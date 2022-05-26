@@ -1,96 +1,156 @@
-use std::time::Duration;
+use tui::widgets::TableState;
 
 use super::db::{FoodBase, Ingredient};
 
 #[derive(Clone)]
+pub enum PopUp {
+    Delete {
+        id: isize,
+    },
+    AddSourceUrl {
+        ingredient: Ingredient,
+        url: String,
+    },
+    AddSourceWeight {
+        ingredient: Ingredient,
+        weight: String,
+        url: String,
+    },
+}
+
+#[derive(Clone)]
 pub enum AppState {
     Init,
-    Initialized {
-        duration: Duration,
-        counter_sleep: u32,
-        counter_tick: u64,
+    IngredientView {
+        popup: Option<PopUp>,
         ingredients: Vec<Ingredient>,
+        selection: TableState,
     },
 }
 
 impl AppState {
     pub fn initialized() -> Self {
-        let duration = Duration::from_secs(1);
-        let counter_sleep = 0;
-        let counter_tick = 0;
         let ingredients = Vec::new();
-        Self::Initialized {
-            duration,
-            counter_sleep,
-            counter_tick,
+        let selection = TableState::default();
+        let popup = None;
+        Self::IngredientView {
             ingredients,
+            selection,
+            popup,
         }
     }
 
     pub fn is_initialized(&self) -> bool {
-        matches!(self, &Self::Initialized { .. })
+        matches!(self, &Self::IngredientView { .. })
     }
 
-    pub fn incr_sleep(&mut self) {
-        if let Self::Initialized { counter_sleep, .. } = self {
-            *counter_sleep += 1;
+    pub(crate) fn next_item(&mut self) {
+        if let Self::IngredientView {
+            selection,
+            ingredients,
+            ..
+        } = self
+        {
+            let i = match selection.selected() {
+                Some(i) => {
+                    if i >= ingredients.len() - 1 {
+                        1
+                    } else {
+                        i + 1
+                    }
+                }
+                None => 1,
+            };
+            selection.select(Some(i));
         }
     }
 
-    pub fn incr_tick(&mut self) {
-        if let Self::Initialized { counter_tick, .. } = self {
-            *counter_tick += 1;
+    pub fn add_ingredient_source_url(&mut self) {
+        if let AppState::IngredientView {
+            popup,
+            ingredients,
+            selection,
+        } = self
+        {
+            if let Some(i) = selection.selected() {
+                *popup = Some(PopUp::AddSourceUrl {
+                    ingredient: ingredients[i - 1].clone(),
+                    url: String::new(),
+                })
+            }
         }
     }
 
-    pub fn count_sleep(&self) -> Option<u32> {
-        if let Self::Initialized { counter_sleep, .. } = self {
-            Some(*counter_sleep)
-        } else {
-            None
+    pub fn close_popup(&mut self) {
+        if let AppState::IngredientView {
+            popup,
+            ingredients,
+            selection,
+        } = self
+        {
+            *popup = None
         }
     }
 
-    pub fn count_tick(&self) -> Option<u64> {
-        if let Self::Initialized { counter_tick, .. } = self {
-            Some(*counter_tick)
-        } else {
-            None
+    pub fn add_ingredient_source_weight(&mut self) {
+        if let AppState::IngredientView { popup, .. } = self {
+            if let Some(PopUp::AddSourceUrl { ingredient, url }) = popup.take() {
+                *popup = Some(PopUp::AddSourceWeight {
+                    ingredient,
+                    url,
+                    weight: String::new(),
+                })
+            }
         }
+    }
+
+    pub(crate) fn previous_item(&mut self) {
+        if let Self::IngredientView {
+            selection,
+            ingredients,
+            ..
+        } = self
+        {
+            let i = match selection.selected() {
+                Some(i) => {
+                    if i == 1 {
+                        ingredients.len() - 1
+                    } else {
+                        i - 1
+                    }
+                }
+                None => 1,
+            };
+            selection.select(Some(i));
+        }
+    }
+
+    pub fn input(&mut self) -> Option<&mut String> {
+        match self {
+            AppState::IngredientView { ref mut popup, .. } => match popup {
+                Some(PopUp::AddSourceUrl { url, .. }) => Some(url),
+                Some(PopUp::AddSourceWeight { weight, .. }) => Some(weight),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    pub fn popup(&self) -> Option<&PopUp> {
+        if let Self::IngredientView { ref popup, .. } = self {
+            return popup.as_ref();
+        }
+        None
     }
 
     pub async fn update(&mut self, database: &FoodBase) {
-        if let Self::Initialized { ingredients, .. } = self {
+        if let Self::IngredientView { ingredients, .. } = self {
             *ingredients = database.get_ingredients().await.unwrap_or_default();
         }
     }
 
-    pub fn duration(&self) -> Option<&Duration> {
-        if let Self::Initialized { duration, .. } = self {
-            Some(duration)
-        } else {
-            None
-        }
-    }
-
-    pub fn increment_delay(&mut self) {
-        if let Self::Initialized { duration, .. } = self {
-            // Set the duration, note that the duration is in 1s..10s
-            let secs = (duration.as_secs() + 1).clamp(1, 10);
-            *duration = Duration::from_secs(secs);
-        }
-    }
-
-    pub fn decrement_delay(&mut self) {
-        if let Self::Initialized { duration, .. } = self {
-            // Set the duration, note that the duration is in 1s..10s
-            let secs = (duration.as_secs() - 1).clamp(1, 10);
-            *duration = Duration::from_secs(secs);
-        }
-    }
-
     pub(crate) fn ingredients(&self) -> Option<&[Ingredient]> {
-        if let Self::Initialized { ingredients, .. } = self {
+        if let Self::IngredientView { ingredients, .. } = self {
             Some(ingredients.as_slice())
         } else {
             None

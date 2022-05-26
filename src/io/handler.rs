@@ -3,6 +3,8 @@ use std::time::Duration;
 
 use eyre::Result;
 use log::{error, info};
+use sqlx::postgres::types::PgMoney;
+use sqlx::types::BigDecimal;
 
 use super::IoEvent;
 use crate::app::App;
@@ -22,6 +24,17 @@ impl IoAsyncHandler {
         let result = match io_event {
             IoEvent::Initialize => self.do_initialize().await,
             IoEvent::UpdateData => self.do_update_data().await,
+            IoEvent::AddIngredientSource {
+                ingredient_id,
+                store_id,
+                url,
+                price,
+                weight,
+                unit,
+            } => {
+                self.do_add_ingredient_source(ingredient_id, store_id, url, price, weight, unit)
+                    .await
+            }
         };
 
         if let Err(err) = result {
@@ -53,6 +66,28 @@ impl IoAsyncHandler {
         // Notify the app for having slept
         let mut app = self.app.lock().await;
         app.updated_data();
+
+        Ok(())
+    }
+    /// Just take a little break
+    async fn do_add_ingredient_source(
+        &mut self,
+        ingredient_id: i32,
+        store_id: i32,
+        url: String,
+        price: PgMoney,
+        weight: BigDecimal,
+        unit: i32,
+    ) -> Result<()> {
+        info!("Adding ingredient source");
+        self.app
+            .lock()
+            .await
+            .add_ingredient_source(ingredient_id, store_id, weight, price, url)
+            .await;
+        // Notify the app for having slept
+        //let mut app = self.app.lock().await;
+        //app.updated_data();
 
         Ok(())
     }

@@ -19,5 +19,11 @@ tui = { version = "0.17", default-features = false, features = ['crossterm', 'se
 log = "0.4"
 
 tui-logger = "0.7"
+#reqwest = { version = "0.11", features = ["blocking", "cookies"] }
+#scraper = "0.12.0"
+inline-python = "*"
+num = "*"
+regex = "*"
+
 
 eyre = "0.6"

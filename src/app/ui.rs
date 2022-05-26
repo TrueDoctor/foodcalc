@@ -5,16 +5,18 @@ use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, BorderType, Borders, Cell, LineGauge, Paragraph, Row, Table};
+use tui::widgets::{
+    Block, BorderType, Borders, Cell, Clear, LineGauge, Paragraph, Row, Table, Wrap,
+};
 use tui::{symbols, Frame};
 use tui_logger::TuiLoggerWidget;
 
 use super::actions::Actions;
 use super::db::Ingredient;
-use super::state::AppState;
+use super::state::{AppState, PopUp};
 use crate::app::App;
 
-pub fn draw<B>(rect: &mut Frame<B>, app: &App)
+pub fn draw<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
@@ -52,21 +54,28 @@ where
         let body = draw_body(app.is_loading(), app.state());
         rect.render_widget(body, body_chunks[0]);
     */
-    let ingredients = draw_ingredients(app.state().ingredients().unwrap_or_default());
-    rect.render_widget(ingredients, body_chunks[0]);
+    match &mut app.state {
+        AppState::IngredientView {
+            ref mut selection,
+            ingredients,
+            ..
+        } => {
+            let ingredients = draw_ingredients(ingredients.as_slice());
+            rect.render_stateful_widget(ingredients, body_chunks[0], selection);
+        }
+        _ => (),
+    }
 
     let help = draw_help(app.actions());
     rect.render_widget(help, body_chunks[1]);
 
-    // Duration LineGauge
-    /*if let Some(duration) = app.state().duration() {
-        let duration_block = draw_duration(duration);
-        rect.render_widget(duration_block, chunks[2]);
-    }*/
-
     // Logs
     let logs = draw_logs();
     rect.render_widget(logs, chunks[2]);
+
+    if let Some(popup) = app.state.popup() {
+        draw_popups(popup, rect)
+    }
 }
 
 fn draw_title<'a>() -> Paragraph<'a> {
@@ -90,44 +99,10 @@ fn check_size(rect: &Rect) {
     }
 }
 
-fn draw_body<'a>(loading: bool, state: &AppState) -> Paragraph<'a> {
-    let initialized_text = if state.is_initialized() {
-        "Initialized"
-    } else {
-        "Not Initialized !"
-    };
-    let loading_text = if loading { "Loading..." } else { "" };
-    let sleep_text = if let Some(sleeps) = state.count_sleep() {
-        format!("Sleep count: {}", sleeps)
-    } else {
-        String::default()
-    };
-    let tick_text = if let Some(ticks) = state.count_tick() {
-        format!("Tick count: {}", ticks)
-    } else {
-        String::default()
-    };
-
-    Paragraph::new(vec![
-        Spans::from(Span::raw(initialized_text)),
-        Spans::from(Span::raw(loading_text)),
-        Spans::from(Span::raw(sleep_text)),
-        Spans::from(Span::raw(tick_text)),
-    ])
-    .style(Style::default().fg(Color::LightCyan))
-    .alignment(Alignment::Left)
-    .block(
-        Block::default()
-            // .title("Body")
-            .borders(Borders::ALL)
-            .style(Style::default().fg(Color::White))
-            .border_type(BorderType::Plain),
-    )
-}
-
 fn draw_ingredients(ingredients: &[Ingredient]) -> Table {
     let key_style = Style::default().fg(Color::LightCyan);
     let help_style = Style::default().fg(Color::Gray);
+    let selected_style = Style::default().add_modifier(Modifier::REVERSED);
 
     let mut rows = vec![Row::new(vec![
         Cell::from(Span::styled("id", key_style)),
@@ -151,29 +126,10 @@ fn draw_ingredients(ingredients: &[Ingredient]) -> Table {
                 .border_type(BorderType::Plain)
                 .title("Ingredients"),
         )
+        .highlight_style(selected_style)
+        .highlight_symbol(">>")
         .widths(&[Constraint::Length(11), Constraint::Min(20)])
         .column_spacing(1)
-}
-
-fn draw_duration(duration: &Duration) -> LineGauge {
-    let sec = duration.as_secs();
-    let label = format!("{}s", sec);
-    let ratio = sec as f64 / 10.0;
-    LineGauge::default()
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Sleep duration"),
-        )
-        .gauge_style(
-            Style::default()
-                .fg(Color::Cyan)
-                .bg(Color::Black)
-                .add_modifier(Modifier::BOLD),
-        )
-        .line_set(line::THICK)
-        .label(label)
-        .ratio(ratio)
 }
 
 fn draw_help(actions: &Actions) -> Table {
@@ -223,4 +179,63 @@ fn draw_logs<'a>() -> TuiLoggerWidget<'a> {
                 .borders(Borders::ALL),
         )
         .style(Style::default().fg(Color::White).bg(Color::Black))
+}
+
+fn draw_popups<B: Backend>(popup: &PopUp, frame: &mut Frame<B>) {
+    let (title, text) = match popup {
+        PopUp::Delete { id } => (
+            "Delete".to_string(),
+            format!("Do you really want to delete {id}?"),
+        ),
+        PopUp::AddSourceUrl { ingredient, url } => {
+            (format!("Url for {ingredient}:"), url.to_owned())
+        }
+        PopUp::AddSourceWeight {
+            ingredient, weight, ..
+        } => (format!("Weight for {ingredient}:"), weight.to_owned()),
+    };
+    let paragraph = Paragraph::new(Span::styled(
+        text,
+        Style::default().add_modifier(Modifier::SLOW_BLINK),
+    ))
+    .alignment(Alignment::Center)
+    .wrap(Wrap { trim: true });
+
+    let block = Block::default()
+        .style(Style::default().bg(Color::Black))
+        .title(title)
+        .borders(Borders::ALL);
+    //let block = Block::default().title(text.clone()).borders(Borders::ALL);
+    let area = centered_rect(60, 20, frame.size());
+    frame.render_widget(Clear, area); //this clears out the background
+    let block_rect = block.inner(area);
+    frame.render_widget(paragraph, block_rect);
+    frame.render_widget(block, area);
+}
+
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage(percent_y),
+                Constraint::Percentage((100 - percent_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage(percent_x),
+                Constraint::Percentage((100 - percent_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[1])[1]
 }

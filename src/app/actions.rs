@@ -9,18 +9,20 @@ use crate::inputs::key::Key;
 pub enum Action {
     Quit,
     Refresh,
-    IncrementDelay,
-    DecrementDelay,
+    MoveDown,
+    MoveUp,
+    AddSource,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 4] = [
+        static ACTIONS: [Action; 5] = [
             Action::Quit,
             Action::Refresh,
-            Action::IncrementDelay,
-            Action::DecrementDelay,
+            Action::MoveDown,
+            Action::MoveUp,
+            Action::AddSource,
         ];
         ACTIONS.iter()
     }
@@ -29,9 +31,10 @@ impl Action {
     pub fn keys(&self) -> &[Key] {
         match self {
             Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
-            Action::Refresh => &[Key::Char('s')],
-            Action::IncrementDelay => &[Key::Char('+')],
-            Action::DecrementDelay => &[Key::Char('-')],
+            Action::Refresh => &[Key::Char('r')],
+            Action::MoveDown => &[Key::Down],
+            Action::MoveUp => &[Key::Up],
+            Action::AddSource => &[Key::Char('a')],
         }
     }
 }
@@ -42,8 +45,9 @@ impl Display for Action {
         let str = match self {
             Action::Quit => "Quit",
             Action::Refresh => "Sleep",
-            Action::IncrementDelay => "Increment delay",
-            Action::DecrementDelay => "Decrement delay",
+            Action::MoveDown => "Move Down",
+            Action::MoveUp => "Move Up",
+            Action::AddSource => "Add Source",
         };
         write!(f, "{}", str)
     }
@@ -131,8 +135,8 @@ mod tests {
         let _actions: Actions = vec![
             Action::Quit,
             Action::Refresh,
-            Action::IncrementDelay,
-            Action::DecrementDelay,
+            Action::MoveDown,
+            Action::MoveUp,
         ]
         .into();
     }
@@ -142,12 +146,12 @@ mod tests {
     fn should_panic_when_create_actions_conflict_key() {
         let _actions: Actions = vec![
             Action::Quit,
-            Action::DecrementDelay,
+            Action::MoveUp,
             Action::Refresh,
-            Action::IncrementDelay,
-            Action::IncrementDelay,
+            Action::MoveDown,
+            Action::MoveDown,
             Action::Quit,
-            Action::DecrementDelay,
+            Action::MoveUp,
         ]
         .into();
     }
