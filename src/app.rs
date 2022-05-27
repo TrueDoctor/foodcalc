@@ -67,6 +67,7 @@ pub struct App {
     PgMoney::from_bigdecimal(BigDecimal::new(1.into(), 1), 2).unwrap()
 }*/
 
+#[cfg(feature = "scraping")]
 fn fetch_metro_price_python(url: &str) -> PgMoney {
     use inline_python::{python, Context};
 
@@ -109,7 +110,6 @@ impl App {
         let pool = PgPool::connect(&env::var("DATABASE_URL")?).await?;
         let database = db::FoodBase::new(pool);
         let input_mode = InputMode::Normal;
-        let input = String::new();
 
         Ok(Self {
             io_tx,
@@ -123,7 +123,7 @@ impl App {
 
     /// Handle a user action
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
-        if let InputMode::Editing = self.input_mode {
+        if self.state.input().is_some() {
             match key {
                 Key::Enter => match self.state.popup() {
                     None => self.state.add_ingredient_source_url(),
@@ -190,8 +190,8 @@ impl App {
                     AppReturn::Continue
                 }
                 Action::AddSource => {
-                    self.input_mode = InputMode::Editing;
                     self.state.add_ingredient_source_url();
+                    self.input_mode = InputMode::Editing;
                     AppReturn::Continue
                 }
             }
@@ -222,16 +222,20 @@ impl App {
         price: PgMoney,
         url: String,
     ) {
-        let to_decimal = |num: f64| {
-            let num = (num * 1_000_000.).floor() as i64;
-            BigDecimal::new(num.into(), 1_000_000)
-        };
-
         log::debug!("Ingredients");
-        self.database
+        match self
+            .database
             .add_ingredient_source(ingredient_id, store_id, weight, price, Some(url), 0)
             .await
-            .unwrap();
+        {
+            Ok(id) => {
+                self.state.next_item();
+                log::debug!("Added source for ingredient {id}")
+            }
+            Err(error) => {
+                log::error!("failed to add ingredient source to database, {error:?}")
+            }
+        }
     }
 
     /// Send a network event to the IO thread
