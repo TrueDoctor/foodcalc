@@ -56,18 +56,22 @@ pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
     };
 
     use num::Num;
-    Some((
-        BigDecimal::from_str_radix(number.as_str(), 10).unwrap(),
-        unit_id,
-    ))
+    match BigDecimal::from_str_radix(number.as_str(), 10) {
+        Ok(amount) => Some((amount, unit_id)),
+        Err(_) => {
+            log::error!("Failed to parse {description} as package_size");
+            None
+        }
+    }
 }
 
 mod tests {
-    use super::*;
+
     #[test]
     fn test_unit_parsing() {
+        use super::*;
         assert_eq!(
-            Ok((BigDecimal::new(1u32.into(), 0), 0)),
+            Some((BigDecimal::new(1u32.into(), 0), 0)),
             parse_package_size("1kg")
         );
         assert_eq!(None, parse_package_size("1"));

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Duration;
+
 
 use eyre::Result;
 use log::{error, info};
@@ -77,7 +77,7 @@ impl IoAsyncHandler {
         url: String,
         price: PgMoney,
         weight: BigDecimal,
-        unit: i32,
+        _unit: i32,
     ) -> Result<()> {
         info!("Adding ingredient source");
         self.app

@@ -1,14 +1,9 @@
-use std::time::Duration;
-
-use symbols::line;
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::text::{Span, Spans};
-use tui::widgets::{
-    Block, BorderType, Borders, Cell, Clear, LineGauge, Paragraph, Row, Table, Wrap,
-};
-use tui::{symbols, Frame};
+use tui::text::Span;
+use tui::widgets::{Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table, Wrap};
+use tui::Frame;
 use tui_logger::TuiLoggerWidget;
 
 use super::actions::Actions;
@@ -46,24 +41,14 @@ where
         .constraints([Constraint::Min(20), Constraint::Length(32)].as_ref())
         .split(chunks[1]);
 
-    /*let list_chunks = Layout::default()
-            .constraints([Constraint::Min(10), Constraint::Length(20)].as_ref())
-            .direction(Direction::Vertical)
-            .split(body_chunks[0]);
-
-        let body = draw_body(app.is_loading(), app.state());
-        rect.render_widget(body, body_chunks[0]);
-    */
-    match &mut app.state {
-        AppState::IngredientView {
-            ref mut selection,
-            ingredients,
-            ..
-        } => {
-            let ingredients = draw_ingredients(ingredients.as_slice());
-            rect.render_stateful_widget(ingredients, body_chunks[0], selection);
-        }
-        _ => (),
+    if let AppState::IngredientView {
+        ref mut selection,
+        ingredients,
+        ..
+    } = &mut app.state
+    {
+        let ingredients = draw_ingredients(ingredients.as_slice());
+        rect.render_stateful_widget(ingredients, body_chunks[0], selection);
     }
 
     let help = draw_help(app.actions());

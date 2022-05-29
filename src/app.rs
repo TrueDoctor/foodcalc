@@ -1,12 +1,9 @@
 use std::env;
 
 use log::{debug, error, warn};
-use num::Num;
-//use scraper::{Html, Selector};
 use sqlx::postgres::types::PgMoney;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
-use tokio::io::split;
 
 use self::actions::Actions;
 use self::state::{AppState, PopUp};
@@ -19,15 +16,11 @@ pub mod db;
 pub mod state;
 pub mod ui;
 
+static PRICE_PLACEHOLDER: PgMoney = PgMoney(-100i64);
 #[derive(Debug, PartialEq, Eq)]
 pub enum AppReturn {
     Exit,
     Continue,
-}
-
-enum InputMode {
-    Normal,
-    Editing,
 }
 
 /// The main application, containing the state
@@ -39,33 +32,8 @@ pub struct App {
     /// State
     is_loading: bool,
     state: AppState,
-    input_mode: InputMode,
     database: db::FoodBase,
 }
-/*async fn fetch_metro_price_reqwest(url: &str) -> PgMoney {
-    let mut resp = reqwest::get(url).await.unwrap();
-    assert!(resp.status().is_success());
-
-    let body = resp.text().await.unwrap();
-    // parses string of HTML as a document
-    let fragment = Html::parse_document(&body);
-    // parses based on a CSS selector
-    let prices =
-        Selector::parse("div+ div .mfcss_article-detail--price-breakdown span span").unwrap();
-
-    // iterate over elements matching our selector
-    panic!(
-        "at the disco {:?}",
-        fragment.select(&prices).into_iter().size_hint()
-    );
-    for story in fragment.select(&prices) {
-        // grab the headline text and place into a vector
-        let story_txt = story.text().collect::<Vec<_>>();
-        panic!("{:?}", story_txt);
-    }
-
-    PgMoney::from_bigdecimal(BigDecimal::new(1.into(), 1), 2).unwrap()
-}*/
 
 #[cfg(feature = "scraping")]
 fn fetch_metro_price_python(url: &str) -> PgMoney {
@@ -109,13 +77,11 @@ impl App {
         dotenv::dotenv().ok();
         let pool = PgPool::connect(&env::var("DATABASE_URL")?).await?;
         let database = db::FoodBase::new(pool);
-        let input_mode = InputMode::Normal;
 
         Ok(Self {
             io_tx,
             actions,
             is_loading,
-            input_mode,
             state,
             database,
         })
@@ -135,38 +101,34 @@ impl App {
                         url,
                         weight,
                     }) => {
-                        {
-                            let (num, unit) = db::parse_package_size(weight).unwrap();
-                            self.dispatch(IoEvent::AddIngredientSource {
+                        if let Some((num, unit)) = db::parse_package_size(weight) {
+                            let add_source_event = IoEvent::AddIngredientSource {
                                 ingredient_id: ingredient.ingredient_id,
                                 store_id: 0,
                                 url: url.clone(),
                                 weight: num,
                                 unit,
-                                price: PgMoney::from_bigdecimal(
-                                    BigDecimal::from_str_radix("-1", 10).unwrap(),
-                                    2,
-                                )
-                                .unwrap(),
-                            })
-                            .await;
+                                price: PRICE_PLACEHOLDER,
+                            };
+                            self.dispatch(add_source_event).await;
                         }
                         self.state.close_popup();
-                        self.input_mode = InputMode::Normal;
                     }
                     Some(_) => {
                         self.state.close_popup();
-                        self.input_mode = InputMode::Normal;
                     }
                 },
                 Key::Char(c) => {
-                    self.state.input().unwrap().push(c);
+                    if let Some(input) = self.state.input() {
+                        input.push(c)
+                    }
                 }
                 Key::Backspace => {
-                    self.state.input().unwrap().pop();
+                    if let Some(input) = self.state.input() {
+                        input.pop();
+                    }
                 }
                 Key::Esc => {
-                    self.input_mode = InputMode::Normal;
                     self.state.close_popup();
                 }
                 _ => {}
@@ -191,7 +153,6 @@ impl App {
                 }
                 Action::AddSource => {
                     self.state.add_ingredient_source_url();
-                    self.input_mode = InputMode::Editing;
                     AppReturn::Continue
                 }
             }

@@ -84,8 +84,8 @@ impl AppState {
     pub fn close_popup(&mut self) {
         if let AppState::IngredientView {
             popup,
-            ingredients,
-            selection,
+            ingredients: _,
+            selection: _,
         } = self
         {
             *popup = None
@@ -125,7 +125,7 @@ impl AppState {
         }
     }
 
-    pub fn input(&mut self) -> Option<&mut String> {
+    pub(crate) fn input(&mut self) -> Option<&mut String> {
         match self {
             AppState::IngredientView { ref mut popup, .. } => match popup {
                 Some(PopUp::AddSourceUrl { url, .. }) => Some(url),
@@ -136,24 +136,16 @@ impl AppState {
         }
     }
 
-    pub fn popup(&self) -> Option<&PopUp> {
+    pub(crate) fn popup(&self) -> Option<&PopUp> {
         if let Self::IngredientView { ref popup, .. } = self {
             return popup.as_ref();
         }
         None
     }
 
-    pub async fn update(&mut self, database: &FoodBase) {
+    pub(crate) async fn update(&mut self, database: &FoodBase) {
         if let Self::IngredientView { ingredients, .. } = self {
             *ingredients = database.get_ingredients().await.unwrap_or_default();
-        }
-    }
-
-    pub(crate) fn ingredients(&self) -> Option<&[Ingredient]> {
-        if let Self::IngredientView { ingredients, .. } = self {
-            Some(ingredients.as_slice())
-        } else {
-            None
         }
     }
 }
