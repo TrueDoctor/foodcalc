@@ -285,6 +285,7 @@ dependencies = [
  "eyre",
  "futures",
  "inline-python",
+ "lazy_static",
  "log",
  "num",
  "regex",

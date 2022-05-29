@@ -13,10 +13,13 @@ use crate::io::IoEvent;
 
 pub mod actions;
 pub mod db;
+#[cfg(feature = "scraping")]
+pub mod scraping;
 pub mod state;
 pub mod ui;
 
 static PRICE_PLACEHOLDER: PgMoney = PgMoney(-100i64);
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum AppReturn {
     Exit,
@@ -33,39 +36,6 @@ pub struct App {
     is_loading: bool,
     state: AppState,
     database: db::FoodBase,
-}
-
-#[cfg(feature = "scraping")]
-fn fetch_metro_price_python(url: &str) -> PgMoney {
-    use inline_python::{python, Context};
-
-    let c = Context::new();
-    c.run(python! {
-        from selenium import webdriver
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.common.keys import Keys
-        import time
-
-        browser = webdriver.Firefox()
-    });
-
-    c.run(python! {
-        browser.get("https://produkte.metro.de/shop/pv/BTY-Z112/0032/0021/Champignon-weiss-fein-3kg")
-
-    });
-    std::thread::sleep_ms(5000);
-
-    c.run(python! {
-        elem = browser.find_element_by_css_selector(".mfcss_article-detail--price-breakdown")
-        elem = elem.text
-    });
-
-    let value = c.get::<String>("elem");
-    println!("value: {}", value);
-    let price = value.split_whitespace().find(|s| s.contains(',')).unwrap();
-    use num::Num;
-
-    PgMoney::from_bigdecimal(BigDecimal::from_str_radix(price, 10).unwrap(), 2).unwrap()
 }
 
 impl App {
@@ -104,7 +74,7 @@ impl App {
                         if let Some((num, unit)) = db::parse_package_size(weight) {
                             let add_source_event = IoEvent::AddIngredientSource {
                                 ingredient_id: ingredient.ingredient_id,
-                                store_id: 0,
+                                store_id: db::METRO,
                                 url: url.clone(),
                                 weight: num,
                                 unit,
@@ -139,7 +109,7 @@ impl App {
             match action {
                 Action::Quit => AppReturn::Exit,
                 Action::Refresh => {
-                    // Sleep is an I/O action, we dispatch on the IO channel that's run on another thread
+                    // Refresh is an I/O action, we dispatch on the IO channel that's run on another thread
                     self.dispatch(IoEvent::UpdateData).await;
                     AppReturn::Continue
                 }
@@ -153,6 +123,13 @@ impl App {
                 }
                 Action::AddSource => {
                     self.state.add_ingredient_source_url();
+                    AppReturn::Continue
+                }
+                Action::FetchMetroPrice => {
+                    let ingredient = self.state.ingredient();
+                    let ingredient_id = ingredient.map(|ingredient| ingredient.ingredient_id);
+                    self.dispatch(IoEvent::FetchMetroPrice { ingredient_id })
+                        .await;
                     AppReturn::Continue
                 }
             }
@@ -199,6 +176,18 @@ impl App {
         }
     }
 
+    pub async fn fetch_ingredient_price(&mut self, ingredient_id: Option<i32>) {
+        match self.database.fetch_metro_prices(ingredient_id).await {
+            Ok(id) => {
+                self.state.next_item();
+                log::debug!("Updated price for {id:?} ingredients")
+            }
+            Err(error) => {
+                log::error!("failed to updete metro prices, {error:?}")
+            }
+        }
+    }
+
     /// Send a network event to the IO thread
     pub async fn dispatch(&mut self, action: IoEvent) {
         // `is_loading` will be set to false again after the async action has finished in io/handler.rs
@@ -228,6 +217,8 @@ impl App {
             Action::MoveDown,
             Action::MoveUp,
             Action::AddSource,
+            #[cfg(feature = "scraping")]
+            Action::FetchMetroPrice,
         ]
         .into();
         self.state = AppState::initialized()

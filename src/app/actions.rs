@@ -12,17 +12,19 @@ pub enum Action {
     MoveDown,
     MoveUp,
     AddSource,
+    FetchMetroPrice,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 5] = [
+        static ACTIONS: [Action; 6] = [
             Action::Quit,
             Action::Refresh,
             Action::MoveDown,
             Action::MoveUp,
             Action::AddSource,
+            Action::FetchMetroPrice,
         ];
         ACTIONS.iter()
     }
@@ -35,6 +37,7 @@ impl Action {
             Action::MoveDown => &[Key::Down],
             Action::MoveUp => &[Key::Up],
             Action::AddSource => &[Key::Char('a')],
+            Action::FetchMetroPrice => &[Key::Char('f')],
         }
     }
 }
@@ -48,6 +51,7 @@ impl Display for Action {
             Action::MoveDown => "Move Down",
             Action::MoveUp => "Move Up",
             Action::AddSource => "Add Source",
+            Action::FetchMetroPrice => "Fetch Metro Price",
         };
         write!(f, "{}", str)
     }

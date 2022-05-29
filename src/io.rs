@@ -1,5 +1,3 @@
-
-
 use sqlx::postgres::types::PgMoney;
 use sqlx::types::BigDecimal;
 
@@ -16,5 +14,8 @@ pub enum IoEvent {
         weight: BigDecimal,
         price: PgMoney,
         unit: i32,
+    },
+    FetchMetroPrice {
+        ingredient_id: Option<i32>,
     },
 }

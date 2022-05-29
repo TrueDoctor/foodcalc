@@ -4,6 +4,8 @@ use sqlx::postgres::types::PgMoney;
 use sqlx::postgres::PgPool;
 use sqlx::types::BigDecimal;
 
+pub const METRO: i32 = 0;
+
 #[derive(Clone)]
 pub struct Ingredient {
     pub ingredient_id: i32,
@@ -65,27 +67,13 @@ pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
     }
 }
 
-mod tests {
-
-    #[test]
-    fn test_unit_parsing() {
-        use super::*;
-        assert_eq!(
-            Some((BigDecimal::new(1u32.into(), 0), 0)),
-            parse_package_size("1kg")
-        );
-        assert_eq!(None, parse_package_size("1"));
-    }
-}
-
 #[derive(Clone)]
 pub struct IngredientSorce {
     pub ingredient_id: i32,
     pub store_id: i32,
-    pub package_size: i32,
+    pub package_size: BigDecimal,
     pub unit_id: i32,
-    pub name: String,
-    pub price: u64,
+    pub price: PgMoney,
     pub url: Option<String>,
     pub comment: Option<String>,
 }
@@ -160,5 +148,87 @@ impl FoodBase {
         .await?;
 
         Ok(records)
+    }
+
+    pub async fn fetch_metro_prices(&self, ingredient_id: Option<i32>) -> eyre::Result<()> {
+        let sources = self.get_metro_ingredient_sources(ingredient_id).await?;
+        for source in sources {
+            #[cfg(feature = "scraping")]
+            if let Some(url) = source.url.clone() {
+                if let Some(price) = tokio::task::spawn_blocking(move || {
+                    super::scraping::fetch_metro_price_python(&url)
+                })
+                .await?
+                {
+                    log::debug!("{} cents", price.0);
+                    self.update_ingredient_source_price(source.ingredient_id, source.url, price)
+                        .await?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn get_metro_ingredient_sources(
+        &self,
+        ingredient_id: Option<i32>,
+    ) -> eyre::Result<Vec<IngredientSorce>> {
+        let records = match ingredient_id {
+            Some(id) => sqlx::query_as!(
+                IngredientSorce,
+                r#" SELECT * FROM ingredient_sources WHERE store_id = $1 AND ingredient_id = $2 ORDER BY ingredient_id "#,
+                METRO,
+                id
+            )
+            .fetch_all(&*self.pg_pool)
+            .await?,
+            None => sqlx::query_as!(
+                IngredientSorce,
+                r#" SELECT * FROM ingredient_sources WHERE store_id = $1 ORDER BY ingredient_id "#,
+                METRO,
+            )
+            .fetch_all(&*self.pg_pool)
+            .await?,
+        };
+
+        Ok(records)
+    }
+
+    pub async fn update_ingredient_source_price(
+        &self,
+        ingredient_id: i32,
+        url: Option<String>,
+        price: PgMoney,
+    ) -> eyre::Result<u64> {
+        sqlx::query!(
+            r#"
+                UPDATE ingredient_sources
+                SET price = $3
+                WHERE ingredient_id = $1 AND url = $2
+            "#,
+            ingredient_id,
+            url,
+            price,
+        )
+        .execute(&*self.pg_pool)
+        .await
+        .map(|result| result.rows_affected())
+        .map_err(|err| err.into())
+    }
+}
+
+mod tests {
+    #[test]
+    fn test_unit_parsing() {
+        use super::*;
+        assert_eq!(
+            Some((BigDecimal::new(1u32.into(), 0), 0)),
+            parse_package_size("1kg")
+        );
+        assert_eq!(
+            Some((BigDecimal::new(1u32.into(), 0), 0)),
+            parse_package_size("1.5kg")
+        );
+        assert_eq!(None, parse_package_size("1"));
     }
 }

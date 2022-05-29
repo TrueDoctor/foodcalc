@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-
 use eyre::Result;
 use log::{error, info};
 use sqlx::postgres::types::PgMoney;
@@ -35,6 +34,9 @@ impl IoAsyncHandler {
                 self.do_add_ingredient_source(ingredient_id, store_id, url, price, weight, unit)
                     .await
             }
+            IoEvent::FetchMetroPrice { ingredient_id } => {
+                self.do_fetch_metro_price(ingredient_id).await
+            }
         };
 
         if let Err(err) = result {
@@ -59,7 +61,7 @@ impl IoAsyncHandler {
         Ok(())
     }
 
-    /// Just take a little break
+    /// Update the current list view with data from the database
     async fn do_update_data(&mut self) -> Result<()> {
         info!("Fetching ingredients");
         self.app.lock().await.update_data().await;
@@ -69,7 +71,20 @@ impl IoAsyncHandler {
 
         Ok(())
     }
-    /// Just take a little break
+
+    /// Update the price for the given ingredient
+    async fn do_fetch_metro_price(&mut self, ingredient_id: Option<i32>) -> Result<()> {
+        info!("Fetching ingredient price for {ingredient_id:?}");
+        self.app
+            .lock()
+            .await
+            .fetch_ingredient_price(ingredient_id)
+            .await;
+
+        Ok(())
+    }
+
+    /// Add source for given ingredient to the database
     async fn do_add_ingredient_source(
         &mut self,
         ingredient_id: i32,

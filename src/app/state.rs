@@ -52,29 +52,47 @@ impl AppState {
         } = self
         {
             let i = match selection.selected() {
-                Some(i) => {
-                    if i >= ingredients.len() - 1 {
-                        1
-                    } else {
-                        i + 1
-                    }
-                }
+                Some(i) => i % (ingredients.len() - 1) + 1,
                 None => 1,
             };
             selection.select(Some(i));
         }
     }
 
-    pub fn add_ingredient_source_url(&mut self) {
+    pub(crate) fn previous_item(&mut self) {
+        if let Self::IngredientView {
+            selection,
+            ingredients,
+            ..
+        } = self
+        {
+            let i = match selection.selected() {
+                Some(i) => (i + ingredients.len() - 3) % (ingredients.len() - 1) + 1,
+                None => 1,
+            };
+            selection.select(Some(i));
+        }
+    }
+
+    pub(crate) fn ingredient(&self) -> Option<&Ingredient> {
         if let AppState::IngredientView {
-            popup,
             ingredients,
             selection,
+            ..
         } = self
         {
             if let Some(i) = selection.selected() {
+                return ingredients.get(i - 1);
+            }
+        }
+        None
+    }
+
+    pub fn add_ingredient_source_url(&mut self) {
+        if let Some(ingredient) = self.ingredient().map(Clone::clone) {
+            if let AppState::IngredientView { popup, .. } = self {
                 *popup = Some(PopUp::AddSourceUrl {
-                    ingredient: ingredients[i - 1].clone(),
+                    ingredient,
                     url: String::new(),
                 })
             }
@@ -82,12 +100,7 @@ impl AppState {
     }
 
     pub fn close_popup(&mut self) {
-        if let AppState::IngredientView {
-            popup,
-            ingredients: _,
-            selection: _,
-        } = self
-        {
+        if let AppState::IngredientView { popup, .. } = self {
             *popup = None
         }
     }
@@ -101,27 +114,6 @@ impl AppState {
                     weight: String::new(),
                 })
             }
-        }
-    }
-
-    pub(crate) fn previous_item(&mut self) {
-        if let Self::IngredientView {
-            selection,
-            ingredients,
-            ..
-        } = self
-        {
-            let i = match selection.selected() {
-                Some(i) => {
-                    if i == 1 {
-                        ingredients.len() - 1
-                    } else {
-                        i - 1
-                    }
-                }
-                None => 1,
-            };
-            selection.select(Some(i));
         }
     }
 
