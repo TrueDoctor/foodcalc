@@ -5,6 +5,7 @@ use once_cell::sync::OnceCell;
 use sqlx::postgres::types::PgMoney;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
+use tui::widgets::TableState;
 
 use self::actions::Actions;
 use self::state::{AppState, PopUp};
@@ -140,6 +141,24 @@ impl App {
                         .await;
                     AppReturn::Continue
                 }
+                Action::FocusIngredients => {
+                    self.state = AppState::IngredientView {
+                        popup: None,
+                        ingredients: vec![],
+                        selection: TableState::default(),
+                    };
+                    self.dispatch(IoEvent::UpdateData).await;
+                    AppReturn::Continue
+                }
+                Action::FocusMeals => {
+                    self.state = AppState::RecipeIngredientView {
+                        popup: None,
+                        meals: vec![],
+                        selection: TableState::default(),
+                    };
+                    self.dispatch(IoEvent::UpdateData).await;
+                    AppReturn::Continue
+                }
             }
         } else {
             warn!("No action accociated to {}", key);
@@ -215,6 +234,8 @@ impl App {
             Action::AddSource,
             #[cfg(feature = "scraping")]
             Action::FetchMetroPrice,
+            Action::FocusIngredients, // TODO: only show based on current state
+            Action::FocusMeals,
         ]
         .into();
         self.state = AppState::initialized()

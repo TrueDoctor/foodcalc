@@ -189,8 +189,8 @@ impl FoodBase {
             RecipeIngredient,
             r#" SELECT ingredient_id as "ingredient_id!",
                    ingredient as "name!",
-                   weight / servings as "weight!",
-                   energy /servings as "energy!",
+                   round(weight / servings, 2) as "weight!",
+                   round(energy /servings, 2) as "energy!",
                    price / servings as "price!"
                 FROM event_ingredients
                 WHERE event_id = $1
@@ -219,12 +219,15 @@ impl FoodBase {
              place_id as "place_id!",
              place as "place!",
              start_time as "start_time!",
-             weight as "weight!",
-             energy as "energy!",
-             price as "price!",
+             round(sum(weight),2) as "weight!",
+             round(sum(energy),2) as "energy!",
+             sum(price) as "price!",
              servings as "servings!"
 
-            FROM event_ingredients WHERE event_id = $1 ORDER BY ingredient_id "#,
+            FROM event_ingredients
+            WHERE event_id = $1
+            GROUP BY event_id, recipe_id, recipe, place_id, place, start_time, servings
+            ORDER BY start_time "#,
             event_id
         )
         .fetch_all(&*self.pg_pool)
