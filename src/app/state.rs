@@ -168,8 +168,11 @@ impl AppState {
     }
 
     pub(crate) async fn update(&mut self, database: &FoodBase) {
-        if let Self::IngredientView { ingredients, .. } = self {
-            *ingredients = database.get_ingredients().await.unwrap_or_default();
+        match self {
+            Self::IngredientView { ingredients, .. } => {
+                *ingredients = database.get_ingredients().await.unwrap_or_default()
+            }
+            _ => (),
         }
     }
 }

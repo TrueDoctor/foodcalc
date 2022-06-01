@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use sqlx::postgres::types::PgMoney;
 use sqlx::postgres::PgPool;
-use sqlx::types::time::Time;
+use sqlx::types::time::PrimitiveDateTime;
 use sqlx::types::BigDecimal;
 
 pub const METRO: i32 = 0;
@@ -29,7 +29,7 @@ pub struct Meal {
     pub recipe_id: i32,
     pub name: String,
     pub place: String,
-    pub time: Time,
+    pub time: PrimitiveDateTime,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
     pub price: PgMoney,
@@ -180,31 +180,65 @@ impl FoodBase {
         event_id: i32,
         recipe_id: i32,
         place_id: i32,
-        start_time: Time,
-    ) -> eyre::Result<Vec<Ingredient>> {
-        /*
-                let records = sqlx::query_as!(
-                    RecipeIngredient,
-                    r#" SELECT * FROM event_ingredients WHERE event_id =  ORDER BY ingredient_id "#,
-                )
-                .fetch_all(&*self.pg_pool)
-                .await?;
-        */
-        Ok(vec![])
+        start_time: PrimitiveDateTime,
+    ) -> eyre::Result<Vec<RecipeIngredient>> {
+        let records = sqlx::query_as!(
+            RecipeIngredient,
+            r#" SELECT ingredient_id as "ingredient_id!",
+                   ingredient as "name!",
+                   weight / servings as "weight!",
+                   energy /servings as "energy!",
+                   price / servings as "price!"
+                FROM event_ingredients
+                WHERE event_id = $1
+                    AND recipe_id = $2
+                    AND place_id = $3
+                    AND start_time = $4
+                ORDER BY ingredient_id "#,
+            event_id,
+            recipe_id,
+            place_id,
+            start_time
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    pub async fn get_event_meals(&self, event_id: i32) -> eyre::Result<Vec<Meal>> {
+        let records = sqlx::query_as!(
+            Meal,
+            r#" SELECT
+             recipe_id as "recipe_id!",
+             recipe as "name!",
+             place as "place!",
+             start_time as "time!",
+             weight as "weight!",
+             energy as "energy!",
+             price as "price!",
+             servings as "servings!"
+
+            FROM event_ingredients WHERE event_id = $1 ORDER BY ingredient_id "#,
+            event_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
     }
 
     pub async fn fetch_metro_prices(&self, ingredient_id: Option<i32>) -> eyre::Result<()> {
         let sources = self.get_metro_ingredient_sources(ingredient_id).await?;
-        for source in sources {
+        for _source in sources {
             #[cfg(feature = "scraping")]
-            if let Some(url) = source.url.clone() {
+            if let Some(url) = _source.url.clone() {
                 if let Some(price) = tokio::task::spawn_blocking(move || {
                     super::scraping::fetch_metro_price_python(&url)
                 })
                 .await?
                 {
                     log::debug!("{} cents", price.0);
-                    self.update_ingredient_source_price(source.ingredient_id, source.url, price)
+                    self.update_ingredient_source_price(_source.ingredient_id, _source.url, price)
                         .await?;
                 }
             }
