@@ -71,12 +71,12 @@ impl App {
                         url,
                         weight,
                     }) => {
-                        if let Some((num, unit)) = db::parse_package_size(weight) {
+                        if let Some((weight, unit)) = db::parse_package_size(weight) {
                             let add_source_event = IoEvent::AddIngredientSource {
                                 ingredient_id: ingredient.ingredient_id,
                                 store_id: db::METRO,
                                 url: url.clone(),
-                                weight: num,
+                                weight,
                                 unit,
                                 price: PRICE_PLACEHOLDER,
                             };
@@ -159,11 +159,12 @@ impl App {
         weight: BigDecimal,
         price: PgMoney,
         url: String,
+        unit: i32,
     ) {
         log::debug!("Ingredients");
         match self
             .database
-            .add_ingredient_source(ingredient_id, store_id, weight, price, Some(url), 0)
+            .add_ingredient_source(ingredient_id, store_id, weight, price, Some(url), unit)
             .await
         {
             Ok(id) => {

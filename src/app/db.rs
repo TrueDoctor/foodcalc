@@ -6,7 +6,7 @@ use sqlx::types::BigDecimal;
 
 pub const METRO: i32 = 0;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Ingredient {
     pub ingredient_id: i32,
     pub name: String,
@@ -21,13 +21,13 @@ impl Display for Ingredient {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Store {
     pub store_id: i32,
     pub name: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Unit {
     pub unit_id: i32,
     pub name: String,
@@ -59,7 +59,10 @@ pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
 
     use num::Num;
     match BigDecimal::from_str_radix(number.as_str(), 10) {
-        Ok(amount) => Some((amount, unit_id)),
+        Ok(amount) => {
+            log::info!("parsed {description} as {amount} unit:{unit_id} {unit}");
+            Some((amount, unit_id))
+        }
         Err(_) => {
             log::error!("Failed to parse {description} as package_size");
             None
@@ -226,8 +229,12 @@ mod tests {
             parse_package_size("1kg")
         );
         assert_eq!(
-            Some((BigDecimal::new(1u32.into(), 0), 0)),
+            Some((BigDecimal::new(15u32.into(), 1), 0)),
             parse_package_size("1.5kg")
+        );
+        assert_eq!(
+            Some((BigDecimal::new(1u32.into(), 0), 10)),
+            parse_package_size("1Pkg")
         );
         assert_eq!(None, parse_package_size("1"));
     }

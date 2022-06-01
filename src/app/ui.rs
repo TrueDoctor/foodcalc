@@ -25,7 +25,7 @@ where
             [
                 Constraint::Length(3),
                 Constraint::Min(10),
-                Constraint::Length(12),
+                Constraint::Length(32),
             ]
             .as_ref(),
         )

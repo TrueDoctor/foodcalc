@@ -52,7 +52,7 @@ impl AppState {
         } = self
         {
             let i = match selection.selected() {
-                Some(i) => i % (ingredients.len() - 1) + 1,
+                Some(i) => i % (ingredients.len()) + 1,
                 None => 1,
             };
             selection.select(Some(i));
@@ -67,7 +67,7 @@ impl AppState {
         } = self
         {
             let i = match selection.selected() {
-                Some(i) => (i + ingredients.len() - 3) % (ingredients.len() - 1) + 1,
+                Some(i) => (i + ingredients.len() - 2) % (ingredients.len()) + 1,
                 None => 1,
             };
             selection.select(Some(i));

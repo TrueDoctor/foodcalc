@@ -92,13 +92,13 @@ impl IoAsyncHandler {
         url: String,
         price: PgMoney,
         weight: BigDecimal,
-        _unit: i32,
+        unit: i32,
     ) -> Result<()> {
         info!("Adding ingredient source");
         self.app
             .lock()
             .await
-            .add_ingredient_source(ingredient_id, store_id, weight, price, url)
+            .add_ingredient_source(ingredient_id, store_id, weight, price, url, unit)
             .await;
         // Notify the app for having slept
         //let mut app = self.app.lock().await;

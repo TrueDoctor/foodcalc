@@ -15,6 +15,8 @@ lazy_static::lazy_static! {
             import time
 
             browser = webdriver.Chrome()
+            browser.get("https://metro.de")
+            browser.add_cookie({"name":"UserSettings","domain":"metro.de","value":"SelectedStore=f4532d96-c1fb-4930-9f59-c20b0e529643"})
         });
     c
     };
@@ -28,30 +30,30 @@ pub(crate) fn fetch_metro_price_python(url: &str) -> Option<PgMoney> {
 
     });
 
-    fn find_price() -> String {
+    fn find_price() -> Option<String> {
         CONTEXT.run(python! {
             try:
-                elem = browser.find_element_by_css_selector(".mfcss_article-detail--price-breakdown")
-                elem = elem.text
+                elem = browser.find_elements(By.CSS_SELECTOR,".col-xs-12 .mfcss_article-detail--price-breakdown ")
+                elem = [e.text for e in elem]
             except:
-                elem = ""
+                elem = []
         });
 
-        CONTEXT.get::<String>("elem")
+        CONTEXT.get::<Vec<String>>("elem").get(1).cloned()
     }
 
     for _ in 0..40 {
         std::thread::sleep(Duration::from_millis(500));
         log::info!("waited for ones sec");
-        match find_price().as_str() {
-            "" => continue,
-            price => {
+        match find_price() {
+            None => continue,
+            Some(price) => {
                 use regex::Regex;
                 log::info!("got price {price}");
                 let number_regex =
                     Regex::new(r"[0-9][0-9,]*").expect("failed to compile number regex");
 
-                if let Some(number) = number_regex.find(price) {
+                if let Some(number) = number_regex.find(price.as_str()) {
                     log::info!("regex {}", number.as_str());
                     let number = number
                         .as_str()
