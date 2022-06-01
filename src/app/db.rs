@@ -33,6 +33,7 @@ pub struct Meal {
     pub weight: BigDecimal,
     pub energy: BigDecimal,
     pub price: PgMoney,
+    pub servings: i32,
 }
 
 use std::fmt::Display;

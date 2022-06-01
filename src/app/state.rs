@@ -1,6 +1,8 @@
+use std::fmt::Display;
+
 use tui::widgets::TableState;
 
-use super::db::{FoodBase, Ingredient};
+use super::db::{FoodBase, Ingredient, Meal, RecipeIngredient};
 
 #[derive(Clone)]
 pub enum PopUp {
@@ -16,6 +18,11 @@ pub enum PopUp {
         weight: String,
         url: String,
     },
+    ViewMealIngredients {
+        meal: Meal,
+        ingredients: Vec<RecipeIngredient>,
+        selection: TableState,
+    },
 }
 
 #[derive(Clone)]
@@ -24,6 +31,11 @@ pub enum AppState {
     IngredientView {
         popup: Option<PopUp>,
         ingredients: Vec<Ingredient>,
+        selection: TableState,
+    },
+    RecipeIngredientView {
+        popup: Option<PopUp>,
+        meals: Vec<Meal>,
         selection: TableState,
     },
 }
@@ -45,32 +57,32 @@ impl AppState {
     }
 
     pub(crate) fn next_item(&mut self) {
-        if let Self::IngredientView {
-            selection,
-            ingredients,
-            ..
-        } = self
-        {
-            let i = match selection.selected() {
-                Some(i) => i % (ingredients.len()) + 1,
-                None => 1,
-            };
-            selection.select(Some(i));
+        let len = self.list_len();
+        let selection = self.selection();
+        match (selection, len) {
+            (Some(selection), Some(len)) => {
+                let i = match selection.selected() {
+                    Some(i) => i % len + 1,
+                    None => 1,
+                };
+                selection.select(Some(i));
+            }
+            _ => {}
         }
     }
 
     pub(crate) fn previous_item(&mut self) {
-        if let Self::IngredientView {
-            selection,
-            ingredients,
-            ..
-        } = self
-        {
-            let i = match selection.selected() {
-                Some(i) => (i + ingredients.len() - 2) % (ingredients.len()) + 1,
-                None => 1,
-            };
-            selection.select(Some(i));
+        let len = self.list_len();
+        let selection = self.selection();
+        match (selection, len) {
+            (Some(selection), Some(len)) => {
+                let i = match selection.selected() {
+                    Some(i) => (i + len - 2) % len + 1,
+                    None => 1,
+                };
+                selection.select(Some(i));
+            }
+            _ => {}
         }
     }
 
@@ -124,6 +136,26 @@ impl AppState {
                 Some(PopUp::AddSourceWeight { weight, .. }) => Some(weight),
                 _ => None,
             },
+            _ => None,
+        }
+    }
+
+    pub(crate) fn selection(&mut self) -> Option<&mut TableState> {
+        match self {
+            AppState::IngredientView {
+                ref mut selection, ..
+            } => Some(selection),
+            AppState::RecipeIngredientView {
+                ref mut selection, ..
+            } => Some(selection),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn list_len(&self) -> Option<usize> {
+        match self {
+            AppState::IngredientView { ingredients, .. } => Some(ingredients.len()),
+            AppState::RecipeIngredientView { meals, .. } => Some(meals.len()),
             _ => None,
         }
     }

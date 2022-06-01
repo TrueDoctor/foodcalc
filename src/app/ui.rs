@@ -7,7 +7,7 @@ use tui::Frame;
 use tui_logger::TuiLoggerWidget;
 
 use super::actions::Actions;
-use super::db::Ingredient;
+use super::db::{Ingredient, Meal, RecipeIngredient};
 use super::state::{AppState, PopUp};
 use crate::app::App;
 
@@ -41,14 +41,24 @@ where
         .constraints([Constraint::Min(20), Constraint::Length(32)].as_ref())
         .split(chunks[1]);
 
-    if let AppState::IngredientView {
-        ref mut selection,
-        ingredients,
-        ..
-    } = &mut app.state
-    {
-        let ingredients = draw_ingredients(ingredients.as_slice());
-        rect.render_stateful_widget(ingredients, body_chunks[0], selection);
+    match &mut app.state {
+        AppState::IngredientView {
+            ref mut selection,
+            ingredients,
+            ..
+        } => {
+            let ingredients = draw_ingredients(ingredients.as_slice());
+            rect.render_stateful_widget(ingredients, body_chunks[0], selection);
+        }
+        AppState::RecipeIngredientView {
+            ref mut selection,
+            meals,
+            ..
+        } => {
+            let ingredients = draw_meal_list(meals.as_slice());
+            rect.render_stateful_widget(ingredients, body_chunks[0], selection);
+        }
+        _ => (),
     }
 
     let help = draw_help(app.actions());
@@ -84,7 +94,80 @@ fn check_size(rect: &Rect) {
     }
 }
 
+fn draw_table(title: &str, header: Vec<String>, content: Vec<Vec<String>>) -> Table {
+    let key_style = Style::default().fg(Color::LightCyan);
+    let item_style = Style::default().fg(Color::Gray);
+    let selected_style = Style::default().add_modifier(Modifier::REVERSED);
+
+    let mut rows = vec![Row::new(
+        header
+            .into_iter()
+            .map(|name| Cell::from(Span::styled(name, key_style))),
+    )];
+    rows.extend(content.into_iter().map(|content_row| {
+        let cells = content_row
+            .into_iter()
+            .map(|name| Cell::from(Span::styled(name, item_style)));
+        Row::new(cells)
+    }));
+
+    Table::new(rows)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Plain)
+                .title(title),
+        )
+        .highlight_style(selected_style)
+        .highlight_symbol(">>")
+        .widths(&[Constraint::Length(11), Constraint::Min(20)])
+        .column_spacing(1)
+}
+
 fn draw_ingredients(ingredients: &[Ingredient]) -> Table {
+    draw_table(
+        "Ingredients",
+        vec!["id".to_owned(), "name".to_owned()],
+        ingredients
+            .iter()
+            .map(|ingredient| {
+                vec![
+                    ingredient.ingredient_id.to_string(),
+                    ingredient.name.to_string(),
+                ]
+            })
+            .collect(),
+    )
+}
+
+fn draw_meal_list(meals: &[Meal]) -> Table {
+    draw_table(
+        "Meals",
+        vec![
+            "recipe_id".to_owned(),
+            "name".to_owned(),
+            "weight".to_owned(),
+            "energy".to_owned(),
+            "price".to_owned(),
+            "servings".to_owned(),
+        ],
+        meals
+            .iter()
+            .map(|meal| {
+                vec![
+                    meal.recipe_id.to_string(),
+                    meal.name.to_string(),
+                    meal.weight.to_string(),
+                    meal.energy.to_string(),
+                    format!("{}€", meal.price.0 as f32 / 10.),
+                    meal.servings.to_string(),
+                ]
+            })
+            .collect(),
+    )
+}
+
+fn draw_recipe_ingredients(ingredients: &[RecipeIngredient]) -> Table {
     let key_style = Style::default().fg(Color::LightCyan);
     let help_style = Style::default().fg(Color::Gray);
     let selected_style = Style::default().add_modifier(Modifier::REVERSED);
@@ -92,6 +175,9 @@ fn draw_ingredients(ingredients: &[Ingredient]) -> Table {
     let mut rows = vec![Row::new(vec![
         Cell::from(Span::styled("id", key_style)),
         Cell::from(Span::styled("name", key_style)),
+        Cell::from(Span::styled("weight", key_style)),
+        Cell::from(Span::styled("energy", key_style)),
+        Cell::from(Span::styled("price", key_style)),
     ])];
     for ingredient in ingredients {
         let row = Row::new(vec![
@@ -100,6 +186,12 @@ fn draw_ingredients(ingredients: &[Ingredient]) -> Table {
                 help_style,
             )),
             Cell::from(Span::styled(ingredient.name.clone(), help_style)),
+            Cell::from(Span::styled(ingredient.weight.to_string(), help_style)),
+            Cell::from(Span::styled(ingredient.energy.to_string(), help_style)),
+            Cell::from(Span::styled(
+                format!("{}€", ingredient.price.0 as f32 / 10.),
+                help_style,
+            )),
         ]);
         rows.push(row);
     }
@@ -109,7 +201,7 @@ fn draw_ingredients(ingredients: &[Ingredient]) -> Table {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Plain)
-                .title("Ingredients"),
+                .title("RecipeIngredients"),
         )
         .highlight_style(selected_style)
         .highlight_symbol(">>")
@@ -167,25 +259,25 @@ fn draw_logs<'a>() -> TuiLoggerWidget<'a> {
 }
 
 fn draw_popups<B: Backend>(popup: &PopUp, frame: &mut Frame<B>) {
-    let (title, text) = match popup {
-        PopUp::Delete { id } => (
-            "Delete".to_string(),
-            format!("Do you really want to delete {id}?"),
-        ),
-        PopUp::AddSourceUrl { ingredient, url } => {
-            (format!("Url for {ingredient}:"), url.to_owned())
-        }
-        PopUp::AddSourceWeight {
-            ingredient, weight, ..
-        } => (format!("Weight for {ingredient}:"), weight.to_owned()),
-    };
-    let paragraph = Paragraph::new(Span::styled(
-        text,
-        Style::default().add_modifier(Modifier::SLOW_BLINK),
-    ))
-    .alignment(Alignment::Center)
-    .wrap(Wrap { trim: true });
+    fn render_paragraph<B: Backend>(text: String, frame: &mut Frame<B>, block_rect: Rect) {
+        let paragraph = Paragraph::new(Span::styled(
+            text,
+            Style::default().add_modifier(Modifier::SLOW_BLINK),
+        ))
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
 
+        frame.render_widget(paragraph, block_rect);
+    }
+
+    let title = match popup {
+        PopUp::Delete { id, .. } => "Delete".to_string(),
+        PopUp::AddSourceUrl {
+            ingredient, url, ..
+        } => format!("Url for {ingredient}:"),
+        PopUp::AddSourceWeight { ingredient, .. } => format!("Weight for {ingredient}:"),
+        PopUp::ViewMealIngredients { meal, .. } => format!("Ingredients for {}:", meal.name),
+    };
     let block = Block::default()
         .style(Style::default().bg(Color::Black))
         .title(title)
@@ -194,7 +286,22 @@ fn draw_popups<B: Backend>(popup: &PopUp, frame: &mut Frame<B>) {
     let area = centered_rect(60, 20, frame.size());
     frame.render_widget(Clear, area); //this clears out the background
     let block_rect = block.inner(area);
-    frame.render_widget(paragraph, block_rect);
+    match popup {
+        PopUp::Delete { id } => {
+            let text = format!("Do you really want to delete {id}?");
+            render_paragraph(text, frame, block_rect);
+        }
+        PopUp::AddSourceUrl { url, .. } => {
+            let text = url.to_owned();
+            render_paragraph(text, frame, block_rect);
+        }
+
+        PopUp::AddSourceWeight { weight, .. } => {
+            let text = weight.to_owned();
+            render_paragraph(text, frame, block_rect);
+        }
+        _ => {}
+    };
     frame.render_widget(block, area);
 }
 
