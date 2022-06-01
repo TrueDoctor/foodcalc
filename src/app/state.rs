@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use tui::widgets::TableState;
 
 use super::db::{FoodBase, Ingredient, Meal, RecipeIngredient};
@@ -35,7 +33,7 @@ pub enum AppState {
         ingredients: Vec<Ingredient>,
         selection: TableState,
     },
-    RecipeIngredientView {
+    MealView {
         popup: Option<PopUp>,
         meals: Vec<Meal>,
         selection: TableState,
@@ -68,8 +66,8 @@ impl AppState {
                     None => 1,
                 };
                 selection.select(Some(i));
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -83,20 +81,27 @@ impl AppState {
                     None => 1,
                 };
                 selection.select(Some(i));
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
     pub(crate) fn ingredient(&self) -> Option<&Ingredient> {
         if let AppState::IngredientView {
-            ingredients,
-            selection,
-            ..
+            ingredients, selection, ..
         } = self
         {
             if let Some(i) = selection.selected() {
                 return ingredients.get(i - 1);
+            }
+        }
+        None
+    }
+
+    pub(crate) fn meal(&self) -> Option<&Meal> {
+        if let AppState::MealView { meals, selection, .. } = self {
+            if let Some(i) = selection.selected() {
+                return meals.get(i - 1);
             }
         }
         None
@@ -113,9 +118,23 @@ impl AppState {
         }
     }
 
+    pub fn select(&mut self) {
+        if let Some(meal) = self.meal().cloned() {
+            if let AppState::MealView { popup, .. } = self {
+                *popup = Some(PopUp::ViewMealIngredients {
+                    meal,
+                    ingredients: vec![],
+                    selection: TableState::default(),
+                })
+            }
+        }
+    }
+
     pub fn close_popup(&mut self) {
-        if let AppState::IngredientView { popup, .. } = self {
-            *popup = None
+        match self {
+            AppState::IngredientView { popup, .. } => *popup = None,
+            AppState::MealView { popup, .. } => *popup = None,
+            AppState::Init => (),
         }
     }
 
@@ -144,12 +163,12 @@ impl AppState {
 
     pub(crate) fn selection(&mut self) -> Option<&mut TableState> {
         match self {
-            AppState::IngredientView {
-                ref mut selection, ..
+            AppState::IngredientView { ref mut selection, .. } => Some(selection),
+            AppState::MealView {
+                popup: Some(PopUp::ViewMealIngredients { ref mut selection, .. }),
+                ..
             } => Some(selection),
-            AppState::RecipeIngredientView {
-                ref mut selection, ..
-            } => Some(selection),
+            AppState::MealView { ref mut selection, .. } => Some(selection),
             _ => None,
         }
     }
@@ -157,46 +176,38 @@ impl AppState {
     pub(crate) fn list_len(&self) -> Option<usize> {
         match self {
             AppState::IngredientView { ingredients, .. } => Some(ingredients.len()),
-            AppState::RecipeIngredientView { meals, .. } => Some(meals.len()),
+            AppState::MealView {
+                popup: Some(PopUp::ViewMealIngredients { ingredients, .. }),
+                ..
+            } => Some(ingredients.len()),
+            AppState::MealView { meals, .. } => Some(meals.len()),
             _ => None,
         }
     }
 
     pub(crate) fn popup(&self) -> Option<&PopUp> {
-        if let Self::IngredientView { ref popup, .. } = self {
-            return popup.as_ref();
+        match self {
+            Self::IngredientView { ref popup, .. } => popup.as_ref(),
+            Self::MealView { ref popup, .. } => popup.as_ref(),
+            Self::Init => None,
         }
-        None
     }
 
     pub(crate) async fn update(&mut self, database: &FoodBase) {
         match self {
             Self::IngredientView { ingredients, .. } => {
                 *ingredients = database.get_ingredients().await.unwrap_or_default()
-            }
-            Self::RecipeIngredientView {
-                popup:
-                    Some(PopUp::ViewMealIngredients {
-                        meal, ingredients, ..
-                    }),
+            },
+            Self::MealView {
+                popup: Some(PopUp::ViewMealIngredients { meal, ingredients, .. }),
                 ..
             } => {
                 *ingredients = database
-                    .get_recipe_ingredients(
-                        meal.event_id,
-                        meal.recipe_id,
-                        meal.place_id,
-                        meal.start_time,
-                    )
+                    .get_recipe_ingredients(meal.event_id, meal.recipe_id, meal.place_id, meal.start_time)
                     .await
                     .unwrap_or_default()
-            }
-            Self::RecipeIngredientView { meals, .. } => {
-                *meals = database
-                    .get_event_meals(CURRENT_EVENT)
-                    .await
-                    .unwrap_or_default()
-            }
+            },
+            Self::MealView { meals, .. } => *meals = database.get_event_meals(CURRENT_EVENT).await.unwrap_or_default(),
             _ => (),
         }
     }

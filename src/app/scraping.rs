@@ -50,24 +50,15 @@ pub(crate) fn fetch_metro_price_python(url: &str) -> Option<PgMoney> {
             Some(price) => {
                 use regex::Regex;
                 log::info!("got price {price}");
-                let number_regex =
-                    Regex::new(r"[0-9][0-9,]*").expect("failed to compile number regex");
+                let number_regex = Regex::new(r"[0-9][0-9,]*").expect("failed to compile number regex");
 
                 if let Some(number) = number_regex.find(price.as_str()) {
                     log::info!("regex {}", number.as_str());
-                    let number = number
-                        .as_str()
-                        .to_owned()
-                        .replace('.', "")
-                        .replace(',', ".");
+                    let number = number.as_str().to_owned().replace('.', "").replace(',', ".");
                     log::info!("fetched price {number}");
-                    return PgMoney::from_bigdecimal(
-                        BigDecimal::from_str_radix(number.as_str(), 10).unwrap(),
-                        2,
-                    )
-                    .ok();
+                    return PgMoney::from_bigdecimal(BigDecimal::from_str_radix(number.as_str(), 10).unwrap(), 2).ok();
                 }
-            }
+            },
         }
     }
     log::error!("failed to fetch price");

@@ -86,11 +86,11 @@ pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
         Ok(amount) => {
             log::info!("parsed {description} as {amount} unit:{unit_id} {unit}");
             Some((amount, unit_id))
-        }
+        },
         Err(_) => {
             log::error!("Failed to parse {description} as package_size");
             None
-        }
+        },
     }
 }
 
@@ -117,12 +117,7 @@ impl FoodBase {
         }
     }
 
-    pub async fn add_ingredient(
-        &self,
-        name: String,
-        energy: BigDecimal,
-        comment: Option<String>,
-    ) -> eyre::Result<i32> {
+    pub async fn add_ingredient(&self, name: String, energy: BigDecimal, comment: Option<String>) -> eyre::Result<i32> {
         let ingredient = sqlx::query!(
             r#"
                 INSERT INTO ingredients ( name, energy, comment )
@@ -168,12 +163,9 @@ impl FoodBase {
     }
 
     pub async fn get_ingredients(&self) -> eyre::Result<Vec<Ingredient>> {
-        let records = sqlx::query_as!(
-            Ingredient,
-            r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,
-        )
-        .fetch_all(&*self.pg_pool)
-        .await?;
+        let records = sqlx::query_as!(Ingredient, r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,)
+            .fetch_all(&*self.pg_pool)
+            .await?;
 
         Ok(records)
     }
@@ -240,10 +232,8 @@ impl FoodBase {
         for _source in sources {
             #[cfg(feature = "scraping")]
             if let Some(url) = _source.url.clone() {
-                if let Some(price) = tokio::task::spawn_blocking(move || {
-                    super::scraping::fetch_metro_price_python(&url)
-                })
-                .await?
+                if let Some(price) =
+                    tokio::task::spawn_blocking(move || super::scraping::fetch_metro_price_python(&url)).await?
                 {
                     log::debug!("{} cents", price.0);
                     self.update_ingredient_source_price(_source.ingredient_id, _source.url, price)
@@ -254,10 +244,7 @@ impl FoodBase {
         Ok(())
     }
 
-    pub async fn get_metro_ingredient_sources(
-        &self,
-        ingredient_id: Option<i32>,
-    ) -> eyre::Result<Vec<IngredientSorce>> {
+    pub async fn get_metro_ingredient_sources(&self, ingredient_id: Option<i32>) -> eyre::Result<Vec<IngredientSorce>> {
         let records = match ingredient_id {
             Some(id) => sqlx::query_as!(
                 IngredientSorce,
@@ -306,18 +293,9 @@ mod tests {
     #[test]
     fn test_unit_parsing() {
         use super::*;
-        assert_eq!(
-            Some((BigDecimal::new(1u32.into(), 0), 0)),
-            parse_package_size("1kg")
-        );
-        assert_eq!(
-            Some((BigDecimal::new(15u32.into(), 1), 0)),
-            parse_package_size("1.5kg")
-        );
-        assert_eq!(
-            Some((BigDecimal::new(1u32.into(), 0), 10)),
-            parse_package_size("1Pkg")
-        );
+        assert_eq!(Some((BigDecimal::new(1u32.into(), 0), 0)), parse_package_size("1kg"));
+        assert_eq!(Some((BigDecimal::new(15u32.into(), 1), 0)), parse_package_size("1.5kg"));
+        assert_eq!(Some((BigDecimal::new(1u32.into(), 0), 10)), parse_package_size("1Pkg"));
         assert_eq!(None, parse_package_size("1"));
     }
 }

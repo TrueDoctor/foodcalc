@@ -52,10 +52,9 @@ impl App {
         let state = AppState::default();
 
         dotenv::dotenv().ok();
-        let pool =
-            PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
-                .await
-                .expect("failed to establish connection to database");
+        let pool = PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
+            .await
+            .expect("failed to establish connection to database");
         DATABASE.set(db::FoodBase::new(pool)).unwrap();
 
         Ok(Self {
@@ -74,7 +73,7 @@ impl App {
                     None => self.state.add_ingredient_source_url(),
                     Some(PopUp::AddSourceUrl { .. }) => {
                         self.state.add_ingredient_source_weight();
-                    }
+                    },
                     Some(PopUp::AddSourceWeight {
                         ingredient,
                         url,
@@ -92,25 +91,25 @@ impl App {
                             self.dispatch(add_source_event).await;
                         }
                         self.state.close_popup();
-                    }
+                    },
                     Some(_) => {
                         self.state.close_popup();
-                    }
+                    },
                 },
                 Key::Char(c) => {
                     if let Some(input) = self.state.input() {
                         input.push(c)
                     }
-                }
+                },
                 Key::Backspace => {
                     if let Some(input) = self.state.input() {
                         input.pop();
                     }
-                }
+                },
                 Key::Esc => {
                     self.state.close_popup();
-                }
-                _ => {}
+                },
+                _ => {},
             };
             AppReturn::Continue
         } else if let Some(action) = self.actions.find(key) {
@@ -121,26 +120,30 @@ impl App {
                     // Refresh is an I/O action, we dispatch on the IO channel that's run on another thread
                     self.dispatch(IoEvent::UpdateData).await;
                     AppReturn::Continue
-                }
+                },
                 Action::MoveDown => {
                     self.state.next_item();
                     AppReturn::Continue
-                }
+                },
                 Action::MoveUp => {
                     self.state.previous_item();
                     AppReturn::Continue
-                }
+                },
                 Action::AddSource => {
                     self.state.add_ingredient_source_url();
                     AppReturn::Continue
-                }
+                },
                 Action::FetchMetroPrice => {
                     let ingredient = self.state.ingredient();
                     let ingredient_id = ingredient.map(|ingredient| ingredient.ingredient_id);
-                    self.dispatch(IoEvent::FetchMetroPrice { ingredient_id })
-                        .await;
+                    self.dispatch(IoEvent::FetchMetroPrice { ingredient_id }).await;
                     AppReturn::Continue
-                }
+                },
+                Action::Select => {
+                    self.state.select();
+                    self.dispatch(IoEvent::UpdateData).await;
+                    AppReturn::Continue
+                },
                 Action::FocusIngredients => {
                     self.state = AppState::IngredientView {
                         popup: None,
@@ -149,16 +152,20 @@ impl App {
                     };
                     self.dispatch(IoEvent::UpdateData).await;
                     AppReturn::Continue
-                }
+                },
                 Action::FocusMeals => {
-                    self.state = AppState::RecipeIngredientView {
+                    self.state = AppState::MealView {
                         popup: None,
                         meals: vec![],
                         selection: TableState::default(),
                     };
                     self.dispatch(IoEvent::UpdateData).await;
                     AppReturn::Continue
-                }
+                },
+                Action::ClosePopup => {
+                    self.state.close_popup();
+                    AppReturn::Continue
+                },
             }
         } else {
             warn!("No action accociated to {}", key);
@@ -196,10 +203,10 @@ impl App {
             Ok(id) => {
                 self.state.next_item();
                 log::debug!("Added source for ingredient {id}")
-            }
+            },
             Err(error) => {
                 log::error!("failed to add ingredient source to database, {error:?}")
-            }
+            },
         }
     }
 
@@ -229,8 +236,10 @@ impl App {
         self.actions = vec![
             Action::Quit,
             Action::Refresh,
+            Action::ClosePopup,
             Action::MoveDown,
             Action::MoveUp,
+            Action::Select,
             Action::AddSource,
             #[cfg(feature = "scraping")]
             Action::FetchMetroPrice,

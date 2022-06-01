@@ -2,9 +2,7 @@ use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::text::Span;
-use tui::widgets::{
-    Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table, TableState, Wrap,
-};
+use tui::widgets::{Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table, TableState, Wrap};
 use tui::Frame;
 use tui_logger::TuiLoggerWidget;
 
@@ -23,14 +21,7 @@ where
     // Vertical layout
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Length(3),
-                Constraint::Min(10),
-                Constraint::Length(12),
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Length(3), Constraint::Min(10), Constraint::Length(12)].as_ref())
         .split(size);
 
     // Title
@@ -51,15 +42,15 @@ where
         } => {
             let ingredients = draw_ingredients(ingredients.as_slice());
             rect.render_stateful_widget(ingredients, body_chunks[0], selection);
-        }
-        AppState::RecipeIngredientView {
+        },
+        AppState::MealView {
             ref mut selection,
             meals,
             ..
         } => {
             let ingredients = draw_meal_list(meals.as_slice());
             rect.render_stateful_widget(ingredients, body_chunks[0], selection);
-        }
+        },
         _ => (),
     }
 
@@ -102,9 +93,7 @@ fn draw_table(title: &str, header: Vec<String>, content: Vec<Vec<String>>) -> Ta
     let selected_style = Style::default().add_modifier(Modifier::REVERSED);
 
     let mut rows = vec![Row::new(
-        header
-            .into_iter()
-            .map(|name| Cell::from(Span::styled(name, key_style))),
+        header.into_iter().map(|name| Cell::from(Span::styled(name, key_style))),
     )];
     rows.extend(content.into_iter().map(|content_row| {
         let cells = content_row
@@ -141,12 +130,7 @@ fn draw_ingredients(ingredients: &[Ingredient]) -> Table {
         vec!["id".to_owned(), "name".to_owned()],
         ingredients
             .iter()
-            .map(|ingredient| {
-                vec![
-                    ingredient.ingredient_id.to_string(),
-                    ingredient.name.to_string(),
-                ]
-            })
+            .map(|ingredient| vec![ingredient.ingredient_id.to_string(), ingredient.name.to_string()])
             .collect(),
     )
 }
@@ -178,48 +162,6 @@ fn draw_meal_list(meals: &[Meal]) -> Table {
             })
             .collect(),
     )
-}
-
-fn draw_recipe_ingredients(ingredients: &[RecipeIngredient]) -> Table {
-    let key_style = Style::default().fg(Color::LightCyan);
-    let help_style = Style::default().fg(Color::Gray);
-    let selected_style = Style::default().add_modifier(Modifier::REVERSED);
-
-    let mut rows = vec![Row::new(vec![
-        Cell::from(Span::styled("id", key_style)),
-        Cell::from(Span::styled("name", key_style)),
-        Cell::from(Span::styled("weight", key_style)),
-        Cell::from(Span::styled("energy", key_style)),
-        Cell::from(Span::styled("price", key_style)),
-    ])];
-    for ingredient in ingredients {
-        let row = Row::new(vec![
-            Cell::from(Span::styled(
-                ingredient.ingredient_id.to_string(),
-                help_style,
-            )),
-            Cell::from(Span::styled(ingredient.name.clone(), help_style)),
-            Cell::from(Span::styled(ingredient.weight.to_string(), help_style)),
-            Cell::from(Span::styled(ingredient.energy.to_string(), help_style)),
-            Cell::from(Span::styled(
-                format!("{}€", ingredient.price.0 as f32 / 10.),
-                help_style,
-            )),
-        ]);
-        rows.push(row);
-    }
-
-    Table::new(rows)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Plain)
-                .title("RecipeIngredients"),
-        )
-        .highlight_style(selected_style)
-        .highlight_symbol(">>")
-        .widths(&[Constraint::Length(11), Constraint::Min(20)])
-        .column_spacing(1)
 }
 
 fn draw_help(actions: &Actions) -> Table {
@@ -272,15 +214,18 @@ fn draw_logs<'a>() -> TuiLoggerWidget<'a> {
 }
 
 fn draw_popups<B: Backend>(popup: &mut PopUp, frame: &mut Frame<B>) {
-    fn render_paragraph<B: Backend>(text: String, frame: &mut Frame<B>, block_rect: Rect) {
-        let paragraph = Paragraph::new(Span::styled(
-            text,
-            Style::default().add_modifier(Modifier::SLOW_BLINK),
-        ))
-        .alignment(Alignment::Center)
-        .wrap(Wrap { trim: true });
+    fn render_paragraph<B: Backend>(title: String, text: String, frame: &mut Frame<B>, area: Rect) {
+        let paragraph = Paragraph::new(Span::styled(text, Style::default().add_modifier(Modifier::SLOW_BLINK)))
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true });
 
+        let block = Block::default()
+            .style(Style::default().bg(Color::Black))
+            .title(title)
+            .borders(Borders::ALL);
+        let block_rect = block.inner(area);
         frame.render_widget(paragraph, block_rect);
+        frame.render_widget(block, area);
     }
 
     fn render_table<B: Backend>(
@@ -296,68 +241,52 @@ fn draw_popups<B: Backend>(popup: &mut PopUp, frame: &mut Frame<B>) {
     }
 
     let title = match popup {
-        PopUp::Delete { id, .. } => "Delete".to_string(),
-        PopUp::AddSourceUrl {
-            ingredient, url, ..
-        } => format!("Url for {ingredient}:"),
+        PopUp::Delete { .. } => "Delete".to_string(),
+        PopUp::AddSourceUrl { ingredient, .. } => format!("Url for {ingredient}:"),
         PopUp::AddSourceWeight { ingredient, .. } => format!("Weight for {ingredient}:"),
         PopUp::ViewMealIngredients { meal, .. } => format!("Ingredients for {}:", meal.name),
     };
-    let block = Block::default()
-        .style(Style::default().bg(Color::Black))
-        .title(title)
-        .borders(Borders::ALL);
     //let block = Block::default().title(text.clone()).borders(Borders::ALL);
     let area = centered_rect(60, 20, frame.size());
     frame.render_widget(Clear, area); //this clears out the background
-    let block_rect = block.inner(area);
     match popup {
         PopUp::Delete { id } => {
             let text = format!("Do you really want to delete {id}?");
-            render_paragraph(text, frame, block_rect);
-        }
+            render_paragraph(title, text, frame, area);
+        },
         PopUp::AddSourceUrl { url, .. } => {
-            let text = url.to_owned();
-            render_paragraph(text, frame, block_rect);
-        }
+            render_paragraph(title, url.to_owned(), frame, area);
+        },
 
         PopUp::AddSourceWeight { weight, .. } => {
-            let text = weight.to_owned();
-            render_paragraph(text, frame, block_rect);
-        }
+            render_paragraph(title, weight.to_owned(), frame, area);
+        },
         PopUp::ViewMealIngredients {
             meal,
             ingredients,
             selection,
         } => {
+            let headers = ["id", "name", "weight", "energy", "price"];
+            let headers = headers.iter().map(|name| name.to_string()).collect();
+            let format_ingredient = |ingredient: &RecipeIngredient| {
+                vec![
+                    ingredient.ingredient_id.to_string(),
+                    ingredient.name.to_string(),
+                    ingredient.weight.to_string(),
+                    ingredient.energy.to_string(),
+                    format!("{}€", ingredient.price.0 as f32 / 10.),
+                ]
+            };
             render_table(
                 format!("Ingredients for {}:", meal.name).as_str(),
-                vec![
-                    "id".to_string(),
-                    "name".to_string(),
-                    "weight".to_string(),
-                    "energy".to_string(),
-                    "price".to_string(),
-                ],
-                ingredients
-                    .iter()
-                    .map(|ingredient| {
-                        vec![
-                            ingredient.ingredient_id.to_string(),
-                            ingredient.name.to_string(),
-                            ingredient.weight.to_string(),
-                            ingredient.energy.to_string(),
-                            format!("{}€", ingredient.price.0 as f32 / 10.),
-                        ]
-                    })
-                    .collect(),
+                headers,
+                ingredients.iter().map(format_ingredient).collect(),
                 selection,
                 frame,
-                block_rect,
+                area,
             );
-        }
+        },
     };
-    frame.render_widget(block, area);
 }
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`

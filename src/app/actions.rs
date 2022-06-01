@@ -11,24 +11,28 @@ pub enum Action {
     Refresh,
     MoveDown,
     MoveUp,
+    Select,
     AddSource,
     FetchMetroPrice,
     FocusIngredients,
     FocusMeals,
+    ClosePopup,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 8] = [
+        static ACTIONS: [Action; 10] = [
             Action::Quit,
             Action::Refresh,
             Action::MoveDown,
             Action::MoveUp,
             Action::AddSource,
+            Action::Select,
             Action::FetchMetroPrice,
             Action::FocusIngredients,
             Action::FocusMeals,
+            Action::ClosePopup,
         ];
         ACTIONS.iter()
     }
@@ -40,10 +44,12 @@ impl Action {
             Action::Refresh => &[Key::Char('r')],
             Action::MoveDown => &[Key::Down],
             Action::MoveUp => &[Key::Up],
+            Action::Select => &[Key::Enter],
             Action::AddSource => &[Key::Char('a')],
             Action::FetchMetroPrice => &[Key::Char('f')],
             Action::FocusIngredients => &[Key::Char('1')],
             Action::FocusMeals => &[Key::Char('2')],
+            Action::ClosePopup => &[Key::Esc],
         }
     }
 }
@@ -53,9 +59,11 @@ impl Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
             Action::Quit => "Quit",
+            Action::ClosePopup => "Close Popup",
             Action::Refresh => "Sleep",
             Action::MoveDown => "Move Down",
             Action::MoveUp => "Move Up",
+            Action::Select => "Select",
             Action::AddSource => "Add Source",
             Action::FetchMetroPrice => "Fetch Metro Price",
             Action::FocusIngredients => "Switch to ingredient view",
@@ -99,7 +107,7 @@ impl From<Vec<Action>> for Actions {
                     Some(vec) => vec.push(*action),
                     None => {
                         map.insert(*key, vec![*action]);
-                    }
+                    },
                 }
             }
         }
@@ -107,11 +115,7 @@ impl From<Vec<Action>> for Actions {
             .iter()
             .filter(|(_, actions)| actions.len() > 1) // at least two actions share same shortcut
             .map(|(key, actions)| {
-                let actions = actions
-                    .iter()
-                    .map(Action::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
+                let actions = actions.iter().map(Action::to_string).collect::<Vec<_>>().join(", ");
                 format!("Conflict key {} with actions {}", key, actions)
             })
             .collect::<Vec<_>>();
@@ -144,13 +148,7 @@ mod tests {
 
     #[test]
     fn should_create_actions_from_vec() {
-        let _actions: Actions = vec![
-            Action::Quit,
-            Action::Refresh,
-            Action::MoveDown,
-            Action::MoveUp,
-        ]
-        .into();
+        let _actions: Actions = vec![Action::Quit, Action::Refresh, Action::MoveDown, Action::MoveUp].into();
     }
 
     #[test]

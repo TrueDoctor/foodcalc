@@ -46,7 +46,7 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
                 // Render
                 terminal.draw(|rect| ui::draw(rect, &mut app))?;
                 app.update_on_tick().await
-            }
+            },
         };
         // Check if we should exit
         if result == AppReturn::Exit {

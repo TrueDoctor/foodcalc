@@ -33,10 +33,8 @@ impl IoAsyncHandler {
             } => {
                 self.do_add_ingredient_source(ingredient_id, store_id, url, price, weight, unit)
                     .await
-            }
-            IoEvent::FetchMetroPrice { ingredient_id } => {
-                self.do_fetch_metro_price(ingredient_id).await
-            }
+            },
+            IoEvent::FetchMetroPrice { ingredient_id } => self.do_fetch_metro_price(ingredient_id).await,
         };
 
         if let Err(err) = result {
@@ -80,10 +78,10 @@ impl IoAsyncHandler {
             Ok(id) => {
                 self.app.lock().await.state.next_item();
                 log::debug!("Updated price for {id:?} ingredients")
-            }
+            },
             Err(error) => {
                 log::error!("failed to updete metro prices, {error:?}")
-            }
+            },
         };
 
         Ok(())
