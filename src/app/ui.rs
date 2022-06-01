@@ -2,7 +2,7 @@ use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::text::Span;
-use tui::widgets::{Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table, Wrap};
+use tui::widgets::{Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table, Wrap, TableState};
 use tui::Frame;
 use tui_logger::TuiLoggerWidget;
 
@@ -68,8 +68,8 @@ where
     let logs = draw_logs();
     rect.render_widget(logs, chunks[2]);
 
-    if let Some(popup) = app.state.popup() {
-        draw_popups(popup, rect)
+    if let Some(mut popup) = app.state.popup().cloned() {
+        draw_popups(&mut popup, rect)
     }
 }
 
@@ -258,7 +258,7 @@ fn draw_logs<'a>() -> TuiLoggerWidget<'a> {
         .style(Style::default().fg(Color::White).bg(Color::Black))
 }
 
-fn draw_popups<B: Backend>(popup: &PopUp, frame: &mut Frame<B>) {
+fn draw_popups<B: Backend>(popup: &mut PopUp, frame: &mut Frame<B>) {
     fn render_paragraph<B: Backend>(text: String, frame: &mut Frame<B>, block_rect: Rect) {
         let paragraph = Paragraph::new(Span::styled(
             text,
@@ -268,6 +268,11 @@ fn draw_popups<B: Backend>(popup: &PopUp, frame: &mut Frame<B>) {
         .wrap(Wrap { trim: true });
 
         frame.render_widget(paragraph, block_rect);
+    }
+
+    fn render_table<B:Backend>(title:&str,header:Vec<String>,data:Vec<Vec<String>>,state: &mut TableState,frame:&mut Frame<B>,block_rect:Rect) {
+        let table = draw_table(title, header, data);
+        frame.render_stateful_widget(table, block_rect, state)
     }
 
     let title = match popup {
@@ -300,7 +305,24 @@ fn draw_popups<B: Backend>(popup: &PopUp, frame: &mut Frame<B>) {
             let text = weight.to_owned();
             render_paragraph(text, frame, block_rect);
         }
-        _ => {}
+        PopUp::ViewMealIngredients {meal, ingredients,selection} => {
+            render_table(
+                format!("Ingredients for {}:", meal.name).as_str(),
+                vec!["id".to_string(),"name".to_string(),"weight".to_string(),"energy".to_string(),"price".to_string()],
+                ingredients.iter().map(|ingredient| {
+                    vec![
+                        ingredient.ingredient_id.to_string(),
+                        ingredient.name.to_string(),
+                        ingredient.weight.to_string(),
+                        ingredient.energy.to_string(),
+                        format!("{}€", ingredient.price.0 as f32 / 10.),
+                    ]
+                }).collect(),
+                selection,
+                frame,
+                block_rect
+        );
+        }
     };
     frame.render_widget(block, area);
 }
