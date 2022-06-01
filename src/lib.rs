@@ -26,7 +26,7 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
     terminal.hide_cursor()?;
 
     // User event handler
-    let tick_rate = Duration::from_millis(10);
+    let tick_rate = Duration::from_millis(100);
     let mut events = Events::new(tick_rate);
 
     // Trigger state change from Init to Initialized
