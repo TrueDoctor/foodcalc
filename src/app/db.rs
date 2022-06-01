@@ -26,10 +26,12 @@ pub struct RecipeIngredient {
 
 #[derive(Clone, Debug)]
 pub struct Meal {
+    pub event_id: i32,
     pub recipe_id: i32,
     pub name: String,
+    pub place_id: i32,
     pub place: String,
-    pub time: PrimitiveDateTime,
+    pub start_time: PrimitiveDateTime,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
     pub price: PgMoney,
@@ -103,6 +105,7 @@ pub struct IngredientSorce {
     pub comment: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct FoodBase {
     pg_pool: Arc<PgPool>,
 }
@@ -210,10 +213,12 @@ impl FoodBase {
         let records = sqlx::query_as!(
             Meal,
             r#" SELECT
+            event_id as "event_id!",
              recipe_id as "recipe_id!",
              recipe as "name!",
+             place_id as "place_id!",
              place as "place!",
-             start_time as "time!",
+             start_time as "start_time!",
              weight as "weight!",
              energy as "energy!",
              price as "price!",

@@ -1,6 +1,7 @@
 use std::env;
 
 use log::{debug, error, warn};
+use once_cell::sync::OnceCell;
 use sqlx::postgres::types::PgMoney;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
@@ -20,6 +21,12 @@ pub mod ui;
 
 static PRICE_PLACEHOLDER: PgMoney = PgMoney(-100i64);
 
+static DATABASE: OnceCell<db::FoodBase> = OnceCell::new();
+
+pub(crate) fn database() -> &'static db::FoodBase {
+    DATABASE.get().unwrap()
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum AppReturn {
     Exit,
@@ -34,8 +41,7 @@ pub struct App {
     actions: Actions,
     /// State
     is_loading: bool,
-    state: AppState,
-    database: db::FoodBase,
+    pub state: AppState,
 }
 
 impl App {
@@ -45,15 +51,17 @@ impl App {
         let state = AppState::default();
 
         dotenv::dotenv().ok();
-        let pool = PgPool::connect(&env::var("DATABASE_URL")?).await?;
-        let database = db::FoodBase::new(pool);
+        let pool =
+            PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
+                .await
+                .expect("failed to establish connection to database");
+        DATABASE.set(db::FoodBase::new(pool)).unwrap();
 
         Ok(Self {
             io_tx,
             actions,
             is_loading,
             state,
-            database,
         })
     }
 
@@ -148,7 +156,7 @@ impl App {
     /// We could update the app or dispatch event on tick
     pub async fn update_data(&mut self) -> AppReturn {
         // here we just increment a counter
-        self.state.update(&self.database).await;
+        self.state.update(DATABASE.get().unwrap()).await;
         AppReturn::Continue
     }
 
@@ -162,8 +170,7 @@ impl App {
         unit: i32,
     ) {
         log::debug!("Ingredients");
-        match self
-            .database
+        match database()
             .add_ingredient_source(ingredient_id, store_id, weight, price, Some(url), unit)
             .await
         {
@@ -173,18 +180,6 @@ impl App {
             }
             Err(error) => {
                 log::error!("failed to add ingredient source to database, {error:?}")
-            }
-        }
-    }
-
-    pub async fn fetch_ingredient_price(&mut self, ingredient_id: Option<i32>) {
-        match self.database.fetch_metro_prices(ingredient_id).await {
-            Ok(id) => {
-                self.state.next_item();
-                log::debug!("Updated price for {id:?} ingredients")
-            }
-            Err(error) => {
-                log::error!("failed to updete metro prices, {error:?}")
             }
         }
     }

@@ -30,6 +30,7 @@ inline-python = {version = "*", optional = true}
 lazy_static = {version = "1.4"}
 num = "*"
 regex = "*"
+once_cell = "*"
 
 
 eyre = "0.6"

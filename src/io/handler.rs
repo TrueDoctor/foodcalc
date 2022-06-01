@@ -6,7 +6,7 @@ use sqlx::postgres::types::PgMoney;
 use sqlx::types::BigDecimal;
 
 use super::IoEvent;
-use crate::app::App;
+use crate::app::{database, App};
 
 /// In the IO thread, we handle IO event without blocking the UI thread
 pub struct IoAsyncHandler {
@@ -75,11 +75,16 @@ impl IoAsyncHandler {
     /// Update the price for the given ingredient
     async fn do_fetch_metro_price(&mut self, ingredient_id: Option<i32>) -> Result<()> {
         info!("Fetching ingredient price for {ingredient_id:?}");
-        self.app
-            .lock()
-            .await
-            .fetch_ingredient_price(ingredient_id)
-            .await;
+
+        match database().fetch_metro_prices(ingredient_id).await {
+            Ok(id) => {
+                self.app.lock().await.state.next_item();
+                log::debug!("Updated price for {id:?} ingredients")
+            }
+            Err(error) => {
+                log::error!("failed to updete metro prices, {error:?}")
+            }
+        };
 
         Ok(())
     }
@@ -95,6 +100,7 @@ impl IoAsyncHandler {
         unit: i32,
     ) -> Result<()> {
         info!("Adding ingredient source");
+
         self.app
             .lock()
             .await

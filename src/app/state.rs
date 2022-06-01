@@ -4,6 +4,8 @@ use tui::widgets::TableState;
 
 use super::db::{FoodBase, Ingredient, Meal, RecipeIngredient};
 
+const CURRENT_EVENT: i32 = 0;
+
 #[derive(Clone)]
 pub enum PopUp {
     Delete {
@@ -171,6 +173,29 @@ impl AppState {
         match self {
             Self::IngredientView { ingredients, .. } => {
                 *ingredients = database.get_ingredients().await.unwrap_or_default()
+            }
+            Self::RecipeIngredientView {
+                popup:
+                    Some(PopUp::ViewMealIngredients {
+                        meal, ingredients, ..
+                    }),
+                ..
+            } => {
+                *ingredients = database
+                    .get_recipe_ingredients(
+                        meal.event_id,
+                        meal.recipe_id,
+                        meal.place_id,
+                        meal.start_time,
+                    )
+                    .await
+                    .unwrap_or_default()
+            }
+            Self::RecipeIngredientView { meals, .. } => {
+                *meals = database
+                    .get_event_meals(CURRENT_EVENT)
+                    .await
+                    .unwrap_or_default()
             }
             _ => (),
         }
