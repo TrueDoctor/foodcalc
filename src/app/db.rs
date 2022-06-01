@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use sqlx::postgres::types::PgMoney;
 use sqlx::postgres::PgPool;
+use sqlx::types::time::Time;
 use sqlx::types::BigDecimal;
 
 pub const METRO: i32 = 0;
@@ -12,6 +13,26 @@ pub struct Ingredient {
     pub name: String,
     pub energy: BigDecimal,
     pub comment: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct RecipeIngredient {
+    pub ingredient_id: i32,
+    pub name: String,
+    pub weight: BigDecimal,
+    pub energy: BigDecimal,
+    pub price: PgMoney,
+}
+
+#[derive(Clone, Debug)]
+pub struct Meal {
+    pub recipe_id: i32,
+    pub name: String,
+    pub place: String,
+    pub time: Time,
+    pub weight: BigDecimal,
+    pub energy: BigDecimal,
+    pub price: PgMoney,
 }
 
 use std::fmt::Display;
@@ -151,6 +172,24 @@ impl FoodBase {
         .await?;
 
         Ok(records)
+    }
+
+    pub async fn get_recipe_ingredients(
+        &self,
+        event_id: i32,
+        recipe_id: i32,
+        place_id: i32,
+        start_time: Time,
+    ) -> eyre::Result<Vec<Ingredient>> {
+        /*
+                let records = sqlx::query_as!(
+                    RecipeIngredient,
+                    r#" SELECT * FROM event_ingredients WHERE event_id =  ORDER BY ingredient_id "#,
+                )
+                .fetch_all(&*self.pg_pool)
+                .await?;
+        */
+        Ok(vec![])
     }
 
     pub async fn fetch_metro_prices(&self, ingredient_id: Option<i32>) -> eyre::Result<()> {

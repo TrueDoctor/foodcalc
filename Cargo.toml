@@ -10,7 +10,7 @@ default = ["scraping"]
 scraping = ["inline-python"]
 
 [dependencies]
-sqlx = { version = "0.5.13", features = ["postgres", "macros", "migrate", "uuid", "runtime-tokio-rustls", "offline", "bigdecimal"]}
+sqlx = { version = "0.5.13", features = ["postgres", "macros", "migrate", "uuid", "runtime-tokio-rustls", "offline", "bigdecimal", "time"]}
 tokio = { version = "1", features = ["full"] }
 
 futures = "0.3"
