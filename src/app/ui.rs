@@ -156,7 +156,7 @@ fn draw_meal_list(meals: &[Meal]) -> Table {
                     meal.name.to_string(),
                     meal.weight.to_string(),
                     meal.energy.to_string(),
-                    format_price(&ingredient.price),
+                    format_price(&meal.price),
                     meal.servings.to_string(),
                     meal.start_time.to_string(),
                 ]
