@@ -181,15 +181,16 @@ impl FoodBase {
             RecipeIngredient,
             r#" SELECT ingredient_id as "ingredient_id!",
                    ingredient as "name!",
-                   round(weight / servings, 2) as "weight!",
-                   round(energy /servings, 2) as "energy!",
-                   price / servings as "price!"
+                   round(sum(weight) / servings, 2) as "weight!",
+                   round(sum(energy) /servings, 2) as "energy!",
+                   sum(price) / servings as "price!"
                 FROM event_ingredients
                 WHERE event_id = $1
                     AND recipe_id = $2
                     AND place_id = $3
                     AND start_time = $4
-                ORDER BY ingredient_id "#,
+                GROUP BY ingredient_id, ingredient, servings
+                ORDER BY sum(weight) DESC"#,
             event_id,
             recipe_id,
             place_id,
@@ -212,7 +213,7 @@ impl FoodBase {
              place as "place!",
              start_time as "start_time!",
              round(sum(weight),2) as "weight!",
-             round(sum(energy),2) as "energy!",
+             round(sum(energy),0) as "energy!",
              sum(price) as "price!",
              servings as "servings!"
 

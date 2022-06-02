@@ -111,7 +111,6 @@ fn draw_table(title: &str, header: Vec<String>, content: Vec<Vec<String>>) -> Ta
                 .title(title),
         )
         .highlight_style(selected_style)
-        .highlight_symbol(">>")
         .widths(&[
             Constraint::Length(11),
             Constraint::Min(20),
@@ -154,11 +153,11 @@ fn draw_meal_list(meals: &[Meal]) -> Table {
                 vec![
                     meal.recipe_id.to_string(),
                     meal.name.to_string(),
-                    meal.weight.to_string(),
-                    meal.energy.to_string(),
+                    format!("{}\tkg", meal.weight),
+                    format!("{}\tkj", meal.energy),
                     format_price(&meal.price),
                     meal.servings.to_string(),
-                    meal.start_time.to_string(),
+                    meal.start_time.format("%b %d %H:%M"),
                 ]
             })
             .collect(),
@@ -247,9 +246,10 @@ fn draw_popups<B: Backend>(popup: &mut PopUp, frame: &mut Frame<B>) {
         PopUp::AddSourceWeight { ingredient, .. } => format!("Weight for {ingredient}:"),
         PopUp::ViewMealIngredients { meal, .. } => format!("Ingredients for {}:", meal.name),
     };
-    //let block = Block::default().title(text.clone()).borders(Borders::ALL);
+
     let area = centered_rect(60, 20, frame.size());
     frame.render_widget(Clear, area); //this clears out the background
+
     match popup {
         PopUp::Delete { id } => {
             let text = format!("Do you really want to delete {id}?");
@@ -267,27 +267,27 @@ fn draw_popups<B: Backend>(popup: &mut PopUp, frame: &mut Frame<B>) {
             ingredients,
             selection,
         } => {
-            let headers = ["id", "name", "weight", "energy", "price"];
-            let headers = headers.iter().map(|name| name.to_string()).collect();
-            let format_ingredient = |ingredient: &RecipeIngredient| {
-                vec![
-                    ingredient.ingredient_id.to_string(),
-                    ingredient.name.to_string(),
-                    ingredient.weight.to_string(),
-                    ingredient.energy.to_string(),
-                    format_price(&ingredient.price),
-                ]
-            };
-            render_table(
-                format!("Ingredients for {}:", meal.name).as_str(),
-                headers,
-                ingredients.iter().map(format_ingredient).collect(),
-                selection,
-                frame,
-                area,
-            );
+            let (headers, ingredients) = recipe_ingredients_table(ingredients);
+            let title = format!("Ingredients for {}:", meal.name);
+            render_table(title.as_str(), headers, ingredients, selection, frame, area);
         },
     };
+}
+
+fn recipe_ingredients_table(ingredients: &[RecipeIngredient]) -> (Vec<String>, Vec<Vec<String>>) {
+    let headers = ["id", "name", "weight", "energy", "price"];
+    let headers = headers.iter().map(|name| name.to_string()).collect();
+    let format_ingredient = |ingredient: &RecipeIngredient| {
+        vec![
+            ingredient.ingredient_id.to_string(),
+            ingredient.name.to_string(),
+            ingredient.weight.to_string(),
+            ingredient.energy.to_string(),
+            format_price(&ingredient.price),
+        ]
+    };
+    let ingredients = ingredients.iter().map(format_ingredient).collect();
+    (headers, ingredients)
 }
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`
@@ -320,3 +320,4 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 fn format_price(price: &PgMoney) -> String {
     format!("{}€", price.0 as f32 / 100.)
 }
+
