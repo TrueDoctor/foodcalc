@@ -1,3 +1,4 @@
+use sqlx::postgres::types::PgMoney;
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
@@ -155,7 +156,7 @@ fn draw_meal_list(meals: &[Meal]) -> Table {
                     meal.name.to_string(),
                     meal.weight.to_string(),
                     meal.energy.to_string(),
-                    format!("{}€", meal.price.0 as f32 / 100.),
+                    format_price(&ingredient.price),
                     meal.servings.to_string(),
                     meal.start_time.to_string(),
                 ]
@@ -274,7 +275,7 @@ fn draw_popups<B: Backend>(popup: &mut PopUp, frame: &mut Frame<B>) {
                     ingredient.name.to_string(),
                     ingredient.weight.to_string(),
                     ingredient.energy.to_string(),
-                    format!("{}€", ingredient.price.0 as f32 / 10.),
+                    format_price(&ingredient.price),
                 ]
             };
             render_table(
@@ -314,4 +315,8 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             .as_ref(),
         )
         .split(popup_layout[1])[1]
+}
+
+fn format_price(price: &PgMoney) -> String {
+    format!("{}€", price.0 as f32 / 100.)
 }
