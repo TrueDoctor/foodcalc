@@ -18,4 +18,8 @@ pub enum IoEvent {
     FetchMetroPrice {
         ingredient_id: Option<i32>,
     },
+    ExportMeal {
+        meal_id: i32,
+        weight: BigDecimal,
+    },
 }

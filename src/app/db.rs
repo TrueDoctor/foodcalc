@@ -25,6 +25,16 @@ pub struct RecipeIngredient {
 }
 
 #[derive(Clone, Debug)]
+pub struct SubRecipe {
+    pub subrecipe_id: i32,
+    pub recipe: String,
+    pub ingredient: String,
+    pub subrecipe: String,
+    pub weight: BigDecimal,
+    pub is_subrecipe: bool,
+}
+
+#[derive(Clone, Debug)]
 pub struct Meal {
     pub event_id: i32,
     pub recipe_id: i32,
@@ -168,6 +178,91 @@ impl FoodBase {
             .await?;
 
         Ok(records)
+    }
+
+    pub async fn fetch_subrecipes_export(&self, recipe_id: i32, weight: BigDecimal) {
+        let mut subrecipes = sqlx::query_as!(
+            SubRecipe,
+            r#"
+                SELECT recipe as "recipe!", ingredient as "ingredient!", round(weight, 4) as "weight!", subrecipe as "subrecipe!", is_subrecipe as "is_subrecipe!", subrecipe_id as "subrecipe_id!" FROM (
+            SELECT
+                rr.recipe_id,
+                rr.recipe,
+                rr.ingredient,
+                sum(rr.weight / recipe_weight.weight * $2) as weight,
+                rr.subrecipe_id,
+                recipes.name as subrecipe,
+                false as is_subrecipe
+                FROM resolved_recipes as rr
+                JOIN recipe_weight using(recipe_id)
+                JOIN recipes ON(subrecipe_id = recipes.recipe_id)
+                where rr.recipe_id = $1 group by rr.recipe_id, rr.subrecipe_id, recipe, ingredient_id, ingredient, subrecipe
+            UNION
+            SELECT parent_id as recipe_id, parent as recipe, child as ingredient,
+            meta_with_names.weight / recipe_weight.weight * $2 as weight,
+             parent_id as subrecipe_id, parent as subrecipe, true as is_subrecipe
+                FROM meta_with_names
+                JOIN recipe_weight on(recipe_id = $2)
+                where parent_id IN (SELECT subrecipe FROM resolved_meta where recipe_id = 11) or parent_id = 11
+                ) as bar JOIN recipes USING(recipe_id) ORDER BY recipe, subrecipe_id, is_subrecipe DESC
+            "#,
+            recipe_id,
+            weight,
+        ).fetch_all(&*self.pg_pool).await.unwrap();
+        let mut keys = subrecipes.iter().map(|sr| sr.subrecipe_id).collect::<Vec<i32>>();
+        keys.dedup();
+
+        let mut text = r#"
+            \documentclass[11pt,a4paper]{article}
+
+            \usepackage[T1]{fontenc}
+            \usepackage[ngerman]{babel}
+            \usepackage[utf8]{inputenc}
+            \usepackage{gensymb}
+
+            \usepackage{recipe}
+
+            \begin{document}
+            "#
+        .to_owned();
+
+        for subrecipe_id in keys {
+            let ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.subrecipe_id == subrecipe_id).collect();
+            self.format_subrecipe(&mut text, ingredients);
+        }
+        use std::fmt::Write;
+
+        writeln!(text, "\\end{{document}}").unwrap();
+
+        let mut file = std::fs::File::create(format!("{}.tex", subrecipes.first().unwrap().recipe)).unwrap();
+        use std::io::prelude::Write as WF;
+        file.write_all(text.as_bytes()).unwrap();
+    }
+
+    pub fn format_subrecipe(&self, text: &mut String, subrecipes: Vec<&SubRecipe>) {
+        let title = subrecipes.first().unwrap().subrecipe.clone();
+        let ingredients: Vec<_> = subrecipes.iter().filter(|sr| !sr.is_subrecipe).collect();
+        let meta_ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.is_subrecipe).collect();
+
+        use std::fmt::Write;
+        writeln!(text, "\\addrecipe{{{title}}}").unwrap();
+        for ingredient in meta_ingredients {
+            writeln!(
+                text,
+                "\\addingredient{{{}}}{{{}}}{{{}kg}}",
+                title, ingredient.ingredient, ingredient.weight
+            )
+            .unwrap();
+        }
+        for ingredient in ingredients {
+            writeln!(
+                text,
+                "\\addingredient{{{}}}{{{}}}{{{}kg}}",
+                title, ingredient.ingredient, ingredient.weight
+            )
+            .unwrap();
+        }
+        writeln!(text, "\\printrecipe{{{title}}}").unwrap();
     }
 
     pub async fn get_recipe_ingredients(

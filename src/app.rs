@@ -166,6 +166,16 @@ impl App {
                     self.state.close_popup();
                     AppReturn::Continue
                 },
+                Action::Export => {
+                    if let Some(meal) = self.state.meal() {
+                        self.dispatch(IoEvent::ExportMeal {
+                            meal_id: meal.recipe_id,
+                            weight: meal.weight.clone(),
+                        })
+                        .await;
+                    }
+                    AppReturn::Continue
+                },
             }
         } else {
             warn!("No action accociated to {}", key);
@@ -245,6 +255,7 @@ impl App {
             Action::FetchMetroPrice,
             Action::FocusIngredients, // TODO: only show based on current state
             Action::FocusMeals,
+            Action::Export,
         ]
         .into();
         self.state = AppState::initialized()

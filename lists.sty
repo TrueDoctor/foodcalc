@@ -1,0 +1,335 @@
+\ProvidesPackage{lists}
+
+\RequirePackage{etoolbox}
+
+\newcounter{lists@split}
+\newcounter{lists@misc}
+
+\newcounter{lists@concat@temp@count}
+
+% usage: \ifcounter<counter-name><action if it exists><action if it doesn't>
+
+\newcommand*\ifcounter[1]{%       Taken unaltered from https://tex.stackexchange.com/questions/155776/check-if-counter-exists
+  \ifcsname c@#1\endcsname%       Necessary to allow redefining a list with a name already given
+    \expandafter\@firstoftwo
+  \else
+    \expandafter\@secondoftwo
+  \fi
+}
+
+% usage: \initcounter<name>
+% Creates a counter with name <name> if it doesn't exist already, otherwise sets it to 0.
+
+\newcommand{\initcounter}[1]{
+  \ifcounter{#1}{\setcounter{#1}{0}}{\newcounter{#1}}
+}
+
+\def\lists@emptylist{[]}
+
+\def\lists@cons#1#2{%
+    (#2 : #1)%
+}
+
+\def\lists@pm@head\lists@cons#1#2{#2}
+\def\lists@pm@tail\lists@cons#1#2{#1}
+
+\def\lists@foldl#1#2#3#4{%
+    \begingroup%
+    \edef\tmp{#1}%
+    \ifx\lists@emptylist\tmp %
+        \gdef#4{#2}%
+    \else%
+        %
+        \expandafter\def\expandafter\tmphead\expandafter{\lists@pm@head#1}%
+        \expandafter\def\expandafter\tmptail\expandafter{\lists@pm@tail#1}%
+        %
+        \def\prevacc{#2}%
+        \expandafter\expandafter\expandafter\def\expandafter\expandafter\expandafter\tmpacc\expandafter\expandafter\expandafter{%
+        \expandafter\expandafter\expandafter#3\expandafter\expandafter\expandafter{\expandafter\prevacc\expandafter}\expandafter{\tmphead}}%
+        %
+        \expandafter\expandafter\expandafter\lists@foldl\expandafter\expandafter\expandafter{\expandafter\tmptail\expandafter}\expandafter%
+        {\tmpacc}{#3}{#4}%
+    \fi%
+    \endgroup%
+}
+
+% usage: \foldl[<out>]<f><z><name>
+% Returns <z> on an empty list <name>, otherwise, if <name> = (<x>:<xs>), returns \foldl<f>(<f><z><x>)<xs>.
+% Return value stored in <out>, default: \foldres
+
+\newcommand{\foldl}[4][\foldres]%
+{%
+        \expandafter\expandafter\expandafter\lists@foldl\expandafter\expandafter\expandafter%
+        {\csname lists@#4@head\endcsname}{#3}{#2}{#1}%
+}%
+
+\def\lists@foldr#1#2#3{%
+    \begingroup%
+    \edef\tmp{#1}%
+    \ifx\lists@emptylist\tmp%
+    \gdef\lists@foldr@res{#2}%
+    \else%
+    %
+    \expandafter\def\expandafter\tmphead\expandafter{\lists@pm@head#1}%
+    \expandafter\def\expandafter\tmptail\expandafter{\lists@pm@tail#1}%
+    %
+    \expandafter\lists@foldr\expandafter{\tmptail}{#2}{#3}%
+    %
+    \expandafter\expandafter\expandafter\gdef\expandafter\expandafter\expandafter\lists@foldr@res%
+    \expandafter\expandafter\expandafter{\expandafter\expandafter\expandafter#3\expandafter\expandafter\expandafter%
+    {\expandafter\lists@foldr@res\expandafter}\expandafter{\tmphead}}%
+    \fi%
+    \endgroup%
+}
+
+% usage: \foldr<f><z><name>
+% Returns <z> on an empty list <name>, otherwise, if <name> = (<x>:<xs>), returns <f>(\foldr<f><z><xs>)<x>.
+
+\newcommand{\foldr}[3]
+{%
+        \def\lists@foldr@res{}%
+        \expandafter\expandafter\expandafter\lists@foldr\expandafter\expandafter\expandafter%
+        {\csname lists@#3@head\endcsname}{#2}{#1}%
+        \lists@foldr@res%
+}
+
+% usage: \declarelist<name>
+
+\newcommand{\declarelist}[1]
+{
+    \expandafter\edef\csname lists@#1@head\endcsname{\lists@emptylist}
+    \initcounter{lists@#1@count}
+}
+
+% usage: \pushback<name><item>
+
+\newcommand{\pushback}[2]
+{%
+    \expandafter\expandafter\expandafter\def\expandafter\expandafter\expandafter\tmptail%
+    \expandafter\expandafter\expandafter{\csname lists@#1@head\endcsname}%
+    %
+    \expandafter\def\expandafter\tmphead\expandafter{\csname lists@#1@head\endcsname}%
+    %
+    \expandafter\expandafter\expandafter\gdef\expandafter\tmphead\expandafter{\expandafter\lists@cons\expandafter{\tmptail}{#2}}%
+    %
+    \stepcounter{lists@#1@count}%
+}
+
+% usage: \pushfront<name><item>
+
+\newcommand{\pushfront}[2]
+{
+    \listfromcsv{pushfront@temp}{#2}
+    \concat{pushfront@temp}{#1}
+    \rename{pushfront@temp}{#1}
+}
+
+% usage: \popback[<out>, default: \popped]<name>
+% Removes the last element of <name> and stores it in <out>.
+
+\newcommand{\popback}[2][\popped]%
+{%
+    \expandafter\expandafter\expandafter\def\expandafter\expandafter\expandafter\tmpbody%
+    \expandafter\expandafter\expandafter{\csname lists@#2@head\endcsname}%
+    %
+    \expandafter\expandafter\expandafter\def\expandafter\expandafter\expandafter\tmptail%
+    \expandafter\expandafter\expandafter{\expandafter\lists@pm@tail\tmpbody}%
+    %
+    \expandafter\def\expandafter\tmphead\expandafter{\csname lists@#2@head\endcsname}%
+    %
+    \expandafter\expandafter\expandafter\def\expandafter\expandafter\expandafter#1%
+    \expandafter\expandafter\expandafter{\expandafter\lists@pm@head\tmpbody}%
+    %
+    \expandafter\expandafter\expandafter\gdef\expandafter\tmphead\expandafter{\tmptail}%
+    \addtocounter{lists@#2@count}{-1}%
+}
+
+% usage: \peek[<out>]<name>
+% Stores the last element of <name> in <out>, default: \top.
+
+\newcommand{\peek}[2][\top]%
+{%
+    \ifelseempty{#2}{\def#1{\perp}}{%
+        \expandafter\expandafter\expandafter\def\expandafter\expandafter\expandafter\tmpbody%
+        \expandafter\expandafter\expandafter{\csname lists@#2@head\endcsname}%
+    %
+    \expandafter\expandafter\expandafter\def\expandafter\expandafter\expandafter#1%
+    \expandafter\expandafter\expandafter{\expandafter\lists@pm@head\tmpbody}%
+    }%
+}
+
+% usage: \doforall<name><f>
+% Executes <f> on every item of <name> in the order of insertion.
+
+\newcommand{\doforall}[2]
+{%
+    \def\lists@it##1##2{##1#2{##2}}%
+    \foldr{\lists@it}{}{#1}%
+}
+
+% usage: \map<source><f><target>
+% Creates list <target> where <target>[i] = <f>(<source>[i]).
+
+\newcommand{\map}[3]
+{%
+    \declarelist{#3}%
+    \def\lists@it@map##1{\pushback{#3}{#2{##1}}}%
+    \doforall{#1}{\lists@it@map}%
+}
+
+% usage: \rename<old><new>
+% Creates list <new> pointing to current state of list <old>.
+
+\newcommand{\rename}[2]
+{%
+    \expandafter\gdef\expandafter\tmphead\expandafter{\csname lists@#2@head\endcsname}%
+    %
+    \expandafter\expandafter\expandafter\gdef\expandafter\expandafter\expandafter\tmptail%
+    \expandafter\expandafter\expandafter{\csname lists@#1@head\endcsname}%
+    %
+    \expandafter\expandafter\expandafter\gdef\expandafter\tmphead\expandafter{\tmptail}%
+    \initcounter{lists@#2@count}%
+    \setcounter{lists@#2@count}{\value{lists@#1@count}}%
+}
+
+% usage: \copyto<old><new>
+% Creates list <new> identical to current state of list <old>.
+
+\newcommand{\copyto}[2]
+{
+    \declarelist{#2}
+    \def\lists@it@copy##1{\pushback{#2}{##1}}
+    \doforall{#1}{\lists@it@copy}
+}
+
+% usage: \concat<l1><l2>
+% Appends list <l2> to the back of list <l1>.
+
+\newcommand{\concat}[2]
+{
+    \doforall{#2}{\pushback{#1}}
+}
+
+% usage: \reverse<name>
+
+\newcommand{\reverse}[1]
+{%
+    \declarelist{#1@reverse}%
+    \def\lists@it@reverse##1##2{\pushback{#1@reverse}{##2}##1}%
+    %
+    \foldr{\lists@it@reverse}{\rename{#1@reverse}{#1}}{#1}%
+}
+
+% usage: \splitat<name><index>
+% Creates lists <name>@front, <name>@back where <name>@front contains all those items with index <= <index>. 1-indexed.
+
+\newcommand{\splitat}[2]
+{%
+    \setcounter{lists@split}{1}%
+    \declarelist{#1@front}%
+    \declarelist{#1@back}%
+    \def\lists@it@split##1{%
+        \ifnum\value{lists@split}>#2 %
+          \pushback{#1@back}{##1}%
+        \else%
+          \pushback{#1@front}{##1}%
+        \fi%
+        \stepcounter{lists@split}%
+    }%
+    \doforall{#1}{\lists@it@split}%
+}
+
+% usage: \take<name><index>
+% Throws away all items with index > <index>. 1-indexed.
+
+\newcommand{\take}[2]
+{%
+    \splitat{#1}{#2}%
+    \rename{#1@front}{#1}%
+    \setcounter{lists@#1@count}{#2}%
+}
+
+% usage: \drop<name><index>
+% Throws away all items with index <= <index>. 1-indexed.
+
+\newcommand{\drop}[2]
+{%
+    \splitat{#1}{#2}%
+    \rename{#1@back}{#1}%
+    \setcounter{lists@#1@count}{\value{lists@#1@count}-#2}%
+}
+
+% usage: \getelem<name><index>
+% Returns the element at index <index>. 1-indexed.
+
+\newcommand{\getelem}[2]
+{
+    \splitat{#1}{#2}
+    \peek{#1@back}
+}
+
+% usage: \evaluatecount<name><f>
+% Applies function <f> to the item count of list <name>.
+
+\newcommand{\evaluatecount}[2]{#2{lists@#1@count}}
+
+% usage: \getlength<name>
+% Applies function \arabic to the item count of list <name>.
+
+\newcommand{\getlength}[1]{\evaluatecount{#1}{\arabic}}
+
+% usage: \getcount<name>
+% Applies function \value to the item count of list <name>.
+
+\newcommand{\getcount}[1]{\evaluatecount{#1}{\value}}
+
+% usage: \getconsstructure<name>
+% Returns a text-representation of the internal structure of list <name>.
+
+\newcommand{\getconsstructure}[1]{\csname lists@#1@head\endcsname}
+
+% usage: \getlist<name><separator>
+% Prints all items of list <name> in order of insertion, separated by <separator>
+
+\newcommand{\getlist}[2]
+{%
+    \def\tmp{\lists@endoflist}%
+    \def\lists@it@sep##1##2{%
+        \ifx\tmp##1%
+            ##2%
+        \else%
+            ##2#2##1%
+        \fi%
+    }%
+    \foldl{\lists@it@sep}{\tmp}{#1}%
+}
+
+% usage: \listfromcsv<name><items>
+% Initializes list <name>, then interprets <items> as CSV-string and appends them from left to right.
+
+\newcommand{\listfromcsv}[2]
+{%
+    \declarelist{#1}%
+    \def\lists@app##1{\pushback{#1}{##1}}%
+    \edef\tmp{#2}%
+    \expandafter\forcsvlist\expandafter\lists@app\expandafter{\tmp}%
+}
+
+% usage: \ifelseempty<name><action if empty><action if not>
+
+\newcommand{\ifelseempty}[3]
+{%
+    \ifnum\value{lists@#1@count} = 0%
+        #2
+    \else%
+        #3
+    \fi%
+}
+
+% usage: \ifempty<name><action>
+
+\newcommand{\ifempty}[2]{\ifelseempty{#1}{#2}{}}
+
+% usage: \ifnotempty<name><action>
+
+\newcommand{\ifnotempty}[2]{\ifelseempty{#1}{}{#2}}

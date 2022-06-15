@@ -35,6 +35,7 @@ impl IoAsyncHandler {
                     .await
             },
             IoEvent::FetchMetroPrice { ingredient_id } => self.do_fetch_metro_price(ingredient_id).await,
+            IoEvent::ExportMeal { meal_id, weight } => self.do_export_meal(meal_id, weight).await,
         };
 
         if let Err(err) = result {
@@ -84,6 +85,13 @@ impl IoAsyncHandler {
             },
         };
 
+        Ok(())
+    }
+
+    async fn do_export_meal(&mut self, meal_id: i32, weight: BigDecimal) -> Result<()> {
+        info!("Exporting recipe for {meal_id:?}");
+
+        database().fetch_subrecipes_export(meal_id, weight).await;
         Ok(())
     }
 

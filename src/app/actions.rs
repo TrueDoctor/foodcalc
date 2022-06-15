@@ -17,12 +17,13 @@ pub enum Action {
     FocusIngredients,
     FocusMeals,
     ClosePopup,
+    Export,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 10] = [
+        static ACTIONS: [Action; 11] = [
             Action::Quit,
             Action::Refresh,
             Action::MoveDown,
@@ -33,6 +34,7 @@ impl Action {
             Action::FocusIngredients,
             Action::FocusMeals,
             Action::ClosePopup,
+            Action::Export,
         ];
         ACTIONS.iter()
     }
@@ -50,6 +52,7 @@ impl Action {
             Action::FocusIngredients => &[Key::Char('1')],
             Action::FocusMeals => &[Key::Char('2')],
             Action::ClosePopup => &[Key::Esc],
+            Action::Export => &[Key::Char('e')],
         }
     }
 }
@@ -68,6 +71,7 @@ impl Display for Action {
             Action::FetchMetroPrice => "Fetch Metro Price",
             Action::FocusIngredients => "Switch to ingredient view",
             Action::FocusMeals => "Switch to meal view",
+            Action::Export => "export recipe",
         };
         write!(f, "{}", str)
     }

@@ -7,6 +7,8 @@ use eyre::Result;
 use inputs::events::Events;
 use inputs::InputEvent;
 use io::IoEvent;
+use num::FromPrimitive;
+use sqlx::types::BigDecimal;
 use tui::backend::CrosstermBackend;
 use tui::Terminal;
 
@@ -29,6 +31,9 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
     let tick_rate = Duration::from_millis(100);
     let mut events = Events::new(tick_rate);
 
+    app::database()
+        .fetch_subrecipes_export(39, BigDecimal::from_f64(159.71f64).unwrap())
+        .await;
     // Trigger state change from Init to Initialized
     {
         let mut app = app.lock().await;
