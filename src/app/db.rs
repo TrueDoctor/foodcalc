@@ -202,8 +202,8 @@ impl FoodBase {
             meta_with_names.weight / recipe_weight.weight * $2 as weight,
              parent_id as subrecipe_id, parent as subrecipe, true as is_subrecipe
                 FROM meta_with_names
-                JOIN recipe_weight on(recipe_id = $2)
-                where parent_id IN (SELECT subrecipe FROM resolved_meta where recipe_id = 11) or parent_id = 11
+                JOIN recipe_weight on(recipe_id = $1)
+                where parent_id IN (SELECT subrecipe FROM resolved_meta where recipe_id = $1) or parent_id = $1
                 ) as bar JOIN recipes USING(recipe_id) ORDER BY recipe, subrecipe_id, is_subrecipe DESC
             "#,
             recipe_id,
@@ -240,17 +240,22 @@ impl FoodBase {
     }
 
     pub fn format_subrecipe(&self, text: &mut String, subrecipes: Vec<&SubRecipe>) {
-        let title = subrecipes.first().unwrap().subrecipe.clone();
+        let title = escape_underscore(&subrecipes.first().unwrap().subrecipe);
         let ingredients: Vec<_> = subrecipes.iter().filter(|sr| !sr.is_subrecipe).collect();
         let meta_ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.is_subrecipe).collect();
 
+        fn escape_underscore(s: &str) -> String {
+            s.replace('_', " ")
+        }
         use std::fmt::Write;
         writeln!(text, "\\addrecipe{{{title}}}").unwrap();
         for ingredient in meta_ingredients {
             writeln!(
                 text,
                 "\\addingredient{{{}}}{{{}}}{{{}kg}}",
-                title, ingredient.ingredient, ingredient.weight
+                title,
+                escape_underscore(&ingredient.ingredient),
+                ingredient.weight
             )
             .unwrap();
         }
@@ -258,7 +263,9 @@ impl FoodBase {
             writeln!(
                 text,
                 "\\addingredient{{{}}}{{{}}}{{{}kg}}",
-                title, ingredient.ingredient, ingredient.weight
+                title,
+                escape_underscore(&ingredient.ingredient),
+                ingredient.weight
             )
             .unwrap();
         }
