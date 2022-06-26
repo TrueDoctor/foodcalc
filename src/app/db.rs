@@ -1,5 +1,9 @@
 use std::sync::Arc;
 
+use iced::{
+    button, Alignment, Application, Button, Checkbox, Column, Command, Container, Element, Font, Length, Row, Settings,
+    Text,
+};
 use sqlx::postgres::types::PgMoney;
 use sqlx::postgres::PgPool;
 use sqlx::types::time::PrimitiveDateTime;
@@ -13,6 +17,97 @@ pub struct Ingredient {
     pub name: String,
     pub energy: BigDecimal,
     pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum TaskMessage {
+    Completed(bool),
+    Edit,
+    DescriptionEdited(String),
+    FinishEdition,
+    Delete,
+}
+impl Ingredient {
+    pub fn view(&mut self) -> Element<TaskMessage> {
+        let checkbox = Checkbox::new(true, &self.name, TaskMessage::Completed).width(Length::Fill);
+
+        Row::new()
+            .spacing(20)
+            .align_items(Alignment::Center)
+            .push(checkbox)
+            /*.push(
+                Button::new(&mut button::State::new(), edit_icon())
+                    .on_press(TaskMessage::Edit)
+                    .padding(10)
+                    .style(style::Button::Icon),
+            )*/
+            .into()
+    }
+}
+
+fn icon(unicode: char) -> Text {
+    Text::new(unicode.to_string())
+        //.font(ICONS)
+        .width(Length::Units(20))
+        .horizontal_alignment(iced::alignment::Horizontal::Center)
+        .size(20)
+}
+
+fn edit_icon() -> Text {
+    icon('\u{F303}')
+}
+
+fn delete_icon() -> Text {
+    icon('\u{F1F8}')
+}
+mod style {
+    use iced::{button, Background, Color, Vector};
+
+    pub enum Button {
+        FilterActive,
+        FilterSelected,
+        Icon,
+        Destructive,
+    }
+
+    impl button::StyleSheet for Button {
+        fn active(&self) -> button::Style {
+            match self {
+                Button::FilterActive => button::Style::default(),
+                Button::FilterSelected => button::Style {
+                    background: Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.7))),
+                    border_radius: 10.0,
+                    text_color: Color::WHITE,
+                    ..button::Style::default()
+                },
+                Button::Icon => button::Style {
+                    text_color: Color::from_rgb(0.5, 0.5, 0.5),
+                    ..button::Style::default()
+                },
+                Button::Destructive => button::Style {
+                    background: Some(Background::Color(Color::from_rgb(0.8, 0.2, 0.2))),
+                    border_radius: 5.0,
+                    text_color: Color::WHITE,
+                    shadow_offset: Vector::new(1.0, 1.0),
+                    ..button::Style::default()
+                },
+            }
+        }
+
+        fn hovered(&self) -> button::Style {
+            let active = self.active();
+
+            button::Style {
+                text_color: match self {
+                    Button::Icon => Color::from_rgb(0.2, 0.2, 0.7),
+                    Button::FilterActive => Color::from_rgb(0.2, 0.2, 0.7),
+                    _ => active.text_color,
+                },
+                shadow_offset: active.shadow_offset + Vector::new(0.0, 1.0),
+                ..active
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -170,6 +265,10 @@ impl FoodBase {
         .await?;
 
         Ok(ingredient.ingredient_id)
+    }
+
+    pub async fn get_ingredients_option(&self) -> Option<Vec<Ingredient>> {
+        self.get_ingredients().await.ok()
     }
 
     pub async fn get_ingredients(&self) -> eyre::Result<Vec<Ingredient>> {

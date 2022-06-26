@@ -22,9 +22,9 @@ pub mod ui;
 
 static PRICE_PLACEHOLDER: PgMoney = PgMoney(-100i64);
 
-static DATABASE: OnceCell<db::FoodBase> = OnceCell::new();
+pub static DATABASE: OnceCell<db::FoodBase> = OnceCell::new();
 
-pub(crate) fn database() -> &'static db::FoodBase {
+pub fn database() -> &'static db::FoodBase {
     DATABASE.get().unwrap()
 }
 

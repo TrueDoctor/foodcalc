@@ -19,6 +19,7 @@ crossterm = { version = "0.23", features = [ "serde" ] }
 serde = {version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tui = { version = "0.17", default-features = false, features = ['crossterm', 'serde'] }
+iced = {version = "0.4", features=["tokio"]}
 
 log = "0.4"
 

@@ -320,4 +320,3 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 fn format_price(price: &PgMoney) -> String {
     format!("{}€", price.0 as f32 / 100.)
 }
-

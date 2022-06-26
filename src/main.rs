@@ -1,33 +1,178 @@
 use std::sync::Arc;
 
 use eyre::Result;
+use foodcalc::app::db::{FoodBase, Ingredient, TaskMessage};
 use foodcalc::app::App;
 use foodcalc::io::handler::IoAsyncHandler;
 use foodcalc::io::IoEvent;
 use foodcalc::start_ui;
+use iced::alignment::{self, Alignment};
+use iced::button::{self, Button};
+use iced::scrollable::{self, Scrollable};
+use iced::text_input::{self, TextInput};
+use iced::{Application, Checkbox, Column, Command, Container, Element, Font, Length, Row, Settings, Text};
 use log::LevelFilter;
+use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let (sync_io_tx, mut sync_io_rx) = tokio::sync::mpsc::channel::<IoEvent>(100);
+fn main() -> iced::Result {
+    FoodCalc::run(Settings::default())
+}
 
-    // We need to share the App between thread
-    let app = Arc::new(tokio::sync::Mutex::new(App::new(sync_io_tx.clone()).await?));
-    let app_ui = Arc::clone(&app);
+#[derive(Debug)]
+enum FoodCalc {
+    Loading,
+    IngredientView(IngredientsState),
+    //MealView(MealState),
+}
 
-    // Configure log
-    tui_logger::init_logger(LevelFilter::Debug).unwrap();
-    tui_logger::set_default_level(log::LevelFilter::Debug);
+#[derive(Debug, Default)]
+struct IngredientsState {
+    scroll: scrollable::State,
+    input: text_input::State,
+    input_value: String,
+    //filter: Filter,
+    tasks: Vec<Ingredient>,
+    //controls: Controls,
+    dirty: bool,
+    saving: bool,
+}
 
-    // Handle IO in a specifc thread
-    tokio::spawn(async move {
-        let mut handler = IoAsyncHandler::new(app);
-        while let Some(io_event) = sync_io_rx.recv().await {
-            handler.handle_io_event(io_event).await;
+#[derive(Debug, Clone)]
+enum Message {
+    Loaded(Option<Vec<Ingredient>>),
+    Saved(Option<()>),
+    InputChanged(String),
+    CreateTask,
+    //FilterChanged(Filter),
+    TaskMessage(usize, TaskMessage),
+}
+
+impl Application for FoodCalc {
+    type Executor = iced::executor::Default;
+    type Message = Message;
+    type Flags = ();
+
+    fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        let state = IngredientsState::default();
+        let command = Command::perform(
+            async move {
+                dotenv::dotenv().ok();
+                let pool = PgPool::connect(&std::env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
+                    .await
+                    .expect("failed to establish connection to database");
+                foodcalc::app::DATABASE
+                    .set(foodcalc::app::db::FoodBase::new(pool))
+                    .unwrap();
+                FoodBase::get_ingredients_option(foodcalc::app::database()).await
+            },
+            Message::Loaded,
+        );
+        (FoodCalc::Loading, command)
+    }
+
+    fn title(&self) -> String {
+        "FoodCalc".to_string()
+    }
+
+    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        match self {
+            FoodCalc::Loading => {
+                match message {
+                    Message::Loaded(Some(ingredients)) => {
+                        *self = FoodCalc::IngredientView(IngredientsState {
+                            input_value: String::new(),
+                            //filter: state.filter,
+                            tasks: ingredients,
+                            ..IngredientsState::default()
+                        });
+                    },
+                    Message::Loaded(None) => {
+                        *self = FoodCalc::IngredientView(IngredientsState::default());
+                    },
+                    _ => {},
+                }
+
+                Command::none()
+            },
+            FoodCalc::IngredientView(_) => todo!(),
         }
-    });
+    }
 
-    start_ui(&app_ui).await?;
+    fn view(&mut self) -> Element<'_, Self::Message> {
+        match self {
+            FoodCalc::Loading => loading_message(),
+            FoodCalc::IngredientView(IngredientsState {
+                scroll,
+                input,
+                input_value,
+                tasks,
+                dirty,
+                saving,
+            }) => {
+                let title = Text::new("Ingredients")
+                    .width(Length::Fill)
+                    .size(100)
+                    .color([0.5, 0.5, 0.5])
+                    .horizontal_alignment(alignment::Horizontal::Center);
 
-    Ok(())
+                let input = TextInput::new(input, "Ingredient Name", input_value, Message::InputChanged)
+                    .padding(15)
+                    .size(30)
+                    .on_submit(Message::CreateTask);
+                let filtered_tasks = tasks.iter().filter(|task| task.name.contains(&*input_value));
+
+                let tasks: Element<_> = if filtered_tasks.count() > 0 {
+                    tasks
+                        .iter_mut()
+                        .enumerate()
+                        .filter(|(_, task)| task.name.contains(&*input_value))
+                        .fold(Column::new().spacing(20), |column, (i, task)| {
+                            column.push(task.view().map(move |message| Message::TaskMessage(i, message)))
+                        })
+                        .into()
+                } else {
+                    empty_message("You have not created a task yet...")
+                };
+
+                let content = Column::new()
+                    .max_width(800)
+                    .spacing(20)
+                    .push(title)
+                    .push(input)
+                    .push(tasks);
+
+                Scrollable::new(scroll)
+                    .padding(40)
+                    .push(Container::new(content).width(Length::Fill).center_x())
+                    .into()
+            },
+        }
+    }
+}
+
+fn loading_message<'a>() -> Element<'a, Message> {
+    Container::new(
+        Text::new("Loading...")
+            .horizontal_alignment(alignment::Horizontal::Center)
+            .size(50),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .center_y()
+    .into()
+}
+
+fn empty_message<'a>(message: &str) -> Element<'a, Message> {
+    Container::new(
+        Text::new(message)
+            .width(Length::Fill)
+            .size(25)
+            .horizontal_alignment(alignment::Horizontal::Center)
+            .color([0.7, 0.7, 0.7]),
+    )
+    .width(Length::Fill)
+    .height(Length::Units(200))
+    .center_y()
+    .into()
 }
