@@ -21,7 +21,9 @@ fn main() -> iced::Result {
 
 #[derive(Debug)]
 enum FoodCalc {
-    Loading,
+    ConnectingToDatabase,
+    AppInitialized,
+    ErrorView(String),
     IngredientView(IngredientsState),
     //MealView(MealState),
 }
@@ -40,12 +42,18 @@ struct IngredientsState {
 
 #[derive(Debug, Clone)]
 enum Message {
+    DatebaseConnected(Result<(), Error>),
     Loaded(Option<Vec<Ingredient>>),
     Saved(Option<()>),
     InputChanged(String),
     CreateTask,
     //FilterChanged(Filter),
     TaskMessage(usize, TaskMessage),
+}
+
+#[derive(Debug, Clone)]
+enum Error {
+    Database(String),
 }
 
 impl Application for FoodCalc {
@@ -60,15 +68,15 @@ impl Application for FoodCalc {
                 dotenv::dotenv().ok();
                 let pool = PgPool::connect(&std::env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
                     .await
-                    .expect("failed to establish connection to database");
+                    .map_err(|e| Error::Database(e.to_string()))?;
                 foodcalc::app::DATABASE
                     .set(foodcalc::app::db::FoodBase::new(pool))
                     .unwrap();
-                FoodBase::get_ingredients_option(foodcalc::app::database()).await
+                Ok(())
             },
-            Message::Loaded,
+            Message::DatebaseConnected,
         );
-        (FoodCalc::Loading, command)
+        (FoodCalc::ConnectingToDatabase, command)
     }
 
     fn title(&self) -> String {
@@ -77,7 +85,18 @@ impl Application for FoodCalc {
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match self {
-            FoodCalc::Loading => {
+            FoodCalc::ConnectingToDatabase => match message {
+                Message::DatebaseConnected(Ok(_)) => {
+                    *self = FoodCalc::AppInitialized;
+                    Command::perform(foodcalc::app::database().get_ingredients_option(), Message::Loaded)
+                },
+                Message::DatebaseConnected(Err(Error::Database(error))) => {
+                    *self = FoodCalc::ErrorView(error);
+                    Command::none()
+                },
+                _ => Command::none(),
+            },
+            FoodCalc::AppInitialized => {
                 match message {
                     Message::Loaded(Some(ingredients)) => {
                         *self = FoodCalc::IngredientView(IngredientsState {
@@ -96,12 +115,15 @@ impl Application for FoodCalc {
                 Command::none()
             },
             FoodCalc::IngredientView(_) => todo!(),
+            FoodCalc::ErrorView(_) => Command::none(),
         }
     }
 
     fn view(&mut self) -> Element<'_, Self::Message> {
         match self {
-            FoodCalc::Loading => loading_message(),
+            FoodCalc::ConnectingToDatabase => empty_message("Connecting To Database"),
+            FoodCalc::AppInitialized => empty_message("Connection to Database successful"),
+            FoodCalc::ErrorView(error) => empty_message(error),
             FoodCalc::IngredientView(IngredientsState {
                 scroll,
                 input,
