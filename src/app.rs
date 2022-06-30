@@ -1,24 +1,19 @@
 use std::env;
 
+use db::{FoodBase, Ingredient, TaskMessage};
+use iced::alignment::{self, Alignment};
+use iced::scrollable::{self, Scrollable};
+use iced::text_input::{self, TextInput};
+use iced::{Application, Checkbox, Column, Command, Container, Element, Font, Length, Row, Settings, Text};
 use log::{debug, error, warn};
 use once_cell::sync::OnceCell;
 use sqlx::postgres::types::PgMoney;
-use sqlx::types::BigDecimal;
 use sqlx::PgPool;
-use tui::widgets::TableState;
 
-use self::actions::Actions;
-use self::state::{AppState, PopUp};
-use crate::app::actions::Action;
-use crate::inputs::key::Key;
-use crate::io::IoEvent;
-
-pub mod actions;
 pub mod db;
 #[cfg(feature = "scraping")]
 pub mod scraping;
 pub mod state;
-pub mod ui;
 
 static PRICE_PLACEHOLDER: PgMoney = PgMoney(-100i64);
 
@@ -28,244 +23,185 @@ pub fn database() -> &'static db::FoodBase {
     DATABASE.get().unwrap()
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum AppReturn {
-    Exit,
-    Continue,
+#[derive(Debug)]
+pub enum FoodCalc {
+    ConnectingToDatabase,
+    AppInitialized,
+    ErrorView(String),
+    IngredientView(IngredientsState),
+    //MealView(MealState),
 }
 
-/// The main application, containing the state
-pub struct App {
-    /// We could dispatch an IO event
-    io_tx: tokio::sync::mpsc::Sender<IoEvent>,
-    /// Contextual actions
-    actions: Actions,
-    /// State
-    is_loading: bool,
-    pub state: AppState,
+#[derive(Debug, Default)]
+pub struct IngredientsState {
+    scroll: scrollable::State,
+    input: text_input::State,
+    input_value: String,
+    //filter: Filter,
+    tasks: Vec<Ingredient>,
+    //controls: Controls,
+    dirty: bool,
+    saving: bool,
 }
 
-impl App {
-    pub async fn new(io_tx: tokio::sync::mpsc::Sender<IoEvent>) -> eyre::Result<Self> {
-        let actions = vec![Action::Quit].into();
-        let is_loading = false;
-        let state = AppState::default();
+#[derive(Debug, Clone)]
+pub enum Message {
+    DatebaseConnected(Result<(), Error>),
+    Loaded(Option<Vec<Ingredient>>),
+    Saved(Option<()>),
+    InputChanged(String),
+    CreateTask,
+    //FilterChanged(Filter),
+    TaskMessage(usize, TaskMessage),
+}
 
-        dotenv::dotenv().ok();
-        let pool = PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
-            .await
-            .expect("failed to establish connection to database");
-        DATABASE.set(db::FoodBase::new(pool)).unwrap();
+#[derive(Debug, Clone)]
+pub enum Error {
+    Database(String),
+}
 
-        Ok(Self {
-            io_tx,
-            actions,
-            is_loading,
-            state,
-        })
+impl From<sqlx::Error> for Error {
+    fn from(error: sqlx::Error) -> Self {
+        Error::Database(format!("Database Error occurred {error}"))
+    }
+}
+
+impl Application for FoodCalc {
+    type Executor = iced::executor::Default;
+    type Message = Message;
+    type Flags = ();
+
+    fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        let state = IngredientsState::default();
+        let command = Command::perform(
+            async move {
+                dotenv::dotenv().ok();
+                let pool =
+                    PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set")).await?;
+                DATABASE.set(FoodBase::new(pool)).unwrap();
+                Ok(())
+            },
+            Message::DatebaseConnected,
+        );
+        (FoodCalc::ConnectingToDatabase, command)
     }
 
-    /// Handle a user action
-    pub async fn do_action(&mut self, key: Key) -> AppReturn {
-        if self.state.input().is_some() {
-            match key {
-                Key::Enter => match self.state.popup() {
-                    None => self.state.add_ingredient_source_url(),
-                    Some(PopUp::AddSourceUrl { .. }) => {
-                        self.state.add_ingredient_source_weight();
+    fn title(&self) -> String {
+        "FoodCalc".to_string()
+    }
+
+    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        match self {
+            FoodCalc::ConnectingToDatabase => match message {
+                Message::DatebaseConnected(Ok(_)) => {
+                    *self = FoodCalc::AppInitialized;
+                    Command::perform(database().get_ingredients_option(), Message::Loaded)
+                },
+                Message::DatebaseConnected(Err(Error::Database(error))) => {
+                    *self = FoodCalc::ErrorView(error);
+                    Command::none()
+                },
+                _ => Command::none(),
+            },
+            FoodCalc::AppInitialized => {
+                match message {
+                    Message::Loaded(Some(ingredients)) => {
+                        *self = FoodCalc::IngredientView(IngredientsState {
+                            input_value: String::new(),
+                            //filter: state.filter,
+                            tasks: ingredients,
+                            ..IngredientsState::default()
+                        });
                     },
-                    Some(PopUp::AddSourceWeight {
-                        ingredient,
-                        url,
-                        weight,
-                    }) => {
-                        if let Some((weight, unit)) = db::parse_package_size(weight) {
-                            let add_source_event = IoEvent::AddIngredientSource {
-                                ingredient_id: ingredient.ingredient_id,
-                                store_id: db::METRO,
-                                url: url.clone(),
-                                weight,
-                                unit,
-                                price: PRICE_PLACEHOLDER,
-                            };
-                            self.dispatch(add_source_event).await;
-                        }
-                        self.state.close_popup();
+                    Message::Loaded(None) => {
+                        *self = FoodCalc::IngredientView(IngredientsState::default());
                     },
-                    Some(_) => {
-                        self.state.close_popup();
-                    },
-                },
-                Key::Char(c) => {
-                    if let Some(input) = self.state.input() {
-                        input.push(c)
-                    }
-                },
-                Key::Backspace => {
-                    if let Some(input) = self.state.input() {
-                        input.pop();
-                    }
-                },
-                Key::Esc => {
-                    self.state.close_popup();
-                },
-                _ => {},
-            };
-            AppReturn::Continue
-        } else if let Some(action) = self.actions.find(key) {
-            debug!("Run action [{:?}]", action);
-            match action {
-                Action::Quit => AppReturn::Exit,
-                Action::Refresh => {
-                    // Refresh is an I/O action, we dispatch on the IO channel that's run on another thread
-                    self.dispatch(IoEvent::UpdateData).await;
-                    AppReturn::Continue
-                },
-                Action::MoveDown => {
-                    self.state.next_item();
-                    AppReturn::Continue
-                },
-                Action::MoveUp => {
-                    self.state.previous_item();
-                    AppReturn::Continue
-                },
-                Action::AddSource => {
-                    self.state.add_ingredient_source_url();
-                    AppReturn::Continue
-                },
-                Action::FetchMetroPrice => {
-                    let ingredient = self.state.ingredient();
-                    let ingredient_id = ingredient.map(|ingredient| ingredient.ingredient_id);
-                    self.dispatch(IoEvent::FetchMetroPrice { ingredient_id }).await;
-                    AppReturn::Continue
-                },
-                Action::Select => {
-                    self.state.select();
-                    self.dispatch(IoEvent::UpdateData).await;
-                    AppReturn::Continue
-                },
-                Action::FocusIngredients => {
-                    self.state = AppState::IngredientView {
-                        popup: None,
-                        ingredients: vec![],
-                        selection: TableState::default(),
-                    };
-                    self.dispatch(IoEvent::UpdateData).await;
-                    AppReturn::Continue
-                },
-                Action::FocusMeals => {
-                    self.state = AppState::MealView {
-                        popup: None,
-                        meals: vec![],
-                        selection: TableState::default(),
-                    };
-                    self.dispatch(IoEvent::UpdateData).await;
-                    AppReturn::Continue
-                },
-                Action::ClosePopup => {
-                    self.state.close_popup();
-                    AppReturn::Continue
-                },
-                Action::Export => {
-                    if let Some(meal) = self.state.meal() {
-                        self.dispatch(IoEvent::ExportMeal {
-                            meal_id: meal.recipe_id,
-                            weight: meal.weight.clone(),
+                    _ => {},
+                }
+
+                Command::none()
+            },
+            FoodCalc::IngredientView(_) => todo!(),
+            FoodCalc::ErrorView(_) => Command::none(),
+        }
+    }
+
+    fn view(&mut self) -> Element<'_, Self::Message> {
+        match self {
+            FoodCalc::ConnectingToDatabase => empty_message("Connecting To Database"),
+            FoodCalc::AppInitialized => empty_message("Connection to Database successful"),
+            FoodCalc::ErrorView(error) => empty_message(error),
+            FoodCalc::IngredientView(IngredientsState {
+                scroll,
+                input,
+                input_value,
+                tasks,
+                dirty,
+                saving,
+            }) => {
+                let title = Text::new("Ingredients")
+                    .width(Length::Fill)
+                    .size(100)
+                    .color([0.5, 0.5, 0.5])
+                    .horizontal_alignment(alignment::Horizontal::Center);
+
+                let input = TextInput::new(input, "Ingredient Name", input_value, Message::InputChanged)
+                    .padding(15)
+                    .size(30)
+                    .on_submit(Message::CreateTask);
+                let filtered_tasks = tasks.iter().filter(|task| task.name.contains(&*input_value));
+
+                let tasks: Element<_> = if filtered_tasks.count() > 0 {
+                    tasks
+                        .iter_mut()
+                        .enumerate()
+                        .filter(|(_, task)| task.name.contains(&*input_value))
+                        .fold(Column::new().spacing(20), |column, (i, task)| {
+                            column.push(task.view().map(move |message| Message::TaskMessage(i, message)))
                         })
-                        .await;
-                    }
-                    AppReturn::Continue
-                },
-            }
-        } else {
-            warn!("No action accociated to {}", key);
-            AppReturn::Continue
-        }
-    }
+                        .into()
+                } else {
+                    empty_message("You have not created a task yet...")
+                };
 
-    /// We could update the app or dispatch event on tick
-    pub async fn update_on_tick(&mut self) -> AppReturn {
-        // here we just increment a counter
-        AppReturn::Continue
-    }
+                let content = Column::new()
+                    .max_width(800)
+                    .spacing(20)
+                    .push(title)
+                    .push(input)
+                    .push(tasks);
 
-    /// We could update the app or dispatch event on tick
-    pub async fn update_data(&mut self) -> AppReturn {
-        // here we just increment a counter
-        self.state.update(DATABASE.get().unwrap()).await;
-        AppReturn::Continue
-    }
-
-    pub async fn add_ingredient_source(
-        &mut self,
-        ingredient_id: i32,
-        store_id: i32,
-        weight: BigDecimal,
-        price: PgMoney,
-        url: String,
-        unit: i32,
-    ) {
-        log::debug!("Ingredients");
-        match database()
-            .add_ingredient_source(ingredient_id, store_id, weight, price, Some(url), unit)
-            .await
-        {
-            Ok(id) => {
-                self.state.next_item();
-                log::debug!("Added source for ingredient {id}")
-            },
-            Err(error) => {
-                log::error!("failed to add ingredient source to database, {error:?}")
+                Scrollable::new(scroll)
+                    .padding(40)
+                    .push(Container::new(content).width(Length::Fill).center_x())
+                    .into()
             },
         }
     }
+}
 
-    /// Send a network event to the IO thread
-    pub async fn dispatch(&mut self, action: IoEvent) {
-        // `is_loading` will be set to false again after the async action has finished in io/handler.rs
-        self.is_loading = true;
-        if let Err(e) = self.io_tx.send(action).await {
-            self.is_loading = false;
-            error!("Error from dispatch {}", e);
-        };
-    }
+fn loading_message<'a>() -> Element<'a, Message> {
+    Container::new(
+        Text::new("Loading...")
+            .horizontal_alignment(alignment::Horizontal::Center)
+            .size(50),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .center_y()
+    .into()
+}
 
-    pub fn actions(&self) -> &Actions {
-        &self.actions
-    }
-    pub fn state(&self) -> &AppState {
-        &self.state
-    }
-
-    pub fn is_loading(&self) -> bool {
-        self.is_loading
-    }
-
-    pub fn initialized(&mut self) {
-        // Update contextual actions
-        self.actions = vec![
-            Action::Quit,
-            Action::Refresh,
-            Action::ClosePopup,
-            Action::MoveDown,
-            Action::MoveUp,
-            Action::Select,
-            Action::AddSource,
-            #[cfg(feature = "scraping")]
-            Action::FetchMetroPrice,
-            Action::FocusIngredients, // TODO: only show based on current state
-            Action::FocusMeals,
-            Action::Export,
-        ]
-        .into();
-        self.state = AppState::initialized()
-    }
-
-    pub fn loaded(&mut self) {
-        self.is_loading = false;
-    }
-
-    pub fn updated_data(&mut self) {
-        //self.state.incr_sleep();
-    }
+fn empty_message<'a>(message: &str) -> Element<'a, Message> {
+    Container::new(
+        Text::new(message)
+            .width(Length::Fill)
+            .size(25)
+            .horizontal_alignment(alignment::Horizontal::Center)
+            .color([0.7, 0.7, 0.7]),
+    )
+    .width(Length::Fill)
+    .height(Length::Units(200))
+    .center_y()
+    .into()
 }
