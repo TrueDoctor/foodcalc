@@ -219,10 +219,13 @@ impl FoodBase {
             \usepackage[ngerman]{babel}
             \usepackage[utf8]{inputenc}
             \usepackage{gensymb}
+            \usepackage{fullpage}
 
             \usepackage{recipe}
 
             \begin{document}
+            \pagenumbering{gobble}
+            \large
             "#
         .to_owned();
 
