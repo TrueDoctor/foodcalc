@@ -187,7 +187,7 @@ impl FoodBase {
                 SELECT
                     recipe as "recipe!",
                     ingredient as "ingredient!",
-                    weight * $2 as "weight!",
+                    round(weight * $2, 10)  as "weight!",
                     subrecipe as "subrecipe!",
                     is_subrecipe as "is_subrecipe!",
                     subrecipe_id as "subrecipe_id!"
