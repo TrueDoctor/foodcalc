@@ -181,34 +181,26 @@ impl FoodBase {
     }
 
     pub async fn fetch_subrecipes_export(&self, recipe_id: i32, weight: BigDecimal) {
-        let mut subrecipes = sqlx::query_as!(
+        let subrecipes = sqlx::query_as!(
             SubRecipe,
             r#"
-                SELECT recipe as "recipe!", ingredient as "ingredient!", round(weight, 4) as "weight!", subrecipe as "subrecipe!", is_subrecipe as "is_subrecipe!", subrecipe_id as "subrecipe_id!" FROM (
-            SELECT
-                rr.recipe_id,
-                rr.recipe,
-                rr.ingredient,
-                sum(rr.weight / recipe_weight.weight * $2) as weight,
-                rr.subrecipe_id,
-                recipes.name as subrecipe,
-                false as is_subrecipe
-                FROM resolved_recipes as rr
-                JOIN recipe_weight using(recipe_id)
-                JOIN recipes ON(subrecipe_id = recipes.recipe_id)
-                where rr.recipe_id = $1 group by rr.recipe_id, rr.subrecipe_id, recipe, ingredient_id, ingredient, subrecipe
-            UNION
-            SELECT parent_id as recipe_id, parent as recipe, child as ingredient,
-            meta_with_names.weight / recipe_weight.weight * $2 as weight,
-             parent_id as subrecipe_id, parent as subrecipe, true as is_subrecipe
-                FROM meta_with_names
-                JOIN recipe_weight on(recipe_id = $1)
-                where parent_id IN (SELECT subrecipe FROM resolved_meta where recipe_id = $1) or parent_id = $1
-                ) as bar JOIN recipes USING(recipe_id) ORDER BY recipe, subrecipe_id, is_subrecipe DESC
+                SELECT
+                    recipe as "recipe!",
+                    ingredient as "ingredient!",
+                    weight * $2 as "weight!",
+                    subrecipe as "subrecipe!",
+                    is_subrecipe as "is_subrecipe!",
+                    subrecipe_id as "subrecipe_id!"
+                FROM subrecipes
+                WHERE recipe_id = $1
+                ORDER BY recipe, subrecipe_id, ingredient
             "#,
             recipe_id,
             weight,
-        ).fetch_all(&*self.pg_pool).await.unwrap();
+        )
+        .fetch_all(&*self.pg_pool)
+        .await
+        .unwrap();
         let mut keys = subrecipes.iter().map(|sr| sr.subrecipe_id).collect::<Vec<i32>>();
         keys.dedup();
 
@@ -255,7 +247,7 @@ impl FoodBase {
                 "\\addingredient{{{}}}{{{}}}{{{}kg}}",
                 title,
                 escape_underscore(&ingredient.ingredient),
-                ingredient.weight
+                ingredient.weight.round(3)
             )
             .unwrap();
         }
@@ -265,7 +257,7 @@ impl FoodBase {
                 "\\addingredient{{{}}}{{{}}}{{{}kg}}",
                 title,
                 escape_underscore(&ingredient.ingredient),
-                ingredient.weight
+                ingredient.weight.round(3)
             )
             .unwrap();
         }
