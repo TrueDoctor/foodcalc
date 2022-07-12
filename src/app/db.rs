@@ -11,103 +11,12 @@ use sqlx::types::BigDecimal;
 
 pub const METRO: i32 = 0;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Ingredient {
     pub ingredient_id: i32,
     pub name: String,
     pub energy: BigDecimal,
     pub comment: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub enum TaskMessage {
-    Completed(bool),
-    Edit,
-    DescriptionEdited(String),
-    FinishEdition,
-    Delete,
-}
-impl Ingredient {
-    pub fn view(&mut self) -> Element<TaskMessage> {
-        let checkbox = Checkbox::new(true, &self.name, TaskMessage::Completed).width(Length::Fill);
-
-        Row::new()
-            .spacing(20)
-            .align_items(Alignment::Center)
-            .push(checkbox)
-            /*.push(
-                Button::new(&mut button::State::new(), edit_icon())
-                    .on_press(TaskMessage::Edit)
-                    .padding(10)
-                    .style(style::Button::Icon),
-            )*/
-            .into()
-    }
-}
-
-fn icon(unicode: char) -> Text {
-    Text::new(unicode.to_string())
-        //.font(ICONS)
-        .width(Length::Units(20))
-        .horizontal_alignment(iced::alignment::Horizontal::Center)
-        .size(20)
-}
-
-fn edit_icon() -> Text {
-    icon('\u{F303}')
-}
-
-fn delete_icon() -> Text {
-    icon('\u{F1F8}')
-}
-mod style {
-    use iced::{button, Background, Color, Vector};
-
-    pub enum Button {
-        FilterActive,
-        FilterSelected,
-        Icon,
-        Destructive,
-    }
-
-    impl button::StyleSheet for Button {
-        fn active(&self) -> button::Style {
-            match self {
-                Button::FilterActive => button::Style::default(),
-                Button::FilterSelected => button::Style {
-                    background: Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.7))),
-                    border_radius: 10.0,
-                    text_color: Color::WHITE,
-                    ..button::Style::default()
-                },
-                Button::Icon => button::Style {
-                    text_color: Color::from_rgb(0.5, 0.5, 0.5),
-                    ..button::Style::default()
-                },
-                Button::Destructive => button::Style {
-                    background: Some(Background::Color(Color::from_rgb(0.8, 0.2, 0.2))),
-                    border_radius: 5.0,
-                    text_color: Color::WHITE,
-                    shadow_offset: Vector::new(1.0, 1.0),
-                    ..button::Style::default()
-                },
-            }
-        }
-
-        fn hovered(&self) -> button::Style {
-            let active = self.active();
-
-            button::Style {
-                text_color: match self {
-                    Button::Icon => Color::from_rgb(0.2, 0.2, 0.7),
-                    Button::FilterActive => Color::from_rgb(0.2, 0.2, 0.7),
-                    _ => active.text_color,
-                },
-                shadow_offset: active.shadow_offset + Vector::new(0.0, 1.0),
-                ..active
-            }
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -141,13 +50,6 @@ pub struct Meal {
     pub energy: BigDecimal,
     pub price: PgMoney,
     pub servings: i32,
-}
-
-use std::fmt::Display;
-impl Display for Ingredient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.name.as_str())
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -280,34 +182,27 @@ impl FoodBase {
     }
 
     pub async fn fetch_subrecipes_export(&self, recipe_id: i32, weight: BigDecimal) {
-        let mut subrecipes = sqlx::query_as!(
+        let subrecipes = sqlx::query_as!(
             SubRecipe,
             r#"
-                SELECT recipe as "recipe!", ingredient as "ingredient!", round(weight, 4) as "weight!", subrecipe as "subrecipe!", is_subrecipe as "is_subrecipe!", subrecipe_id as "subrecipe_id!" FROM (
-            SELECT
-                rr.recipe_id,
-                rr.recipe,
-                rr.ingredient,
-                sum(rr.weight / recipe_weight.weight * $2) as weight,
-                rr.subrecipe_id,
-                recipes.name as subrecipe,
-                false as is_subrecipe
-                FROM resolved_recipes as rr
-                JOIN recipe_weight using(recipe_id)
-                JOIN recipes ON(subrecipe_id = recipes.recipe_id)
-                where rr.recipe_id = $1 group by rr.recipe_id, rr.subrecipe_id, recipe, ingredient_id, ingredient, subrecipe
-            UNION
-            SELECT parent_id as recipe_id, parent as recipe, child as ingredient,
-            meta_with_names.weight / recipe_weight.weight * $2 as weight,
-             parent_id as subrecipe_id, parent as subrecipe, true as is_subrecipe
-                FROM meta_with_names
-                JOIN recipe_weight on(recipe_id = $1)
-                where parent_id IN (SELECT subrecipe FROM resolved_meta where recipe_id = $1) or parent_id = $1
-                ) as bar JOIN recipes USING(recipe_id) ORDER BY recipe, subrecipe_id, is_subrecipe DESC
+                SELECT
+                    recipe as "recipe!",
+                    ingredient as "ingredient!",
+                    round(weight * $2, 10)  as "weight!",
+                    subrecipe as "subrecipe!",
+                    is_subrecipe as "is_subrecipe!",
+                    subrecipe_id as "subrecipe_id!"
+                FROM subrecipes
+                WHERE recipe_id = $1
+                ORDER BY recipe, subrecipe_id, ingredient
+
             "#,
             recipe_id,
             weight,
-        ).fetch_all(&*self.pg_pool).await.unwrap();
+        )
+        .fetch_all(&*self.pg_pool)
+        .await
+        .unwrap();
         let mut keys = subrecipes.iter().map(|sr| sr.subrecipe_id).collect::<Vec<i32>>();
         keys.dedup();
 
@@ -354,7 +249,7 @@ impl FoodBase {
                 "\\addingredient{{{}}}{{{}}}{{{}kg}}",
                 title,
                 escape_underscore(&ingredient.ingredient),
-                ingredient.weight
+                ingredient.weight.round(3)
             )
             .unwrap();
         }
@@ -364,7 +259,7 @@ impl FoodBase {
                 "\\addingredient{{{}}}{{{}}}{{{}kg}}",
                 title,
                 escape_underscore(&ingredient.ingredient),
-                ingredient.weight
+                ingredient.weight.round(3)
             )
             .unwrap();
         }

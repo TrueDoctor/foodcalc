@@ -1,4 +1,3 @@
-use tui::widgets::TableState;
 
 use super::db::{FoodBase, Ingredient, Meal, RecipeIngredient};
 

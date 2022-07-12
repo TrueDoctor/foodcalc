@@ -1,6 +1,6 @@
 use std::env;
 
-use db::{FoodBase, Ingredient, TaskMessage};
+use db::{FoodBase, Ingredient};
 use iced::alignment::{self, Alignment};
 use iced::scrollable::{self, Scrollable};
 use iced::text_input::{self, TextInput};
@@ -10,10 +10,13 @@ use once_cell::sync::OnceCell;
 use sqlx::postgres::types::PgMoney;
 use sqlx::PgPool;
 
+use self::model_wrapper::{IngredientMessage, IngredientWrapper};
+
 pub mod db;
+pub mod model_wrapper;
 #[cfg(feature = "scraping")]
 pub mod scraping;
-pub mod state;
+//pub mod state;
 
 static PRICE_PLACEHOLDER: PgMoney = PgMoney(-100i64);
 
@@ -38,7 +41,7 @@ pub struct IngredientsState {
     input: text_input::State,
     input_value: String,
     //filter: Filter,
-    tasks: Vec<Ingredient>,
+    ingredients: Vec<IngredientWrapper>,
     //controls: Controls,
     dirty: bool,
     saving: bool,
@@ -47,12 +50,12 @@ pub struct IngredientsState {
 #[derive(Debug, Clone)]
 pub enum Message {
     DatebaseConnected(Result<(), Error>),
-    Loaded(Option<Vec<Ingredient>>),
+    Loaded(Option<Vec<IngredientWrapper>>),
     Saved(Option<()>),
     InputChanged(String),
-    CreateTask,
+    CreateIngredient,
     //FilterChanged(Filter),
-    TaskMessage(usize, TaskMessage),
+    IngredientMessage(usize, IngredientMessage),
 }
 
 #[derive(Debug, Clone)]
@@ -95,7 +98,19 @@ impl Application for FoodCalc {
             FoodCalc::ConnectingToDatabase => match message {
                 Message::DatebaseConnected(Ok(_)) => {
                     *self = FoodCalc::AppInitialized;
-                    Command::perform(database().get_ingredients_option(), Message::Loaded)
+                    Command::perform(
+                        async {
+                            database().get_ingredients_option().await.map(|x| {
+                                x.into_iter()
+                                    .map(|i| IngredientWrapper {
+                                        ingredient: i,
+                                        ..Default::default()
+                                    })
+                                    .collect()
+                            })
+                        },
+                        Message::Loaded,
+                    )
                 },
                 Message::DatebaseConnected(Err(Error::Database(error))) => {
                     *self = FoodCalc::ErrorView(error);
@@ -109,7 +124,7 @@ impl Application for FoodCalc {
                         *self = FoodCalc::IngredientView(IngredientsState {
                             input_value: String::new(),
                             //filter: state.filter,
-                            tasks: ingredients,
+                            ingredients,
                             ..IngredientsState::default()
                         });
                     },
@@ -121,7 +136,27 @@ impl Application for FoodCalc {
 
                 Command::none()
             },
-            FoodCalc::IngredientView(_) => todo!(),
+            FoodCalc::IngredientView(IngredientsState {
+                input_value,
+                ingredients,
+                ..
+            }) => {
+                match message {
+                    Message::InputChanged(input) => {
+                        *input_value = input;
+                    },
+                    Message::IngredientMessage(i, message) => {
+                        if let Some(ingredient) = ingredients.get_mut(i) {
+                            ingredient.update(message);
+                        }
+                    },
+                    _ => {
+                        debug!("recieved message without handler: {message:?}")
+                    },
+                }
+                Command::none()
+            },
+
             FoodCalc::ErrorView(_) => Command::none(),
         }
     }
@@ -135,7 +170,7 @@ impl Application for FoodCalc {
                 scroll,
                 input,
                 input_value,
-                tasks,
+                ingredients,
                 dirty,
                 saving,
             }) => {
@@ -148,20 +183,36 @@ impl Application for FoodCalc {
                 let input = TextInput::new(input, "Ingredient Name", input_value, Message::InputChanged)
                     .padding(15)
                     .size(30)
-                    .on_submit(Message::CreateTask);
-                let filtered_tasks = tasks.iter().filter(|task| task.name.contains(&*input_value));
+                    .on_submit(Message::CreateIngredient);
+                let filtered_ingredients = ingredients.iter().filter(|ingredient| {
+                    ingredient
+                        .ingredient
+                        .name
+                        .to_lowercase()
+                        .contains(&*input_value.to_lowercase())
+                });
 
-                let tasks: Element<_> = if filtered_tasks.count() > 0 {
-                    tasks
+                let ingredients: Element<_> = if filtered_ingredients.count() > 0 {
+                    ingredients
                         .iter_mut()
                         .enumerate()
-                        .filter(|(_, task)| task.name.contains(&*input_value))
-                        .fold(Column::new().spacing(20), |column, (i, task)| {
-                            column.push(task.view().map(move |message| Message::TaskMessage(i, message)))
+                        .filter(|(_, ingredient)| {
+                            ingredient
+                                .ingredient
+                                .name
+                                .to_lowercase()
+                                .contains(&input_value.to_lowercase())
+                        })
+                        .fold(Column::new().spacing(20), |column, (i, ingredient)| {
+                            column.push(
+                                ingredient
+                                    .view()
+                                    .map(move |message| Message::IngredientMessage(i, message)),
+                            )
                         })
                         .into()
                 } else {
-                    empty_message("You have not created a task yet...")
+                    empty_message("No matching ingredient...")
                 };
 
                 let content = Column::new()
@@ -169,7 +220,7 @@ impl Application for FoodCalc {
                     .spacing(20)
                     .push(title)
                     .push(input)
-                    .push(tasks);
+                    .push(ingredients);
 
                 Scrollable::new(scroll)
                     .padding(40)
