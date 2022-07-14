@@ -2,7 +2,7 @@ use tui::widgets::TableState;
 
 use super::db::{FoodBase, Ingredient, Meal, RecipeIngredient};
 
-const CURRENT_EVENT: i32 = 0;
+const CURRENT_EVENT: i32 = 5;
 
 #[derive(Clone)]
 pub enum PopUp {
