@@ -74,8 +74,7 @@ impl Application for FoodCalc {
     type Message = Message;
     type Flags = ();
 
-    fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        let state = IngredientsState::default();
+    fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let command = Command::perform(
             async move {
                 dotenv::dotenv().ok();
@@ -100,14 +99,10 @@ impl Application for FoodCalc {
                     *self = FoodCalc::AppInitialized;
                     Command::perform(
                         async {
-                            database().get_ingredients_option().await.map(|x| {
-                                x.into_iter()
-                                    .map(|i| IngredientWrapper {
-                                        ingredient: i,
-                                        ..Default::default()
-                                    })
-                                    .collect()
-                            })
+                            database()
+                                .get_ingredients_option()
+                                .await
+                                .map(|x| x.into_iter().map(IngredientWrapper::new).collect())
                         },
                         Message::Loaded,
                     )

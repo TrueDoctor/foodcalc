@@ -15,21 +15,21 @@ tokio = { version = "1", features = ["full"] }
 
 futures = "0.3"
 dotenv = "0.15.0"
-crossterm = { version = "0.23", features = [ "serde" ] }
 serde = {version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tui = { version = "0.17", default-features = false, features = ['crossterm', 'serde'] }
 iced = {version = "0.4", features=["tokio"]}
 anyhow = "*"
+chrono = "*"
 
 log = "0.4"
+fern = {version = "0.6", features = ["colored"]}
+iced_aw = { version = "0.2", default-features = false, features = ["tabs", "modal"] }
 
 tui-logger = "0.7"
 #reqwest = { version = "0.11", features = ["blocking", "cookies"] }
 #scraper = "0.12.0"
 
 inline-python = {version = "*", optional = true}
-lazy_static = {version = "1.4"}
 num = "*"
 regex = "*"
 once_cell = "*"

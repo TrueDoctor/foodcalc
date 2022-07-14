@@ -707,6 +707,7 @@ dependencies = [
  "fern",
  "futures",
  "iced",
+ "iced_aw",
  "inline-python",
  "log",
  "num",
@@ -1073,6 +1074,17 @@ dependencies = [
  "iced_wgpu",
  "iced_winit",
  "thiserror",
+]
+
+[[package]]
+name = "iced_aw"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0ba7cca72e5405936b31f104f8f7fcd371450ab170cd936fda051c8ffc3c614"
+dependencies = [
+ "iced_graphics",
+ "iced_native",
+ "iced_style",
 ]
 
 [[package]]
