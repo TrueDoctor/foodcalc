@@ -2,7 +2,7 @@ use fern::colors::{Color, ColoredLevelConfig};
 use iced::{Application, Settings};
 
 fn main() -> iced::Result {
-    let colors = ColoredLevelConfig::new().debug(Color::Magenta);
+    let colors = ColoredLevelConfig::new().debug(Color::Magenta).info(Color::Green);
 
     fern::Dispatch::new()
         .chain(std::io::stdout())

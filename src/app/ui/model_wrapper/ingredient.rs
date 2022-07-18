@@ -1,6 +1,8 @@
 use std::fmt::Display;
 
+use iced::alignment::Horizontal;
 use iced::{button, text_input, Alignment, Button, Element, Length, Row, Text, TextInput};
+use num::Zero;
 
 use super::style;
 use crate::app::ui::Icon;
@@ -79,12 +81,33 @@ impl IngredientWrapper {
     }
 
     pub fn view(&mut self) -> Element<IngredientMessage> {
+        let energy_color = match self.ingredient.energy == sqlx::types::BigDecimal::zero() {
+            true => [0.7, 0.7, 0.7],
+            false => [0., 0., 0.],
+        };
         match &mut self.state {
             IngredientState::Idle { edit_button } => Row::new()
                 .spacing(20)
                 .align_items(Alignment::Center)
                 .push(Text::new(self.ingredient.ingredient_id.to_string()))
                 .push(Text::new(self.ingredient.name.to_string()).width(Length::Fill))
+                .push(
+                    Text::new(
+                        self.ingredient
+                            .comment
+                            .as_ref()
+                            .map(|c| format!("({c})"))
+                            .unwrap_or_default(),
+                    )
+                    .horizontal_alignment(Horizontal::Right)
+                    .width(Length::Fill),
+                )
+                .push(
+                    Text::new(format!("{} kj", self.ingredient.energy.round(2)))
+                        .width(Length::Units(100))
+                        .color(energy_color)
+                        .horizontal_alignment(Horizontal::Right),
+                )
                 .push(
                     Button::new(edit_button, Icon::Edit.text())
                         .on_press(IngredientMessage::Edit)
