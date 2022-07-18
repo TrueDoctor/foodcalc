@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use iced::{button, text_input, Alignment, Button, Element, Row, Text, TextInput};
+use iced::{button, text_input, Alignment, Button, Element, Length, Row, Text, TextInput};
 
 use super::style;
 use crate::app::ui::Icon;
@@ -84,7 +84,7 @@ impl IngredientWrapper {
                 .spacing(20)
                 .align_items(Alignment::Center)
                 .push(Text::new(self.ingredient.ingredient_id.to_string()))
-                .push(Text::new(self.ingredient.name.to_string()))
+                .push(Text::new(self.ingredient.name.to_string()).width(Length::Fill))
                 .push(
                     Button::new(edit_button, Icon::Edit.text())
                         .on_press(IngredientMessage::Edit)
@@ -98,7 +98,7 @@ impl IngredientWrapper {
             } => {
                 let text_input = TextInput::new(
                     text_input,
-                    "Describe your task...",
+                    "Ingredient Name…",
                     &self.ingredient.name,
                     IngredientMessage::DescriptionEdited,
                 )

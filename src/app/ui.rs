@@ -33,6 +33,7 @@ const ICON_FONT: Font = iced::Font::External {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Icon {
     Apple,
+    Burger,
     Edit,
     CogAlt,
     Delete,
@@ -42,6 +43,7 @@ impl From<Icon> for char {
     fn from(icon: Icon) -> Self {
         match icon {
             Icon::Apple => '\u{eb3b}',
+            Icon::Burger => '\u{eb49}',
             Icon::CogAlt => '\u{ef3b}',
             Icon::Edit => '\u{ec55}',
             Icon::Delete => '\u{ec53}',
