@@ -147,7 +147,7 @@ impl super::Tab for IngredientTab {
     }
 
     fn tab_label(&self) -> iced_aw::TabLabel {
-        super::TabLabel::IconText(super::Icon::Heart.into(), self.title())
+        super::TabLabel::IconText(super::Icon::Apple.into(), self.title())
     }
 }
 

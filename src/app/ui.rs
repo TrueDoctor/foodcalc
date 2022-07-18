@@ -30,26 +30,34 @@ const ICON_FONT: Font = iced::Font::External {
     bytes: include_bytes!("../../fonts/icons.ttf"),
 };
 
-const TAB_FONT: Font = iced::Font::External {
-    name: "Tab Icons",
-    bytes: include_bytes!("../../fonts/tab_bar.ttf"),
-};
-
-enum Icon {
-    User,
-    Heart,
-    Calc,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Icon {
+    Apple,
+    Edit,
     CogAlt,
+    Delete,
 }
 
 impl From<Icon> for char {
     fn from(icon: Icon) -> Self {
         match icon {
-            Icon::User => '\u{E800}',
-            Icon::Heart => '\u{E801}',
-            Icon::Calc => '\u{F1EC}',
-            Icon::CogAlt => '\u{E802}',
+            Icon::Apple => '\u{eb3b}',
+            Icon::CogAlt => '\u{ef3b}',
+            Icon::Edit => '\u{ec55}',
+            Icon::Delete => '\u{ec53}',
         }
+    }
+}
+
+impl Icon {
+    pub fn text(&self) -> Text {
+        let c: char = (*self).into();
+        Text::new(c.to_string())
+            .font(ICON_FONT)
+            .width(Length::Units(20))
+            .height(Length::Shrink)
+            .horizontal_alignment(iced::alignment::Horizontal::Center)
+            .size(20)
     }
 }
 
@@ -104,7 +112,7 @@ impl TabBarExample {
             .push(self.ingredient_tab.tab_label(), self.ingredient_tab.view())
             .push(self.settings_tab.tab_label(), self.settings_tab.view())
             .tab_bar_style(theme)
-            .icon_font(TAB_FONT)
+            .icon_font(ICON_FONT)
             .tab_bar_position(match position {
                 TabBarPosition::Top => iced_aw::TabBarPosition::Top,
                 TabBarPosition::Bottom => iced_aw::TabBarPosition::Bottom,

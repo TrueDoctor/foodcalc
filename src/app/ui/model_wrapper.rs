@@ -3,27 +3,6 @@ use iced::{Font, Length, Text};
 mod ingredient;
 pub use ingredient::{IngredientMessage, IngredientWrapper};
 
-// Fonts
-const ICONS: Font = Font::External {
-    name: "Icons",
-    bytes: include_bytes!("../../../fonts/icons.ttf"),
-};
-
-fn icon(unicode: char) -> Text {
-    Text::new(unicode.to_string())
-        .font(ICONS)
-        .width(Length::Units(20))
-        .horizontal_alignment(iced::alignment::Horizontal::Center)
-        .size(20)
-}
-
-fn edit_icon() -> Text {
-    icon('\u{F303}')
-}
-
-fn delete_icon() -> Text {
-    icon('\u{F1F8}')
-}
 mod style {
     use iced::{button, Background, Color, Vector};
 

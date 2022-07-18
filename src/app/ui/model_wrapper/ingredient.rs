@@ -2,7 +2,8 @@ use std::fmt::Display;
 
 use iced::{button, text_input, Alignment, Button, Element, Row, Text, TextInput};
 
-use super::{delete_icon, edit_icon, style};
+use super::style;
+use crate::app::ui::Icon;
 use crate::db::Ingredient;
 
 #[derive(Debug, Clone)]
@@ -85,7 +86,7 @@ impl IngredientWrapper {
                 .push(Text::new(self.ingredient.ingredient_id.to_string()))
                 .push(Text::new(self.ingredient.name.to_string()))
                 .push(
-                    Button::new(edit_button, edit_icon())
+                    Button::new(edit_button, Icon::Edit.text())
                         .on_press(IngredientMessage::Edit)
                         .padding(10)
                         .style(style::Button::Icon),
@@ -111,7 +112,10 @@ impl IngredientWrapper {
                     .push(
                         Button::new(
                             delete_button,
-                            Row::new().spacing(10).push(delete_icon()).push(Text::new("Delete")),
+                            Row::new()
+                                .spacing(10)
+                                .push(Icon::Delete.text())
+                                .push(Text::new("Delete")),
                         )
                         .on_press(IngredientMessage::Delete)
                         .padding(10)
