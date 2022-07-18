@@ -20,5 +20,10 @@ fn main() -> iced::Result {
         .apply()
         .unwrap();
 
-    foodcalc::app::FoodCalc::run(Settings::default())
+    let settings = Settings {
+        antialiasing: true,
+        text_multithreading: true,
+        ..Settings::default()
+    };
+    foodcalc::app::FoodCalc::run(settings)
 }

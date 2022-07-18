@@ -7,7 +7,6 @@ use iced::scrollable::{self, Scrollable};
 use iced::text_input::{self, TextInput};
 use iced::{Application, Checkbox, Column, Command, Container, Element, Font, Length, Row, Settings, Text};
 use log::{debug, error, warn};
-use once_cell::sync::OnceCell;
 use sqlx::postgres::types::PgMoney;
 use sqlx::PgPool;
 
@@ -21,12 +20,6 @@ pub mod scraping;
 pub mod ui;
 
 static PRICE_PLACEHOLDER: PgMoney = PgMoney(-100i64);
-
-pub static DATABASE: OnceCell<db::FoodBase> = OnceCell::new();
-
-pub fn database() -> &'static db::FoodBase {
-    DATABASE.get().unwrap()
-}
 
 #[derive(Debug)]
 pub enum FoodCalc {

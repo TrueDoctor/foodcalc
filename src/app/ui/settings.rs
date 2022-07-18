@@ -92,6 +92,7 @@ impl Tab for SettingsTab {
     fn content(&mut self) -> Element<'_, Self::Message> {
         let content: Element<'_, SettingsMessage> = Container::new(
             Column::new()
+                .spacing(20)
                 .push(Text::new("TabBar position:").size(20))
                 .push(TabBarPosition::ALL.iter().cloned().fold(
                     Column::new().padding(10).spacing(10),
@@ -126,7 +127,12 @@ impl Tab for SettingsTab {
                 ),
         )
         .into();
+        let element: Element<'_, SettingsMessage> = Container::new(content)
+            .height(iced::Length::Fill)
+            .width(iced::Length::Fill)
+            .center_x()
+            .into();
 
-        content.map(TabMessage::Settings)
+        element.map(TabMessage::Settings)
     }
 }

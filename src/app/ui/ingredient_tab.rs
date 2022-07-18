@@ -137,7 +137,11 @@ impl super::Tab for IngredientTab {
 
         let element: Element<'_, IngredientTabMessage> =
             Column::new().max_width(800).spacing(20).push(input).push(scroll).into();
-        let element: Element<'_, IngredientTabMessage> = Container::new(element).width(Length::Fill).center_x().into();
+        let element: Element<'_, IngredientTabMessage> = Container::new(element)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x()
+            .into();
 
         element.map(TabMessage::IngredientTab)
     }

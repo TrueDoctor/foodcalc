@@ -2,6 +2,7 @@
 name = "foodcalc"
 version = "0.1.0"
 edition = "2021"
+authors = ["Dennis Kobert <dennis@kobert.dev>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -26,13 +27,11 @@ fern = {version = "0.6", features = ["colored"]}
 iced_aw = { version = "0.2", default-features = false, features = ["tabs", "modal"] }
 
 tui-logger = "0.7"
-#reqwest = { version = "0.11", features = ["blocking", "cookies"] }
-#scraper = "0.12.0"
+#reqwest = { version = "0.11" }
 
 inline-python = {version = "*", optional = true}
 num = "*"
 regex = "*"
-once_cell = "*"
 
 
 eyre = "0.6"
