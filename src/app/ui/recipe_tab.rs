@@ -5,15 +5,15 @@ use iced::text_input::{self, TextInput};
 use iced::{alignment, Application, Column, Command, Container, Element, Length, Sandbox, Text};
 use log::debug;
 
-use super::model_wrapper::{IngredientMessage, IngredientWrapper};
+use super::model_wrapper::{RecipeMessage, RecipeWrapper};
 use super::TabMessage;
 use crate::db::FoodBase;
 
 //pub mod state;
 
 #[derive(Clone, Debug)]
-pub struct IngredientTab {
-    ingredient_list: Vec<IngredientWrapper>,
+pub struct RecipeTab {
+    recipe_list: Vec<RecipeWrapper>,
     scroll: scrollable::State,
     input: text_input::State,
     input_value: String,
@@ -22,10 +22,10 @@ pub struct IngredientTab {
 }
 
 #[derive(Debug, Clone)]
-pub enum IngredientTabMessage {
+pub enum RecipeTabMessage {
     InputChanged(String),
-    IngredientMessage(usize, IngredientMessage),
-    UpdateData(Result<Vec<IngredientWrapper>, Error>),
+    RecipeMessage(usize, RecipeMessage),
+    UpdateData(Result<Vec<RecipeWrapper>, Error>),
 }
 
 #[derive(Debug, Clone)]
@@ -39,43 +39,46 @@ impl From<eyre::ErrReport> for Error {
     }
 }
 
-impl IngredientTab {
+impl RecipeTab {
     pub fn new(database: Arc<FoodBase>) -> (Self, Command<TabMessage>) {
         let move_database = database.clone();
         let command = Command::perform(
             async move {
-                let ingredients = move_database
-                    .get_ingredients()
+                let recipes = move_database
+                    .get_recipes()
                     .await?
                     .into_iter()
-                    .map(IngredientWrapper::new)
+                    .map(RecipeWrapper::new)
                     .collect();
-                Ok(ingredients)
+                Ok(recipes)
             },
-            IngredientTabMessage::UpdateData,
+            RecipeTabMessage::UpdateData,
         );
-        let ingredients = IngredientTab {
+        let recipes = RecipeTab {
             database,
             scroll: scrollable::State::default(),
             input: text_input::State::default(),
             input_value: String::new(),
-            ingredient_list: Vec::new(),
+            recipe_list: Vec::new(),
             dirty: false,
         };
-        (ingredients, command.map(TabMessage::IngredientTab))
+        (recipes, command.map(TabMessage::RecipeTab))
     }
 
-    pub fn update(&mut self, message: IngredientTabMessage) -> Command<TabMessage> {
+    pub fn update(&mut self, message: RecipeTabMessage) -> Command<TabMessage> {
         match message {
-            IngredientTabMessage::UpdateData(Ok(ingredients)) => {
-                self.ingredient_list = ingredients;
+            RecipeTabMessage::UpdateData(Ok(recipes)) => {
+                self.recipe_list = recipes;
             },
-            IngredientTabMessage::InputChanged(input) => {
+            RecipeTabMessage::UpdateData(Err(error)) => {
+                log::error!("{error:?}");
+            },
+            RecipeTabMessage::InputChanged(input) => {
                 self.input_value = input;
             },
-            IngredientTabMessage::IngredientMessage(i, message) => {
-                if let Some(ingredient) = self.ingredient_list.get_mut(i) {
-                    ingredient.update(message);
+            RecipeTabMessage::RecipeMessage(i, message) => {
+                if let Some(recipe) = self.recipe_list.get_mut(i) {
+                    recipe.update(message);
                 }
             },
             _ => {
@@ -86,75 +89,75 @@ impl IngredientTab {
     }
 }
 
-impl super::Tab for IngredientTab {
+impl super::Tab for RecipeTab {
     type Message = TabMessage;
 
     fn title(&self) -> String {
-        "Ingredients".to_string()
+        "Recipes".to_string()
     }
 
     fn content(&mut self) -> Element<'_, Self::Message> {
         let input = TextInput::new(
             &mut self.input,
-            "Ingredient Name",
+            "Recipe Name",
             &self.input_value,
-            IngredientTabMessage::InputChanged,
+            RecipeTabMessage::InputChanged,
         )
         .padding(15)
         .size(30);
-        let filtered_ingredients = self.ingredient_list.iter().filter(|ingredient| {
-            ingredient
-                .ingredient
+        let filtered_recipes = self.recipe_list.iter().filter(|recipe| {
+            recipe
+                .recipe
                 .name
                 .to_lowercase()
                 .contains(&*self.input_value.to_lowercase())
         });
 
-        let ingredients: Element<_> = if filtered_ingredients.count() > 0 {
-            self.ingredient_list
+        let recipes: Element<_> = if filtered_recipes.count() > 0 {
+            self.recipe_list
                 .iter_mut()
                 .enumerate()
-                .filter(|(_, ingredient)| {
-                    ingredient
-                        .ingredient
+                .filter(|(_, recipe)| {
+                    recipe
+                        .recipe
                         .name
                         .to_lowercase()
                         .contains(&self.input_value.to_lowercase())
                 })
-                .fold(Column::new().spacing(00), |column, (i, ingredient)| {
+                .fold(Column::new().spacing(00), |column, (i, recipe)| {
                     column.push(
-                        ingredient
+                        recipe
                             .view()
-                            .map(move |message| IngredientTabMessage::IngredientMessage(i, message)),
+                            .map(move |message| RecipeTabMessage::RecipeMessage(i, message)),
                     )
                 })
                 .into()
         } else {
-            empty_message("No matching ingredient...")
+            empty_message("No matching recipe...")
         };
 
-        let scroll: Element<'_, IngredientTabMessage> = Scrollable::new(&mut self.scroll)
+        let scroll: Element<'_, RecipeTabMessage> = Scrollable::new(&mut self.scroll)
             .padding(40)
-            .push(Container::new(ingredients).width(Length::Fill))
+            .push(Container::new(recipes).width(Length::Fill))
             .into();
 
-        let element: Element<'_, IngredientTabMessage> =
+        let element: Element<'_, RecipeTabMessage> =
             Column::new().max_width(800).spacing(20).push(input).push(scroll).into();
-        let element: Element<'_, IngredientTabMessage> = Container::new(element)
+        let element: Element<'_, RecipeTabMessage> = Container::new(element)
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x()
             .into();
 
-        element.map(TabMessage::IngredientTab)
+        element.map(TabMessage::RecipeTab)
     }
 
     fn tab_label(&self) -> iced_aw::TabLabel {
-        super::TabLabel::IconText(super::Icon::Apple.into(), self.title())
+        super::TabLabel::IconText(super::Icon::Burger.into(), self.title())
     }
 }
 
-fn empty_message<'a>(message: &str) -> Element<'a, IngredientTabMessage> {
+fn empty_message<'a>(message: &str) -> Element<'a, RecipeTabMessage> {
     Container::new(
         Text::new(message)
             .width(Length::Fill)

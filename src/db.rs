@@ -19,6 +19,13 @@ pub struct Ingredient {
     pub comment: Option<String>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct Recipe {
+    pub recipe_id: i32,
+    pub name: String,
+    pub comment: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct RecipeIngredient {
     pub ingredient_id: i32,
@@ -64,6 +71,17 @@ pub struct Unit {
     pub name: String,
 }
 
+#[derive(Clone)]
+pub struct IngredientSorce {
+    pub ingredient_id: i32,
+    pub store_id: i32,
+    pub package_size: BigDecimal,
+    pub unit_id: i32,
+    pub price: PgMoney,
+    pub url: Option<String>,
+    pub comment: Option<String>,
+}
+
 pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
     use regex::Regex;
     let number_regex = Regex::new(r"^[0-9][0-9,\.]*").expect("failed to compile number regex");
@@ -101,17 +119,6 @@ pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
     }
 }
 
-#[derive(Clone)]
-pub struct IngredientSorce {
-    pub ingredient_id: i32,
-    pub store_id: i32,
-    pub package_size: BigDecimal,
-    pub unit_id: i32,
-    pub price: PgMoney,
-    pub url: Option<String>,
-    pub comment: Option<String>,
-}
-
 #[derive(Debug)]
 pub struct FoodBase {
     pg_pool: Arc<PgPool>,
@@ -134,6 +141,31 @@ impl FoodBase {
             name,
             energy,
             comment
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(ingredient.ingredient_id)
+    }
+
+    pub async fn update_ingredient(
+        &self,
+        ingredient_id: i32,
+        name: String,
+        energy: BigDecimal,
+        comment: Option<String>,
+    ) -> eyre::Result<i32> {
+        let ingredient = sqlx::query!(
+            r#"
+                UPDATE ingredients
+                SET name = $1, energy = $2, comment = $3
+                WHERE ingredient_id = $4
+                RETURNING ingredient_id
+            "#,
+            name,
+            energy,
+            comment,
+            ingredient_id
         )
         .fetch_one(&*self.pg_pool)
         .await?;
@@ -169,12 +201,16 @@ impl FoodBase {
         Ok(ingredient.ingredient_id)
     }
 
-    pub async fn get_ingredients_option(&self) -> Option<Vec<Ingredient>> {
-        self.get_ingredients().await.ok()
-    }
-
     pub async fn get_ingredients(&self) -> eyre::Result<Vec<Ingredient>> {
         let records = sqlx::query_as!(Ingredient, r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,)
+            .fetch_all(&*self.pg_pool)
+            .await?;
+
+        Ok(records)
+    }
+
+    pub async fn get_recipes(&self) -> eyre::Result<Vec<Recipe>> {
+        let records = sqlx::query_as!(Recipe, r#" SELECT * FROM recipes ORDER BY recipe_id "#,)
             .fetch_all(&*self.pg_pool)
             .await?;
 

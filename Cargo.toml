@@ -19,7 +19,6 @@ dotenv = "0.15.0"
 serde = {version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 iced = {version = "0.4", features=["tokio"]}
-anyhow = "*"
 chrono = "*"
 
 log = "0.4"

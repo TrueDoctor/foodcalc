@@ -8,8 +8,10 @@ use iced::{Application, Column, Command, Container, Element, Font, Length, Sandb
 use iced_aw::{TabLabel, Tabs};
 
 mod ingredient_tab;
-
 use self::ingredient_tab::{IngredientTab, IngredientTabMessage};
+
+mod recipe_tab;
+use self::recipe_tab::{RecipeTab, RecipeTabMessage};
 use crate::app::Message;
 use crate::db::FoodBase;
 
@@ -68,6 +70,7 @@ pub struct TabBarExample {
     active_tab: usize,
     database: Arc<FoodBase>,
     ingredient_tab: IngredientTab,
+    recipe_tab: RecipeTab,
     settings_tab: SettingsTab,
 }
 
@@ -75,20 +78,26 @@ pub struct TabBarExample {
 pub enum TabMessage {
     TabSelected(usize),
     IngredientTab(IngredientTabMessage),
+    RecipeTab(RecipeTabMessage),
     Settings(SettingsMessage),
 }
 
 impl TabBarExample {
     pub fn new(database: Arc<FoodBase>) -> (Self, Command<TabMessage>) {
         let (ingredient_tab, ingredient_command) = IngredientTab::new(database.clone());
+        let (recipe_tab, recipe_command) = RecipeTab::new(database.clone());
 
         let tab_bar = TabBarExample {
             active_tab: 0,
             database,
             ingredient_tab,
+            recipe_tab,
             settings_tab: SettingsTab::new(),
         };
-        (tab_bar, Command::batch([ingredient_command].into_iter()))
+        (
+            tab_bar,
+            Command::batch([ingredient_command, recipe_command].into_iter()),
+        )
     }
 
     fn title(&self) -> String {
@@ -102,6 +111,7 @@ impl TabBarExample {
                 Command::none()
             },
             TabMessage::IngredientTab(message) => self.ingredient_tab.update(message),
+            TabMessage::RecipeTab(message) => self.recipe_tab.update(message),
             TabMessage::Settings(message) => self.settings_tab.update(message),
         }
     }
@@ -112,6 +122,7 @@ impl TabBarExample {
 
         let element: Element<'_, TabMessage> = Tabs::new(self.active_tab, TabMessage::TabSelected)
             .push(self.ingredient_tab.tab_label(), self.ingredient_tab.view())
+            .push(self.recipe_tab.tab_label(), self.recipe_tab.view())
             .push(self.settings_tab.tab_label(), self.settings_tab.view())
             .tab_bar_style(theme)
             .icon_font(ICON_FONT)

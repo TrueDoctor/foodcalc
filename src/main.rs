@@ -7,6 +7,7 @@ fn main() -> iced::Result {
     fern::Dispatch::new()
         .chain(std::io::stdout())
         .level_for("foodcalc", log::LevelFilter::Trace)
+        .level_for("sqlx", log::LevelFilter::Trace)
         .level(log::LevelFilter::Warn)
         .format(move |out, message, record| {
             out.finish(format_args!(
