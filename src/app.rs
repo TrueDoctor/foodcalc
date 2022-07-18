@@ -38,11 +38,17 @@ pub enum Message {
 #[derive(Debug, Clone)]
 pub enum Error {
     Database(String),
+    Misc(String),
 }
 
 impl From<sqlx::Error> for Error {
     fn from(error: sqlx::Error) -> Self {
         Error::Database(format!("Database Error occurred {error}"))
+    }
+}
+impl From<eyre::ErrReport> for Error {
+    fn from(error: eyre::ErrReport) -> Self {
+        Error::Misc(format!("Error occurred {error}"))
     }
 }
 
@@ -82,16 +88,12 @@ impl Application for FoodCalc {
                 },
                 _ => Command::none(),
             },
-            FoodCalc::MainView(main_view) => {
-                match message {
-                    Message::MainMessage(message) => {
-                        main_view.update(message);
-                    },
-                    _ => {
-                        debug!("recieved message without handler: {message:?}")
-                    },
-                }
-                Command::none()
+            FoodCalc::MainView(main_view) => match message {
+                Message::MainMessage(message) => main_view.update(message).map(Message::MainMessage),
+                _ => {
+                    debug!("recieved message without handler: {message:?}");
+                    Command::none()
+                },
             },
 
             FoodCalc::ErrorView(_) => Command::none(),

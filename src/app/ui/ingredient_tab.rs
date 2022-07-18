@@ -31,11 +31,18 @@ pub enum IngredientTabMessage {
 #[derive(Debug, Clone)]
 pub enum Error {
     Misc(String),
+    Database(String),
 }
 
 impl From<eyre::ErrReport> for Error {
     fn from(error: eyre::ErrReport) -> Self {
-        Error::Misc(format!("Database Error occurred {error}"))
+        Error::Misc(format!("Error occurred {error}"))
+    }
+}
+
+impl From<sqlx::Error> for Error {
+    fn from(error: sqlx::Error) -> Self {
+        Error::Database(format!("Database Error occurred {error}"))
     }
 }
 
@@ -69,20 +76,27 @@ impl IngredientTab {
         match message {
             IngredientTabMessage::UpdateData(Ok(ingredients)) => {
                 self.ingredient_list = ingredients;
+                Command::none()
             },
             IngredientTabMessage::InputChanged(input) => {
                 self.input_value = input;
+                Command::none()
             },
             IngredientTabMessage::IngredientMessage(i, message) => {
                 if let Some(ingredient) = self.ingredient_list.get_mut(i) {
-                    ingredient.update(message);
+                    ingredient
+                        .update(message, &self.database)
+                        .map(move |message| IngredientTabMessage::IngredientMessage(i, message))
+                        .map(TabMessage::IngredientTab)
+                } else {
+                    Command::none()
                 }
             },
             _ => {
-                debug!("recieved message without handler: {message:?}")
+                log::warn!("recieved message without handler: {message:?}");
+                Command::none()
             },
         }
-        Command::none()
     }
 }
 

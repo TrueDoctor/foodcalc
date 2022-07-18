@@ -1,12 +1,15 @@
 use std::fmt::Display;
+use std::sync::Arc;
 
 use iced::alignment::Horizontal;
-use iced::{button, text_input, Alignment, Button, Element, Length, Row, Text, TextInput};
+use iced::{button, text_input, Alignment, Button, Command, Element, Length, Row, Text, TextInput};
 use num::Zero;
 
 use super::style;
+use crate::app::ui::ingredient_tab::IngredientTabMessage;
 use crate::app::ui::Icon;
-use crate::db::Ingredient;
+use crate::app::Error;
+use crate::db::{FoodBase, Ingredient};
 
 #[derive(Debug, Clone)]
 pub enum IngredientState {
@@ -41,6 +44,7 @@ impl Display for Ingredient {
 
 #[derive(Debug, Clone)]
 pub enum IngredientMessage {
+    View(Result<i32, Error>),
     Edit,
     DescriptionEdited(String),
     FinishEdition,
@@ -55,8 +59,8 @@ impl IngredientWrapper {
         }
     }
 
-    pub fn update(&mut self, message: IngredientMessage) {
-        match message {
+    pub fn update(&mut self, message: IngredientMessage, database: &Arc<FoodBase>) -> Command<IngredientMessage> {
+        let command = match message {
             IngredientMessage::Edit => {
                 let mut text_input = text_input::State::focused();
                 text_input.select_all();
@@ -65,19 +69,42 @@ impl IngredientWrapper {
                     text_input,
                     delete_button: button::State::new(),
                 };
+
+                Command::none()
             },
             IngredientMessage::DescriptionEdited(new_description) => {
                 self.ingredient.name = new_description;
+                Command::none() // check if name is already in database
+            },
+            IngredientMessage::View(Ok(_)) => {
+                self.state = IngredientState::Idle {
+                    edit_button: button::State::new(),
+                };
+                Command::none()
+            },
+            IngredientMessage::View(Err(error)) => {
+                log::error!("{:?}", error);
+                Command::none()
             },
             IngredientMessage::FinishEdition => {
                 if !self.ingredient.name.is_empty() {
-                    self.state = IngredientState::Idle {
-                        edit_button: button::State::new(),
-                    }
+                    let ingredient = self.ingredient.clone();
+                    let database = database.clone();
+                    Command::perform(
+                        async move {
+                            log::debug!("Updating ingredient {}", ingredient.name);
+                            let id = database.update_ingredient(ingredient).await?;
+                            Ok(id)
+                        },
+                        IngredientMessage::View,
+                    )
+                } else {
+                    Command::none()
                 }
             },
-            IngredientMessage::Delete => {},
-        }
+            IngredientMessage::Delete => Command::none(),
+        };
+        command
     }
 
     pub fn view(&mut self) -> Element<IngredientMessage> {

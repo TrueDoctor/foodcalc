@@ -148,13 +148,7 @@ impl FoodBase {
         Ok(ingredient.ingredient_id)
     }
 
-    pub async fn update_ingredient(
-        &self,
-        ingredient_id: i32,
-        name: String,
-        energy: BigDecimal,
-        comment: Option<String>,
-    ) -> eyre::Result<i32> {
+    pub async fn update_ingredient(&self, ingredient: Ingredient) -> eyre::Result<i32> {
         let ingredient = sqlx::query!(
             r#"
                 UPDATE ingredients
@@ -162,10 +156,10 @@ impl FoodBase {
                 WHERE ingredient_id = $4
                 RETURNING ingredient_id
             "#,
-            name,
-            energy,
-            comment,
-            ingredient_id
+            ingredient.name,
+            ingredient.energy,
+            ingredient.comment,
+            ingredient.ingredient_id
         )
         .fetch_one(&*self.pg_pool)
         .await?;

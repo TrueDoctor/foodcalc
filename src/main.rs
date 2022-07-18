@@ -2,12 +2,16 @@ use fern::colors::{Color, ColoredLevelConfig};
 use iced::{Application, Settings};
 
 fn main() -> iced::Result {
-    let colors = ColoredLevelConfig::new().debug(Color::Magenta).info(Color::Green);
+    let colors = ColoredLevelConfig::new()
+        .debug(Color::Magenta)
+        .info(Color::Green)
+        .error(Color::Red);
 
     fern::Dispatch::new()
         .chain(std::io::stdout())
         .level_for("foodcalc", log::LevelFilter::Trace)
         .level_for("sqlx", log::LevelFilter::Trace)
+        .level_for("iced", log::LevelFilter::Trace)
         .level(log::LevelFilter::Warn)
         .format(move |out, message, record| {
             out.finish(format_args!(

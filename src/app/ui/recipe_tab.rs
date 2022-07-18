@@ -9,6 +9,8 @@ use super::model_wrapper::{RecipeMessage, RecipeWrapper};
 use super::TabMessage;
 use crate::db::FoodBase;
 
+use crate::app::Error;
+
 //pub mod state;
 
 #[derive(Clone, Debug)]
@@ -26,17 +28,6 @@ pub enum RecipeTabMessage {
     InputChanged(String),
     RecipeMessage(usize, RecipeMessage),
     UpdateData(Result<Vec<RecipeWrapper>, Error>),
-}
-
-#[derive(Debug, Clone)]
-pub enum Error {
-    Misc(String),
-}
-
-impl From<eyre::ErrReport> for Error {
-    fn from(error: eyre::ErrReport) -> Self {
-        Error::Misc(format!("Database Error occurred {error}"))
-    }
 }
 
 impl RecipeTab {
