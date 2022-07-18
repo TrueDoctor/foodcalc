@@ -6,7 +6,7 @@ pub use ingredient::{IngredientMessage, IngredientWrapper};
 // Fonts
 const ICONS: Font = Font::External {
     name: "Icons",
-    bytes: include_bytes!("../../fonts/icons.ttf"),
+    bytes: include_bytes!("../../../fonts/icons.ttf"),
 };
 
 fn icon(unicode: char) -> Text {

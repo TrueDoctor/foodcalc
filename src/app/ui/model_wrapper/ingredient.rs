@@ -2,8 +2,8 @@ use std::fmt::Display;
 
 use iced::{button, text_input, Alignment, Button, Element, Row, Text, TextInput};
 
-use super::super::db::Ingredient;
 use super::{delete_icon, edit_icon, style};
+use crate::db::Ingredient;
 
 #[derive(Debug, Clone)]
 pub enum IngredientState {
