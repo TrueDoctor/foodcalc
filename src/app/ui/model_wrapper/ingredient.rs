@@ -6,7 +6,7 @@ use iced::{button, text_input, Alignment, Button, Command, Element, Length, Row,
 use num::Zero;
 
 use super::style;
-use crate::app::ui::ingredient_tab::IngredientTabMessage;
+
 use crate::app::ui::Icon;
 use crate::app::Error;
 use crate::db::{FoodBase, Ingredient};

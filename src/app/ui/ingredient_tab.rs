@@ -3,7 +3,7 @@ use std::sync::Arc;
 use iced::scrollable::{self, Scrollable};
 use iced::text_input::{self, TextInput};
 use iced::{alignment, Application, Column, Command, Container, Element, Length, Sandbox, Text};
-use log::debug;
+
 
 use super::model_wrapper::{IngredientMessage, IngredientWrapper};
 use super::TabMessage;

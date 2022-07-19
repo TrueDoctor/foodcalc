@@ -4,7 +4,7 @@ pub mod theme;
 use std::sync::Arc;
 
 use iced::alignment::{Horizontal, Vertical};
-use iced::{Application, Column, Command, Container, Element, Font, Length, Sandbox, Settings, Text};
+use iced::{Application, Column, Command, Container, Element, Font, Length, Sandbox, Text};
 use iced_aw::{TabLabel, Tabs};
 
 mod ingredient_tab;

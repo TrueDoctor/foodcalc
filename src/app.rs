@@ -1,17 +1,17 @@
 use std::env;
 use std::sync::Arc;
 
-use db::{FoodBase, Ingredient};
-use iced::alignment::{self, Alignment};
-use iced::scrollable::{self, Scrollable};
-use iced::text_input::{self, TextInput};
-use iced::{Application, Checkbox, Column, Command, Container, Element, Font, Length, Row, Settings, Text};
-use log::{debug, error, warn};
+use db::{FoodBase};
+use iced::alignment::{self};
+
+
+use iced::{Application, Command, Container, Element, Length, Text};
+use log::{debug};
 use sqlx::postgres::types::PgMoney;
 use sqlx::PgPool;
 
-use self::ui::model_wrapper::{IngredientMessage, IngredientWrapper};
-use self::ui::{TabBarExample, TabMessage};
+
+use self::ui::{TabMessage};
 pub use crate::db;
 
 #[cfg(feature = "scraping")]
