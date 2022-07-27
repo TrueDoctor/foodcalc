@@ -89,7 +89,7 @@ impl Tab for SettingsTab {
         TabLabel::IconText(Icon::CogAlt.into(), self.title())
     }
 
-    fn content(&mut self) -> Element<'_, Self::Message> {
+    fn content(&mut self, theme: impl iced_aw::modal::StyleSheet + 'static) -> Element<'_, Self::Message> {
         let content: Element<'_, SettingsMessage> = Container::new(
             Column::new()
                 .spacing(20)

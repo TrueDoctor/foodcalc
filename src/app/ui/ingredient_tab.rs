@@ -4,12 +4,11 @@ use iced::scrollable::{self, Scrollable};
 use iced::text_input::{self, TextInput};
 use iced::{alignment, Application, Column, Command, Container, Element, Length, Sandbox, Text};
 
+mod ingredient;
+pub use ingredient::{IngredientMessage, IngredientWrapper};
 
-use super::model_wrapper::{IngredientMessage, IngredientWrapper};
 use super::TabMessage;
 use crate::db::FoodBase;
-
-//pub mod state;
 
 #[derive(Clone, Debug)]
 pub struct IngredientTab {
@@ -107,7 +106,7 @@ impl super::Tab for IngredientTab {
         "Ingredients".to_string()
     }
 
-    fn content(&mut self) -> Element<'_, Self::Message> {
+    fn content(&mut self, theme: impl iced_aw::modal::StyleSheet + 'static) -> Element<'_, Self::Message> {
         let input = TextInput::new(
             &mut self.input,
             "Ingredient Name",
@@ -128,13 +127,7 @@ impl super::Tab for IngredientTab {
             self.ingredient_list
                 .iter_mut()
                 .enumerate()
-                .filter(|(_, ingredient)| {
-                    ingredient
-                        .ingredient
-                        .name
-                        .to_lowercase()
-                        .contains(&self.input_value.to_lowercase())
-                })
+                .filter(|(_, ingredient)| crate::similar(&ingredient.ingredient.name, &self.input_value))
                 .fold(Column::new().spacing(00), |column, (i, ingredient)| {
                     column.push(
                         ingredient

@@ -701,6 +701,7 @@ dependencies = [
  "futures",
  "iced",
  "iced_aw",
+ "iced_searchable_picklist",
  "inline-python",
  "log",
  "num",
@@ -1128,6 +1129,15 @@ dependencies = [
  "num-traits",
  "twox-hash",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "iced_searchable_picklist"
+version = "0.1.1"
+dependencies = [
+ "iced_core",
+ "iced_native",
+ "iced_style",
 ]
 
 [[package]]

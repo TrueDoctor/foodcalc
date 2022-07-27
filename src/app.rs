@@ -1,17 +1,15 @@
 use std::env;
 use std::sync::Arc;
 
-use db::{FoodBase};
+use db::FoodBase;
 use iced::alignment::{self};
 
-
 use iced::{Application, Command, Container, Element, Length, Text};
-use log::{debug};
+use log::debug;
 use sqlx::postgres::types::PgMoney;
 use sqlx::PgPool;
 
-
-use self::ui::{TabMessage};
+use self::ui::TabMessage;
 pub use crate::db;
 
 #[cfg(feature = "scraping")]

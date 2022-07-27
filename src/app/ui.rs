@@ -1,10 +1,10 @@
-pub mod model_wrapper;
+pub mod style;
 pub mod theme;
 
 use std::sync::Arc;
 
 use iced::alignment::{Horizontal, Vertical};
-use iced::{Application, Column, Command, Container, Element, Font, Length, Sandbox, Text};
+use iced::{Column, Command, Container, Element, Font, Length, Text};
 use iced_aw::{TabLabel, Tabs};
 
 mod ingredient_tab;
@@ -12,11 +12,9 @@ use self::ingredient_tab::{IngredientTab, IngredientTabMessage};
 
 mod recipe_tab;
 use self::recipe_tab::{RecipeTab, RecipeTabMessage};
+
 use crate::app::Message;
 use crate::db::FoodBase;
-
-//mod recipes;
-//use recipes::{RecipeMessage, RecipeTab};
 
 //mod event_meals;
 //use counter::{CounterMessage, CounterTab};
@@ -65,7 +63,7 @@ impl Icon {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TabBarExample {
     active_tab: usize,
     database: Arc<FoodBase>,
@@ -121,9 +119,9 @@ impl TabBarExample {
         let theme = self.settings_tab.settings().tab_bar_theme.unwrap_or_default();
 
         let element: Element<'_, TabMessage> = Tabs::new(self.active_tab, TabMessage::TabSelected)
-            .push(self.ingredient_tab.tab_label(), self.ingredient_tab.view())
-            .push(self.recipe_tab.tab_label(), self.recipe_tab.view())
-            .push(self.settings_tab.tab_label(), self.settings_tab.view())
+            .push(self.ingredient_tab.tab_label(), self.ingredient_tab.view(theme))
+            .push(self.recipe_tab.tab_label(), self.recipe_tab.view(theme))
+            .push(self.settings_tab.tab_label(), self.settings_tab.view(theme))
             .tab_bar_style(theme)
             .icon_font(ICON_FONT)
             .tab_bar_position(match position {
@@ -142,14 +140,14 @@ trait Tab {
 
     fn tab_label(&self) -> TabLabel;
 
-    fn view(&mut self) -> Element<'_, Self::Message> {
+    fn view(&mut self, theme: impl iced_aw::modal::StyleSheet + 'static) -> Element<'_, Self::Message> {
         let title = Text::new(self.title())
             .width(Length::Fill)
             .size(HEADER_SIZE)
             .color([0.5, 0.5, 0.5])
             .horizontal_alignment(iced::alignment::Horizontal::Center);
 
-        let column = Column::new().spacing(20).push(title).push(self.content());
+        let column = Column::new().spacing(20).push(title).push(self.content(theme));
 
         Container::new(column)
             .width(Length::Fill)
@@ -160,5 +158,5 @@ trait Tab {
             .into()
     }
 
-    fn content(&mut self) -> Element<'_, Self::Message>;
+    fn content(&mut self, theme: impl iced_aw::modal::StyleSheet + 'static) -> Element<'_, Self::Message>;
 }

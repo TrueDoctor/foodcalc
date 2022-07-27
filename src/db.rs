@@ -1,8 +1,7 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 
-use iced::{
-    Application,
-};
+use iced::Application;
 use sqlx::postgres::types::PgMoney;
 use sqlx::postgres::PgPool;
 use sqlx::types::time::PrimitiveDateTime;
@@ -10,7 +9,7 @@ use sqlx::types::BigDecimal;
 
 pub const METRO: i32 = 0;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Ingredient {
     pub ingredient_id: i32,
     pub name: String,
@@ -18,15 +17,15 @@ pub struct Ingredient {
     pub comment: Option<String>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Recipe {
     pub recipe_id: i32,
     pub name: String,
     pub comment: Option<String>,
 }
 
-#[derive(Clone, Debug)]
-pub struct RecipeIngredient {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EventRecipeIngredient {
     pub ingredient_id: i32,
     pub name: String,
     pub weight: BigDecimal,
@@ -34,7 +33,7 @@ pub struct RecipeIngredient {
     pub price: PgMoney,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SubRecipe {
     pub subrecipe_id: i32,
     pub recipe: String,
@@ -44,7 +43,7 @@ pub struct SubRecipe {
     pub is_subrecipe: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Meal {
     pub event_id: i32,
     pub recipe_id: i32,
@@ -58,16 +57,61 @@ pub struct Meal {
     pub servings: i32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Store {
     pub store_id: i32,
     pub name: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Unit {
     pub unit_id: i32,
-    pub name: String,
+    pub name: Cow<'static, str>,
+}
+
+impl std::string::ToString for Unit {
+    fn to_string(&self) -> String {
+        self.name.to_string()
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum RecipeMetaIngredient {
+    Ingredient(Ingredient),
+    MetaRecipe(Recipe),
+}
+
+impl Default for RecipeMetaIngredient {
+    fn default() -> Self {
+        Self::Ingredient(Ingredient::default())
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
+pub struct RecipeEntry {
+    pub ingredient: RecipeMetaIngredient,
+    pub amount: BigDecimal,
+    pub unit: Unit,
+}
+
+impl RecipeMetaIngredient {
+    pub fn name(&self) -> &str {
+        match self {
+            RecipeMetaIngredient::Ingredient(ingredient) => &ingredient.name,
+            RecipeMetaIngredient::MetaRecipe(recipe) => &recipe.name,
+        }
+    }
+}
+
+impl std::string::ToString for RecipeMetaIngredient {
+    fn to_string(&self) -> String {
+        self.name().to_string()
+    }
+}
+impl std::string::ToString for RecipeEntry {
+    fn to_string(&self) -> String {
+        self.ingredient.name().to_string()
+    }
 }
 
 #[derive(Clone)]
@@ -210,6 +254,128 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn get_all_meta_ingredients(&self) -> eyre::Result<Vec<RecipeMetaIngredient>> {
+        let ingredients = sqlx::query_as!(Ingredient, r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,)
+            .fetch_all(&*self.pg_pool)
+            .await?
+            .into_iter()
+            .map(RecipeMetaIngredient::Ingredient);
+
+        let recipes = sqlx::query_as!(Recipe, r#" SELECT * FROM recipes ORDER BY recipe_id "#,)
+            .fetch_all(&*self.pg_pool)
+            .await?
+            .into_iter()
+            .map(RecipeMetaIngredient::MetaRecipe);
+
+        let records = recipes.chain(ingredients).collect();
+        Ok(records)
+    }
+
+    pub async fn get_meta_ingredients(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeEntry>> {
+        let ingredients = self.get_recipe_ingredients(recipe_id).await?;
+        let mut records = self.get_recipe_meta_ingredients(recipe_id).await?;
+        records.extend(ingredients);
+        Ok(records)
+    }
+
+    pub async fn get_recipe_ingredients(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeEntry>> {
+        struct RecipeIngredientWeight {
+            ingredient_id: i32,
+            name: String,
+            comment: Option<String>,
+            energy: BigDecimal,
+            amount: BigDecimal,
+            unit_id: i32,
+            unit_name: String,
+        }
+        let records = sqlx::query_as!(
+            RecipeIngredientWeight,
+            r#" SELECT ingredient_id, ingredients.name, energy, comment, amount, unit_id, units.name as "unit_name!"
+                FROM recipe_ingredients
+                JOIN ingredients USING(ingredient_id)
+                JOIN units USING(unit_id)
+                WHERE recipe_ingredients.recipe_id = $1
+                ORDER BY ingredient_id  "#,
+            recipe_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        let records = records
+            .into_iter()
+            .map(
+                |RecipeIngredientWeight {
+                     ingredient_id,
+                     name,
+                     comment,
+                     energy,
+                     unit_name,
+                     unit_id,
+                     amount,
+                 }| RecipeEntry {
+                    ingredient: RecipeMetaIngredient::Ingredient(Ingredient {
+                        ingredient_id,
+                        name,
+                        comment,
+                        energy,
+                    }),
+                    amount,
+                    unit: Unit {
+                        name: Cow::Owned(unit_name),
+                        unit_id,
+                    },
+                },
+            )
+            .collect();
+
+        Ok(records)
+    }
+
+    pub async fn get_recipe_meta_ingredients(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeEntry>> {
+        struct RecipeIngredientWeight {
+            recipe_id: i32,
+            name: String,
+            comment: Option<String>,
+            weight: BigDecimal,
+        }
+        let records = sqlx::query_as!(
+            RecipeIngredientWeight,
+            r#" SELECT recipes.recipe_id, name,  comment, weight as "weight!"
+                FROM resolved_meta
+                JOIN recipes ON(recipes.recipe_id = subrecipe_id)
+                WHERE resolved_meta.recipe_id = $1
+                ORDER BY recipes.recipe_id  "#,
+            recipe_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        let records = records
+            .into_iter()
+            .map(
+                |RecipeIngredientWeight {
+                     recipe_id,
+                     name,
+                     comment,
+                     weight,
+                 }| RecipeEntry {
+                    ingredient: RecipeMetaIngredient::MetaRecipe(Recipe {
+                        recipe_id,
+                        name,
+                        comment,
+                    }),
+                    amount: weight,
+                    unit: Unit {
+                        name: Cow::Borrowed("kg"),
+                        unit_id: 0,
+                    },
+                },
+            )
+            .collect();
+
+        Ok(records)
+    }
+
     pub async fn fetch_subrecipes_export(&self, recipe_id: i32, weight: BigDecimal) {
         let subrecipes = sqlx::query_as!(
             SubRecipe,
@@ -295,15 +461,15 @@ impl FoodBase {
         writeln!(text, "\\printrecipe{{{title}}}").unwrap();
     }
 
-    pub async fn get_recipe_ingredients(
+    pub async fn get_event_recipe_ingredients(
         &self,
         event_id: i32,
         recipe_id: i32,
         place_id: i32,
         start_time: PrimitiveDateTime,
-    ) -> eyre::Result<Vec<RecipeIngredient>> {
+    ) -> eyre::Result<Vec<EventRecipeIngredient>> {
         let records = sqlx::query_as!(
-            RecipeIngredient,
+            EventRecipeIngredient,
             r#" SELECT ingredient_id as "ingredient_id!",
                    ingredient as "name!",
                    round(sum(weight) / servings, 2) as "weight!",

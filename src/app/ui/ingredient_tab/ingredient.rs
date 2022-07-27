@@ -5,7 +5,7 @@ use iced::alignment::Horizontal;
 use iced::{button, text_input, Alignment, Button, Command, Element, Length, Row, Text, TextInput};
 use num::Zero;
 
-use super::style;
+use crate::app::ui::style;
 
 use crate::app::ui::Icon;
 use crate::app::Error;
