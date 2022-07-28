@@ -67,7 +67,13 @@ impl SettingsTab {
     pub fn update(&mut self, message: SettingsMessage) -> Command<TabMessage> {
         match message {
             SettingsMessage::PositionSelected(position) => self.settings().tab_bar_position = Some(position),
-            SettingsMessage::ThemeSelected(theme) => self.settings().tab_bar_theme = Some(theme),
+            SettingsMessage::ThemeSelected(theme) => {
+                self.settings().tab_bar_theme = Some(theme);
+                match super::theme::THEME.write() {
+                    Ok(mut t) => *t = theme,
+                    Err(_) => log::error!("error setting theme"),
+                }
+            },
         };
         Command::none()
     }
@@ -89,11 +95,12 @@ impl Tab for SettingsTab {
         TabLabel::IconText(Icon::CogAlt.into(), self.title())
     }
 
-    fn content(&mut self, theme: impl iced_aw::modal::StyleSheet + 'static) -> Element<'_, Self::Message> {
+    fn content(&mut self) -> Element<'_, Self::Message> {
+        let theme = crate::theme();
         let content: Element<'_, SettingsMessage> = Container::new(
             Column::new()
                 .spacing(20)
-                .push(Text::new("TabBar position:").size(20))
+                .push(Text::new("TabBar position:").size(20).color(theme.foreground()))
                 .push(TabBarPosition::ALL.iter().cloned().fold(
                     Column::new().padding(10).spacing(10),
                     |column, position| {
@@ -104,27 +111,27 @@ impl Tab for SettingsTab {
                                 self.settings().tab_bar_position,
                                 SettingsMessage::PositionSelected,
                             )
+                            .style(theme)
                             .size(16),
                         )
                     },
                 ))
-                .push(Text::new("TabBar color:").size(20))
-                .push(
-                    Theme::ALL
-                        .iter()
-                        .cloned()
-                        .fold(Column::new().padding(10).spacing(10), |column, theme| {
-                            column.push(
-                                Radio::new(
-                                    theme,
-                                    theme,
-                                    self.settings().tab_bar_theme,
-                                    SettingsMessage::ThemeSelected,
-                                )
-                                .size(16),
+                .push(Text::new("TabBar color:").size(20).color(theme.foreground()))
+                .push(Theme::ALL.iter().cloned().fold(
+                    Column::new().padding(10).spacing(10),
+                    |column, selected_theme| {
+                        column.push(
+                            Radio::new(
+                                selected_theme,
+                                selected_theme,
+                                Some(theme),
+                                SettingsMessage::ThemeSelected,
                             )
-                        }),
-                ),
+                            .style(theme)
+                            .size(16),
+                        )
+                    },
+                )),
         )
         .into();
         let element: Element<'_, SettingsMessage> = Container::new(content)

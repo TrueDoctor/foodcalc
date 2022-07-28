@@ -28,11 +28,16 @@ impl RecipeWrapper {
     }
 
     pub fn view(&mut self) -> Element<RecipeTabMessage> {
+        let theme = crate::theme();
         Row::new()
             .spacing(20)
             .align_items(Alignment::Center)
-            .push(Text::new(self.recipe.recipe_id.to_string()))
-            .push(Text::new(self.recipe.name.to_string()).width(Length::Fill))
+            .push(Text::new(self.recipe.recipe_id.to_string()).color(theme.foreground()))
+            .push(
+                Text::new(self.recipe.name.to_string())
+                    .width(Length::Fill)
+                    .color(theme.foreground()),
+            )
             .push(
                 Button::new(&mut self.edit_button, Icon::Edit.text())
                     .on_press(RecipeTabMessage::OpenModal(self.recipe.clone()))

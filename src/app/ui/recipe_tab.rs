@@ -6,7 +6,6 @@ use iced::{
     alignment, alignment::Horizontal, button, Application, Button, Column, Command, Container, Element, Length, Row,
     Sandbox, Text,
 };
-use iced_aw::{modal, Card, Modal};
 use log::debug;
 
 use super::TabMessage;
@@ -27,14 +26,14 @@ pub struct ModalState {
     recipe_detail_modal: Option<RecipeDetail>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RecipeTab {
     recipe_list: Vec<RecipeWrapper>,
     scroll: scrollable::State,
     input: text_input::State,
     input_value: String,
     database: Arc<FoodBase>,
-    recipe_detail_modal: modal::State<ModalState>,
+    recipe_detail_modal: ModalState,
 }
 
 #[derive(Debug, Clone)]
@@ -70,7 +69,7 @@ impl RecipeTab {
             input: text_input::State::default(),
             input_value: String::new(),
             recipe_list: Vec::new(),
-            recipe_detail_modal: modal::State::new(ModalState::default()),
+            recipe_detail_modal: ModalState::default(),
         };
         (recipes, command.map(TabMessage::RecipeTab))
     }
@@ -87,31 +86,32 @@ impl RecipeTab {
                 self.input_value = input;
             },
             RecipeTabMessage::RecipeDetailMessage(message) => {
-                if let Some(modal) = self.recipe_detail_modal.inner_mut().recipe_detail_modal.as_mut() {
+                if let Some(modal) = self.recipe_detail_modal.recipe_detail_modal.as_mut() {
                     modal.update(message);
                 }
             },
             RecipeTabMessage::CancelButtonPressed => {
-                self.recipe_detail_modal.show(false);
+                self.recipe_detail_modal.recipe_detail_modal = None;
             },
             RecipeTabMessage::CloseModal => {
-                self.recipe_detail_modal.show(false);
+                self.recipe_detail_modal.recipe_detail_modal = None;
             },
             RecipeTabMessage::ShowModal(Ok(recipe_detail)) => {
-                *self.recipe_detail_modal.inner_mut() = ModalState {
-                    cancel_state: button::State::default(),
-                    ok_state: button::State::default(),
-                    recipe_detail_modal: Some(recipe_detail),
-                };
-                self.recipe_detail_modal.show(true);
+                self.recipe_detail_modal.recipe_detail_modal = Some(recipe_detail);
             },
             RecipeTabMessage::OpenModal(recipe) => {
                 let move_database = self.database.clone();
                 return Command::perform(
                     async move {
                         let all_ingredients = move_database.get_all_meta_ingredients().await?;
-                        let entries = move_database.get_recipe_meta_ingredients(recipe.recipe_id).await?;
-                        Ok(RecipeDetail::new(recipe, Arc::new(all_ingredients), entries))
+                        let all_units = move_database.get_units().await?;
+                        let entries = move_database.get_meta_ingredients(recipe.recipe_id).await?;
+                        Ok(RecipeDetail::new(
+                            recipe,
+                            Arc::new(all_ingredients),
+                            Arc::new(all_units),
+                            entries,
+                        ))
                     },
                     RecipeTabMessage::ShowModal,
                 )
@@ -132,7 +132,9 @@ impl super::Tab for RecipeTab {
         "Recipes".to_string()
     }
 
-    fn content(&mut self, theme: impl iced_aw::modal::StyleSheet + 'static) -> Element<'_, Self::Message> {
+    fn content(&mut self) -> Element<'_, Self::Message> {
+        let theme = crate::theme();
+
         let input = TextInput::new(
             &mut self.input,
             "Recipe Name",
@@ -140,14 +142,12 @@ impl super::Tab for RecipeTab {
             RecipeTabMessage::InputChanged,
         )
         .padding(15)
+        .style(theme)
         .size(30);
-        let filtered_recipes = self.recipe_list.iter().filter(|recipe| {
-            recipe
-                .recipe
-                .name
-                .to_lowercase()
-                .contains(&*self.input_value.to_lowercase())
-        });
+        let filtered_recipes = self
+            .recipe_list
+            .iter()
+            .filter(|recipe| crate::similar(&recipe.recipe.name, &*self.input_value));
 
         let recipes: Element<_> = if filtered_recipes.count() > 0 {
             self.recipe_list
@@ -176,48 +176,63 @@ impl super::Tab for RecipeTab {
             .center_x()
             .into();
 
-        let element: Element<'_, RecipeTabMessage> = Modal::new(&mut self.recipe_detail_modal, element, |state| {
-            Card::new(
-                Text::new("My modal"),
-                state
-                    .recipe_detail_modal
-                    .as_mut()
-                    .unwrap()
-                    .view()
-                    .map(RecipeTabMessage::RecipeDetailMessage),
-            )
-            .foot(
-                Row::new()
-                    .spacing(10)
-                    .padding(5)
-                    .width(Length::Fill)
-                    .push(
-                        Button::new(
-                            &mut state.cancel_state,
-                            Text::new("Cancel").horizontal_alignment(Horizontal::Center),
-                        )
-                        .width(Length::Fill)
-                        .on_press(RecipeTabMessage::CancelButtonPressed),
+        let modal_shown = self.recipe_detail_modal.recipe_detail_modal.is_some();
+        let modal_state = &mut self.recipe_detail_modal.recipe_detail_modal;
+
+        let modal: Element<'_, RecipeTabMessage> =
+            Column::new().spacing(30)
+            .push(
+            Text::new(
+                modal_state
+                    .as_ref()
+                    .map(|x| x.recipe.name.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                ).color(theme.foreground()).size(30))
+            .push(
+            modal_state
+                .as_mut()
+                .map(|recipe_detail| recipe_detail.view().map(RecipeTabMessage::RecipeDetailMessage))
+                .unwrap_or_else(|| empty_message("No recipe selected...")))
+        .push(
+            Row::new()
+                .spacing(10)
+                .padding(5)
+                .width(Length::Fill)
+                .push(
+                    Button::new(
+
+                        &mut self.recipe_detail_modal.cancel_state,
+                        Text::new("Cancel").horizontal_alignment(Horizontal::Center),
                     )
-                    .push(
-                        Button::new(
-                            &mut state.ok_state,
-                            Text::new("Ok").horizontal_alignment(Horizontal::Center),
-                        )
-                        .width(Length::Fill)
-                        .on_press(RecipeTabMessage::SaveRecipe),
-                    ),
-            )
-            .max_width(600)
-            //.width(Length::Shrink)
-            //.height(Length::Shrink)
-            .on_close(RecipeTabMessage::CloseModal)
-            .into()
-        })
-        .style(theme)
-        .backdrop(RecipeTabMessage::CloseModal)
-        .on_esc(RecipeTabMessage::CloseModal)
-        .into();
+                    .width(Length::Fill)
+                    .style(theme)
+                    .on_press(RecipeTabMessage::CancelButtonPressed),
+                )
+                .push(
+                    Button::new(
+                        &mut self.recipe_detail_modal.ok_state,
+                        Text::new("Ok").horizontal_alignment(Horizontal::Center),
+                    )
+                    .width(Length::Fill)
+                    .style(theme)
+                    .on_press(RecipeTabMessage::SaveRecipe),
+                ),
+        ).max_width(1000).into()/*
+        .max_width(1000)
+        //.width(Length::Shrink)
+        //.height(Length::Shrink)
+        .on_close(RecipeTabMessage::CloseModal)
+        .into()*/;
+        let modal: Element<'_, RecipeTabMessage> = Container::new(modal)
+            .center_x()
+            .height(Length::Fill)
+            .width(Length::Fill)
+            .into();
+        let element: Element<'_, RecipeTabMessage> = match modal_shown {
+            true => modal,
+            false => element,
+        };
 
         element.map(TabMessage::RecipeTab)
     }

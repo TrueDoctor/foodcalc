@@ -72,6 +72,11 @@ impl Application for FoodCalc {
         "FoodCalc".to_string()
     }
 
+    fn background_color(&self) -> iced::Color {
+        crate::theme().background()
+    }
+
+
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match self {
             FoodCalc::ConnectingToDatabase => match message {

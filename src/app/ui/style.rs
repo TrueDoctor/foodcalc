@@ -7,15 +7,16 @@ pub enum Button {
 
 impl button::StyleSheet for Button {
     fn active(&self) -> button::Style {
+        let theme = crate::theme();
         match self {
             Button::Icon => button::Style {
-                text_color: Color::from_rgb(0.5, 0.5, 0.5),
+                text_color: theme.border_color(),
                 ..button::Style::default()
             },
             Button::Destructive => button::Style {
-                background: Some(Background::Color(Color::from_rgb(0.8, 0.2, 0.2))),
+                background: Some(Background::Color(theme.warning())),
                 border_radius: 5.0,
-                text_color: Color::WHITE,
+                text_color: theme.background(),
                 shadow_offset: Vector::new(1.0, 1.0),
                 ..button::Style::default()
             },

@@ -108,16 +108,21 @@ impl IngredientWrapper {
     }
 
     pub fn view(&mut self) -> Element<IngredientMessage> {
+        let theme = crate::theme();
         let energy_color = match self.ingredient.energy == sqlx::types::BigDecimal::zero() {
-            true => [0.7, 0.7, 0.7],
-            false => [0., 0., 0.],
+            true => theme.accent_light(),
+            false => theme.foreground(),
         };
         match &mut self.state {
             IngredientState::Idle { edit_button } => Row::new()
                 .spacing(20)
                 .align_items(Alignment::Center)
-                .push(Text::new(self.ingredient.ingredient_id.to_string()))
-                .push(Text::new(self.ingredient.name.to_string()).width(Length::Fill))
+                .push(Text::new(self.ingredient.ingredient_id.to_string()).color(theme.foreground()))
+                .push(
+                    Text::new(self.ingredient.name.to_string())
+                        .width(Length::Fill)
+                        .color(theme.foreground()),
+                )
                 .push(
                     Text::new(
                         self.ingredient
@@ -127,6 +132,7 @@ impl IngredientWrapper {
                             .unwrap_or_default(),
                     )
                     .horizontal_alignment(Horizontal::Right)
+                    .color(theme.foreground())
                     .width(Length::Fill),
                 )
                 .push(

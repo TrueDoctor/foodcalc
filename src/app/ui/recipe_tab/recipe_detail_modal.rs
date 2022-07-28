@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use iced::{button, text_input, Alignment, Button, Column, Element, Length, Row, Text, TextInput};
 
-use crate::db::RecipeEntry;
 use crate::db::{Recipe, RecipeMetaIngredient};
+use crate::db::{RecipeEntry, Unit};
 
 mod recipe_ingredient_wrapper;
 use recipe_ingredient_wrapper::{RecipeIngredientMessage, RecipeIngredientWrapper};
@@ -14,6 +14,7 @@ pub struct RecipeDetail {
     pub(crate) recipe_name: text_input::State,
     pub(crate) recipe_description: text_input::State,
     pub(crate) all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
+    pub(crate) all_units: Arc<Vec<Unit>>,
     pub(crate) ingredients: Vec<RecipeIngredientWrapper>,
     //pub(crate) steps: Vec<RecipeStepWrapper>,
 }
@@ -32,14 +33,16 @@ impl RecipeDetail {
     pub fn new(
         recipe: Recipe,
         all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
+        all_units: Arc<Vec<Unit>>,
         recipe_ingredients: Vec<RecipeEntry>,
     ) -> Self {
         Self {
             recipe,
             all_ingredients: all_ingredients.clone(),
+            all_units: all_units.clone(),
             ingredients: recipe_ingredients
                 .into_iter()
-                .map(|ingredient| RecipeIngredientWrapper::new(all_ingredients.clone(), ingredient))
+                .map(|ingredient| RecipeIngredientWrapper::new(all_ingredients.clone(), all_units.clone(), ingredient))
                 .collect(),
             ..Default::default()
         }
@@ -52,6 +55,13 @@ impl RecipeDetail {
             },
             RecipeDetailMessage::Delete => {},
             RecipeDetailMessage::SubmitDescription => {},
+            RecipeDetailMessage::RecipeIngredientMessage(i, RecipeIngredientMessage::Focus) => {
+                for (j, ingredient) in self.ingredients.iter_mut().enumerate() {
+                    if j != i {
+                        ingredient.update(RecipeIngredientMessage::Unfocus);
+                    }
+                }
+            },
             RecipeDetailMessage::RecipeIngredientMessage(i, message) => {
                 if let Some(recipe_ingredient) = self.ingredients.get_mut(i) {
                     recipe_ingredient.update(message);
@@ -61,6 +71,7 @@ impl RecipeDetail {
     }
 
     pub fn view(&mut self) -> Element<RecipeDetailMessage> {
+        let theme = crate::theme();
         let description_input = TextInput::new(
             &mut self.recipe_description,
             "Recipe Description…",
@@ -68,6 +79,7 @@ impl RecipeDetail {
             RecipeDetailMessage::DescriptionEdited,
         )
         .on_submit(RecipeDetailMessage::SubmitDescription)
+        .style(theme)
         .padding(10);
 
         let ingredients: Element<'_, RecipeDetailMessage> = self

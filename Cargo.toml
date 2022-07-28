@@ -19,14 +19,13 @@ dotenv = "0.15.0"
 serde = {version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 iced = {version = "0.4", features=["tokio"]}
-iced_searchable_picklist = { path = "../iced-searchable-picklist" }
+iced_searchable_picklist = { version = "0.1.1" }
 chrono = "*"
 
 log = "0.4"
 fern = {version = "0.6", features = ["colored"]}
-iced_aw = { version = "0.2", default-features = false, features = ["tabs", "modal", "card"] }
+iced_aw = { version = "0.2", default-features = false, features = ["tabs"] }
 
-tui-logger = "0.7"
 #reqwest = { version = "0.11" }
 
 inline-python = {version = "*", optional = true}
@@ -35,3 +34,4 @@ regex = "*"
 
 
 eyre = "0.6"
+lazy_static = "1.4.0"

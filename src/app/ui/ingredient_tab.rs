@@ -106,7 +106,9 @@ impl super::Tab for IngredientTab {
         "Ingredients".to_string()
     }
 
-    fn content(&mut self, theme: impl iced_aw::modal::StyleSheet + 'static) -> Element<'_, Self::Message> {
+    fn content(&mut self) -> Element<'_, Self::Message> {
+        let theme = crate::theme();
+
         let input = TextInput::new(
             &mut self.input,
             "Ingredient Name",
@@ -114,6 +116,7 @@ impl super::Tab for IngredientTab {
             IngredientTabMessage::InputChanged,
         )
         .padding(15)
+        .style(theme)
         .size(30);
         let filtered_ingredients = self.ingredient_list.iter().filter(|ingredient| {
             ingredient

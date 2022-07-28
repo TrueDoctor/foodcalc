@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use iced::{button, text_input, Alignment, Button, Element, Length, Row, Text, TextInput};
+use num::Num;
 use sqlx::types::BigDecimal;
 
 use crate::app::ui::style;
@@ -17,6 +18,7 @@ pub struct RecipeIngredientWrapper {
     unit_list: iced::pick_list::State<Unit>,
     ingredient_list: iced_searchable_picklist::State<RecipeMetaIngredient>,
     all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
+    all_units: Arc<Vec<Unit>>,
     filtered_ingredients: Option<Vec<RecipeMetaIngredient>>,
     ingredient_filter: String,
     amount_text: String,
@@ -30,14 +32,18 @@ pub enum RecipeIngredientMessage {
     AmountChanged(String),
     PickUnit(Unit),
     SubmitAmount,
+    Focus,
+    Unfocus,
     PickIngredient(RecipeMetaIngredient),
     SubmitFilter,
 }
 
 impl RecipeIngredientWrapper {
-    pub fn new(ingredients: Arc<Vec<RecipeMetaIngredient>>, entry: RecipeEntry) -> Self {
+    pub fn new(ingredients: Arc<Vec<RecipeMetaIngredient>>, all_units: Arc<Vec<Unit>>, entry: RecipeEntry) -> Self {
         Self {
             all_ingredients: ingredients,
+            all_units,
+            amount_text: entry.amount.to_string(),
             entry,
             ..Default::default()
         }
@@ -57,43 +63,63 @@ impl RecipeIngredientWrapper {
             },
             RecipeIngredientMessage::AmountChanged(amount) => self.amount_text = amount,
             RecipeIngredientMessage::PickUnit(unit) => self.entry.unit = unit,
-            RecipeIngredientMessage::SubmitAmount => (),
+            RecipeIngredientMessage::SubmitAmount => {
+                if let Ok(num) = BigDecimal::from_str_radix(&self.amount_text, 10) {
+                    self.entry.amount = num;
+                }
+            },
             RecipeIngredientMessage::PickIngredient(ingredient) => {
                 self.entry.ingredient = ingredient;
-                self.filtered_ingredients = None
+                //self.filtered_ingredients = None
             },
-            RecipeIngredientMessage::SubmitFilter => (),
+            RecipeIngredientMessage::SubmitFilter => {
+                if let Some([elem]) = self.filtered_ingredients.as_deref() {
+                    self.ingredient_list.unfocus();
+                    self.entry.ingredient = elem.clone();
+                }
+            },
+            RecipeIngredientMessage::Focus => self.ingredient_list.focus(),
+            RecipeIngredientMessage::Unfocus => self.ingredient_list.unfocus(),
         }
     }
 
     pub fn view(&mut self) -> Element<RecipeIngredientMessage> {
+        let theme = crate::theme();
         let ingredient_list = iced_searchable_picklist::PickList::new(
             &mut self.ingredient_list,
-            dbg!(self.filtered_ingredients.as_ref().unwrap_or(&*self.all_ingredients)),
+            self.filtered_ingredients.as_ref().unwrap_or(&*self.all_ingredients),
             Some(self.entry.ingredient.clone()),
             RecipeIngredientMessage::PickIngredient,
             RecipeIngredientMessage::FilterChanged,
             &self.ingredient_filter,
         )
         .on_submit(RecipeIngredientMessage::SubmitFilter)
+        .on_focus(RecipeIngredientMessage::Focus)
+        .width(Length::FillPortion(3))
+        .text_style(theme)
+        .style(theme)
         .padding(10);
 
         let amount_input = TextInput::new(
             &mut self.amount,
-            "Ingredient Amount…",
+            "Amount…",
             &self.amount_text,
             RecipeIngredientMessage::AmountChanged,
         )
         .on_submit(RecipeIngredientMessage::SubmitAmount)
-        .width(Length::Units(30))
+        .width(Length::Units(60))
+        .style(theme)
         .padding(10);
 
-        static units: &[Unit] = &[Unit {
-            unit_id: 0,
-            name: Cow::Borrowed("Kilo"),
-        }];
-        let unit_list =
-            iced::PickList::new(&mut self.unit_list, units, None, RecipeIngredientMessage::PickUnit).padding(10);
+        let unit_list = iced::PickList::new(
+            &mut self.unit_list,
+            &*self.all_units,
+            Some(self.entry.unit.clone()),
+            RecipeIngredientMessage::PickUnit,
+        )
+        .padding(10)
+        .style(theme)
+        .width(Length::Shrink);
 
         Row::new()
             .spacing(20)

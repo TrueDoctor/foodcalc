@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use futures::FutureExt;
 use iced::Application;
 use sqlx::postgres::types::PgMoney;
 use sqlx::postgres::PgPool;
@@ -254,6 +255,24 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn get_units(&self) -> eyre::Result<Vec<Unit>> {
+        struct FetchUnit {
+            pub unit_id: i32,
+            pub name: String,
+        }
+        let records = sqlx::query_as!(FetchUnit, r#" SELECT * FROM units ORDER BY unit_id "#,)
+            .fetch_all(&*self.pg_pool)
+            .await?
+            .into_iter()
+            .map(|unit| Unit {
+                unit_id: unit.unit_id,
+                name: Cow::Owned(unit.name),
+            })
+            .collect();
+
+        Ok(records)
+    }
+
     pub async fn get_all_meta_ingredients(&self) -> eyre::Result<Vec<RecipeMetaIngredient>> {
         let ingredients = sqlx::query_as!(Ingredient, r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,)
             .fetch_all(&*self.pg_pool)
@@ -340,11 +359,11 @@ impl FoodBase {
         }
         let records = sqlx::query_as!(
             RecipeIngredientWeight,
-            r#" SELECT recipes.recipe_id, name,  comment, weight as "weight!"
-                FROM resolved_meta
-                JOIN recipes ON(recipes.recipe_id = subrecipe_id)
-                WHERE resolved_meta.recipe_id = $1
-                ORDER BY recipes.recipe_id  "#,
+            r#" SELECT recipe_id, name,  comment, weight as "weight!"
+                FROM meta_recipes
+                JOIN recipes ON(recipe_id = child_id)
+                WHERE parent_id = $1
+                ORDER BY recipe_id  "#,
             recipe_id
         )
         .fetch_all(&*self.pg_pool)

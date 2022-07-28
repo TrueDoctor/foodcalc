@@ -116,12 +116,12 @@ impl TabBarExample {
 
     pub fn view(&mut self) -> Element<'_, Message> {
         let position = self.settings_tab.settings().tab_bar_position.unwrap_or_default();
-        let theme = self.settings_tab.settings().tab_bar_theme.unwrap_or_default();
+        let theme = theme::THEME.read().map(|guard| *guard).unwrap_or_default();
 
         let element: Element<'_, TabMessage> = Tabs::new(self.active_tab, TabMessage::TabSelected)
-            .push(self.ingredient_tab.tab_label(), self.ingredient_tab.view(theme))
-            .push(self.recipe_tab.tab_label(), self.recipe_tab.view(theme))
-            .push(self.settings_tab.tab_label(), self.settings_tab.view(theme))
+            .push(self.ingredient_tab.tab_label(), self.ingredient_tab.view())
+            .push(self.recipe_tab.tab_label(), self.recipe_tab.view())
+            .push(self.settings_tab.tab_label(), self.settings_tab.view())
             .tab_bar_style(theme)
             .icon_font(ICON_FONT)
             .tab_bar_position(match position {
@@ -129,6 +129,7 @@ impl TabBarExample {
                 TabBarPosition::Bottom => iced_aw::TabBarPosition::Bottom,
             })
             .into();
+        //let element = element.explain(iced::Color::from_rgb(1., 0., 0.));
         element.map(Message::MainMessage)
     }
 }
@@ -140,14 +141,14 @@ trait Tab {
 
     fn tab_label(&self) -> TabLabel;
 
-    fn view(&mut self, theme: impl iced_aw::modal::StyleSheet + 'static) -> Element<'_, Self::Message> {
+    fn view(&mut self) -> Element<'_, Self::Message> {
         let title = Text::new(self.title())
             .width(Length::Fill)
             .size(HEADER_SIZE)
             .color([0.5, 0.5, 0.5])
             .horizontal_alignment(iced::alignment::Horizontal::Center);
 
-        let column = Column::new().spacing(20).push(title).push(self.content(theme));
+        let column = Column::new().spacing(20).push(title).push(self.content());
 
         Container::new(column)
             .width(Length::Fill)
@@ -158,5 +159,5 @@ trait Tab {
             .into()
     }
 
-    fn content(&mut self, theme: impl iced_aw::modal::StyleSheet + 'static) -> Element<'_, Self::Message>;
+    fn content(&mut self) -> Element<'_, Self::Message>;
 }
