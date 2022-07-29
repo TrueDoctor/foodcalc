@@ -1133,9 +1133,9 @@ dependencies = [
 
 [[package]]
 name = "iced_searchable_picklist"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7110f4b5cdcc086bb24f4736b9ad24b0459a72e26b490778b4dc6bcaf9f8d83d"
+checksum = "0f453b16ed9c2bae5dc7911cb5a9252a3bd9ef9e7312935836c2f9d3b7af6616"
 dependencies = [
  "iced_core",
  "iced_native",

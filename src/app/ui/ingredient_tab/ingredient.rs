@@ -110,7 +110,7 @@ impl IngredientWrapper {
     pub fn view(&mut self) -> Element<IngredientMessage> {
         let theme = crate::theme();
         let energy_color = match self.ingredient.energy == sqlx::types::BigDecimal::zero() {
-            true => theme.accent_light(),
+            true => [0.5, 0.5, 0.5].into(),
             false => theme.foreground(),
         };
         match &mut self.state {
