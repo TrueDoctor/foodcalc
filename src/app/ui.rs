@@ -131,28 +131,25 @@ impl TabBarExample {
 }
 
 trait Tab {
-    type Message;
+    type Message:'static;
 
     fn title(&self) -> String;
 
     fn tab_label(&self) -> TabLabel;
 
     fn view(&mut self) -> Element<'_, Self::Message> {
-        let title = Text::new(self.title())
-            .width(Length::Fill)
-            .size(HEADER_SIZE)
-            .color([0.5, 0.5, 0.5])
-            .horizontal_alignment(iced::alignment::Horizontal::Center);
 
-        let column = Column::new().spacing(20).push(title).push(self.content());
+        let column = Column::new().spacing(20).push(self.content());
 
-        Container::new(column)
+        let element: iced::Element<'_, Self::Message> = Container::new(column)
             .width(Length::Fill)
             .height(Length::Fill)
             .align_x(Horizontal::Center)
             .align_y(Vertical::Center)
             .padding(TAB_PADDING)
-            .into()
+            .into();
+            element
+            //element.explain(iced::Color::from_rgb(1.0,0.0,0.0))
     }
 
     fn content(&mut self) -> Element<'_, Self::Message>;

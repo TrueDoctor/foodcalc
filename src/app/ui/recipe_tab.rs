@@ -196,6 +196,7 @@ impl super::Tab for RecipeTab {
                 .spacing(10)
                 .padding(5)
                 .width(Length::Fill)
+                .height(Length::Units(50))
                 .push(
                     Button::new(
 

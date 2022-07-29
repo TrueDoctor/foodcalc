@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use iced::{text_input, Alignment, Column, Element, TextInput};
+use iced::{text_input, Alignment, Column, Element, TextInput, Scrollable, Length};
 
 use crate::db::{Recipe, RecipeMetaIngredient};
 use crate::db::{RecipeEntry, Unit};
@@ -15,6 +15,7 @@ pub struct RecipeDetail {
     pub(crate) _all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
     pub(crate) _all_units: Arc<Vec<Unit>>,
     pub(crate) ingredients: Vec<RecipeIngredientWrapper>,
+    pub(crate) scroll: iced::scrollable::State,
     //pub(crate) steps: Vec<RecipeStepWrapper>,
 }
 
@@ -93,6 +94,7 @@ impl RecipeDetail {
                 )
             })
             .into();
+        let ingredients = Scrollable::new(&mut self.scroll).push(ingredients).height(Length::Units(350));
         Column::new()
             .spacing(20)
             .align_items(Alignment::Center)
