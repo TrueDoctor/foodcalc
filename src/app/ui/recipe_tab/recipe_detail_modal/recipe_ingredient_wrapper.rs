@@ -12,7 +12,7 @@ use crate::db::Unit;
 
 #[derive(Debug, Clone, Default)]
 pub struct RecipeIngredientWrapper {
-    entry: RecipeEntry,
+    pub(crate) entry: RecipeEntry,
     amount: text_input::State,
     unit_list: iced::pick_list::State<Unit>,
     ingredient_list: iced_searchable_picklist::State<RecipeMetaIngredient>,

@@ -77,6 +77,9 @@ impl RecipeDetail {
                     }
                 }
             },
+            RecipeDetailMessage::RecipeIngredientMessage(i, RecipeIngredientMessage::Delete) => {
+                log::trace!("Deleted recipe entry: {:?}", self.ingredients.remove(i).entry);
+            },
             RecipeDetailMessage::RecipeIngredientMessage(i, message) => {
                 if let Some(recipe_ingredient) = self.ingredients.get_mut(i) {
                     recipe_ingredient.update(message);
