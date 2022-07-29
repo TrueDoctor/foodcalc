@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use iced::{button, text_input, Alignment, Button, Element, Length, Row, Text, TextInput};
+use iced::{button, Alignment, Button, Element, Length, Row, Text};
 
 use super::RecipeTabMessage;
 use crate::app::ui::style;

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use iced::scrollable::{self, Scrollable};
 use iced::text_input::{self, TextInput};
-use iced::{alignment, Application, Column, Command, Container, Element, Length, Sandbox, Text};
+use iced::{alignment, Column, Command, Container, Element, Length, Text};
 
 mod ingredient;
 pub use ingredient::{IngredientMessage, IngredientWrapper};
@@ -17,7 +17,6 @@ pub struct IngredientTab {
     input: text_input::State,
     input_value: String,
     database: Arc<FoodBase>,
-    dirty: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -66,9 +65,11 @@ impl IngredientTab {
             input: text_input::State::default(),
             input_value: String::new(),
             ingredient_list: Vec::new(),
-            dirty: false,
         };
-        (ingredients, command.map(TabMessage::IngredientTab))
+        (
+            ingredients,
+            command.map(|message| TabMessage::IngredientTab(message.into())),
+        )
     }
 
     pub fn update(&mut self, message: IngredientTabMessage) -> Command<TabMessage> {
@@ -86,7 +87,7 @@ impl IngredientTab {
                     ingredient
                         .update(message, &self.database)
                         .map(move |message| IngredientTabMessage::IngredientMessage(i, message))
-                        .map(TabMessage::IngredientTab)
+                        .map(|message| TabMessage::IngredientTab(message.into()))
                 } else {
                     Command::none()
                 }
@@ -156,7 +157,7 @@ impl super::Tab for IngredientTab {
             .center_x()
             .into();
 
-        element.map(TabMessage::IngredientTab)
+        element.map(|message| TabMessage::IngredientTab(message.into()))
     }
 
     fn tab_label(&self) -> iced_aw::TabLabel {

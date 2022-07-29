@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use futures::FutureExt;
-use iced::Application;
 use sqlx::postgres::types::PgMoney;
 use sqlx::postgres::PgPool;
 use sqlx::types::time::PrimitiveDateTime;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use iced::{button, text_input, Alignment, Button, Column, Element, Length, Row, Text, TextInput};
+use iced::{text_input, Alignment, Column, Element, TextInput};
 
 use crate::db::{Recipe, RecipeMetaIngredient};
 use crate::db::{RecipeEntry, Unit};
@@ -11,10 +11,9 @@ use recipe_ingredient_wrapper::{RecipeIngredientMessage, RecipeIngredientWrapper
 #[derive(Debug, Clone, Default)]
 pub struct RecipeDetail {
     pub(crate) recipe: Recipe,
-    pub(crate) recipe_name: text_input::State,
     pub(crate) recipe_description: text_input::State,
-    pub(crate) all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
-    pub(crate) all_units: Arc<Vec<Unit>>,
+    pub(crate) _all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
+    pub(crate) _all_units: Arc<Vec<Unit>>,
     pub(crate) ingredients: Vec<RecipeIngredientWrapper>,
     //pub(crate) steps: Vec<RecipeStepWrapper>,
 }
@@ -38,8 +37,8 @@ impl RecipeDetail {
     ) -> Self {
         Self {
             recipe,
-            all_ingredients: all_ingredients.clone(),
-            all_units: all_units.clone(),
+            _all_ingredients: all_ingredients.clone(),
+            _all_units: all_units.clone(),
             ingredients: recipe_ingredients
                 .into_iter()
                 .map(|ingredient| RecipeIngredientWrapper::new(all_ingredients.clone(), all_units.clone(), ingredient))

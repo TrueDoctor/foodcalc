@@ -6,7 +6,6 @@ use iced::alignment::{self};
 
 use iced::{Application, Command, Container, Element, Length, Text};
 use log::debug;
-use sqlx::postgres::types::PgMoney;
 use sqlx::PgPool;
 
 use self::ui::TabMessage;
@@ -17,13 +16,11 @@ pub mod scraping;
 
 pub mod ui;
 
-static PRICE_PLACEHOLDER: PgMoney = PgMoney(-100i64);
-
 #[derive(Debug)]
 pub enum FoodCalc {
     ConnectingToDatabase,
     ErrorView(String),
-    MainView(ui::TabBarExample),
+    MainView(Box<ui::TabBarExample>),
     //MealView(MealState),
 }
 
@@ -82,7 +79,7 @@ impl Application for FoodCalc {
             FoodCalc::ConnectingToDatabase => match message {
                 Message::DatebaseConnected(Ok(database)) => {
                     let (main_view, main_command) = ui::TabBarExample::new(database);
-                    *self = FoodCalc::MainView(main_view);
+                    *self = FoodCalc::MainView(main_view.into());
                     main_command.map(Message::MainMessage)
                 },
                 Message::DatebaseConnected(Err(Error::Database(error))) => {

@@ -66,7 +66,7 @@ impl Icon {
 #[derive(Debug)]
 pub struct TabBarExample {
     active_tab: usize,
-    database: Arc<FoodBase>,
+    _database: Arc<FoodBase>,
     ingredient_tab: IngredientTab,
     recipe_tab: RecipeTab,
     settings_tab: SettingsTab,
@@ -75,8 +75,8 @@ pub struct TabBarExample {
 #[derive(Clone, Debug)]
 pub enum TabMessage {
     TabSelected(usize),
-    IngredientTab(IngredientTabMessage),
-    RecipeTab(RecipeTabMessage),
+    IngredientTab(Box<IngredientTabMessage>),
+    RecipeTab(Box<RecipeTabMessage>),
     Settings(SettingsMessage),
 }
 
@@ -87,7 +87,7 @@ impl TabBarExample {
 
         let tab_bar = TabBarExample {
             active_tab: 0,
-            database,
+            _database: database,
             ingredient_tab,
             recipe_tab,
             settings_tab: SettingsTab::new(),
@@ -98,18 +98,14 @@ impl TabBarExample {
         )
     }
 
-    fn title(&self) -> String {
-        String::from("TabBar Example")
-    }
-
     pub fn update(&mut self, message: TabMessage) -> Command<TabMessage> {
         match message {
             TabMessage::TabSelected(selected) => {
                 self.active_tab = selected;
                 Command::none()
             },
-            TabMessage::IngredientTab(message) => self.ingredient_tab.update(message),
-            TabMessage::RecipeTab(message) => self.recipe_tab.update(message),
+            TabMessage::IngredientTab(message) => self.ingredient_tab.update(*message),
+            TabMessage::RecipeTab(message) => self.recipe_tab.update(*message),
             TabMessage::Settings(message) => self.settings_tab.update(message),
         }
     }

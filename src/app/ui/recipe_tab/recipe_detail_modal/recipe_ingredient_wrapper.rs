@@ -1,12 +1,11 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use iced::{button, text_input, Alignment, Button, Element, Length, Row, Text, TextInput};
 use num::Num;
 use sqlx::types::BigDecimal;
 
-use crate::app::ui::style;
-use crate::app::ui::Icon;
+use crate::app::ui::style::Button::Destructive;
+use crate::app::ui::{style, Icon};
 use crate::db::RecipeEntry;
 use crate::db::RecipeMetaIngredient;
 use crate::db::Unit;
@@ -36,6 +35,7 @@ pub enum RecipeIngredientMessage {
     Unfocus,
     PickIngredient(RecipeMetaIngredient),
     SubmitFilter,
+    Delete,
 }
 
 impl RecipeIngredientWrapper {
@@ -44,6 +44,7 @@ impl RecipeIngredientWrapper {
             all_ingredients: ingredients,
             all_units,
             amount_text: entry.amount.to_string(),
+            amount_valid: true,
             entry,
             ..Default::default()
         }
@@ -66,11 +67,13 @@ impl RecipeIngredientWrapper {
             RecipeIngredientMessage::SubmitAmount => {
                 if let Ok(num) = BigDecimal::from_str_radix(&self.amount_text, 10) {
                     self.entry.amount = num;
+                    self.amount_valid = true;
+                } else {
+                    self.amount_valid = false;
                 }
             },
             RecipeIngredientMessage::PickIngredient(ingredient) => {
                 self.entry.ingredient = ingredient;
-                //self.filtered_ingredients = None
             },
             RecipeIngredientMessage::SubmitFilter => {
                 if let Some([elem]) = self.filtered_ingredients.as_deref() {
@@ -80,6 +83,7 @@ impl RecipeIngredientWrapper {
             },
             RecipeIngredientMessage::Focus => self.ingredient_list.focus(),
             RecipeIngredientMessage::Unfocus => self.ingredient_list.unfocus(),
+            RecipeIngredientMessage::Delete => (),
         }
     }
 
@@ -100,6 +104,10 @@ impl RecipeIngredientWrapper {
         .style(theme)
         .padding(10);
 
+        let text_theme = match self.amount_valid {
+            true => style::TextInput::Normal,
+            false => style::TextInput::Error,
+        };
         let amount_input = TextInput::new(
             &mut self.amount,
             "Amount…",
@@ -108,7 +116,7 @@ impl RecipeIngredientWrapper {
         )
         .on_submit(RecipeIngredientMessage::SubmitAmount)
         .width(Length::Units(60))
-        .style(theme)
+        .style(text_theme)
         .padding(10);
 
         let unit_list = iced::PickList::new(
@@ -121,12 +129,24 @@ impl RecipeIngredientWrapper {
         .style(theme)
         .width(Length::Shrink);
 
+        let delete_button = Button::new(
+            &mut self.delete_button,
+            Row::new()
+                .spacing(10)
+                .push(Icon::Delete.text())
+                .push(Text::new("Delete")),
+        )
+        .on_press(RecipeIngredientMessage::Delete)
+        .padding(10)
+        .style(Destructive);
+
         Row::new()
             .spacing(20)
             .align_items(Alignment::Center)
             .push(ingredient_list)
             .push(amount_input)
             .push(unit_list)
+            .push(delete_button)
             .into()
     }
 }

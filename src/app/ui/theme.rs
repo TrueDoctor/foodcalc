@@ -1,8 +1,5 @@
 use std::sync::RwLock;
 
-use iced::Color;
-use iced_aw::tabs::Style;
-
 pub struct TabBar;
 pub use style::Theme;
 
@@ -11,7 +8,7 @@ lazy_static::lazy_static! {
 }
 
 pub fn theme() -> Theme {
-    THEME.read().as_deref().cloned().unwrap_or_default().clone()
+    THEME.read().as_deref().cloned().unwrap_or_default()
 }
 
 impl From<style::Theme> for String {
@@ -261,7 +258,7 @@ mod style {
                     dot_color: ACTIVE,
                     border_width: 1.0,
                     border_color: ACTIVE,
-                    text_color: None,
+                    text_color: Color::WHITE.into(),
                 }
             }
 

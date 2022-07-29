@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use iced::scrollable::{self, Scrollable};
 use iced::text_input::{self, TextInput};
-use iced::{
-    alignment, alignment::Horizontal, button, Application, Button, Column, Command, Container, Element, Length, Row,
-    Sandbox, Text,
-};
+use iced::{alignment, alignment::Horizontal, button, Button, Column, Command, Container, Element, Length, Row, Text};
 use log::debug;
 
 use super::TabMessage;
@@ -71,7 +68,7 @@ impl RecipeTab {
             recipe_list: Vec::new(),
             recipe_detail_modal: ModalState::default(),
         };
-        (recipes, command.map(TabMessage::RecipeTab))
+        (recipes, command.map(|message| TabMessage::RecipeTab(message.into())))
     }
 
     pub fn update(&mut self, message: RecipeTabMessage) -> Command<TabMessage> {
@@ -115,7 +112,7 @@ impl RecipeTab {
                     },
                     RecipeTabMessage::ShowModal,
                 )
-                .map(TabMessage::RecipeTab);
+                .map(|message| TabMessage::RecipeTab(message.into()));
             },
             _ => {
                 debug!("recieved message without handler: {message:?}")
@@ -154,7 +151,7 @@ impl super::Tab for RecipeTab {
                 .iter_mut()
                 .enumerate()
                 .filter(|(_, recipe)| crate::similar(&recipe.recipe.name, &self.input_value))
-                .fold(Column::new().spacing(00), |column, (i, recipe)| {
+                .fold(Column::new().spacing(00), |column, (_i, recipe)| {
                     column.push(recipe.view())
                 })
                 .into()
@@ -234,7 +231,7 @@ impl super::Tab for RecipeTab {
             false => element,
         };
 
-        element.map(TabMessage::RecipeTab)
+        element.map(|message| TabMessage::RecipeTab(message.into()))
     }
 
     /*fn modal(&self, content: Element<'_, RecipeTabMessage>) {
