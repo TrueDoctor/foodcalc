@@ -22,7 +22,6 @@ use crate::db::FoodBase;
 mod settings;
 use settings::{SettingsMessage, SettingsTab, TabBarPosition};
 
-const HEADER_SIZE: u16 = 100;
 const TAB_PADDING: u16 = 16;
 
 const ICON_FONT: Font = iced::Font::External {
@@ -37,6 +36,7 @@ pub enum Icon {
     Edit,
     CogAlt,
     Delete,
+    Plus,
 }
 
 impl From<Icon> for char {
@@ -47,6 +47,7 @@ impl From<Icon> for char {
             Icon::CogAlt => '\u{ef3b}',
             Icon::Edit => '\u{ec55}',
             Icon::Delete => '\u{ec53}',
+            Icon::Plus => '\u{ec3e}',
         }
     }
 }
@@ -131,14 +132,13 @@ impl TabBarExample {
 }
 
 trait Tab {
-    type Message:'static;
+    type Message: 'static;
 
     fn title(&self) -> String;
 
     fn tab_label(&self) -> TabLabel;
 
     fn view(&mut self) -> Element<'_, Self::Message> {
-
         let column = Column::new().spacing(20).push(self.content());
 
         let element: iced::Element<'_, Self::Message> = Container::new(column)
@@ -148,8 +148,8 @@ trait Tab {
             .align_y(Vertical::Center)
             .padding(TAB_PADDING)
             .into();
-            element
-            //element.explain(iced::Color::from_rgb(1.0,0.0,0.0))
+        element
+        //element.explain(iced::Color::from_rgb(1.0,0.0,0.0))
     }
 
     fn content(&mut self) -> Element<'_, Self::Message>;
