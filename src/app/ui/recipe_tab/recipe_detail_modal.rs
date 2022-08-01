@@ -85,7 +85,26 @@ impl RecipeDetail {
                     recipe_ingredient.update(message);
                 }
             },
-            RecipeDetailMessage::Save => log::warn!("implement saving to database"),
+            RecipeDetailMessage::Save => {
+                let move_database = self.database.clone();
+                let recipe = self.recipe.clone();
+                let ingredients: Vec<_> = self
+                    .ingredients
+                    .iter()
+                    .map(|entry_wrapper| entry_wrapper.entry.clone())
+                    .collect();
+
+                return Command::perform(
+                    async move {
+                        move_database.update_recipe(&recipe).await?;
+                        move_database
+                            .update_recipe_entries(&recipe, ingredients.into_iter())
+                            .await?;
+                        Ok(())
+                    },
+                    RecipeTabMessage::SaveRecipe,
+                );
+            },
             RecipeDetailMessage::AddIngredient => {
                 self.ingredients.push(RecipeIngredientWrapper::new(
                     self.all_ingredients.clone(),
@@ -156,7 +175,7 @@ impl RecipeDetail {
 
         let ok_button = Button::new(
             &mut self.ok_state,
-            Text::new("Ok").horizontal_alignment(Horizontal::Center),
+            Text::new("Save").horizontal_alignment(Horizontal::Center),
         )
         .width(Length::Fill)
         .style(theme)

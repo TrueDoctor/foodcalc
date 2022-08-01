@@ -35,7 +35,7 @@ pub enum RecipeTabMessage {
     ShowModal(Result<RecipeDetail, Error>),
     CloseModal,
     CancelButtonPressed,
-    SaveRecipe,
+    SaveRecipe(Result<(), Error>),
 }
 
 impl RecipeTab {
@@ -110,6 +110,23 @@ impl RecipeTab {
                     RecipeTabMessage::ShowModal,
                 )
                 .map(|message| TabMessage::RecipeTab(message.into()));
+            },
+            RecipeTabMessage::SaveRecipe(Ok(())) => {
+                self.recipe_detail_modal = None;
+                let move_database = self.database.clone();
+                let command = Command::perform(
+                    async move {
+                        let recipes = move_database
+                            .get_recipes()
+                            .await?
+                            .into_iter()
+                            .map(RecipeWrapper::new)
+                            .collect();
+                        Ok(recipes)
+                    },
+                    RecipeTabMessage::UpdateData,
+                );
+                return command.map(|message| TabMessage::RecipeTab(message.into()));
             },
             _ => {
                 debug!("recieved message without handler: {message:?}")

@@ -62,10 +62,23 @@ pub struct Store {
     pub name: String,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Unit {
     pub unit_id: i32,
     pub name: Cow<'static, str>,
+}
+
+impl Unit {
+    pub const KG: Unit = Unit {
+        unit_id: 0,
+        name: Cow::Borrowed("kg"),
+    };
+}
+
+impl Default for Unit {
+    fn default() -> Self {
+        Self::KG
+    }
 }
 
 impl std::string::ToString for Unit {
@@ -443,6 +456,96 @@ impl FoodBase {
         let mut file = std::fs::File::create(format!("{}.tex", subrecipes.first().unwrap().recipe)).unwrap();
         use std::io::prelude::Write as WF;
         file.write_all(text.as_bytes()).unwrap();
+    }
+
+    pub async fn update_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
+        let recipe = sqlx::query_as!(
+            Recipe,
+            r#"
+                UPDATE recipes
+                SET name = $1, comment = $2
+                WHERE recipe_id = $3
+                RETURNING *
+            "#,
+            recipe.name,
+            recipe.comment,
+            recipe.recipe_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(recipe)
+    }
+
+    pub async fn update_recipe_entries(
+        &self,
+        recipe: &Recipe,
+        entries: impl Iterator<Item = RecipeEntry>,
+    ) -> eyre::Result<()> {
+        let mut transaction = self.pg_pool.begin().await?;
+        pub async fn insert_recipe_entry<'a>(
+            executor: impl sqlx::Executor<'a, Database = sqlx::Postgres>,
+            recipe_id: i32,
+            entry: RecipeEntry,
+        ) -> sqlx::Result<()> {
+            let count = match entry.ingredient {
+                RecipeMetaIngredient::Ingredient(ingredient) => sqlx::query!(
+                    r#"
+                            INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id)
+                            VALUES ($1, $2, $3, $4)
+                        "#,
+                    recipe_id,
+                    ingredient.ingredient_id,
+                    entry.amount,
+                    entry.unit.unit_id,
+                )
+                .execute(executor)
+                .await?
+                .rows_affected(),
+                RecipeMetaIngredient::MetaRecipe(recipe) => sqlx::query!(
+                    r#"
+                            INSERT INTO meta_recipes (parent_id, child_id, weight)
+                            VALUES ($1, $2, $3)
+                        "#,
+                    recipe_id,
+                    recipe.recipe_id,
+                    entry.amount,
+                )
+                .execute(executor)
+                .await?
+                .rows_affected(),
+            };
+            assert_eq!(count, 1);
+
+            Ok(())
+        }
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM recipe_ingredients
+                WHERE recipe_id = $1
+            "#,
+            recipe.recipe_id,
+        )
+        .execute(&mut transaction)
+        .await?;
+        log::debug!("Deleted {} recipe_ingredients", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM meta_recipes
+                WHERE parent_id = $1
+            "#,
+            recipe.recipe_id,
+        )
+        .execute(&mut transaction)
+        .await?;
+        log::debug!("Deleted {} meta_recipes", count.rows_affected());
+
+        for entry in entries {
+            insert_recipe_entry(&mut transaction, recipe.recipe_id, entry).await?;
+        }
+        transaction.commit().await?;
+        Ok(())
     }
 
     pub fn format_subrecipe(&self, text: &mut String, subrecipes: Vec<&SubRecipe>) {

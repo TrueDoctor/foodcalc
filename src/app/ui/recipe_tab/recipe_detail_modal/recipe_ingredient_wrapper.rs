@@ -74,6 +74,9 @@ impl RecipeIngredientWrapper {
             },
             RecipeIngredientMessage::PickIngredient(ingredient) => {
                 self.entry.ingredient = ingredient;
+                if let RecipeMetaIngredient::MetaRecipe(_) = self.entry.ingredient {
+                    self.entry.unit = Unit::default();
+                }
             },
             RecipeIngredientMessage::SubmitFilter => {
                 if let Some([elem]) = self.filtered_ingredients.as_deref() {
@@ -119,9 +122,14 @@ impl RecipeIngredientWrapper {
         .style(text_theme)
         .padding(10);
 
+        let unit_list = match self.entry.ingredient {
+            RecipeMetaIngredient::MetaRecipe(_) => &[Unit::KG][..],
+            _ => &self.all_units[..],
+        };
+
         let unit_list = iced::PickList::new(
             &mut self.unit_list,
-            &*self.all_units,
+            unit_list,
             Some(self.entry.unit.clone()),
             RecipeIngredientMessage::PickUnit,
         )
