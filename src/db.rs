@@ -476,6 +476,7 @@ impl FoodBase {
         Ok(recipe)
     }
 
+    // TODO: Human race condition, add proper locking / edit notifications
     pub async fn update_recipe_entries(
         &self,
         recipe: &Recipe,
