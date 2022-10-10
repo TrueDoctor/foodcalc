@@ -13,6 +13,9 @@ use self::ingredient_tab::{IngredientTab, IngredientTabMessage};
 mod recipe_tab;
 use self::recipe_tab::{RecipeTab, RecipeTabMessage};
 
+mod event_tab;
+use self::event_tab::{EventTab, EventTabMessage};
+
 use crate::app::Message;
 use crate::db::FoodBase;
 
@@ -70,6 +73,7 @@ pub struct TabBarExample {
     _database: Arc<FoodBase>,
     ingredient_tab: IngredientTab,
     recipe_tab: RecipeTab,
+    event_tab: EventTab,
     settings_tab: SettingsTab,
 }
 
@@ -78,6 +82,7 @@ pub enum TabMessage {
     TabSelected(usize),
     IngredientTab(Box<IngredientTabMessage>),
     RecipeTab(Box<RecipeTabMessage>),
+    EventTab(Box<EventTabMessage>),
     Settings(SettingsMessage),
 }
 
@@ -85,17 +90,19 @@ impl TabBarExample {
     pub fn new(database: Arc<FoodBase>) -> (Self, Command<TabMessage>) {
         let (ingredient_tab, ingredient_command) = IngredientTab::new(database.clone());
         let (recipe_tab, recipe_command) = RecipeTab::new(database.clone());
+        let (event_tab, event_command) = EventTab::new(database.clone());
 
         let tab_bar = TabBarExample {
             active_tab: 0,
             _database: database,
             ingredient_tab,
             recipe_tab,
+            event_tab,
             settings_tab: SettingsTab::new(),
         };
         (
             tab_bar,
-            Command::batch([ingredient_command, recipe_command].into_iter()),
+            Command::batch([ingredient_command, recipe_command, event_command].into_iter()),
         )
     }
 
@@ -107,6 +114,7 @@ impl TabBarExample {
             },
             TabMessage::IngredientTab(message) => self.ingredient_tab.update(*message),
             TabMessage::RecipeTab(message) => self.recipe_tab.update(*message),
+            TabMessage::EventTab(message) => self.event_tab.update(*message),
             TabMessage::Settings(message) => self.settings_tab.update(message),
         }
     }
@@ -118,6 +126,7 @@ impl TabBarExample {
         let element: Element<'_, TabMessage> = Tabs::new(self.active_tab, TabMessage::TabSelected)
             .push(self.ingredient_tab.tab_label(), self.ingredient_tab.view())
             .push(self.recipe_tab.tab_label(), self.recipe_tab.view())
+            .push(self.event_tab.tab_label(), self.event_tab.view())
             .push(self.settings_tab.tab_label(), self.settings_tab.view())
             .tab_bar_style(theme)
             .icon_font(ICON_FONT)

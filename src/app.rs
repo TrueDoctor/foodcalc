@@ -73,7 +73,6 @@ impl Application for FoodCalc {
         crate::theme().background()
     }
 
-
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match self {
             FoodCalc::ConnectingToDatabase => match message {

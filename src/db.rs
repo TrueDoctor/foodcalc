@@ -57,6 +57,14 @@ pub struct Meal {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Event {
+    pub event_id: i32,
+    pub event_name: String,
+    pub comment: Option<String>,
+    pub budget: Option<PgMoney>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Store {
     pub store_id: i32,
     pub name: String,
@@ -580,6 +588,21 @@ impl FoodBase {
             .unwrap();
         }
         writeln!(text, "\\printrecipe{{{title}}}").unwrap();
+    }
+
+    pub async fn get_events(&self) -> eyre::Result<Vec<Event>> {
+        let records = sqlx::query_as!(
+            Event,
+            r#" SELECT event_id as "event_id!",
+                    event_name as "event_name!",
+                    comment as "comment",
+                    budget as "budget"
+                FROM events
+            "#
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
     }
 
     pub async fn get_event_recipe_ingredients(
