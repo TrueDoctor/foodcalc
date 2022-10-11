@@ -56,6 +56,22 @@ pub struct Meal {
     pub servings: i32,
 }
 
+impl Default for Meal {
+    fn default() -> Self {
+        Self { 
+            event_id: Default::default(), 
+            recipe_id: Default::default(), 
+            name: Default::default(), 
+            place_id: Default::default(), 
+            place: Default::default(), 
+            start_time: PrimitiveDateTime::parse("1970-01-01 00:00:00", "%F %T").unwrap(), 
+            weight: Default::default(), 
+            energy: Default::default(), 
+            price: PgMoney::from(0), 
+            servings: Default::default() }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Event {
     pub event_id: i32,

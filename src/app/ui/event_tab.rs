@@ -32,7 +32,10 @@ pub enum EventTabMessage {
     EventDetailMessage(EventDetailMessage),
     InputChanged(String),
     OpenModal(Event),
-    ShowModal(Result<EventDetail, Error>)
+    ShowModal(Result<EventDetail, Error>),
+    CancelButtonPressed,
+    CloseModal,
+    SaveEvent(Result<(),Error>)
 
 }
 
@@ -68,7 +71,46 @@ impl EventTab {
             EventTabMessage::UpdateData(Ok(events)) => {
                 self.event_list = events;
             },
-            _ => debug!("recieved message without handler: {message:?}"),
+            EventTabMessage::UpdateData(Err(error))=>{
+                log::error!("{error:?}");
+            },
+            EventTabMessage::InputChanged(input) => {
+                self.input_value = input;
+            },
+            EventTabMessage::OpenModal(event) =>{
+                let move_database = self.database.clone();
+                return Command::perform(async move {
+                    let recipes = move_database.get_recipes().await?;
+                    let meals = move_database.get_event_meals(event.event_id).await?;
+                    Ok(EventDetail::new(
+                        event,
+                        move_database.clone(),
+                        Arc::new(recipes),
+                        meals
+                    ))
+                }, 
+                EventTabMessage::ShowModal
+            )
+            .map(|message| TabMessage::EventTab(message.into()));
+            },
+            EventTabMessage::ShowModal(Ok(event_detail)) => {
+                self.event_detail_modal = Some(event_detail);
+            },
+            EventTabMessage::CancelButtonPressed => {
+                println!("Cancel");
+                self.event_detail_modal = None;
+            },
+            EventTabMessage::CloseModal => {
+                self.event_detail_modal = None;
+            },
+            EventTabMessage::EventDetailMessage(message) => {
+                if let Some(modal) = self.event_detail_modal.as_mut() {
+                    return modal
+                        .update(message)
+                        .map(|message| TabMessage::EventTab(message.into()))
+                }
+            },
+            _ => debug!("recieved event tab message without handler: {message:?}"),
         }
         Command::none()
     }

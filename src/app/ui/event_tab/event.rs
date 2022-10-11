@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use iced::{button, Element, Row, Text, Length, Button, Alignment};
 
-use crate::{db::{Event}, app::ui::{style, Icon}};
+use crate::{db::Event, app::ui::{style, Icon}};
 
 use super::EventTabMessage;
 
