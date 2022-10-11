@@ -71,7 +71,26 @@ impl EventDetail {
             EventDetailMessage::AddMeal => self
                 .meals
                 .push(MealWrapper::new(Meal::default(), self.all_recipes.clone())),
-            EventDetailMessage::Save => todo!(),
+            EventDetailMessage::Save => {
+                let move_database = self.database.clone();
+                let event = self.event.clone();
+                let meals : Vec<_> = self
+                    .meals
+                    .iter()
+                    .map(|meal_wrapper| meal_wrapper.meal.clone())
+                    .collect();
+
+                return Command::perform(
+                    async move {
+                        move_database.update_event(&event).await?;
+                        move_database
+                            .update_event_meals(&event, meals.into_iter())
+                            .await?;
+                        Ok(())
+                    }, 
+                    EventTabMessage::SaveEvent,
+                )
+            },
             EventDetailMessage::Cancel => {
                 println!("Cancel");
                 return Command::perform(async {}, |_| EventTabMessage::CancelButtonPressed);

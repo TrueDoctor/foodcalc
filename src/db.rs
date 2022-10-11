@@ -47,9 +47,11 @@ pub struct Meal {
     pub event_id: i32,
     pub recipe_id: i32,
     pub name: String,
+    pub comment: Option<String>,
     pub place_id: i32,
     pub place: String,
     pub start_time: PrimitiveDateTime,
+    pub end_time: PrimitiveDateTime,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
     pub price: PgMoney,
@@ -62,9 +64,11 @@ impl Default for Meal {
             event_id: Default::default(), 
             recipe_id: Default::default(), 
             name: Default::default(), 
+            comment: None,
             place_id: Default::default(), 
             place: Default::default(), 
-            start_time: PrimitiveDateTime::parse("1970-01-01 00:00:00", "%F %T").unwrap(), 
+            start_time: PrimitiveDateTime::parse("1970-01-01 00:00:00", "%F %T").unwrap(),
+            end_time: PrimitiveDateTime::parse("1970-01-01 00:00:00", "%F %T").unwrap(),
             weight: Default::default(), 
             energy: Default::default(), 
             price: PgMoney::from(0), 
@@ -657,21 +661,29 @@ impl FoodBase {
         let records = sqlx::query_as!(
             Meal,
             r#" SELECT
-            event_id as "event_id!",
-             recipe_id as "recipe_id!",
+            event_meals.event_id as "event_id!",
+            event_meals.recipe_id as "recipe_id!",
              recipe as "name!",
-             place_id as "place_id!",
+             comment,
+             event_meals.place_id as "place_id!",
              place as "place!",
-             start_time as "start_time!",
+             event_meals.start_time as "start_time!",
+             event_meals.end_time as "end_time!",
              round(sum(weight),2) as "weight!",
              round(sum(energy),0) as "energy!",
              sum(price) as "price!",
-             servings as "servings!"
+             event_meals.servings as "servings!"
 
             FROM event_ingredients
-            WHERE event_id = $1
-            GROUP BY event_id, recipe_id, recipe, place_id, place, start_time, servings
-            ORDER BY start_time "#,
+            INNER JOIN event_meals 
+            ON event_ingredients.event_id=event_meals.event_id
+            AND event_ingredients.recipe_id = event_meals.recipe_id
+            AND event_ingredients.place_id = event_meals.place_id
+            AND event_ingredients.start_time = event_meals.start_time
+
+            WHERE event_meals.event_id = $1
+            GROUP BY event_meals.event_id, event_meals.recipe_id, recipe, event_meals.place_id, place, event_meals.start_time, event_meals.servings
+            ORDER BY event_meals.start_time "#,
             event_id
         )
         .fetch_all(&*self.pg_pool)
@@ -738,6 +750,79 @@ impl FoodBase {
         .await
         .map(|result| result.rows_affected())
         .map_err(|err| err.into())
+    }
+
+    pub async fn update_event(
+        &self,
+        event: &Event
+    ) -> eyre::Result<Event> {
+        let event = sqlx::query_as!(
+            Event,
+            r#"
+                UPDATE events
+                SET event_name = $1, comment = $2, budget = $3
+                WHERE event_id = $4
+                RETURNING *
+            "#,
+            event.event_name,
+            event.comment,
+            event.budget,
+            event.event_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(event)
+    }
+
+    pub async fn update_event_meals(
+        &self,
+        event: &Event,
+        meals: impl Iterator<Item = Meal>,
+    ) -> eyre::Result<()> {
+        let mut transaction = self.pg_pool.begin().await?;
+        pub async fn insert_meal<'a>(
+            executor: impl sqlx::Executor<'a, Database = sqlx::Postgres>,
+            event_id: i32,
+            meal: Meal
+        ) -> sqlx::Result<()> {
+            let count = sqlx::query!(
+                r#"
+                    INSERT INTO event_meals (event_id, recipe_id, place_id, comment, energy_per_serving, servings, start_time, end_time)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                "#,
+                event_id,
+                meal.recipe_id,
+                meal.place_id,
+                meal.comment,
+                meal.energy,
+                meal.servings,
+                meal.start_time,
+                meal.end_time
+            )
+            .execute(executor)
+            .await?
+            .rows_affected();
+        
+            assert_eq!(count, 1);
+            Ok(())
+        }
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM event_meals
+                WHERE event_id = $1
+            "#,
+            event.event_id,
+        )
+        .execute(&mut transaction)
+        .await?
+        .rows_affected();
+        log::debug!("Deleted {} event_meals", count);
+
+        for meal in meals {
+            insert_meal(&mut transaction, event.event_id, meal);
+        }
+        transaction.commit().await?;
+        Ok(())
     }
 }
 
