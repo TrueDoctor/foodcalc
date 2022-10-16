@@ -176,7 +176,7 @@ impl super::Tab for EventTab {
     }
 
     fn tab_label(&self) -> iced_aw::TabLabel {
-        super::TabLabel::IconText(super::Icon::Burger.into(), self.title())
+        super::TabLabel::IconText(super::Icon::Calendar.into(), self.title())
     }
 }
 

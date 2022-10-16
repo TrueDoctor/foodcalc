@@ -12,7 +12,7 @@ use crate::{
 };
 
 use self::{
-    event_meal_wrapper::{MealMessage, MealWrapper},
+    event_meal_wrapper::{MealWrapper, MealWrapperMessage},
     meal_detail_modal::MealDetail,
 };
 mod meal_detail_modal;
@@ -36,14 +36,13 @@ pub struct EventDetail {
 
 #[derive(Debug, Clone)]
 pub enum EventDetailMessage {
-    MealMessage(usize, MealMessage),
+    MealWrapperMessage(usize, MealWrapperMessage),
     MealDetailMessage(MealDetailMessage),
     ShowModal(Result<MealDetail, Error>),
+    CloseModal(Result<(), Error>),
     AddMeal,
     Save,
-    SaveMeal(Meal),
     Cancel,
-    CancelButtonPressed,
 }
 
 impl EventDetail {
@@ -51,7 +50,7 @@ impl EventDetail {
         Self {
             event: event,
             database: database.clone(),
-            meals: meals.into_iter().map(|meal| MealWrapper::new(meal)).collect(),
+            meals: meals.into_iter().map(|meal| MealWrapper::new(Some(meal))).collect(),
             scroll: Default::default(),
             cancel_state: Default::default(),
             ok_state: Default::default(),
@@ -62,27 +61,28 @@ impl EventDetail {
 
     pub fn update(&mut self, message: EventDetailMessage) -> Command<EventTabMessage> {
         match message {
-            EventDetailMessage::MealMessage(i, MealMessage::Focus) => {
+            EventDetailMessage::MealWrapperMessage(i, MealWrapperMessage::Focus) => {
                 for (j, meal) in self.meals.iter_mut().enumerate() {
                     if j != i {
-                        meal.update(MealMessage::Unfocus);
+                        meal.update(MealWrapperMessage::Unfocus);
                     }
                 }
             },
-            EventDetailMessage::MealMessage(i, MealMessage::Delete) => {
+            EventDetailMessage::MealWrapperMessage(i, MealWrapperMessage::Delete) => {
                 log::trace!("Deleted recipe entry: {:?}", self.meals.remove(i).meal);
             },
-            EventDetailMessage::MealMessage(_, MealMessage::OpenModal(meal)) => {
+            EventDetailMessage::MealWrapperMessage(_, MealWrapperMessage::OpenModal(meal)) => {
                 let move_database = self.database.clone();
-                debug!(
-                    "Opening modal for {}:{} @ {}, {}",
-                    meal.event_id, meal.recipe_id, meal.place_id, meal.start_time
-                );
                 return Command::perform(
                     async move {
                         let all_recipes = move_database.get_recipes().await?;
                         let all_places = move_database.get_places().await?;
-                        Ok(MealDetail::new(meal, Arc::new(all_recipes), Arc::new(all_places)))
+                        Ok(MealDetail::new(
+                            meal,
+                            Arc::new(all_recipes),
+                            Arc::new(all_places),
+                            move_database,
+                        ))
                     },
                     EventDetailMessage::ShowModal,
                 )
@@ -91,55 +91,35 @@ impl EventDetail {
             EventDetailMessage::ShowModal(Ok(meal_modal)) => {
                 self.meal_modal = Some(meal_modal);
             },
-            EventDetailMessage::MealDetailMessage(message) =>{
+            EventDetailMessage::MealDetailMessage(message) => {
                 if let Some(meal_detail) = self.meal_modal.as_mut() {
                     meal_detail.update(message);
                 }
             },
-            EventDetailMessage::MealMessage(i, message) => {
+            EventDetailMessage::MealWrapperMessage(i, message) => {
                 if let Some(meal) = self.meals.get_mut(i) {
                     meal.update(message);
                 }
             },
-            EventDetailMessage::AddMeal => self.meals.push(MealWrapper::new(Meal::default())),
+            EventDetailMessage::AddMeal => self.meals.push(MealWrapper::new(None)),
             EventDetailMessage::Save => {
                 let move_database = self.database.clone();
                 let event = self.event.clone();
-                let meals: Vec<_> = self
-                    .meals
-                    .iter()
-                    .map(|meal_wrapper| meal_wrapper.meal.clone())
-                    .collect();
-
                 return Command::perform(
                     async move {
                         move_database.update_event(&event).await?;
-                        move_database.update_event_meals(&event, meals.into_iter()).await?;
                         Ok(())
                     },
                     EventTabMessage::SaveEvent,
                 );
             },
-            EventDetailMessage::SaveMeal(meal) => {
-                let move_database = self.database.clone();
-                let event = self.event.clone();
-                let meals: Vec<_> = self
-                    .meals
-                    .iter()
-                    .map(|meal_wrapper| meal_wrapper.meal.clone())
-                    .collect();
 
-                return Command::perform(
-                    async move {
-                        move_database.update_event_meals(&event, meals.into_iter()).await?;
-                        Ok(())
-                    },
-                    EventTabMessage::SaveEvent,
-                );
-            },
             EventDetailMessage::Cancel => {
                 println!("Cancel");
                 return Command::perform(async {}, |_| EventTabMessage::CancelButtonPressed);
+            },
+            EventDetailMessage::CloseModal(Ok(_)) => {
+                self.meal_modal = None;
             },
             _ => {
                 debug!("recieved message without handler: {message:?}")
@@ -160,7 +140,7 @@ impl EventDetail {
             .fold(Column::new(), |column, (i, meal)| {
                 column.push(
                     meal.view()
-                        .map(move |message| EventDetailMessage::MealMessage(i, message)),
+                        .map(move |message| EventDetailMessage::MealWrapperMessage(i, message)),
                 )
             })
             .into();

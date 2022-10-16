@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
 use iced::{alignment::Horizontal, button, Alignment, Button, Column, Command, Element, Length, Row, Text, TextInput};
-use serde::de::value;
 use sqlx::types::time::PrimitiveDateTime;
 
-use crate::db::{Meal, Place, Recipe};
+use crate::db::{Meal, Place, Recipe, FoodBase};
 
 use super::EventDetailMessage;
 
@@ -17,7 +16,8 @@ pub struct InputState {
 
 #[derive(Debug, Clone)]
 pub struct MealDetail {
-    pub(crate) meal: Meal,
+    pub(crate) new_meal: Meal,
+    old_meal: Option<Meal>,
     all_recipes: Arc<Vec<Recipe>>,
     all_places: Arc<Vec<Place>>,
     filtered_recipes: Option<Vec<Recipe>>,
@@ -35,6 +35,7 @@ pub struct MealDetail {
 
     pub(crate) ok_state: button::State,
     pub(crate) cancel_state: button::State,
+    database: Arc<FoodBase>
 }
 
 #[derive(Debug, Clone)]
@@ -64,9 +65,10 @@ pub enum MealDetailMessage {
 }
 
 impl MealDetail {
-    pub fn new(meal: Meal, all_recipes: Arc<Vec<Recipe>>, all_places: Arc<Vec<Place>>) -> Self {
+    pub fn new(meal: Option<Meal>, all_recipes: Arc<Vec<Recipe>>, all_places: Arc<Vec<Place>>, database: Arc<FoodBase>) -> Self {
         Self {
-            meal: meal.clone(),
+            new_meal: meal.clone().unwrap_or_default(),
+            old_meal: meal.clone(),
             all_recipes: all_recipes.clone(),
             all_places: all_places.clone(),
             filtered_recipes: None,
@@ -76,39 +78,40 @@ impl MealDetail {
             recipe_picker: Default::default(),
             place_picker: Default::default(),
             start_time: InputState {
-                value: meal.start_time.to_string(),
+                value: meal.clone().unwrap_or_default().start_time.to_string(),
                 valid: true,
                 ..Default::default()
             },
             end_time: InputState {
-                value: meal.end_time.to_string(),
+                value: meal.clone().unwrap_or_default().end_time.to_string(),
                 valid: true,
                 ..Default::default()
             },
             servings: InputState {
-                value: meal.servings.to_string(),
+                value: meal.clone().unwrap_or_default().servings.to_string(),
                 valid: true,
                 ..Default::default()
             },
             energy: InputState {
-                value: meal.energy.to_string(),
+                value: meal.clone().unwrap_or_default().energy.to_string(),
                 valid: true,
                 ..Default::default()
             },
             comment: InputState {
-                value: meal.comment.unwrap_or_default(),
+                value: meal.clone().unwrap_or_default().comment.unwrap_or_default(),
                 valid: true,
                 ..Default::default()
             },
             ok_state: Default::default(),
             cancel_state: Default::default(),
+            database
         }
     }
 
     pub fn update(&mut self, message: MealDetailMessage) -> Command<EventDetailMessage> {
         match message {
-            MealDetailMessage::PickRecipe(recipe) => self.meal.recipe_id = recipe.recipe_id,
-            MealDetailMessage::PickPlace(place) => self.meal.place_id = place.place_id,
+            MealDetailMessage::PickRecipe(recipe) => self.new_meal.recipe_id = recipe.recipe_id,
+            MealDetailMessage::PickPlace(place) => self.new_meal.place_id = place.place_id,
             MealDetailMessage::RecipeFilterChanged(name) => {
                 self.recipe_filter = name;
                 self.filtered_recipes = (!self.recipe_filter.is_empty()).then(|| {
@@ -145,10 +148,10 @@ impl MealDetail {
                 self.place_picker.unfocus();
                 self.recipe_picker.unfocus();
                 if let Some([recipe]) = self.filtered_recipes.as_deref() {
-                    self.meal.recipe_id = recipe.recipe_id;
+                    self.new_meal.recipe_id = recipe.recipe_id;
                 }
                 if let Some([place]) = self.filtered_places.as_deref() {
-                    self.meal.place_id = place.place_id;
+                    self.new_meal.place_id = place.place_id;
                 }
             },
             MealDetailMessage::Delete => (),
@@ -157,13 +160,13 @@ impl MealDetail {
                 InputField::EndTime => self.end_time.value = s,
                 InputField::Servings => self.servings.value = s,
                 InputField::Energy => self.energy.value = s,
-                InputField::Comment => self.meal.comment = Some(s),
+                InputField::Comment => self.new_meal.comment = Some(s),
             },
             MealDetailMessage::SubmitValue(input) => match input {
                 InputField::StartTime => {
                     if let Ok(time) = PrimitiveDateTime::parse(&self.start_time.value, "%F %T") {
                         self.start_time.valid = true;
-                        self.meal.start_time = time;
+                        self.new_meal.start_time = time;
                     } else {
                         self.start_time.valid = false;
                     }
@@ -171,7 +174,7 @@ impl MealDetail {
                 InputField::EndTime => {
                     if let Ok(time) = PrimitiveDateTime::parse(&self.end_time.value, "%F %T") {
                         self.end_time.valid = true;
-                        self.meal.end_time = time;
+                        self.new_meal.end_time = time;
                     } else {
                         self.servings.valid = false;
                     }
@@ -179,7 +182,7 @@ impl MealDetail {
                 InputField::Servings => {
                     if let Ok(n) = self.servings.value.parse() {
                         self.servings.valid = true;
-                        self.meal.servings = n;
+                        self.new_meal.servings = n;
                     } else {
                         self.servings.valid = false;
                     }
@@ -187,7 +190,7 @@ impl MealDetail {
                 InputField::Energy => {
                     if let Ok(n) = self.servings.value.parse() {
                         self.servings.valid = true;
-                        self.meal.servings = n;
+                        self.new_meal.servings = n;
                     } else {
                         self.servings.valid = false;
                     }
@@ -196,11 +199,17 @@ impl MealDetail {
             },
             MealDetailMessage::Cancel => {
                 println!("Cancel");
-                return Command::perform(async {}, |_| EventDetailMessage::CancelButtonPressed);
+                return Command::perform(async {}, |_| EventDetailMessage::CloseModal(Ok(())));
             },
             MealDetailMessage::Save => {
-                let meal = self.meal.clone();
-                return Command::perform(async move { meal }, EventDetailMessage::SaveMeal);
+                
+                let move_database = self.database.clone();
+                let meal = self.new_meal.clone();
+                let old_meal = self.old_meal.clone();
+                return Command::perform(async move { 
+                        move_database.update_single_meal(old_meal, Some(meal)).await?;
+                        Ok(())
+                 }, EventDetailMessage::CloseModal);
             },
         }
         Command::none()
@@ -212,7 +221,7 @@ impl MealDetail {
         let selected_recipe = self
             .all_recipes
             .iter()
-            .find(|recipe| recipe.recipe_id == self.meal.recipe_id)
+            .find(|recipe| recipe.recipe_id == self.new_meal.recipe_id)
             .cloned();
         let recipe_list = iced_searchable_picklist::PickList::new(
             &mut self.recipe_picker,
@@ -232,7 +241,7 @@ impl MealDetail {
         let selected_place = self
             .all_places
             .iter()
-            .find(|place| place.place_id == self.meal.place_id)
+            .find(|place| place.place_id == self.new_meal.place_id)
             .cloned();
         let place_list = iced_searchable_picklist::PickList::new(
             &mut self.place_picker,

@@ -40,6 +40,8 @@ pub enum Icon {
     CogAlt,
     Delete,
     Plus,
+    Clock,
+    Calendar,
 }
 
 impl From<Icon> for char {
@@ -51,6 +53,8 @@ impl From<Icon> for char {
             Icon::Edit => '\u{ec55}',
             Icon::Delete => '\u{ec53}',
             Icon::Plus => '\u{ec3e}',
+            Icon::Clock => '\u{eedc}',
+            Icon::Calendar => '\u{eecd}'
         }
     }
 }

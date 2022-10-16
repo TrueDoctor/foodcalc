@@ -61,19 +61,20 @@ pub struct Meal {
 
 impl Default for Meal {
     fn default() -> Self {
-        Self { 
-            event_id: Default::default(), 
-            recipe_id: Default::default(), 
-            name: Default::default(), 
+        Self {
+            event_id: Default::default(),
+            recipe_id: Default::default(),
+            name: Default::default(),
             comment: None,
-            place_id: Default::default(), 
-            place: Default::default(), 
+            place_id: Default::default(),
+            place: Default::default(),
             start_time: PrimitiveDateTime::parse("1970-01-01 00:00:00", "%F %T").unwrap(),
             end_time: PrimitiveDateTime::parse("1970-01-01 00:00:00", "%F %T").unwrap(),
-            weight: Default::default(), 
-            energy: Default::default(), 
-            price: PgMoney::from(0), 
-            servings: Default::default() }
+            weight: Default::default(),
+            energy: Default::default(),
+            price: PgMoney::from(0),
+            servings: Default::default(),
+        }
     }
 }
 
@@ -85,7 +86,6 @@ pub struct Event {
     pub budget: Option<PgMoney>,
 }
 
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Place {
     pub place_id: i32,
@@ -95,7 +95,7 @@ pub struct Place {
 
 impl Display for Place {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{}",self.name)
+        write!(f, "{}", self.name)
     }
 }
 
@@ -123,7 +123,6 @@ impl Default for Unit {
         Self::KG
     }
 }
-
 
 impl std::string::ToString for Unit {
     fn to_string(&self) -> String {
@@ -768,10 +767,7 @@ impl FoodBase {
         .map_err(|err| err.into())
     }
 
-    pub async fn update_event(
-        &self,
-        event: &Event
-    ) -> eyre::Result<Event> {
+    pub async fn update_event(&self, event: &Event) -> eyre::Result<Event> {
         let event = sqlx::query_as!(
             Event,
             r#"
@@ -790,16 +786,97 @@ impl FoodBase {
         Ok(event)
     }
 
-    pub async fn update_event_meals(
-        &self,
-        event: &Event,
-        meals: impl Iterator<Item = Meal>,
-    ) -> eyre::Result<()> {
+    pub async fn update_single_meal(&self, old_meal: Option<Meal>, new_meal: Option<Meal>) -> eyre::Result<()> {
+        if let Some(old) = old_meal {
+            if let Some(new) = new_meal {
+                let count = sqlx::query!(
+                    r#"
+                    UPDATE event_meals
+                    SET event_id = $1,
+                        recipe_id = $2, 
+                        place_id = $3, 
+                        start_time = $4, 
+                        end_time = $5,
+                        energy_per_serving = $6, 
+                        servings = $7, 
+                        comment = $8 
+                    WHERE
+                        event_id = $9 AND
+                        recipe_id = $10 AND
+                        place_id = $11 AND
+                        start_time = $12
+                    "#,
+                    new.event_id,
+                    new.recipe_id,
+                    new.place_id,
+                    new.start_time,
+                    new.end_time,
+                    new.energy,
+                    new.servings,
+                    new.comment,
+                    old.event_id,
+                    old.recipe_id,
+                    old.place_id,
+                    old.start_time,
+                )
+                .execute(&*self.pg_pool)
+                .await?
+                .rows_affected();
+
+                assert_eq!(count, 1);
+            } else {
+                let count = sqlx::query!(
+                    r#"
+                    DELETE FROM event_meals
+                    WHERE
+                        event_id = $1 AND
+                        recipe_id = $2 AND
+                        place_id = $3 AND
+                        start_time = $4
+                    "#,
+                    old.event_id,
+                    old.recipe_id,
+                    old.place_id,
+                    old.start_time,
+                )
+                .execute(&*self.pg_pool)
+                .await?
+                .rows_affected();
+
+                assert_eq!(count, 1);
+            }
+        } else {
+            if let Some(new) = new_meal {
+                let count = sqlx::query!(
+                r#"
+                INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                "#,
+                new.event_id,
+                new.recipe_id,
+                new.place_id,
+                new.start_time,
+                new.end_time,
+                new.energy,
+                new.servings,
+                new.comment,
+            )
+            .execute(&*self.pg_pool)
+            .await?
+            .rows_affected();
+
+                assert_eq!(count, 1);
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn update_event_meals(&self, event: &Event, meals: impl Iterator<Item = Meal>) -> eyre::Result<()> {
         let mut transaction = self.pg_pool.begin().await?;
         pub async fn insert_meal<'a>(
             executor: impl sqlx::Executor<'a, Database = sqlx::Postgres>,
             event_id: i32,
-            meal: Meal
+            meal: Meal,
         ) -> sqlx::Result<()> {
             let count = sqlx::query!(
                 r#"
@@ -818,7 +895,7 @@ impl FoodBase {
             .execute(executor)
             .await?
             .rows_affected();
-        
+
             assert_eq!(count, 1);
             Ok(())
         }
