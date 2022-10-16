@@ -848,7 +848,6 @@ impl FoodBase {
             }
         } else {
             if let Some(new) = new_meal {
-                debug!("{} {} {} {}", new.event_id, new.recipe_id, new.place_id, new.start_time.to_string());
                 let count = sqlx::query!(
                 r#"
                 INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)

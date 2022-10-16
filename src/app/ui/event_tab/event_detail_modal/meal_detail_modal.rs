@@ -412,6 +412,7 @@ impl MealDetail {
 
         Column::new()
             .spacing(20)
+            .max_width(800)
             .align_items(Alignment::Center)
             .push(row1)
             .push(row2)

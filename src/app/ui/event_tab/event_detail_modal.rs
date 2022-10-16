@@ -8,7 +8,7 @@ use crate::{
         ui::{style, Icon},
         Error,
     },
-    db::{Event, FoodBase, Meal},
+    db::{Event, FoodBase, Meal, Place, Recipe},
 };
 
 use self::{
@@ -32,6 +32,8 @@ pub struct EventDetail {
     pub(crate) ok_state: button::State,
     pub(crate) add_meal_button: button::State,
     pub(crate) meal_modal: Option<MealDetail>,
+    all_recipes: Arc<Vec<Recipe>>,
+    all_places: Arc<Vec<Place>>,
 }
 
 #[derive(Debug, Clone)]
@@ -40,29 +42,47 @@ pub enum EventDetailMessage {
     MealDetailMessage(MealDetailMessage),
     ShowModal(Result<MealDetail, Error>),
     CloseModal(Result<(), Error>),
-    UpdateMeals(Result<Vec<Meal>,Error>),
+    UpdateMeals(Result<Vec<Meal>, Error>),
     AddMeal,
     Save,
     Cancel,
 }
 
 impl EventDetail {
-    pub fn new(event: Event, database: Arc<FoodBase>, meals: Vec<Meal>) -> Self {
+    pub fn new(
+        event: Event,
+        database: Arc<FoodBase>,
+        meals: Vec<Meal>,
+        recipes: Vec<Recipe>,
+        places: Vec<Place>,
+    ) -> Self {
+        let recipes = Arc::new(recipes);
+        let places = Arc::new(places);
         Self {
             event: event,
             database: database.clone(),
-            meals: meals.into_iter().map(|meal| MealWrapper::new(Some(meal))).collect(),
+            meals: meals
+                .into_iter()
+                .map(|meal| MealWrapper::new(Some(meal), recipes.clone(), places.clone()))
+                .collect(),
             scroll: Default::default(),
             cancel_state: Default::default(),
             ok_state: Default::default(),
             add_meal_button: Default::default(),
             meal_modal: None,
+            all_recipes: recipes,
+            all_places: places,
         }
     }
 
     pub fn update(&mut self, message: EventDetailMessage) -> Command<EventTabMessage> {
         match message {
-            EventDetailMessage::UpdateMeals(Ok(meals)) => self.meals = meals.into_iter().map(|meal| MealWrapper::new(Some(meal))).collect(),
+            EventDetailMessage::UpdateMeals(Ok(meals)) => {
+                self.meals = meals
+                    .into_iter()
+                    .map(|meal| MealWrapper::new(Some(meal), self.all_recipes.clone(), self.all_places.clone()))
+                    .collect()
+            },
             EventDetailMessage::MealWrapperMessage(i, MealWrapperMessage::Focus) => {
                 for (j, meal) in self.meals.iter_mut().enumerate() {
                     if j != i {
@@ -74,10 +94,13 @@ impl EventDetail {
                 let remove = self.meals.remove(i).meal;
                 log::trace!("Deleted recipe entry: {:?}", remove);
                 let move_database = self.database.clone();
-                return Command::perform(async move {
-                    move_database.update_single_meal(remove, None).await?;
-                    Ok(())
-                }, |_:Result<(),Error>| EventTabMessage::EventDetailMessage(EventDetailMessage::CloseModal(Ok(()))));
+                return Command::perform(
+                    async move {
+                        move_database.update_single_meal(remove, None).await?;
+                        Ok(())
+                    },
+                    |_: Result<(), Error>| EventTabMessage::EventDetailMessage(EventDetailMessage::CloseModal(Ok(()))),
+                );
             },
             EventDetailMessage::MealWrapperMessage(_, MealWrapperMessage::OpenModal(meal)) => {
                 let move_database = self.database.clone();
@@ -91,7 +114,7 @@ impl EventDetail {
                             Arc::new(all_recipes),
                             Arc::new(all_places),
                             move_database,
-                            event_id
+                            event_id,
                         ))
                     },
                     EventDetailMessage::ShowModal,
@@ -111,7 +134,11 @@ impl EventDetail {
                     meal.update(message);
                 }
             },
-            EventDetailMessage::AddMeal => self.meals.push(MealWrapper::new(None)),
+            EventDetailMessage::AddMeal => self.meals.push(MealWrapper::new(
+                None,
+                self.all_recipes.clone(),
+                self.all_places.clone(),
+            )),
             EventDetailMessage::Save => {
                 let move_database = self.database.clone();
                 let event = self.event.clone();
@@ -132,10 +159,13 @@ impl EventDetail {
                 self.meal_modal = None;
                 let event_id = self.event.event_id;
                 let move_database = self.database.clone();
-                return Command::perform(async move {
-                    let meals = move_database.get_event_meals(event_id).await?;
-                    Ok(meals)
-                }, |result| EventTabMessage::EventDetailMessage(EventDetailMessage::UpdateMeals(result)))
+                return Command::perform(
+                    async move {
+                        let meals = move_database.get_event_meals(event_id).await?;
+                        Ok(meals)
+                    },
+                    |result| EventTabMessage::EventDetailMessage(EventDetailMessage::UpdateMeals(result)),
+                );
             },
             _ => {
                 debug!("recieved message without handler: {message:?}")
@@ -205,6 +235,7 @@ impl EventDetail {
 
         let element: Element<'_, EventDetailMessage> = Column::new()
             .spacing(20)
+            .max_width(800)
             .align_items(Alignment::Center)
             .push(title)
             .push(meals)

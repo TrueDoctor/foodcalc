@@ -81,10 +81,14 @@ impl EventTab {
                 let move_database = self.database.clone();
                 return Command::perform(async move {
                     let meals = move_database.get_event_meals(event.event_id).await?;
+                    let recipes = move_database.get_recipes().await?;
+                    let places = move_database.get_places().await?;
                     Ok(EventDetail::new(
                         event,
                         move_database.clone(),
-                        meals
+                        meals,
+                        recipes,
+                        places,
                     ))
                 }, 
                 EventTabMessage::ShowModal
