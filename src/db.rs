@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::sync::Arc;
 
+use log::debug;
 use sqlx::postgres::types::PgMoney;
 use sqlx::postgres::PgPool;
 use sqlx::types::time::PrimitiveDateTime;
@@ -847,6 +848,7 @@ impl FoodBase {
             }
         } else {
             if let Some(new) = new_meal {
+                debug!("{} {} {} {}", new.event_id, new.recipe_id, new.place_id, new.start_time.to_string());
                 let count = sqlx::query!(
                 r#"
                 INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)

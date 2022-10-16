@@ -40,6 +40,7 @@ pub enum EventDetailMessage {
     MealDetailMessage(MealDetailMessage),
     ShowModal(Result<MealDetail, Error>),
     CloseModal(Result<(), Error>),
+    UpdateMeals(Result<Vec<Meal>,Error>),
     AddMeal,
     Save,
     Cancel,
@@ -61,6 +62,7 @@ impl EventDetail {
 
     pub fn update(&mut self, message: EventDetailMessage) -> Command<EventTabMessage> {
         match message {
+            EventDetailMessage::UpdateMeals(Ok(meals)) => self.meals = meals.into_iter().map(|meal| MealWrapper::new(Some(meal))).collect(),
             EventDetailMessage::MealWrapperMessage(i, MealWrapperMessage::Focus) => {
                 for (j, meal) in self.meals.iter_mut().enumerate() {
                     if j != i {
@@ -69,10 +71,17 @@ impl EventDetail {
                 }
             },
             EventDetailMessage::MealWrapperMessage(i, MealWrapperMessage::Delete) => {
-                log::trace!("Deleted recipe entry: {:?}", self.meals.remove(i).meal);
+                let remove = self.meals.remove(i).meal;
+                log::trace!("Deleted recipe entry: {:?}", remove);
+                let move_database = self.database.clone();
+                return Command::perform(async move {
+                    move_database.update_single_meal(remove, None).await?;
+                    Ok(())
+                }, |_:Result<(),Error>| EventTabMessage::EventDetailMessage(EventDetailMessage::CloseModal(Ok(()))));
             },
             EventDetailMessage::MealWrapperMessage(_, MealWrapperMessage::OpenModal(meal)) => {
                 let move_database = self.database.clone();
+                let event_id = self.event.event_id;
                 return Command::perform(
                     async move {
                         let all_recipes = move_database.get_recipes().await?;
@@ -82,6 +91,7 @@ impl EventDetail {
                             Arc::new(all_recipes),
                             Arc::new(all_places),
                             move_database,
+                            event_id
                         ))
                     },
                     EventDetailMessage::ShowModal,
@@ -93,7 +103,7 @@ impl EventDetail {
             },
             EventDetailMessage::MealDetailMessage(message) => {
                 if let Some(meal_detail) = self.meal_modal.as_mut() {
-                    meal_detail.update(message);
+                    return meal_detail.update(message).map(EventTabMessage::EventDetailMessage);
                 }
             },
             EventDetailMessage::MealWrapperMessage(i, message) => {
@@ -120,6 +130,12 @@ impl EventDetail {
             },
             EventDetailMessage::CloseModal(Ok(_)) => {
                 self.meal_modal = None;
+                let event_id = self.event.event_id;
+                let move_database = self.database.clone();
+                return Command::perform(async move {
+                    let meals = move_database.get_event_meals(event_id).await?;
+                    Ok(meals)
+                }, |result| EventTabMessage::EventDetailMessage(EventDetailMessage::UpdateMeals(result)))
             },
             _ => {
                 debug!("recieved message without handler: {message:?}")

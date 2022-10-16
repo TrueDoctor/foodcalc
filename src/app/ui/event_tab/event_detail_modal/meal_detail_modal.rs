@@ -1,9 +1,13 @@
 use std::sync::Arc;
 
 use iced::{alignment::Horizontal, button, Alignment, Button, Column, Command, Element, Length, Row, Text, TextInput};
+use log::debug;
 use sqlx::types::time::PrimitiveDateTime;
 
-use crate::db::{Meal, Place, Recipe, FoodBase};
+use crate::{
+    app::ui::style,
+    db::{FoodBase, Meal, Place, Recipe},
+};
 
 use super::EventDetailMessage;
 
@@ -35,7 +39,7 @@ pub struct MealDetail {
 
     pub(crate) ok_state: button::State,
     pub(crate) cancel_state: button::State,
-    database: Arc<FoodBase>
+    database: Arc<FoodBase>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,9 +69,17 @@ pub enum MealDetailMessage {
 }
 
 impl MealDetail {
-    pub fn new(meal: Option<Meal>, all_recipes: Arc<Vec<Recipe>>, all_places: Arc<Vec<Place>>, database: Arc<FoodBase>) -> Self {
+    pub fn new(
+        meal: Option<Meal>,
+        all_recipes: Arc<Vec<Recipe>>,
+        all_places: Arc<Vec<Place>>,
+        database: Arc<FoodBase>,
+        event_id:i32
+    ) -> Self {
+        let mut new_meal = meal.clone().unwrap_or_default();
+        new_meal.event_id = event_id;
         Self {
-            new_meal: meal.clone().unwrap_or_default(),
+            new_meal,
             old_meal: meal.clone(),
             all_recipes: all_recipes.clone(),
             all_places: all_places.clone(),
@@ -104,7 +116,7 @@ impl MealDetail {
             },
             ok_state: Default::default(),
             cancel_state: Default::default(),
-            database
+            database,
         }
     }
 
@@ -164,15 +176,24 @@ impl MealDetail {
             },
             MealDetailMessage::SubmitValue(input) => match input {
                 InputField::StartTime => {
+                    let start_time_seconds = self.start_time.value.clone() + ":00";
                     if let Ok(time) = PrimitiveDateTime::parse(&self.start_time.value, "%F %T") {
+                        self.start_time.valid = true;
+                        self.new_meal.start_time = time;
+                    } else if let Ok(time) = PrimitiveDateTime::parse(&start_time_seconds, "%F %T") {
                         self.start_time.valid = true;
                         self.new_meal.start_time = time;
                     } else {
                         self.start_time.valid = false;
                     }
+                    debug!("Submit Start Time, Success: {}", self.start_time.valid);
                 },
                 InputField::EndTime => {
+                    let end_time_seconds = self.end_time.value.clone() + ":00";
                     if let Ok(time) = PrimitiveDateTime::parse(&self.end_time.value, "%F %T") {
+                        self.end_time.valid = true;
+                        self.new_meal.end_time = time;
+                    } else if let Ok(time) = PrimitiveDateTime::parse(&end_time_seconds, "%F %T") {
                         self.end_time.valid = true;
                         self.new_meal.end_time = time;
                     } else {
@@ -199,17 +220,35 @@ impl MealDetail {
             },
             MealDetailMessage::Cancel => {
                 println!("Cancel");
-                return Command::perform(async {}, |_| EventDetailMessage::CloseModal(Ok(())));
+                return Command::perform(async { Ok(()) }, |result| EventDetailMessage::CloseModal(result));
             },
             MealDetailMessage::Save => {
-                
                 let move_database = self.database.clone();
+                self.update(MealDetailMessage::SubmitValue(InputField::StartTime));
+                self.update(MealDetailMessage::SubmitValue(InputField::EndTime));
+                self.update(MealDetailMessage::SubmitValue(InputField::Servings));
+                self.update(MealDetailMessage::SubmitValue(InputField::Energy));
+                self.update(MealDetailMessage::SubmitValue(InputField::Comment));
                 let meal = self.new_meal.clone();
                 let old_meal = self.old_meal.clone();
-                return Command::perform(async move { 
-                        move_database.update_single_meal(old_meal, Some(meal)).await?;
-                        Ok(())
-                 }, EventDetailMessage::CloseModal);
+                if vec![
+                    &self.start_time,
+                    &self.end_time,
+                    &self.comment,
+                    &self.energy,
+                    &self.servings,
+                ]
+                .iter()
+                .all(|input| input.valid)
+                {
+                    return Command::perform(
+                        async move {
+                            move_database.update_single_meal(old_meal, Some(meal)).await?;
+                            Ok(())
+                        },
+                        EventDetailMessage::CloseModal,
+                    );
+                }
             },
         }
         Command::none()
@@ -258,6 +297,11 @@ impl MealDetail {
         .style(theme)
         .padding(10);
 
+        let text_theme = match self.start_time.valid {
+            true => style::TextInput::Normal,
+            false => style::TextInput::Error,
+        };
+
         let start_input = TextInput::new(
             &mut self.start_time.state,
             "Start Time…",
@@ -266,39 +310,59 @@ impl MealDetail {
         )
         .on_submit(MealDetailMessage::SubmitValue(InputField::StartTime))
         .width(Length::FillPortion(1))
-        .style(theme)
+        .style(text_theme)
         .padding(10);
+
+        let text_theme = match self.end_time.valid {
+            true => style::TextInput::Normal,
+            false => style::TextInput::Error,
+        };
 
         let end_input = TextInput::new(&mut self.end_time.state, "End Time…", &self.end_time.value, |value| {
             MealDetailMessage::ValueChanged(InputField::EndTime, value)
         })
         .on_submit(MealDetailMessage::SubmitValue(InputField::EndTime))
         .width(Length::FillPortion(1))
-        .style(theme)
+        .style(text_theme)
         .padding(10);
+
+        let text_theme = match self.comment.valid {
+            true => style::TextInput::Normal,
+            false => style::TextInput::Error,
+        };
 
         let comment_input = TextInput::new(&mut self.comment.state, "Comment…", &self.comment.value, |value| {
             MealDetailMessage::ValueChanged(InputField::Comment, value)
         })
         .on_submit(MealDetailMessage::SubmitValue(InputField::Comment))
         .width(Length::Fill)
-        .style(theme)
+        .style(text_theme)
         .padding(10);
+
+        let text_theme = match self.servings.valid {
+            true => style::TextInput::Normal,
+            false => style::TextInput::Error,
+        };
 
         let servings_input = TextInput::new(&mut self.servings.state, "Servings…", &self.servings.value, |value| {
             MealDetailMessage::ValueChanged(InputField::Servings, value)
         })
         .on_submit(MealDetailMessage::SubmitValue(InputField::StartTime))
         .width(Length::FillPortion(1))
-        .style(theme)
+        .style(text_theme)
         .padding(10);
+
+        let text_theme = match self.energy.valid {
+            true => style::TextInput::Normal,
+            false => style::TextInput::Error,
+        };
 
         let energy_input = TextInput::new(&mut self.energy.state, "Energy…", &self.energy.value, |value| {
             MealDetailMessage::ValueChanged(InputField::Energy, value)
         })
         .on_submit(MealDetailMessage::SubmitValue(InputField::StartTime))
         .width(Length::FillPortion(1))
-        .style(theme)
+        .style(text_theme)
         .padding(10);
 
         let cancel_button = Button::new(

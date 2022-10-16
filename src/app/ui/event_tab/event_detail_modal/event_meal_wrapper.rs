@@ -41,6 +41,7 @@ impl MealWrapper {
 
     pub fn update(&mut self, message: MealWrapperMessage) -> Command<EventDetailMessage> {
         match message {
+            
             _ => {}
         }
         Command::none()
