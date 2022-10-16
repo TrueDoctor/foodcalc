@@ -80,12 +80,10 @@ impl EventTab {
             EventTabMessage::OpenModal(event) =>{
                 let move_database = self.database.clone();
                 return Command::perform(async move {
-                    let recipes = move_database.get_recipes().await?;
                     let meals = move_database.get_event_meals(event.event_id).await?;
                     Ok(EventDetail::new(
                         event,
                         move_database.clone(),
-                        Arc::new(recipes),
                         meals
                     ))
                 }, 

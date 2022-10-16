@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::sync::Arc;
 
 use sqlx::postgres::types::PgMoney;
@@ -84,6 +85,20 @@ pub struct Event {
     pub budget: Option<PgMoney>,
 }
 
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Place {
+    pub place_id: i32,
+    pub name: String,
+    pub comment: Option<String>,
+}
+
+impl Display for Place {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.name)
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Store {
     pub store_id: i32,
@@ -108,6 +123,7 @@ impl Default for Unit {
         Self::KG
     }
 }
+
 
 impl std::string::ToString for Unit {
     fn to_string(&self) -> String {
@@ -819,10 +835,22 @@ impl FoodBase {
         log::debug!("Deleted {} event_meals", count);
 
         for meal in meals {
-            insert_meal(&mut transaction, event.event_id, meal);
+            insert_meal(&mut transaction, event.event_id, meal).await?;
         }
         transaction.commit().await?;
         Ok(())
+    }
+
+    pub async fn get_places(&self) -> eyre::Result<Vec<Place>> {
+        let records = sqlx::query_as!(
+            Place,
+            r#" SELECT *
+                FROM places
+            "#
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
     }
 }
 
