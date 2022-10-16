@@ -63,7 +63,7 @@ impl EventDetail {
             database: database.clone(),
             meals: meals
                 .into_iter()
-                .map(|meal| MealWrapper::new(Some(meal), recipes.clone(), places.clone()))
+                .map(|meal| MealWrapper::new(Some(meal), recipes.clone(), places.clone(), database.clone()))
                 .collect(),
             scroll: Default::default(),
             cancel_state: Default::default(),
@@ -80,7 +80,7 @@ impl EventDetail {
             EventDetailMessage::UpdateMeals(Ok(meals)) => {
                 self.meals = meals
                     .into_iter()
-                    .map(|meal| MealWrapper::new(Some(meal), self.all_recipes.clone(), self.all_places.clone()))
+                    .map(|meal| MealWrapper::new(Some(meal), self.all_recipes.clone(), self.all_places.clone(), self.database.clone()))
                     .collect()
             },
             EventDetailMessage::MealWrapperMessage(i, MealWrapperMessage::Focus) => {
@@ -131,13 +131,14 @@ impl EventDetail {
             },
             EventDetailMessage::MealWrapperMessage(i, message) => {
                 if let Some(meal) = self.meals.get_mut(i) {
-                    meal.update(message);
+                    return meal.update(message).map(EventTabMessage::EventDetailMessage);
                 }
             },
             EventDetailMessage::AddMeal => self.meals.push(MealWrapper::new(
                 None,
                 self.all_recipes.clone(),
                 self.all_places.clone(),
+                self.database.clone()
             )),
             EventDetailMessage::Save => {
                 let move_database = self.database.clone();

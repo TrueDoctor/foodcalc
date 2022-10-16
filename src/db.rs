@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::sync::Arc;
 
-use log::debug;
 use sqlx::postgres::types::PgMoney;
 use sqlx::postgres::PgPool;
 use sqlx::types::time::PrimitiveDateTime;

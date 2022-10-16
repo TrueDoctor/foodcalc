@@ -42,6 +42,7 @@ pub enum Icon {
     Plus,
     Clock,
     Calendar,
+    RestaurantMenu,
 }
 
 impl From<Icon> for char {
@@ -54,7 +55,8 @@ impl From<Icon> for char {
             Icon::Delete => '\u{ec53}',
             Icon::Plus => '\u{ec3e}',
             Icon::Clock => '\u{eedc}',
-            Icon::Calendar => '\u{eecd}'
+            Icon::Calendar => '\u{eecd}',
+            Icon::RestaurantMenu => '\u{eb8b}',
         }
     }
 }
