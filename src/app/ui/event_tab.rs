@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use iced::scrollable::{self, Scrollable};
-use iced::{text_input, Command, TextInput, Element, Column, Container, Length, alignment, Text};
-use log::debug;
 use crate::app::Error;
-use crate::db::{FoodBase, Event};
+use crate::db::{Event, FoodBase};
+use iced::scrollable::{self, Scrollable};
+use iced::{alignment, text_input, Column, Command, Container, Element, Length, Text, TextInput};
+use log::debug;
 
 use self::event_detail_modal::EventDetailMessage;
 
@@ -23,7 +23,7 @@ pub struct EventTab {
     input: text_input::State,
     input_value: String,
     database: Arc<FoodBase>,
-    event_detail_modal: Option<EventDetail>
+    event_detail_modal: Option<EventDetail>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,25 +35,28 @@ pub enum EventTabMessage {
     ShowModal(Result<EventDetail, Error>),
     CancelButtonPressed,
     CloseModal,
-    SaveEvent(Result<(),Error>)
+    SaveEvent(Result<(), Error>),
+}
 
+fn load_events(database: Arc<FoodBase>) -> Command<EventTabMessage> {
+    Command::perform(
+        async move {
+            let events = database
+                .get_events()
+                .await?
+                .into_iter()
+                .map(EventWrapper::new)
+                .collect();
+            Ok(events)
+        },
+        EventTabMessage::UpdateData,
+    )
 }
 
 impl EventTab {
     pub fn new(database: Arc<FoodBase>) -> (Self, Command<TabMessage>) {
         let move_database = database.clone();
-        let command = Command::perform(
-            async move {
-                let events = move_database
-                    .get_events()
-                    .await?
-                    .into_iter()
-                    .map(EventWrapper::new)
-                    .collect();
-                Ok(events)
-            },
-            EventTabMessage::UpdateData,
-        );
+        let command = load_events(move_database);
 
         let events = EventTab {
             event_list: Vec::new(),
@@ -61,7 +64,7 @@ impl EventTab {
             input: text_input::State::default(),
             input_value: String::new(),
             database: database,
-            event_detail_modal: None
+            event_detail_modal: None,
         };
         (events, command.map(|message| TabMessage::EventTab(message.into())))
     }
@@ -71,29 +74,27 @@ impl EventTab {
             EventTabMessage::UpdateData(Ok(events)) => {
                 self.event_list = events;
             },
-            EventTabMessage::UpdateData(Err(error))=>{
+            EventTabMessage::UpdateData(Err(error)) => {
                 log::error!("{error:?}");
             },
             EventTabMessage::InputChanged(input) => {
                 self.input_value = input;
             },
-            EventTabMessage::OpenModal(event) =>{
+            EventTabMessage::OpenModal(event) => {
                 let move_database = self.database.clone();
-                return Command::perform(async move {
-                    let meals = move_database.get_event_meals(event.event_id).await?;
-                    let recipes = move_database.get_recipes().await?;
-                    let places = move_database.get_places().await?;
-                    Ok(EventDetail::new(
-                        event,
-                        move_database.clone(),
-                        meals,
-                        recipes,
-                        places,
-                    ))
-                }, 
-                EventTabMessage::ShowModal
-            )
-            .map(|message| TabMessage::EventTab(message.into()));
+                return Command::perform(
+                    async move {
+                        let meals = move_database.get_event_meals(event.event_id).await?;
+                        let recipes = move_database.get_recipes().await?;
+                        let places = move_database.get_places().await?;
+                        Ok(EventDetail::new(event, move_database.clone(), meals, recipes, places))
+                    },
+                    EventTabMessage::ShowModal,
+                )
+                .map(|message| TabMessage::EventTab(message.into()));
+            },
+            EventTabMessage::SaveEvent(_) => {
+                return load_events(self.database.clone()).map(|message| TabMessage::EventTab(message.into()));
             },
             EventTabMessage::ShowModal(Ok(event_detail)) => {
                 self.event_detail_modal = Some(event_detail);
@@ -109,7 +110,7 @@ impl EventTab {
                 if let Some(modal) = self.event_detail_modal.as_mut() {
                     return modal
                         .update(message)
-                        .map(|message| TabMessage::EventTab(message.into()))
+                        .map(|message| TabMessage::EventTab(message.into()));
                 }
             },
             _ => debug!("recieved event tab message without handler: {message:?}"),
@@ -129,10 +130,10 @@ impl super::Tab for EventTab {
         let theme = crate::theme();
 
         let input = TextInput::new(
-            &mut self.input, 
-            "Event Name", 
-            &self.input_value, 
-            EventTabMessage::InputChanged
+            &mut self.input,
+            "Event Name",
+            &self.input_value,
+            EventTabMessage::InputChanged,
         )
         .padding(15)
         .style(theme)
@@ -141,9 +142,9 @@ impl super::Tab for EventTab {
         let filtered_events = self
             .event_list
             .iter()
-            .filter(|event| crate::similar(&event.event.event_name,&*self.input_value));
+            .filter(|event| crate::similar(&event.event.event_name, &*self.input_value));
 
-        let events: Element<_> = if filtered_events.clone().count()>0 {
+        let events: Element<_> = if filtered_events.clone().count() > 0 {
             self.event_list
                 .iter_mut()
                 .enumerate()
@@ -161,7 +162,7 @@ impl super::Tab for EventTab {
             .push(Container::new(events).width(Length::Fill))
             .into();
 
-        let element: Element<'_, EventTabMessage> = 
+        let element: Element<'_, EventTabMessage> =
             Column::new().max_width(800).spacing(20).push(input).push(scroll).into();
 
         let element: Element<'_, EventTabMessage> = Container::new(element)
@@ -169,14 +170,13 @@ impl super::Tab for EventTab {
             .height(Length::Fill)
             .center_x()
             .into();
-        
-        
-            let element: Element<'_, EventTabMessage> = match self.event_detail_modal.as_mut() {
-                Some(modal) => modal.view().map(EventTabMessage::EventDetailMessage),
-                None => element,
-            };
-    
-            element.map(|message| TabMessage::EventTab(message.into()))    
+
+        let element: Element<'_, EventTabMessage> = match self.event_detail_modal.as_mut() {
+            Some(modal) => modal.view().map(EventTabMessage::EventDetailMessage),
+            None => element,
+        };
+
+        element.map(|message| TabMessage::EventTab(message.into()))
     }
 
     fn tab_label(&self) -> iced_aw::TabLabel {

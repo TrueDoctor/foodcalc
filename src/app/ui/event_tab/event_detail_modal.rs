@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use iced::{alignment::Horizontal, button, Alignment, Button, Column, Command, Element, Length, Row, Scrollable, Text};
 use log::debug;
+use sqlx::{postgres::types::PgMoney, types::BigDecimal};
 
 use crate::{
     app::{
@@ -25,15 +26,20 @@ mod event_meal_wrapper;
 #[derive(Debug, Clone)]
 pub struct EventDetail {
     pub(crate) event: Event,
-    database: Arc<FoodBase>,
-    pub(crate) meals: Vec<MealWrapper>,
-    pub(crate) scroll: iced::scrollable::State,
-    pub(crate) cancel_state: button::State,
-    pub(crate) ok_state: button::State,
-    pub(crate) add_meal_button: button::State,
-    pub(crate) meal_modal: Option<MealDetail>,
     all_recipes: Arc<Vec<Recipe>>,
     all_places: Arc<Vec<Place>>,
+    meals: Vec<MealWrapper>,
+
+    title_state: iced::text_input::State,
+    comment_state: iced::text_input::State,
+    budget_state: iced::text_input::State,
+    scroll: iced::scrollable::State,
+    cancel_state: button::State,
+    ok_state: button::State,
+    add_meal_button: button::State,
+    meal_modal: Option<MealDetail>,
+
+    database: Arc<FoodBase>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +49,9 @@ pub enum EventDetailMessage {
     ShowModal(Result<MealDetail, Error>),
     CloseModal(Result<(), Error>),
     UpdateMeals(Result<Vec<Meal>, Error>),
+    TitleChange(String),
+    CommentChanged(String),
+    BudgetChanged(String),
     AddMeal,
     Save,
     Cancel,
@@ -72,6 +81,9 @@ impl EventDetail {
             meal_modal: None,
             all_recipes: recipes,
             all_places: places,
+            title_state: Default::default(),
+            comment_state: Default::default(),
+            budget_state: Default::default(),
         }
     }
 
@@ -80,7 +92,14 @@ impl EventDetail {
             EventDetailMessage::UpdateMeals(Ok(meals)) => {
                 self.meals = meals
                     .into_iter()
-                    .map(|meal| MealWrapper::new(Some(meal), self.all_recipes.clone(), self.all_places.clone(), self.database.clone()))
+                    .map(|meal| {
+                        MealWrapper::new(
+                            Some(meal),
+                            self.all_recipes.clone(),
+                            self.all_places.clone(),
+                            self.database.clone(),
+                        )
+                    })
                     .collect()
             },
             EventDetailMessage::MealWrapperMessage(i, MealWrapperMessage::Focus) => {
@@ -138,7 +157,7 @@ impl EventDetail {
                 None,
                 self.all_recipes.clone(),
                 self.all_places.clone(),
-                self.database.clone()
+                self.database.clone(),
             )),
             EventDetailMessage::Save => {
                 let move_database = self.database.clone();
@@ -168,6 +187,23 @@ impl EventDetail {
                     |result| EventTabMessage::EventDetailMessage(EventDetailMessage::UpdateMeals(result)),
                 );
             },
+            EventDetailMessage::BudgetChanged(budget) => {
+                let budget = if let Some(budget) = BigDecimal::parse_bytes(budget.as_bytes(), 10) {
+                    match PgMoney::from_bigdecimal(budget, 2) {
+                        Ok(budget) => Some(budget),
+                        Err(error) => {
+                            debug!("{}", error);
+                            None
+                        },
+                    }
+                } else {
+                    None
+                };
+                self.event.budget = budget;
+            },
+            EventDetailMessage::CommentChanged(comment) => {
+                self.event.comment = Some(comment);
+            },
             _ => {
                 debug!("recieved message without handler: {message:?}")
             },
@@ -178,7 +214,45 @@ impl EventDetail {
     pub fn view(&mut self) -> Element<EventDetailMessage> {
         let theme = crate::theme();
 
-        let title = Text::new(&self.event.event_name).color(theme.foreground()).size(30);
+        let title = iced::TextInput::new(
+            &mut self.title_state,
+            "Event Title...",
+            &self.event.event_name,
+            EventDetailMessage::TitleChange,
+        )
+        .width(Length::FillPortion(1))
+        .style(theme)
+        .padding(10);
+
+        let comment = self.event.comment.clone().unwrap_or_default();
+
+        let comment = iced::TextInput::new(
+            &mut self.comment_state,
+            "Comment ...",
+            &comment,
+            EventDetailMessage::CommentChanged,
+        )
+        .width(Length::FillPortion(2))
+        .style(theme)
+        .padding(10);
+
+        let budget = if let Some(budget) = self.event.budget {
+            (budget.0 / 100).to_string()
+        } else {
+            "".to_string()
+        };
+
+        let budget = iced::TextInput::new(
+            &mut self.budget_state,
+            "Budget ...",
+            &budget,
+            EventDetailMessage::BudgetChanged,
+        )
+        .width(Length::FillPortion(1))
+        .style(theme)
+        .padding(10);
+
+        //let title = Text::new(&self.event.event_name).color(theme.foreground()).size(30);
 
         let meals: Element<'_, EventDetailMessage> = self
             .meals
@@ -226,6 +300,14 @@ impl EventDetail {
         .style(theme)
         .on_press(EventDetailMessage::Save);
 
+        let header = Row::new()
+            .spacing(10)
+            .padding(5)
+            .width(Length::Fill)
+            .height(Length::Units(50))
+            .push(budget)
+            .push(comment);
+
         let footer = Row::new()
             .spacing(10)
             .padding(5)
@@ -239,6 +321,7 @@ impl EventDetail {
             .max_width(800)
             .align_items(Alignment::Center)
             .push(title)
+            .push(header)
             .push(meals)
             .push(footer)
             .into();
