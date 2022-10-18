@@ -3,12 +3,12 @@ use std::sync::Arc;
 use crate::app::Error;
 use crate::db::{Event, FoodBase};
 use iced::scrollable::{self, Scrollable};
-use iced::{alignment, text_input, Column, Command, Container, Element, Length, Text, TextInput};
+use iced::{alignment, text_input, Button, Column, Command, Container, Element, Length, Row, Text, TextInput};
 use log::debug;
 
 use self::event_detail_modal::EventDetailMessage;
 
-use super::TabMessage;
+use super::{style, Icon, TabMessage};
 
 mod event;
 pub use event::EventWrapper;
@@ -21,6 +21,7 @@ pub struct EventTab {
     event_list: Vec<EventWrapper>,
     scroll: scrollable::State,
     input: text_input::State,
+    add_event_button: iced::button::State,
     input_value: String,
     database: Arc<FoodBase>,
     event_detail_modal: Option<EventDetail>,
@@ -36,6 +37,10 @@ pub enum EventTabMessage {
     CancelButtonPressed,
     CloseModal,
     SaveEvent(Result<(), Error>),
+    AddEvent(Result<Event,Error>),
+    PrintRecipes(Event),
+    Nothing,
+    NewEvent,
 }
 
 fn load_events(database: Arc<FoodBase>) -> Command<EventTabMessage> {
@@ -45,7 +50,7 @@ fn load_events(database: Arc<FoodBase>) -> Command<EventTabMessage> {
                 .get_events()
                 .await?
                 .into_iter()
-                .map(EventWrapper::new)
+                .map(|event| EventWrapper::new(event))
                 .collect();
             Ok(events)
         },
@@ -60,9 +65,10 @@ impl EventTab {
 
         let events = EventTab {
             event_list: Vec::new(),
-            scroll: scrollable::State::default(),
-            input: text_input::State::default(),
-            input_value: String::new(),
+            scroll: Default::default(),
+            input: Default::default(),
+            add_event_button: Default::default(),
+            input_value: Default::default(),
             database: database,
             event_detail_modal: None,
         };
@@ -113,6 +119,30 @@ impl EventTab {
                         .map(|message| TabMessage::EventTab(message.into()));
                 }
             },
+            EventTabMessage::NewEvent => {
+                let move_database = self.database.clone();
+                return Command::perform(
+                    async move {
+                        let event = move_database.add_empty_event().await?;
+                        Ok(event)
+                    },
+                    |event|TabMessage::EventTab(EventTabMessage::AddEvent(event).into()),
+                );
+            },
+            EventTabMessage::AddEvent(Ok(event)) => self.event_list.push(EventWrapper::new(event)),
+            EventTabMessage::PrintRecipes(event) => {
+                let move_database = self.database.clone();
+                return Command::perform(
+                    async move {
+                        let meals = move_database.get_event_meals(event.event_id).await?;
+                        for meal in meals {
+                            move_database.fetch_subrecipes_export(meal.recipe_id, meal.weight).await;
+                        }
+                        Ok(())
+                    },
+                    |_: Result<(), Error>| TabMessage::EventTab(EventTabMessage::Nothing.into()),
+                );
+            },
             _ => debug!("recieved event tab message without handler: {message:?}"),
         }
         Command::none()
@@ -144,6 +174,17 @@ impl super::Tab for EventTab {
             .iter()
             .filter(|event| crate::similar(&event.event.event_name, &*self.input_value));
 
+        let add_event_button = Button::new(
+            &mut self.add_event_button,
+            Row::new()
+                .spacing(10)
+                .push(Icon::Plus.text())
+                .push(Text::new("Add Event")),
+        )
+        .on_press(EventTabMessage::NewEvent)
+        .padding(10)
+        .style(style::Button::Add);
+
         let events: Element<_> = if filtered_events.clone().count() > 0 {
             self.event_list
                 .iter_mut()
@@ -152,6 +193,7 @@ impl super::Tab for EventTab {
                 .fold(Column::new().spacing(00), |column, (_i, event)| {
                     column.push(event.view())
                 })
+                .push(Row::new().push(add_event_button))
                 .into()
         } else {
             empty_message("No matching event ...")

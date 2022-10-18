@@ -767,6 +767,21 @@ impl FoodBase {
         .map_err(|err| err.into())
     }
 
+    pub async fn add_empty_event(&self) -> eyre::Result<Event> {
+        let event = sqlx::query_as!(
+            Event,
+            r#"
+                INSERT INTO events (event_name, comment, budget)
+                VALUES ($1, NULL, NULL)
+                RETURNING *
+            "#,
+            "",
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(event)
+    }
+
     pub async fn update_event(&self, event: &Event) -> eyre::Result<Event> {
         let event = sqlx::query_as!(
             Event,

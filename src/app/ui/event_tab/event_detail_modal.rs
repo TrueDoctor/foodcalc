@@ -201,6 +201,7 @@ impl EventDetail {
                 };
                 self.event.budget = budget;
             },
+            EventDetailMessage::TitleChange(title) => self.event.event_name = title,
             EventDetailMessage::CommentChanged(comment) => {
                 self.event.comment = Some(comment);
             },
