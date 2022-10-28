@@ -62,13 +62,17 @@ impl RecipeIngredientWrapper {
                         .collect::<Vec<_>>()
                 })
             },
-            RecipeIngredientMessage::AmountChanged(amount) => self.amount_text = amount,
+            RecipeIngredientMessage::AmountChanged(amount) => {
+                self.amount_text = amount;
+                self.update(RecipeIngredientMessage::SubmitAmount)
+            },
             RecipeIngredientMessage::PickUnit(unit) => self.entry.unit = unit,
             RecipeIngredientMessage::SubmitAmount => {
                 if let Ok(num) = BigDecimal::from_str_radix(&self.amount_text, 10) {
                     self.entry.amount = num;
                     self.amount_valid = true;
                 } else {
+                    log::error!("Invalid amount: {}", self.amount_text);
                     self.amount_valid = false;
                 }
             },

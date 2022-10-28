@@ -690,7 +690,7 @@ impl FoodBase {
              event_meals.servings as "servings!"
 
             FROM event_ingredients
-            INNER JOIN event_meals 
+            INNER JOIN event_meals
             ON event_ingredients.event_id=event_meals.event_id
             AND event_ingredients.recipe_id = event_meals.recipe_id
             AND event_ingredients.place_id = event_meals.place_id
@@ -808,13 +808,13 @@ impl FoodBase {
                     r#"
                     UPDATE event_meals
                     SET event_id = $1,
-                        recipe_id = $2, 
-                        place_id = $3, 
-                        start_time = $4, 
+                        recipe_id = $2,
+                        place_id = $3,
+                        start_time = $4,
                         end_time = $5,
-                        energy_per_serving = $6, 
-                        servings = $7, 
-                        comment = $8 
+                        energy_per_serving = $6,
+                        servings = $7,
+                        comment = $8
                     WHERE
                         event_id = $9 AND
                         recipe_id = $10 AND
