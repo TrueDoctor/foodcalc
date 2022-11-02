@@ -209,11 +209,11 @@ impl MealDetail {
                     }
                 },
                 InputField::Energy => {
-                    if let Ok(n) = self.servings.value.parse() {
-                        self.servings.valid = true;
-                        self.new_meal.servings = n;
+                    if let Ok(n) = self.energy.value.parse() {
+                        self.energy.valid = true;
+                        self.new_meal.energy = n;
                     } else {
-                        self.servings.valid = false;
+                        self.energy.valid = false;
                     }
                 },
                 InputField::Comment => self.comment.valid = true,
