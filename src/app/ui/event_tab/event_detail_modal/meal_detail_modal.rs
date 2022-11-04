@@ -74,7 +74,7 @@ impl MealDetail {
         all_recipes: Arc<Vec<Recipe>>,
         all_places: Arc<Vec<Place>>,
         database: Arc<FoodBase>,
-        event_id:i32
+        event_id: i32,
     ) -> Self {
         let mut new_meal = meal.clone().unwrap_or_default();
         new_meal.event_id = event_id;
@@ -110,7 +110,7 @@ impl MealDetail {
                 ..Default::default()
             },
             comment: InputState {
-                value: meal.clone().unwrap_or_default().comment.unwrap_or_default(),
+                value: meal.unwrap_or_default().comment.unwrap_or_default(),
                 valid: true,
                 ..Default::default()
             },
@@ -167,12 +167,15 @@ impl MealDetail {
                 }
             },
             MealDetailMessage::Delete => (),
-            MealDetailMessage::ValueChanged(field, s) => match field {
-                InputField::StartTime => self.start_time.value = s,
-                InputField::EndTime => self.end_time.value = s,
-                InputField::Servings => self.servings.value = s,
-                InputField::Energy => self.energy.value = s,
-                InputField::Comment => self.new_meal.comment = Some(s),
+            MealDetailMessage::ValueChanged(field, s) => {
+                match field {
+                    InputField::StartTime => self.start_time.value = s,
+                    InputField::EndTime => self.end_time.value = s,
+                    InputField::Servings => self.servings.value = s,
+                    InputField::Energy => self.energy.value = s,
+                    InputField::Comment => self.new_meal.comment = Some(s),
+                };
+                self.update(MealDetailMessage::SubmitValue(field));
             },
             MealDetailMessage::SubmitValue(input) => match input {
                 InputField::StartTime => {
@@ -220,15 +223,10 @@ impl MealDetail {
             },
             MealDetailMessage::Cancel => {
                 println!("Cancel");
-                return Command::perform(async { Ok(()) }, |result| EventDetailMessage::CloseModal(result));
+                return Command::perform(async { Ok(()) }, EventDetailMessage::CloseModal);
             },
             MealDetailMessage::Save => {
                 let move_database = self.database.clone();
-                self.update(MealDetailMessage::SubmitValue(InputField::StartTime));
-                self.update(MealDetailMessage::SubmitValue(InputField::EndTime));
-                self.update(MealDetailMessage::SubmitValue(InputField::Servings));
-                self.update(MealDetailMessage::SubmitValue(InputField::Energy));
-                self.update(MealDetailMessage::SubmitValue(InputField::Comment));
                 let meal = self.new_meal.clone();
                 let old_meal = self.old_meal.clone();
                 if vec![

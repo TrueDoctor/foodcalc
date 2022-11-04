@@ -68,7 +68,7 @@ impl EventDetail {
         let recipes = Arc::new(recipes);
         let places = Arc::new(places);
         Self {
-            event: event,
+            event,
             database: database.clone(),
             meals: meals
                 .into_iter()

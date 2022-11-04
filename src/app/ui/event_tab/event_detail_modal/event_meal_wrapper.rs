@@ -4,7 +4,7 @@ use iced::{button, Alignment, Button, Command, Element, Row, Text};
 
 use crate::{
     app::ui::{style, Icon},
-    db::{Meal, Place, Recipe, FoodBase},
+    db::{FoodBase, Meal, Place, Recipe},
 };
 
 use crate::app::ui::style::Button::Destructive;
@@ -19,7 +19,7 @@ pub struct MealWrapper {
     print_button: button::State,
     delete_button: button::State,
     edit_button: button::State,
-    database: Arc<FoodBase>
+    database: Arc<FoodBase>,
 }
 
 #[derive(Clone, Debug)]
@@ -33,27 +33,32 @@ pub enum MealWrapperMessage {
 }
 
 impl MealWrapper {
-    pub fn new(meal: Option<Meal>, all_recipes: Arc<Vec<Recipe>>, all_places: Arc<Vec<Place>>, database: Arc<FoodBase>) -> Self {
+    pub fn new(
+        meal: Option<Meal>,
+        all_recipes: Arc<Vec<Recipe>>,
+        all_places: Arc<Vec<Place>>,
+        database: Arc<FoodBase>,
+    ) -> Self {
         Self {
-            meal: meal.clone(),
+            meal,
             all_recipes,
             all_places,
             print_button: Default::default(),
             delete_button: Default::default(),
             edit_button: Default::default(),
-            database
+            database,
         }
     }
 
     pub fn update(&mut self, message: MealWrapperMessage) -> Command<EventDetailMessage> {
-        match message {
-            MealWrapperMessage::PrintMeal(Some(meal)) => {
-                let move_database = self.database.clone();
-                return Command::perform(async move {
+        if let MealWrapperMessage::PrintMeal(Some(meal)) = message {
+            let move_database = self.database.clone();
+            return Command::perform(
+                async move {
                     move_database.fetch_subrecipes_export(meal.recipe_id, meal.weight).await;
-                }, |_| EventDetailMessage::MealWrapperMessage(0, MealWrapperMessage::Nothing));
-            }
-            _ => {}
+                },
+                |_| EventDetailMessage::MealWrapperMessage(0, MealWrapperMessage::Nothing),
+            );
         }
         Command::none()
     }
@@ -61,41 +66,38 @@ impl MealWrapper {
     pub fn view(&mut self) -> Element<MealWrapperMessage> {
         let theme = crate::theme();
 
-        let label = self.all_recipes
-        .iter()
-        .find(|recipe| recipe.recipe_id == self.meal.clone().unwrap_or_default().recipe_id)
-        .cloned()
-        .unwrap_or_default()
-        .name;
+        let label = self
+            .all_recipes
+            .iter()
+            .find(|recipe| recipe.recipe_id == self.meal.clone().unwrap_or_default().recipe_id)
+            .cloned()
+            .unwrap_or_default()
+            .name;
 
-        let recipe = iced::Text::new(
-            label,
-        )
-        .width(iced::Length::FillPortion(3))
-        .color(theme.foreground());
+        let recipe = iced::Text::new(label)
+            .width(iced::Length::FillPortion(3))
+            .color(theme.foreground());
 
-        let label = self.all_places
-        .iter()
-        .find(|place| place.place_id == self.meal.clone().unwrap_or_default().place_id)
-        .cloned()
-        .unwrap_or_default()
-        .name;
+        let label = self
+            .all_places
+            .iter()
+            .find(|place| place.place_id == self.meal.clone().unwrap_or_default().place_id)
+            .cloned()
+            .unwrap_or_default()
+            .name;
 
-        let place = iced::Text::new(
-            label
-        )
-        .width(iced::Length::FillPortion(3))
-        .color(theme.foreground());
-
+        let place = iced::Text::new(label)
+            .width(iced::Length::FillPortion(3))
+            .color(theme.foreground());
 
         let start = iced::Text::new(self.meal.clone().unwrap_or_default().start_time.to_string())
             .width(iced::Length::FillPortion(3))
             .color(theme.foreground());
 
         let print_button = Button::new(&mut self.print_button, Icon::RestaurantMenu.text())
-        .on_press(MealWrapperMessage::PrintMeal(self.meal.clone()))
-        .padding(10)
-        .style(style::Button::Icon);
+            .on_press(MealWrapperMessage::PrintMeal(self.meal.clone()))
+            .padding(10)
+            .style(style::Button::Icon);
 
         let delete_button = Button::new(
             &mut self.delete_button,

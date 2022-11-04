@@ -685,7 +685,7 @@ impl FoodBase {
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
              round(sum(weight),2) as "weight!",
-             round(sum(energy),0) as "energy!",
+             round(sum(energy) / event_meals.servings,0) as "energy!",
              sum(price) as "price!",
              event_meals.servings as "servings!"
 
@@ -860,28 +860,26 @@ impl FoodBase {
 
                 assert_eq!(count, 1);
             }
-        } else {
-            if let Some(new) = new_meal {
-                let count = sqlx::query!(
-                r#"
-                INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                "#,
-                new.event_id,
-                new.recipe_id,
-                new.place_id,
-                new.start_time,
-                new.end_time,
-                new.energy,
-                new.servings,
-                new.comment,
-            )
-            .execute(&*self.pg_pool)
-            .await?
-            .rows_affected();
+        } else if let Some(new) = new_meal {
+            let count = sqlx::query!(
+            r#"
+            INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            "#,
+            new.event_id,
+            new.recipe_id,
+            new.place_id,
+            new.start_time,
+            new.end_time,
+            new.energy,
+            new.servings,
+            new.comment,
+        )
+        .execute(&*self.pg_pool)
+        .await?
+        .rows_affected();
 
-                assert_eq!(count, 1);
-            }
+            assert_eq!(count, 1);
         }
         Ok(())
     }
