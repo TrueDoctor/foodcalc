@@ -496,7 +496,7 @@ impl FoodBase {
 
         writeln!(text, "\\end{{document}}").unwrap();
 
-        let mut file = std::fs::File::create(format!("{}.tex", subrecipes.first().unwrap().recipe)).unwrap();
+        let mut file = std::fs::File::create(format!("recipes/{}.tex", subrecipes.first().unwrap().recipe)).unwrap();
         use std::io::prelude::Write as WF;
         file.write_all(text.as_bytes()).unwrap();
     }
