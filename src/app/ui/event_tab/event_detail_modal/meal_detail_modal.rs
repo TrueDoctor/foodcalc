@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
-use iced::{alignment::Horizontal, button, Alignment, Button, Column, Command, Element, Length, Row, Text, TextInput};
+use iced::alignment::Horizontal;
+use iced::{button, Alignment, Button, Column, Command, Element, Length, Row, Text, TextInput};
 use log::debug;
 use sqlx::types::time::PrimitiveDateTime;
 
-use crate::{
-    app::ui::style,
-    db::{FoodBase, Meal, Place, Recipe},
-};
-
 use super::EventDetailMessage;
+use crate::app::ui::style;
+use crate::db::{FoodBase, Meal, Place, Recipe};
 
 #[derive(Debug, Clone, Default)]
 pub struct InputState {
@@ -59,6 +57,7 @@ pub enum MealDetailMessage {
     PlaceFilterChanged(String),
     ValueChanged(InputField, String),
     SubmitValue(InputField),
+    SubmitValues,
     FocusRecipe,
     FocusPlace,
     Unfocus,
@@ -81,8 +80,8 @@ impl MealDetail {
         Self {
             new_meal,
             old_meal: meal.clone(),
-            all_recipes: all_recipes.clone(),
-            all_places: all_places.clone(),
+            all_recipes,
+            all_places,
             filtered_recipes: None,
             filtered_places: None,
             recipe_filter: Default::default(),
@@ -177,42 +176,52 @@ impl MealDetail {
                 };
                 self.update(MealDetailMessage::SubmitValue(field));
             },
+            MealDetailMessage::SubmitValues => {
+                self.update(MealDetailMessage::SubmitValue(InputField::StartTime));
+                self.update(MealDetailMessage::SubmitValue(InputField::EndTime));
+                self.update(MealDetailMessage::SubmitValue(InputField::Servings));
+                self.update(MealDetailMessage::SubmitValue(InputField::Energy));
+                self.update(MealDetailMessage::SubmitValue(InputField::Comment));
+            },
             MealDetailMessage::SubmitValue(input) => match input {
                 InputField::StartTime => {
-                    let start_time_seconds = self.start_time.value.clone() + ":00";
-                    if let Ok(time) = PrimitiveDateTime::parse(&self.start_time.value, "%F %T") {
-                        self.start_time.valid = true;
-                        self.new_meal.start_time = time;
-                    } else if let Ok(time) = PrimitiveDateTime::parse(&start_time_seconds, "%F %T") {
+                    let times = [self.start_time.value.clone(), format!("{}:00", self.start_time.value)];
+                    if let Some(time) = times
+                        .into_iter()
+                        .find_map(|time| PrimitiveDateTime::parse(time, "%F %T").ok())
+                    {
                         self.start_time.valid = true;
                         self.new_meal.start_time = time;
                     } else {
-                        self.start_time.valid = false;
+                        self.servings.valid = false;
                     }
                     debug!("Submit Start Time, Success: {}", self.start_time.valid);
                 },
                 InputField::EndTime => {
-                    let end_time_seconds = self.end_time.value.clone() + ":00";
-                    if let Ok(time) = PrimitiveDateTime::parse(&self.end_time.value, "%F %T") {
-                        self.end_time.valid = true;
-                        self.new_meal.end_time = time;
-                    } else if let Ok(time) = PrimitiveDateTime::parse(&end_time_seconds, "%F %T") {
+                    let mut times = [self.end_time.value.clone(), format!("{}:00", self.end_time.value)].into_iter();
+                    if let Some(time) = times.find_map(|time| PrimitiveDateTime::parse(time, "%F %T").ok()) {
                         self.end_time.valid = true;
                         self.new_meal.end_time = time;
                     } else {
                         self.servings.valid = false;
                     }
+                    debug!("Submit End Time, Success: {}", self.start_time.valid);
                 },
-                InputField::Servings => {
-                    if let Ok(n) = self.servings.value.parse() {
+                InputField::Servings => match self.servings.value.trim().parse() {
+                    Ok(n) => {
                         self.servings.valid = true;
                         self.new_meal.servings = n;
-                    } else {
+                    },
+                    Err(error) => {
+                        debug!(
+                            "Invalid input for servings, must be i32: {}\n {error}",
+                            self.servings.value
+                        );
                         self.servings.valid = false;
-                    }
+                    },
                 },
                 InputField::Energy => {
-                    if let Ok(n) = self.energy.value.parse() {
+                    if let Ok(n) = self.energy.value.trim().parse() {
                         self.energy.valid = true;
                         self.new_meal.energy = n;
                     } else {
@@ -226,6 +235,7 @@ impl MealDetail {
                 return Command::perform(async { Ok(()) }, EventDetailMessage::CloseModal);
             },
             MealDetailMessage::Save => {
+                self.update(MealDetailMessage::SubmitValues);
                 let move_database = self.database.clone();
                 let meal = self.new_meal.clone();
                 let old_meal = self.old_meal.clone();
@@ -246,6 +256,8 @@ impl MealDetail {
                         },
                         EventDetailMessage::CloseModal,
                     );
+                } else {
+                    println!("Invalid input {:#?}", self);
                 }
             },
         }
