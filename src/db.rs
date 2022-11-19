@@ -18,6 +18,24 @@ pub struct Ingredient {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct IngredientCreate {
+    pub name: String,
+    pub energy: BigDecimal,
+    pub comment: Option<String>,
+}
+
+impl Ingredient {
+    pub fn new(ingredient_id: i32, name: String, energy: BigDecimal, comment: Option<String>) -> Self {
+        Self {
+            ingredient_id,
+            name,
+            energy,
+            comment,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Recipe {
     pub recipe_id: i32,
     pub name: String,
@@ -230,6 +248,7 @@ impl FoodBase {
     }
 
     pub async fn add_ingredient(&self, name: String, energy: BigDecimal, comment: Option<String>) -> eyre::Result<i32> {
+        log::debug!("add_ingredient({:?}, {:?}, {:?})", name, energy, comment);
         let ingredient = sqlx::query!(
             r#"
                 INSERT INTO ingredients ( name, energy, comment )

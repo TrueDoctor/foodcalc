@@ -15,7 +15,6 @@ use self::recipe_tab::{RecipeTab, RecipeTabMessage};
 
 mod event_tab;
 use self::event_tab::{EventTab, EventTabMessage};
-
 use crate::app::Message;
 use crate::db::FoodBase;
 
@@ -24,6 +23,8 @@ use crate::db::FoodBase;
 
 mod settings;
 use settings::{SettingsMessage, SettingsTab, TabBarPosition};
+
+pub mod util;
 
 const TAB_PADDING: u16 = 16;
 

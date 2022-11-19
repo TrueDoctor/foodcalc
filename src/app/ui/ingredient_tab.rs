@@ -1,14 +1,19 @@
 use std::sync::Arc;
 
+use iced::button::Button;
 use iced::scrollable::{self, Scrollable};
 use iced::text_input::{self, TextInput};
-use iced::{alignment, Column, Command, Container, Element, Length, Text};
+use iced::{alignment, button, Alignment, Column, Command, Container, Element, Length, Row, Space, Text};
 
 mod ingredient;
 pub use ingredient::{IngredientMessage, IngredientWrapper};
 
-use super::TabMessage;
-use crate::db::FoodBase;
+mod ingredient_create;
+use ingredient_create::IngredientCreationDialog;
+
+use self::ingredient_create::IngredientCreateMessage;
+use super::{style, Icon, TabMessage};
+use crate::db::{FoodBase, Ingredient, IngredientCreate};
 
 #[derive(Clone, Debug)]
 pub struct IngredientTab {
@@ -17,13 +22,20 @@ pub struct IngredientTab {
     input: text_input::State,
     input_value: String,
     database: Arc<FoodBase>,
+    pub(crate) add_ingredient_button: button::State,
+    ingredient_create: Option<IngredientCreationDialog>,
 }
 
 #[derive(Debug, Clone)]
 pub enum IngredientTabMessage {
     InputChanged(String),
     IngredientMessage(usize, IngredientMessage),
+    IngredientCreateMessage(IngredientCreateMessage),
     UpdateData(Result<Vec<IngredientWrapper>, Error>),
+    AddIngredient,
+    CloseCreateIngredient,
+    CreateIngredient(IngredientCreate),
+    Refresh,
 }
 
 #[derive(Debug, Clone)]
@@ -46,30 +58,17 @@ impl From<sqlx::Error> for Error {
 
 impl IngredientTab {
     pub fn new(database: Arc<FoodBase>) -> (Self, Command<TabMessage>) {
-        let move_database = database.clone();
-        let command = Command::perform(
-            async move {
-                let ingredients = move_database
-                    .get_ingredients()
-                    .await?
-                    .into_iter()
-                    .map(IngredientWrapper::new)
-                    .collect();
-                Ok(ingredients)
-            },
-            IngredientTabMessage::UpdateData,
-        );
-        let ingredients = IngredientTab {
+        let mut ingredients = IngredientTab {
             database,
             scroll: scrollable::State::default(),
             input: text_input::State::default(),
             input_value: String::new(),
             ingredient_list: Vec::new(),
+            add_ingredient_button: button::State::default(),
+            ingredient_create: None,
         };
-        (
-            ingredients,
-            command.map(|message| TabMessage::IngredientTab(message.into())),
-        )
+        let command = ingredients.update(IngredientTabMessage::Refresh);
+        (ingredients, command)
     }
 
     pub fn update(&mut self, message: IngredientTabMessage) -> Command<TabMessage> {
@@ -91,6 +90,52 @@ impl IngredientTab {
                 } else {
                     Command::none()
                 }
+            },
+            IngredientTabMessage::IngredientCreateMessage(message) => {
+                if let Some(message) = self.ingredient_create.as_mut().and_then(|cd| cd.update(message)) {
+                    Command::perform(async move { Box::new(message.clone()) }, TabMessage::IngredientTab)
+                } else {
+                    Command::none()
+                }
+            },
+            IngredientTabMessage::AddIngredient => {
+                self.ingredient_create = Some(IngredientCreationDialog::default());
+                Command::none()
+            },
+            IngredientTabMessage::CloseCreateIngredient => {
+                self.ingredient_create = None;
+                Command::none()
+            },
+            IngredientTabMessage::Refresh => {
+                log::debug!("Refreshing ingredient list");
+                let move_database = self.database.clone();
+                Command::perform(
+                    async move {
+                        let ingredients = move_database
+                            .get_ingredients()
+                            .await?
+                            .into_iter()
+                            .map(IngredientWrapper::new)
+                            .collect();
+                        Ok(ingredients)
+                    },
+                    IngredientTabMessage::UpdateData,
+                )
+                .map(|message| TabMessage::IngredientTab(message.into()))
+            },
+            IngredientTabMessage::CreateIngredient(ingredient) => {
+                self.ingredient_create = None;
+                let move_database = self.database.clone();
+                Command::perform(
+                    async move {
+                        let _ingredient_id = move_database
+                            .add_ingredient(ingredient.name, ingredient.energy, ingredient.comment)
+                            .await?;
+                        Ok(())
+                    },
+                    |_: Result<(), Error>| Box::new(IngredientTabMessage::Refresh),
+                )
+                .map(TabMessage::IngredientTab)
             },
             _ => {
                 log::warn!("recieved message without handler: {message:?}");
@@ -146,11 +191,31 @@ impl super::Tab for IngredientTab {
 
         let scroll: Element<'_, IngredientTabMessage> = Scrollable::new(&mut self.scroll)
             .padding(40)
-            .push(Container::new(ingredients).width(Length::Fill))
+            .push(Container::new(ingredients).width(Length::Fill).height(Length::Shrink))
+            .height(Length::Fill)
             .into();
 
-        let element: Element<'_, IngredientTabMessage> =
-            Column::new().max_width(800).spacing(20).push(input).push(scroll).into();
+        let add_ingredient_button = Button::new(&mut self.add_ingredient_button, Icon::Plus.text())
+            .on_press(IngredientTabMessage::AddIngredient)
+            .padding(10)
+            .height(Length::Units(40))
+            .width(Length::Units(60))
+            .style(style::Button::Add);
+
+        let element: Element<'_, IngredientTabMessage> = if let Some(ingredient_create) = &mut self.ingredient_create {
+            ingredient_create
+                .view()
+                .map(IngredientTabMessage::IngredientCreateMessage)
+        } else {
+            Column::new()
+                .max_width(800)
+                .spacing(20)
+                .push(input)
+                .push(scroll)
+                .push(add_ingredient_button)
+                .push(Space::with_height(Length::Units(10)))
+                .into()
+        };
         let element: Element<'_, IngredientTabMessage> = Container::new(element)
             .width(Length::Fill)
             .height(Length::Fill)

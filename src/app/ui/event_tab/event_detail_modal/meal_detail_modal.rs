@@ -7,14 +7,8 @@ use sqlx::types::time::PrimitiveDateTime;
 
 use super::EventDetailMessage;
 use crate::app::ui::style;
+use crate::app::ui::util::InputState;
 use crate::db::{FoodBase, Meal, Place, Recipe};
-
-#[derive(Debug, Clone, Default)]
-pub struct InputState {
-    state: iced::text_input::State,
-    valid: bool,
-    value: String,
-}
 
 #[derive(Debug, Clone)]
 pub struct MealDetail {
