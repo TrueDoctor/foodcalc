@@ -2,9 +2,9 @@ use std::env;
 use std::sync::Arc;
 
 use db::FoodBase;
+use fern::colors::{Color, ColoredLevelConfig};
 use iced::alignment::{self};
-
-use iced::{Application, Command, Container, Element, Length, Text};
+use iced::{Application, Column, Command, Container, Element, Length, Text};
 use log::debug;
 use sqlx::PgPool;
 
@@ -17,7 +17,15 @@ pub mod scraping;
 pub mod ui;
 
 #[derive(Debug)]
-pub enum FoodCalc {
+pub struct FoodCalc {
+    state: FoodCalcState,
+    errors: Vec<String>,
+    receiver: std::sync::mpsc::Receiver<String>,
+    ok_state: iced::button::State,
+}
+
+#[derive(Debug)]
+pub enum FoodCalcState {
     ConnectingToDatabase,
     ErrorView(String),
     MainView(Box<ui::TabBarExample>),
@@ -28,6 +36,7 @@ pub enum FoodCalc {
 pub enum Message {
     DatebaseConnected(Result<Arc<FoodBase>, Error>),
     MainMessage(TabMessage),
+    ErrorClosed,
 }
 
 #[derive(Debug, Clone)]
@@ -53,6 +62,30 @@ impl Application for FoodCalc {
     type Flags = ();
 
     fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        let colors = ColoredLevelConfig::new()
+            .debug(Color::Magenta)
+            .info(Color::Green)
+            .error(Color::Red);
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        fern::Dispatch::new()
+            .chain(std::io::stdout())
+            .chain(sender)
+            .level_for("foodcalc", log::LevelFilter::Trace)
+            .level_for("sqlx", log::LevelFilter::Trace)
+            .level_for("iced", log::LevelFilter::Trace)
+            .level(log::LevelFilter::Warn)
+            .format(move |out, message, record| {
+                out.finish(format_args!(
+                    "[{}]{} {}",
+                    // This will color the log level only, not the whole line. Just a touch.
+                    colors.color(record.level()),
+                    chrono::Utc::now().format("[%Y-%m-%d %H:%M:%S]"),
+                    message
+                ))
+            })
+            .apply()
+            .unwrap();
         let command = Command::perform(
             async move {
                 dotenv::dotenv().ok();
@@ -62,7 +95,16 @@ impl Application for FoodCalc {
             },
             Message::DatebaseConnected,
         );
-        (FoodCalc::ConnectingToDatabase, command)
+        let state = FoodCalcState::ConnectingToDatabase;
+        (
+            FoodCalc {
+                state,
+                errors: vec![],
+                receiver,
+                ok_state: iced::button::State::new(),
+            },
+            command,
+        )
     }
 
     fn title(&self) -> String {
@@ -74,36 +116,59 @@ impl Application for FoodCalc {
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
-        match self {
-            FoodCalc::ConnectingToDatabase => match message {
+        match &mut self.state {
+            FoodCalcState::ConnectingToDatabase => match message {
                 Message::DatebaseConnected(Ok(database)) => {
                     let (main_view, main_command) = ui::TabBarExample::new(database);
-                    *self = FoodCalc::MainView(main_view.into());
+                    self.state = FoodCalcState::MainView(main_view.into());
                     main_command.map(Message::MainMessage)
                 },
                 Message::DatebaseConnected(Err(Error::Database(error))) => {
-                    *self = FoodCalc::ErrorView(error);
+                    self.state = FoodCalcState::ErrorView(error);
                     Command::none()
                 },
                 _ => Command::none(),
             },
-            FoodCalc::MainView(main_view) => match message {
+            FoodCalcState::MainView(main_view) => match message {
+                Message::ErrorClosed => {
+                    self.errors.clear();
+                    Command::none()
+                },
                 Message::MainMessage(message) => main_view.update(message).map(Message::MainMessage),
                 _ => {
-                    debug!("recieved message without handler: {message:?}");
+                    log::error!("recieved message without handler: {message:?}");
                     Command::none()
                 },
             },
 
-            FoodCalc::ErrorView(_) => Command::none(),
+            FoodCalcState::ErrorView(_) => Command::none(),
         }
     }
 
     fn view(&mut self) -> Element<'_, Self::Message> {
-        match self {
-            FoodCalc::ConnectingToDatabase => empty_message("Connecting To Database"),
-            FoodCalc::ErrorView(error) => empty_message(error),
-            FoodCalc::MainView(main_view) => main_view.view(),
+        let theme = crate::theme();
+        self.receiver.try_iter().for_each(|message| {
+            if message.contains("[31mERROR") && !message.contains("egl") {
+                self.errors.push(message);
+            }
+        });
+        if !self.errors.is_empty() {
+            let error_view: Column<Self::Message> = Column::new().push(Text::new("Errors:"));
+            let view: Column<Self::Message> = self
+                .errors
+                .iter()
+                .fold(error_view, |view, error| view.push(Text::new(error).size(20)));
+            let view = view.push(
+                iced::Button::new(&mut self.ok_state, Text::new("Ok"))
+                    .on_press(Message::ErrorClosed)
+                    .style(theme),
+            );
+            return view.into();
+        }
+        match &mut self.state {
+            FoodCalcState::ConnectingToDatabase => empty_message("Connecting To Database"),
+            FoodCalcState::ErrorView(error) => empty_message(error),
+            FoodCalcState::MainView(main_view) => main_view.view(),
         }
     }
 }
