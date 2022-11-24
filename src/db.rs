@@ -19,6 +19,7 @@ pub struct Ingredient {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct IngredientCreate {
+    pub id: Option<i32>,
     pub name: String,
     pub energy: BigDecimal,
     pub comment: Option<String>,
@@ -32,6 +33,31 @@ impl Ingredient {
             energy,
             comment,
         }
+    }
+}
+
+impl From<Ingredient> for IngredientCreate {
+    fn from(value: Ingredient) -> Self {
+        IngredientCreate {
+            id: Some(value.ingredient_id),
+            name: value.name,
+            energy: value.energy,
+            comment: value.comment,
+        }
+    }
+}
+
+impl IngredientCreate {
+    pub fn to_ingredient(&self) -> eyre::Result<Ingredient> {
+        let Some(id) = self.id else {
+                return Err(eyre::eyre!("No id found"));
+            };
+        Ok(Ingredient {
+            ingredient_id: id,
+            name: self.name.clone(),
+            energy: self.energy.clone(),
+            comment: self.comment.clone(),
+        })
     }
 }
 

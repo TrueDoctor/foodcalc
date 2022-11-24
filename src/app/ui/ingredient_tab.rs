@@ -30,11 +30,12 @@ pub struct IngredientTab {
 pub enum IngredientTabMessage {
     InputChanged(String),
     IngredientMessage(usize, IngredientMessage),
-    IngredientCreateMessage(IngredientCreateMessage),
+    IngredientDetailMessage(IngredientCreateMessage),
     UpdateData(Result<Vec<IngredientWrapper>, Error>),
     AddIngredient,
+    EditIngredient(i32),
     CloseCreateIngredient,
-    CreateIngredient(IngredientCreate),
+    UpdateIngredient(IngredientCreate),
     Refresh,
 }
 
@@ -84,14 +85,13 @@ impl IngredientTab {
             IngredientTabMessage::IngredientMessage(i, message) => {
                 if let Some(ingredient) = self.ingredient_list.get_mut(i) {
                     ingredient
-                        .update(message, &self.database)
-                        .map(move |message| IngredientTabMessage::IngredientMessage(i, message))
+                        .update(message)
                         .map(|message| TabMessage::IngredientTab(message.into()))
                 } else {
                     Command::none()
                 }
             },
-            IngredientTabMessage::IngredientCreateMessage(message) => {
+            IngredientTabMessage::IngredientDetailMessage(message) => {
                 if let Some(message) = self.ingredient_create.as_mut().and_then(|cd| cd.update(message)) {
                     Command::perform(async move { Box::new(message.clone()) }, TabMessage::IngredientTab)
                 } else {
@@ -100,6 +100,12 @@ impl IngredientTab {
             },
             IngredientTabMessage::AddIngredient => {
                 self.ingredient_create = Some(IngredientCreationDialog::default());
+                Command::none()
+            },
+            IngredientTabMessage::EditIngredient(id) => {
+                let Some(ingredient) = self.ingredient_list.iter().find(|i| i.ingredient.ingredient_id == id)
+                    else { log::error!("Tried to edit non existing ingredient"); return Command::none() };
+                self.ingredient_create = Some(IngredientCreationDialog::edit(ingredient.ingredient.clone()));
                 Command::none()
             },
             IngredientTabMessage::CloseCreateIngredient => {
@@ -123,14 +129,18 @@ impl IngredientTab {
                 )
                 .map(|message| TabMessage::IngredientTab(message.into()))
             },
-            IngredientTabMessage::CreateIngredient(ingredient) => {
+            IngredientTabMessage::UpdateIngredient(ingredient) => {
                 self.ingredient_create = None;
                 let move_database = self.database.clone();
                 Command::perform(
                     async move {
-                        let _ingredient_id = move_database
-                            .add_ingredient(ingredient.name, ingredient.energy, ingredient.comment)
-                            .await?;
+                        if ingredient.id.is_some() {
+                            move_database.update_ingredient(ingredient.to_ingredient()?).await?;
+                        } else {
+                            move_database
+                                .add_ingredient(ingredient.name, ingredient.energy, ingredient.comment)
+                                .await?;
+                        }
                         Ok(())
                     },
                     |_: Result<(), Error>| Box::new(IngredientTabMessage::Refresh),
@@ -205,7 +215,7 @@ impl super::Tab for IngredientTab {
         let element: Element<'_, IngredientTabMessage> = if let Some(ingredient_create) = &mut self.ingredient_create {
             ingredient_create
                 .view()
-                .map(IngredientTabMessage::IngredientCreateMessage)
+                .map(IngredientTabMessage::IngredientDetailMessage)
         } else {
             Column::new()
                 .max_width(800)
