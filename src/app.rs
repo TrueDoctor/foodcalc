@@ -4,7 +4,7 @@ use std::sync::Arc;
 use db::FoodBase;
 use fern::colors::{Color, ColoredLevelConfig};
 use iced::alignment::{self};
-use iced::{Application, Column, Command, Container, Element, Length, Text};
+use iced::{Application, Column, Command, Container, Element, Length, Space, Text};
 use log::debug;
 use sqlx::PgPool;
 
@@ -149,26 +149,37 @@ impl Application for FoodCalc {
         let theme = crate::theme();
         self.receiver.try_iter().for_each(|message| {
             if message.contains("[31mERROR") && !message.contains("egl") {
-                self.errors.push(message);
+                self.errors.push(message.splitn(2, ' ').last().unwrap().to_string());
             }
         });
+        let main_window = match &mut self.state {
+            FoodCalcState::ConnectingToDatabase => empty_message("Connecting To Database"),
+            FoodCalcState::ErrorView(error) => empty_message(error),
+            FoodCalcState::MainView(main_view) => main_view.view(),
+        };
         if !self.errors.is_empty() {
             let error_view: Column<Self::Message> = Column::new().push(Text::new("Errors:"));
-            let view: Column<Self::Message> = self
-                .errors
-                .iter()
-                .fold(error_view, |view, error| view.push(Text::new(error).size(20)));
+            let view: Column<Self::Message> = self.errors.iter().fold(error_view, |view, error| {
+                view.push(Text::new(error).size(40).color(iced::Color::from_rgb8(255, 0, 0)))
+            });
             let view = view.push(
                 iced::Button::new(&mut self.ok_state, Text::new("Ok"))
                     .on_press(Message::ErrorClosed)
                     .style(theme),
             );
-            return view.into();
-        }
-        match &mut self.state {
-            FoodCalcState::ConnectingToDatabase => empty_message("Connecting To Database"),
-            FoodCalcState::ErrorView(error) => empty_message(error),
-            FoodCalcState::MainView(main_view) => main_view.view(),
+            Column::new()
+                .push(Space::with_height(Length::Units(30)))
+                .push(
+                    Container::new(view)
+                        .width(Length::Fill)
+                        .height(Length::Shrink)
+                        .center_x(),
+                )
+                .push(Space::with_height(Length::Units(30)))
+                .push(main_window)
+                .into()
+        } else {
+            main_window
         }
     }
 }
