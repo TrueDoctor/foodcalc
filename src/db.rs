@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::sync::Arc;
 
-use sqlx::postgres::types::PgMoney;
+use chrono::Duration;
+use sqlx::postgres::types::{PgInterval, PgMoney};
 use sqlx::postgres::PgPool;
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::types::BigDecimal;
@@ -193,6 +194,31 @@ pub struct RecipeEntry {
     pub unit: Unit,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecipeStep {
+    pub step_id: i32,
+    pub step_order: f64,
+    pub step_name: String,
+    pub step_description: String,
+    pub fixed_duration: PgInterval,
+    pub duration_per_kg: PgInterval,
+    pub recipe_id: i32,
+}
+
+impl Default for RecipeStep {
+    fn default() -> Self {
+        Self {
+            step_id: Default::default(),
+            step_order: Default::default(),
+            step_name: Default::default(),
+            step_description: Default::default(),
+            fixed_duration: PgInterval::try_from(std::time::Duration::from_secs(0)).unwrap(),
+            duration_per_kg: PgInterval::try_from(std::time::Duration::from_secs(0)).unwrap(),
+            recipe_id: Default::default(),
+        }
+    }
+}
+
 impl RecipeMetaIngredient {
     pub fn name(&self) -> &str {
         match self {
@@ -271,6 +297,30 @@ impl FoodBase {
         Self {
             pg_pool: Arc::new(pg_pool),
         }
+    }
+
+    pub async fn get_recipe_steps(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeStep>> {
+        let mut conn = self.pg_pool.acquire().await?;
+        let steps = sqlx::query_as!(
+            RecipeStep,
+            r#"
+            SELECT
+                step_id,
+                step_order,
+                step_name,
+                step_description,
+                fixed_duration,
+                duration_per_kg,
+                recipe_id
+            FROM steps
+            WHERE recipe_id = $1
+            ORDER BY step_order
+            "#,
+            recipe_id
+        )
+        .fetch_all(&mut conn)
+        .await?;
+        Ok(steps)
     }
 
     pub async fn add_ingredient(&self, name: String, energy: BigDecimal, comment: Option<String>) -> eyre::Result<i32> {

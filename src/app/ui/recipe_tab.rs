@@ -6,9 +6,8 @@ use iced::{alignment, Column, Command, Container, Element, Length, Text};
 use log::debug;
 
 use super::TabMessage;
-use crate::db::{FoodBase, Recipe};
-
 use crate::app::Error;
+use crate::db::{FoodBase, Recipe};
 
 mod recipe;
 pub use recipe::RecipeWrapper;
@@ -99,12 +98,14 @@ impl RecipeTab {
                         let all_ingredients = move_database.get_all_meta_ingredients().await?;
                         let all_units = move_database.get_units().await?;
                         let entries = move_database.get_meta_ingredients(recipe.recipe_id).await?;
+                        let steps = move_database.get_recipe_steps(recipe.recipe_id).await?;
                         Ok(RecipeDetail::new(
                             recipe,
                             Arc::new(all_ingredients),
                             Arc::new(all_units),
                             move_database.clone(),
                             entries,
+                            steps,
                         ))
                     },
                     RecipeTabMessage::ShowModal,
