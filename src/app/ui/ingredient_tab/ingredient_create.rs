@@ -7,15 +7,15 @@ use sqlx::types::BigDecimal;
 
 use super::IngredientTabMessage;
 use crate::app::ui::style;
-use crate::app::ui::util::InputState;
+use crate::app::ui::util::{InputState, OptionString};
 use crate::db::{FoodBase, Ingredient, IngredientCreate};
 
 #[derive(Debug, Clone)]
 pub struct IngredientCreationDialog {
     ingredient: IngredientCreate,
-    name: InputState,
-    energy: InputState,
-    comment: InputState,
+    name: InputState<String>,
+    energy: InputState<BigDecimal>,
+    comment: InputState<OptionString>,
 
     pub(crate) ok_state: button::State,
     pub(crate) cancel_state: button::State,
@@ -39,21 +39,9 @@ impl IngredientCreationDialog {
     pub fn create() -> Self {
         Self {
             ingredient: IngredientCreate::default(),
-            name: InputState {
-                value: String::new(),
-                valid: false,
-                ..Default::default()
-            },
-            energy: InputState {
-                value: String::from("0"),
-                valid: true,
-                ..Default::default()
-            },
-            comment: InputState {
-                value: String::new(),
-                valid: true,
-                ..Default::default()
-            },
+            name: InputState::new(""),
+            energy: InputState::new("0"),
+            comment: InputState::new(""),
             ok_state: Default::default(),
             cancel_state: Default::default(),
         }
@@ -64,21 +52,9 @@ impl IngredientCreationDialog {
         let name = ingredient.name.clone();
         Self {
             ingredient: ingredient.into(),
-            name: InputState {
-                value: name,
-                valid: true,
-                ..Default::default()
-            },
-            energy: InputState {
-                value: energy,
-                valid: true,
-                ..Default::default()
-            },
-            comment: InputState {
-                value: comment,
-                valid: true,
-                ..Default::default()
-            },
+            name: InputState::new(name),
+            energy: InputState::new(energy),
+            comment: InputState::new(comment),
             ok_state: Default::default(),
             cancel_state: Default::default(),
         }
@@ -87,34 +63,11 @@ impl IngredientCreationDialog {
     pub fn update(&mut self, message: IngredientCreateMessage) -> Option<IngredientTabMessage> {
         match message {
             IngredientCreateMessage::SubmitValue(field, string) => {
+                let input = string.trim();
                 match field {
-                    InputField::Name => {
-                        // TODO: Check if name is valid
-                        self.name.valid = true;
-                        self.ingredient.name = string.clone();
-                        self.name.value = string
-                    },
-                    InputField::Energy => {
-                        self.energy.value = string;
-                        match self.energy.value.trim().parse() {
-                            Ok(n) if n > BigDecimal::from_u8(0).unwrap() => {
-                                self.energy.valid = true;
-                                self.ingredient.energy = n;
-                            },
-                            _ => {
-                                self.energy.valid = false;
-                            },
-                        }
-                    },
-                    InputField::Comment => {
-                        if string.trim().is_empty() {
-                            self.ingredient.comment = None;
-                        } else {
-                            self.ingredient.comment = Some(string.clone());
-                        }
-                        self.comment.value = string;
-                        self.comment.valid = true;
-                    },
+                    InputField::Name => self.name.update(input),
+                    InputField::Energy => self.energy.update(input),
+                    InputField::Comment => self.comment.update(input),
                 };
             },
             IngredientCreateMessage::Cancel => {
@@ -122,9 +75,9 @@ impl IngredientCreationDialog {
                 return Some(IngredientTabMessage::CloseCreateIngredient);
             },
             IngredientCreateMessage::Save => {
-                if vec![&self.comment, &self.energy, &self.name]
+                if vec![&self.comment.valid(), &self.energy.valid(), &self.name.valid()]
                     .iter()
-                    .all(|input| input.valid)
+                    .all(|input| **input)
                 {
                     return Some(IngredientTabMessage::UpdateIngredient(self.ingredient.clone()));
                 } else {
@@ -145,7 +98,7 @@ impl IngredientCreationDialog {
         .style(style::TextInput::Normal)
         .padding(10);
 
-        let text_theme = match self.name.valid {
+        let text_theme = match self.name.valid() {
             true => style::TextInput::Normal,
             false => style::TextInput::Error,
         };
@@ -157,7 +110,7 @@ impl IngredientCreationDialog {
         .style(text_theme)
         .padding(10);
 
-        let text_theme = match self.energy.valid {
+        let text_theme = match self.energy.valid() {
             true => style::TextInput::Normal,
             false => style::TextInput::Error,
         };

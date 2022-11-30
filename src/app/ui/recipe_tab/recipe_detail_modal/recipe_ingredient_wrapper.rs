@@ -6,13 +6,11 @@ use sqlx::types::BigDecimal;
 
 use crate::app::ui::style::Button::Destructive;
 use crate::app::ui::{style, Icon};
-use crate::db::RecipeEntry;
-use crate::db::RecipeMetaIngredient;
-use crate::db::Unit;
+use crate::db::{RecipeIngrdient, RecipeMetaIngredient, Unit};
 
 #[derive(Debug, Clone, Default)]
 pub struct RecipeIngredientWrapper {
-    pub(crate) entry: RecipeEntry,
+    pub(crate) entry: RecipeIngrdient,
     amount: text_input::State,
     unit_list: iced::pick_list::State<Unit>,
     ingredient_list: iced_searchable_picklist::State<RecipeMetaIngredient>,
@@ -39,7 +37,7 @@ pub enum RecipeIngredientMessage {
 }
 
 impl RecipeIngredientWrapper {
-    pub fn new(ingredients: Arc<Vec<RecipeMetaIngredient>>, all_units: Arc<Vec<Unit>>, entry: RecipeEntry) -> Self {
+    pub fn new(ingredients: Arc<Vec<RecipeMetaIngredient>>, all_units: Arc<Vec<Unit>>, entry: RecipeIngrdient) -> Self {
         Self {
             all_ingredients: ingredients,
             all_units,
@@ -48,6 +46,10 @@ impl RecipeIngredientWrapper {
             entry,
             ..Default::default()
         }
+    }
+
+    pub fn valid(&self) -> bool {
+        self.amount_valid
     }
 
     pub fn update(&mut self, message: RecipeIngredientMessage) {

@@ -1,4 +1,3 @@
-use fern::colors::{Color, ColoredLevelConfig};
 use iced::{Application, Settings};
 
 fn main() -> iced::Result {
