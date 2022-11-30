@@ -1,15 +1,13 @@
 \ProvidesPackage{recipe}
 
 \RequirePackage{lists}
+\RequirePackage{structs}
 
 \RequirePackage{calc}
 
-\def\ingredient@name\ingredient#1#2{#1}
-\def\ingredient@quantity\ingredient#1#2{#2}
-
-\def\shoppingitem@name\shoppingitem#1#2#3{#1}
-\def\shoppingitem@quantity\shoppingitem#1#2#3{#2}
-\def\shoppingitem@price\shoppingitem#1#2#3{#3}
+\newstruct{ingredient}{name}{quantity}
+\newstruct{shoppingitem}{name}{quantity}{price}
+\newstruct{step}{name}{description}{time}
 
 \def\basiceval#1{\the\numexpr#1\relax}
 
@@ -41,9 +39,10 @@
     \pushback{#1@ingredients}{\ingredient{#2}{#3}}
 }
 
-\newcommand{\addstep}[2]
+% \addstep <recipe><step name><step description><estimated step duration>
+\newcommand{\addstep}[4]
 {
-    \pushback{#1@steps}{#2}
+    \pushback{#1@steps}{\step{#2}{#3}{#4}}
 }
 
 \def\test#1{\dblog{\noexpand #1}}
@@ -55,6 +54,7 @@
 
 \newcommand{\printingredients}[1]
 {
+    \begin{dbsection}{printing ingredients}
     \noindent
     \fbox
     {
@@ -67,17 +67,20 @@
             \begin{minipage}{0.45\textwidth}
                 \centering
                 \begin{tabular}{rl}
+                    \dblog{printing first half of ingredients}
                     \doforall{#1@ingredients@front}{\ingredients@it}
                 \end{tabular}
             \end{minipage}
             \begin{minipage}{0.45\textwidth}
                 \centering
                 \begin{tabular}{rl}
+                    \dblog{printing second half of ingredients}
                     \doforall{#1@ingredients@back}{\ingredients@it}
                 \end{tabular}
             \end{minipage}
         \end{minipage}
     }
+    \end{dbsection}
 }
 
 \newcommand{\printshoppinglist}[1][\shoppinglist@defaultname]
@@ -100,6 +103,7 @@
 
 \newcommand{\printsteps}[1]
 {
+    \begin{dbsection}{printing steps}
     \noindent
     \fbox
     {
@@ -110,17 +114,24 @@
                 \ifnum\value{recipe@steps}>1%
                     \\[0.5ex]%
                 \fi%
-                \textbf{Schritt \arabic{recipe@steps}:} %
-                ##1%
+                \dblog{\unexpanded{Step: ##1}}%
+                \dblog{name: \step@name##1}%
+                \dblog{time: \step@time##1}%
+                \dblog{description: \step@description##1}%
+                \textbf{Schritt \arabic{recipe@steps}: \step@name##1} (\step@time##1)%
+                \\[1ex]%
+                \step@description##1%
                 \stepcounter{recipe@steps}%
             }
             \doforall{#1@steps}{\steps@it}
         \end{minipage}
     }
+    \end{dbsection}
 }
 
 \newcommand{\printrecipe}[1]
 {
+    \begin{dbsection}{printing recipe}
     \noindent
     \fbox
     {
@@ -133,4 +144,5 @@
         \end{minipage}
     }
     \\[3.5ex]
+    \end{dbsection}
 }
