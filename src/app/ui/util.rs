@@ -1,9 +1,7 @@
 use std::str::FromStr;
 
-use chrono::Duration;
 use sqlx::postgres::types::PgInterval;
 use sqlx::types::time::PrimitiveDateTime;
-use sqlx::types::BigDecimal;
 
 #[derive(Debug, Clone)]
 pub struct InputState<T> {
@@ -59,15 +57,10 @@ impl FromStr for DurationInput {
     }
 }
 
-impl Into<String> for DurationInput {
-    fn into(self) -> String {
-        let duration = chrono::Duration::microseconds(self.0.microseconds);
-        format!(
-            "{}:{}:{}",
-            duration.num_hours(),
-            duration.num_minutes(),
-            duration.num_seconds()
-        )
+impl From<DurationInput> for String {
+    fn from(val: DurationInput) -> Self {
+        let duration = chrono::Duration::microseconds(val.0.microseconds);
+        format!("{} min", duration.num_minutes(),)
     }
 }
 

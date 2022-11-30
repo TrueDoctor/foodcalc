@@ -5,7 +5,7 @@ use iced::{button, text_input, Alignment, Button, Column, Command, Element, Leng
 
 use super::RecipeTabMessage;
 use crate::app::ui::{style, Icon};
-use crate::db::{FoodBase, Recipe, RecipeEntry, RecipeMetaIngredient, RecipeStep, Unit};
+use crate::db::{FoodBase, Recipe, RecipeIngrdient, RecipeMetaIngredient, RecipeStep, Unit};
 
 mod recipe_ingredient_wrapper;
 use recipe_ingredient_wrapper::{RecipeIngredientMessage, RecipeIngredientWrapper};
@@ -48,7 +48,7 @@ impl RecipeDetail {
         all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
         all_units: Arc<Vec<Unit>>,
         database: Arc<FoodBase>,
-        recipe_ingredients: Vec<RecipeEntry>,
+        recipe_ingredients: Vec<RecipeIngrdient>,
         recipe_steps: Vec<RecipeStep>,
     ) -> Self {
         Self {
@@ -60,10 +60,7 @@ impl RecipeDetail {
                 .into_iter()
                 .map(|ingredient| RecipeIngredientWrapper::new(all_ingredients.clone(), all_units.clone(), ingredient))
                 .collect(),
-            steps: recipe_steps
-                .into_iter()
-                .map(|step| RecipeStepWrapper::edit(step))
-                .collect(),
+            steps: recipe_steps.into_iter().map(RecipeStepWrapper::edit).collect(),
             recipe_description: Default::default(),
             scroll_ingredients: Default::default(),
             scroll_steps: Default::default(),
@@ -72,6 +69,10 @@ impl RecipeDetail {
             add_ingredient_button: Default::default(),
             add_step_button: Default::default(),
         }
+    }
+
+    pub fn valid(&self) -> bool {
+        self.ingredients.iter().all(|ingredient| ingredient.valid()) && self.steps.iter().all(|step| step.valid())
     }
 
     pub fn update(&mut self, message: RecipeDetailMessage) -> Command<RecipeTabMessage> {
@@ -92,7 +93,7 @@ impl RecipeDetail {
                 log::trace!("Deleted recipe entry: {:?}", self.ingredients.remove(i).entry);
             },
             RecipeDetailMessage::RecipeStepMessage(i, RecipeStepMessage::Delete) => {
-                log::trace!("Deleted recipe entry: {:?}", self.ingredients.remove(i).entry);
+                log::trace!("Deleted recipe entry: {:?}", self.steps.remove(i).entry);
             },
             RecipeDetailMessage::RecipeIngredientMessage(i, message) => {
                 if let Some(recipe_ingredient) = self.ingredients.get_mut(i) {
@@ -112,23 +113,33 @@ impl RecipeDetail {
                     .iter()
                     .map(|entry_wrapper| entry_wrapper.entry.clone())
                     .collect();
+                let steps: Vec<_> = self
+                    .steps
+                    .iter()
+                    .map(|entry_wrapper| entry_wrapper.entry.clone())
+                    .collect();
 
-                return Command::perform(
-                    async move {
-                        move_database.update_recipe(&recipe).await?;
-                        move_database
-                            .update_recipe_entries(&recipe, ingredients.into_iter())
-                            .await?;
-                        Ok(())
-                    },
-                    RecipeTabMessage::SaveRecipe,
-                );
+                if self.valid() {
+                    return Command::perform(
+                        async move {
+                            move_database.update_recipe(&recipe).await?;
+                            move_database
+                                .update_recipe_entries(&recipe, ingredients.into_iter())
+                                .await?;
+                            move_database.update_recipe_steps(&recipe, steps.into_iter()).await?;
+                            Ok(())
+                        },
+                        RecipeTabMessage::SaveRecipe,
+                    );
+                } else {
+                    log::error!("Recipe is not valid");
+                }
             },
             RecipeDetailMessage::AddIngredient => {
                 self.ingredients.push(RecipeIngredientWrapper::new(
                     self.all_ingredients.clone(),
                     self.all_units.clone(),
-                    RecipeEntry::default(),
+                    RecipeIngrdient::default(),
                 ));
             },
             RecipeDetailMessage::AddStep => {
@@ -192,7 +203,7 @@ impl RecipeDetail {
             .steps
             .iter_mut()
             .enumerate()
-            .fold(Column::new().spacing(10), |column, (i, recipe)| {
+            .fold(Column::new().spacing(40), |column, (i, recipe)| {
                 column.push(
                     recipe
                         .view()
