@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Display;
+use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Duration;
@@ -8,6 +9,10 @@ use sqlx::postgres::types::{PgInterval, PgMoney};
 use sqlx::postgres::PgPool;
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::types::BigDecimal;
+use tectonic::driver::ProcessingSessionBuilder;
+use tectonic::{ctry, status};
+use tectonic_bundles::dir::DirBundle;
+use tokio::task::spawn_blocking;
 
 pub const METRO: i32 = 0;
 
@@ -592,10 +597,45 @@ impl FoodBase {
         use std::fmt::Write;
 
         writeln!(text, "\\end{{document}}").unwrap();
+        /*
+        let mut status = status::NoopStatusBackend::default();
+        let mut files = {
+            let mut sb = ProcessingSessionBuilder::default();
+            sb
+            .filesystem_root(Path::new("./recipes"))
+            .primary_input_buffer(text.as_bytes())
+            .tex_input_name(format!("{}.tex", subrecipes.first().unwrap().recipe).as_str())
+            .format_name("latex")
+            .keep_logs(false)
+            .keep_intermediates(false)
+            .print_stdout(false)
+            .bundle(Box::new(DirBundle::new(Path::new("./recipes"))));
+            spawn_blocking(
+                move || {
+                    let mut sess = sb
+                    .create(&mut status)
+                    .expect("failed to initialize the LaTeX processing session");
+                    sess.run(&mut status).expect("the LaTeX engine failed");
+                    sess.into_file_data()
+                }
+            ).await
+        };
 
-        let mut file = std::fs::File::create(format!("recipes/{}.tex", subrecipes.first().unwrap().recipe)).unwrap();
+        let Some(pdf) = files.remove("texput.pdf")  else {
+
+            log::error!(
+                "LaTeX didn't report failure, but no PDF was created (??)"
+            );
+            return;
+        };
+        let pdf_data = pdf.data;
+        */
+        let pdf_data: Vec<u8> = spawn_blocking(move || tectonic::latex_to_pdf(text).expect("processing failed")).await.unwrap();
+        println!("Output PDF size is {} bytes", pdf_data.len());
+
+        let mut file = std::fs::File::create(format!("recipes/{}.pdf", subrecipes.first().unwrap().recipe)).unwrap();
         use std::io::prelude::Write as WF;
-        file.write_all(text.as_bytes()).unwrap();
+        file.write_all(&pdf_data).unwrap();
     }
 
     pub async fn update_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
@@ -771,11 +811,13 @@ impl FoodBase {
             .unwrap();
         }
         for step in steps {
-            fn to_minutes (duration:PgInterval) -> f64 {
+            fn to_minutes(duration: PgInterval) -> f64 {
                 let duration = chrono::Duration::microseconds(duration.microseconds);
-                duration.num_minutes().to_f64().unwrap_or_default() + duration.num_seconds().to_f64().unwrap_or_default()/60.
-            }   
-            let duration = to_minutes(step.duration_per_kg) * weight.to_f64().unwrap_or_default() + to_minutes(step.fixed_duration);
+                duration.num_minutes().to_f64().unwrap_or_default()
+                    + duration.num_seconds().to_f64().unwrap_or_default() / 60.
+            }
+            let duration = to_minutes(step.duration_per_kg) * weight.to_f64().unwrap_or_default()
+                + to_minutes(step.fixed_duration);
             writeln!(
                 text,
                 "\\addstep{{{}}}{{{}}}{{{}}}{{{:.3} min}}",

@@ -1073,6 +1073,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tectonic",
+ "tectonic_bundles",
  "tokio",
 ]
 
