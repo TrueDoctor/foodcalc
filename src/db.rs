@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use chrono::Duration;
+use num::ToPrimitive;
 use sqlx::postgres::types::{PgInterval, PgMoney};
 use sqlx::postgres::PgPool;
 use sqlx::types::time::PrimitiveDateTime;
@@ -585,7 +586,8 @@ impl FoodBase {
 
         for subrecipe_id in keys {
             let ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.subrecipe_id == subrecipe_id).collect();
-            self.format_subrecipe(&mut text, ingredients);
+            let steps = self.get_recipe_steps(subrecipe_id).await.unwrap_or_default();
+            self.format_subrecipe(&mut text, ingredients, steps);
         }
         use std::fmt::Write;
 
@@ -737,10 +739,11 @@ impl FoodBase {
         Ok(())
     }
 
-    pub fn format_subrecipe(&self, text: &mut String, subrecipes: Vec<&SubRecipe>) {
+    pub fn format_subrecipe(&self, text: &mut String, subrecipes: Vec<&SubRecipe>, steps: Vec<RecipeStep>) {
         let title = escape_underscore(&subrecipes.first().unwrap().subrecipe);
         let ingredients: Vec<_> = subrecipes.iter().filter(|sr| !sr.is_subrecipe).collect();
         let meta_ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.is_subrecipe).collect();
+        let weight: BigDecimal = ingredients.iter().map(|ingredient| ingredient.weight.clone()).sum();
 
         fn escape_underscore(s: &str) -> String {
             s.replace('_', " ")
@@ -764,6 +767,19 @@ impl FoodBase {
                 title,
                 escape_underscore(&ingredient.ingredient),
                 ingredient.weight.round(3)
+            )
+            .unwrap();
+        }
+        for step in steps {
+            fn to_minutes (duration:PgInterval) -> f64 {
+                let duration = chrono::Duration::microseconds(duration.microseconds);
+                duration.num_minutes().to_f64().unwrap_or_default() + duration.num_seconds().to_f64().unwrap_or_default()/60.
+            }   
+            let duration = to_minutes(step.duration_per_kg) * weight.to_f64().unwrap_or_default() + to_minutes(step.fixed_duration);
+            writeln!(
+                text,
+                "\\addstep{{{}}}{{{}}}{{{}}}{{{:.3} min}}",
+                title, step.step_name, step.step_description, duration
             )
             .unwrap();
         }
