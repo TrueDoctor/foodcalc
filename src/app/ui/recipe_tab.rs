@@ -113,7 +113,9 @@ impl RecipeTab {
                 .map(|message| TabMessage::RecipeTab(message.into()));
             },
             RecipeTabMessage::SaveRecipe(Ok(())) => {
-                self.recipe_detail_modal = None;
+                if crate::app::ui::settings::close_on_save() {
+                    self.recipe_detail_modal = None;
+                }
                 let move_database = self.database.clone();
                 let command = Command::perform(
                     async move {

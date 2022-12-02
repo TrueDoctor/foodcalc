@@ -1,8 +1,18 @@
+use std::sync::RwLock;
+
 use iced::{Column, Command, Container, Element, Radio, Text};
 use iced_aw::TabLabel;
 
 use crate::app::ui::theme::Theme;
 use crate::app::ui::{Icon, Tab, TabMessage};
+
+lazy_static::lazy_static! {
+    pub static  ref CLOSE_ON_SAVE: RwLock<bool> = RwLock::new(true);
+}
+
+pub fn close_on_save() -> bool {
+    CLOSE_ON_SAVE.read().as_deref().cloned().unwrap_or_default()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabBarPosition {
@@ -50,6 +60,7 @@ impl TabSettings {
 pub enum SettingsMessage {
     PositionSelected(TabBarPosition),
     ThemeSelected(Theme),
+    CloseOnSaveUpdated(bool),
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +84,9 @@ impl SettingsTab {
                     Ok(mut t) => *t = theme,
                     Err(_) => log::error!("error setting theme"),
                 }
+            },
+            SettingsMessage::CloseOnSaveUpdated(close_on_save) => {
+                *CLOSE_ON_SAVE.write().unwrap() = close_on_save;
             },
         };
         Command::none()
@@ -131,6 +145,12 @@ impl Tab for SettingsTab {
                             .size(16),
                         )
                     },
+                ))
+                .push(Text::new("Close on save:").size(20).color(theme.foreground()))
+                .push(iced::widget::Checkbox::new(
+                    close_on_save(),
+                    "Close on save",
+                    SettingsMessage::CloseOnSaveUpdated,
                 )),
         )
         .into();
