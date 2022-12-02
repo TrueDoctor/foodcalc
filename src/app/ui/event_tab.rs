@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
-use crate::app::Error;
-use crate::db::{Event, FoodBase};
 use iced::scrollable::{self, Scrollable};
 use iced::{alignment, text_input, Button, Column, Command, Container, Element, Length, Row, Text, TextInput};
 use log::debug;
 
 use self::event_detail_modal::EventDetailMessage;
-
 use super::{style, Icon, TabMessage};
+use crate::app::Error;
+use crate::db::{Event, FoodBase};
 
 mod event;
 pub use event::EventWrapper;
@@ -37,7 +36,7 @@ pub enum EventTabMessage {
     CancelButtonPressed,
     CloseModal,
     SaveEvent(Result<(), Error>),
-    AddEvent(Result<Event,Error>),
+    AddEvent(Result<Event, Error>),
     PrintRecipes(Event),
     Nothing,
     NewEvent,
@@ -126,7 +125,7 @@ impl EventTab {
                         let event = move_database.add_empty_event().await?;
                         Ok(event)
                     },
-                    |event|TabMessage::EventTab(EventTabMessage::AddEvent(event).into()),
+                    |event| TabMessage::EventTab(EventTabMessage::AddEvent(event).into()),
                 );
             },
             EventTabMessage::AddEvent(Ok(event)) => self.event_list.push(EventWrapper::new(event)),
@@ -135,9 +134,10 @@ impl EventTab {
                 return Command::perform(
                     async move {
                         let meals = move_database.get_event_meals(event.event_id).await?;
-                        for meal in meals {
-                            move_database.fetch_subrecipes_export(meal.recipe_id, meal.weight).await;
-                        }
+                        let futures = meals
+                            .into_iter()
+                            .map(|meal| move_database.fetch_subrecipes_export(meal.recipe_id, meal.weight));
+                        futures::future::join_all(futures).await;
                         Ok(())
                     },
                     |_: Result<(), Error>| TabMessage::EventTab(EventTabMessage::Nothing.into()),

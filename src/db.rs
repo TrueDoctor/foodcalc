@@ -597,28 +597,41 @@ impl FoodBase {
         use std::fmt::Write;
 
         writeln!(text, "\\end{{document}}").unwrap();
-        /*
         let mut status = status::NoopStatusBackend::default();
+        let name = subrecipes.first().unwrap().recipe.clone();
+
         let mut files = {
-            let mut sb = ProcessingSessionBuilder::default();
-            sb
-            .filesystem_root(Path::new("./recipes"))
-            .primary_input_buffer(text.as_bytes())
-            .tex_input_name(format!("{}.tex", subrecipes.first().unwrap().recipe).as_str())
-            .format_name("latex")
-            .keep_logs(false)
-            .keep_intermediates(false)
-            .print_stdout(false)
-            .bundle(Box::new(DirBundle::new(Path::new("./recipes"))));
-            spawn_blocking(
-                move || {
-                    let mut sess = sb
+            spawn_blocking(move || {
+                let auto_create_config_file = false;
+                let config = tectonic::config::PersistentConfig::open(auto_create_config_file).unwrap();
+
+                let only_cached = false;
+                let bundle = config.default_bundle(only_cached, &mut status).unwrap();
+
+                let format_cache_path = config.format_cache_path().unwrap();
+
+                let mut sb = ProcessingSessionBuilder::default();
+                sb.filesystem_root(Path::new("./recipes"))
+                    .primary_input_buffer(text.as_bytes())
+                    .tex_input_name("texput.tex")
+                    .format_name("latex")
+                    .keep_logs(false)
+                    .keep_intermediates(false)
+                    .format_cache_path(format_cache_path)
+                    .bundle(bundle)
+                    .do_not_write_output_files()
+                    .print_stdout(false);
+                //.bundle(Box::new(DirBundle::new(Path::new("./recipes"))));
+                let mut sess = sb
                     .create(&mut status)
                     .expect("failed to initialize the LaTeX processing session");
-                    sess.run(&mut status).expect("the LaTeX engine failed");
-                    sess.into_file_data()
+                if let Err(e) = sess.run(&mut status) {
+                    log::error!("failed to run the LaTeX processing session: {}", e);
                 }
-            ).await
+                sess.into_file_data()
+            })
+            .await
+            .unwrap()
         };
 
         let Some(pdf) = files.remove("texput.pdf")  else {
@@ -629,11 +642,21 @@ impl FoodBase {
             return;
         };
         let pdf_data = pdf.data;
+        /*
+                let pdf_data: Vec<u8> = spawn_blocking(move || tectonic::latex_to_pdf(text).expect("processing failed"))
+                    .await
+                    .unwrap();
         */
-        let pdf_data: Vec<u8> = spawn_blocking(move || tectonic::latex_to_pdf(text).expect("processing failed")).await.unwrap();
         println!("Output PDF size is {} bytes", pdf_data.len());
 
-        let mut file = std::fs::File::create(format!("recipes/{}.pdf", subrecipes.first().unwrap().recipe)).unwrap();
+        let create_result = std::fs::create_dir("recipes/out");
+        if let Err(e) = create_result {
+            if e.kind() != std::io::ErrorKind::AlreadyExists {
+                log::error!("failed to create output directory: {}", e);
+                return;
+            }
+        }
+        let mut file = std::fs::File::create(format!("recipes/out/{}.pdf", name)).unwrap();
         use std::io::prelude::Write as WF;
         file.write_all(&pdf_data).unwrap();
     }
