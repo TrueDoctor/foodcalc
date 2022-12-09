@@ -1,0 +1,41 @@
+[package]
+name = "foodcalc"
+version = "0.1.0"
+edition = "2021"
+authors = ["Dennis Kobert <dennis@kobert.dev>"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = []
+scraping = ["inline-python"]
+tectonic = ["dep:tectonic", "tectonic_bundles"]
+
+[dependencies]
+sqlx = { version = "0.5.13", features = ["postgres", "macros", "migrate", "uuid", "runtime-tokio-rustls", "offline", "bigdecimal", "time"]}
+tokio = { version = "1", features = ["full"] }
+
+futures = "0.3"
+dotenv = "0.15.0"
+serde = {version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+iced = {version = "0.4", features=["tokio"]}
+iced_searchable_picklist = { version = "0.1.2" }
+chrono = "*"
+
+log = "0.4"
+fern = {version = "0.6", features = ["colored"]}
+iced_aw = { version = "0.2", default-features = false, features = ["tabs"] }
+
+#reqwest = { version = "0.11" }
+
+inline-python = {version = "*", optional = true}
+num = "*"
+regex = "*"
+
+
+eyre = "0.6"
+lazy_static = "1.4.0"
+parse_duration = "2.1.1"
+tectonic = {version = "0.12.0", optional = true}
+tectonic_bundles = { version = "0.3.0", optional = true }

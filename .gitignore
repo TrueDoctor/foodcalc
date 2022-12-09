@@ -1,4 +1,4 @@
 /target
-/tex
-/recipes/*.tex
-/recipes/out/
+tex
+recipes/*.tex
+recipes/out/

@@ -9,9 +9,6 @@ use sqlx::postgres::types::{PgInterval, PgMoney};
 use sqlx::postgres::PgPool;
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::types::BigDecimal;
-use tectonic::driver::ProcessingSessionBuilder;
-use tectonic::{ctry, status};
-use tectonic_bundles::dir::DirBundle;
 use tokio::task::spawn_blocking;
 
 pub const METRO: i32 = 0;
@@ -595,70 +592,76 @@ impl FoodBase {
             self.format_subrecipe(&mut text, ingredients, steps);
         }
         use std::fmt::Write;
+        #[cfg(feature = "tectonic"]
+        {
+            use tectonic::driver::ProcessingSessionBuilder;
+            use tectonic::{ctry, status};
+            use tectonic_bundles::dir::DirBundle;
 
-        writeln!(text, "\\end{{document}}").unwrap();
-        let mut status = status::NoopStatusBackend::default();
-        let name = subrecipes.first().unwrap().recipe.clone();
+            writeln!(text, "\\end{{document}}").unwrap();
+            let mut status = status::NoopStatusBackend::default();
+            let name = subrecipes.first().unwrap().recipe.clone();
 
-        let mut files = {
-            spawn_blocking(move || {
-                let auto_create_config_file = false;
-                let config = tectonic::config::PersistentConfig::open(auto_create_config_file).unwrap();
+            let mut files = {
+                spawn_blocking(move || {
+                    let auto_create_config_file = false;
+                    let config = tectonic::config::PersistentConfig::open(auto_create_config_file).unwrap();
 
-                let only_cached = false;
-                let bundle = config.default_bundle(only_cached, &mut status).unwrap();
+                    let only_cached = false;
+                    let bundle = config.default_bundle(only_cached, &mut status).unwrap();
 
-                let format_cache_path = config.format_cache_path().unwrap();
+                    let format_cache_path = config.format_cache_path().unwrap();
 
-                let mut sb = ProcessingSessionBuilder::default();
-                sb.filesystem_root(Path::new("./recipes"))
-                    .primary_input_buffer(text.as_bytes())
-                    .tex_input_name("texput.tex")
-                    .format_name("latex")
-                    .keep_logs(false)
-                    .keep_intermediates(false)
-                    .format_cache_path(format_cache_path)
-                    .bundle(bundle)
-                    .do_not_write_output_files()
-                    .print_stdout(false);
-                //.bundle(Box::new(DirBundle::new(Path::new("./recipes"))));
-                let mut sess = sb
-                    .create(&mut status)
-                    .expect("failed to initialize the LaTeX processing session");
-                if let Err(e) = sess.run(&mut status) {
-                    log::error!("failed to run the LaTeX processing session: {}", e);
-                }
-                sess.into_file_data()
-            })
-            .await
-            .unwrap()
-        };
+                    let mut sb = ProcessingSessionBuilder::default();
+                    sb.filesystem_root(Path::new("./recipes"))
+                        .primary_input_buffer(text.as_bytes())
+                        .tex_input_name("texput.tex")
+                        .format_name("latex")
+                        .keep_logs(false)
+                        .keep_intermediates(false)
+                        .format_cache_path(format_cache_path)
+                        .bundle(bundle)
+                        .do_not_write_output_files()
+                        .print_stdout(false);
+                    //.bundle(Box::new(DirBundle::new(Path::new("./recipes"))));
+                    let mut sess = sb
+                        .create(&mut status)
+                        .expect("failed to initialize the LaTeX processing session");
+                    if let Err(e) = sess.run(&mut status) {
+                        log::error!("failed to run the LaTeX processing session: {}", e);
+                    }
+                    sess.into_file_data()
+                })
+                .await
+                .unwrap()
+            };
 
-        let Some(pdf) = files.remove("texput.pdf")  else {
+            let Some(pdf) = files.remove("texput.pdf")  else {
 
-            log::error!(
-                "LaTeX didn't report failure, but no PDF was created (??)"
-            );
-            return;
-        };
-        let pdf_data = pdf.data;
-        /*
-                let pdf_data: Vec<u8> = spawn_blocking(move || tectonic::latex_to_pdf(text).expect("processing failed"))
-                    .await
-                    .unwrap();
-        */
-        println!("Output PDF size is {} bytes", pdf_data.len());
-
-        let create_result = std::fs::create_dir("recipes/out");
-        if let Err(e) = create_result {
-            if e.kind() != std::io::ErrorKind::AlreadyExists {
-                log::error!("failed to create output directory: {}", e);
+                log::error!(
+                    "LaTeX didn't report failure, but no PDF was created (??)"
+                );
                 return;
+            };
+            let pdf_data = pdf.data;
+            /*
+                    let pdf_data: Vec<u8> = spawn_blocking(move || tectonic::latex_to_pdf(text).expect("processing failed"))
+                        .await
+                        .unwrap();
+            */
+            println!("Output PDF size is {} bytes", pdf_data.len());
+
+            let create_result = std::fs::create_dir("recipes/out");
+            if let Err(e) = create_result {
+                if e.kind() != std::io::ErrorKind::AlreadyExists {
+                    log::error!("failed to create output directory: {}", e);
+                    return;
+                }
             }
+            let mut file = std::fs::File::create(format!("recipes/out/{}.pdf", name)).unwrap();
+            use std::io::prelude::Write as WF;
+            file.write_all(&pdf_data).unwrap();
         }
-        let mut file = std::fs::File::create(format!("recipes/out/{}.pdf", name)).unwrap();
-        use std::io::prelude::Write as WF;
-        file.write_all(&pdf_data).unwrap();
     }
 
     pub async fn update_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
