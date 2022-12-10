@@ -2145,6 +2145,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "metro-scrape"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
