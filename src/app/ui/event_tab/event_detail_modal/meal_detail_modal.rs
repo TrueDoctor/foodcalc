@@ -84,7 +84,7 @@ impl MealDetail {
             start_time: InputState::new(new_meal.start_time.to_string()),
             end_time: InputState::new(new_meal.end_time.to_string()),
             servings: InputState::new(new_meal.servings.to_string()),
-            energy: InputState::new(new_meal.servings.to_string()),
+            energy: InputState::new(new_meal.energy.to_string()),
             comment: InputState::new(new_meal.comment.unwrap_or_default()),
             ok_state: Default::default(),
             cancel_state: Default::default(),
