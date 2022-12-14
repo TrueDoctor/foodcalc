@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use iced::scrollable::{self, Scrollable};
-use iced::text_input::{self, TextInput};
-use iced::{alignment, Column, Command, Container, Element, Length, Text};
+use iced::widget::*;
+use iced::{alignment, Command, Element, Length};
 use log::debug;
 
 use super::TabMessage;
@@ -18,8 +17,6 @@ use recipe_detail_modal::{RecipeDetail, RecipeDetailMessage};
 #[derive(Debug, Clone)]
 pub struct RecipeTab {
     recipe_list: Vec<RecipeWrapper>,
-    scroll: scrollable::State,
-    input: text_input::State,
     input_value: String,
     database: Arc<FoodBase>,
     recipe_detail_modal: Option<RecipeDetail>,
@@ -54,8 +51,6 @@ impl RecipeTab {
         );
         let recipes = RecipeTab {
             database,
-            scroll: scrollable::State::default(),
-            input: text_input::State::default(),
             input_value: String::new(),
             recipe_list: Vec::new(),
             recipe_detail_modal: None,
@@ -149,15 +144,9 @@ impl super::Tab for RecipeTab {
     fn content(&mut self) -> Element<'_, Self::Message> {
         let theme = crate::theme();
 
-        let input = TextInput::new(
-            &mut self.input,
-            "Recipe Name",
-            &self.input_value,
-            RecipeTabMessage::InputChanged,
-        )
-        .padding(15)
-        .style(theme)
-        .size(30);
+        let input = TextInput::new("Recipe Name", &self.input_value, RecipeTabMessage::InputChanged)
+            .padding(15)
+            .size(30);
         let filtered_recipes = self
             .recipe_list
             .iter()
@@ -176,10 +165,8 @@ impl super::Tab for RecipeTab {
             empty_message("No matching recipe...")
         };
 
-        let scroll: Element<'_, RecipeTabMessage> = Scrollable::new(&mut self.scroll)
-            .padding(40)
-            .push(Container::new(recipes).width(Length::Fill))
-            .into();
+        let scroll: Element<'_, RecipeTabMessage> =
+            Scrollable::new(Container::new(recipes).width(Length::Fill).padding(40)).into();
 
         let element: Element<'_, RecipeTabMessage> =
             Column::new().max_width(800).spacing(20).push(input).push(scroll).into();
@@ -205,11 +192,11 @@ impl super::Tab for RecipeTab {
 
 fn empty_message<'a>(message: &str) -> Element<'a, RecipeTabMessage> {
     Container::new(
-        Text::new(message)
+        text(message)
             .width(Length::Fill)
             .size(25)
             .horizontal_alignment(alignment::Horizontal::Center)
-            .color([0.7, 0.7, 0.7]),
+            .style(iced::theme::Text::Color(iced::color!(0.7, 0.7, 0.7))),
     )
     .width(Length::Fill)
     .height(Length::Units(200))

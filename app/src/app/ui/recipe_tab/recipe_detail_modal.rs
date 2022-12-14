@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use iced::alignment::Horizontal;
-use iced::{button, text_input, Alignment, Button, Column, Command, Element, Length, Row, Scrollable, Text, TextInput};
+use iced::widget::*;
+use iced::{Alignment, Command, Element, Length};
 
 use super::RecipeTabMessage;
-use crate::app::ui::{style, Icon};
+use crate::app::ui::Icon;
 use crate::db::{FoodBase, Recipe, RecipeIngrdient, RecipeMetaIngredient, RecipeStep, Unit};
 
 mod recipe_ingredient_wrapper;
@@ -15,18 +16,11 @@ use recipe_step_wrapper::{RecipeStepMessage, RecipeStepWrapper};
 #[derive(Debug, Clone)]
 pub struct RecipeDetail {
     pub(crate) recipe: Recipe,
-    pub(crate) recipe_description: text_input::State,
     database: Arc<FoodBase>,
     pub(crate) all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
     pub(crate) all_units: Arc<Vec<Unit>>,
     pub(crate) ingredients: Vec<RecipeIngredientWrapper>,
     pub(crate) steps: Vec<RecipeStepWrapper>,
-    pub(crate) scroll_ingredients: iced::scrollable::State,
-    pub(crate) scroll_steps: iced::scrollable::State,
-    pub(crate) cancel_state: button::State,
-    pub(crate) ok_state: button::State,
-    pub(crate) add_ingredient_button: button::State,
-    pub(crate) add_step_button: button::State,
 }
 
 #[derive(Debug, Clone)]
@@ -61,13 +55,6 @@ impl RecipeDetail {
                 .map(|ingredient| RecipeIngredientWrapper::new(all_ingredients.clone(), all_units.clone(), ingredient))
                 .collect(),
             steps: recipe_steps.into_iter().map(RecipeStepWrapper::edit).collect(),
-            recipe_description: Default::default(),
-            scroll_ingredients: Default::default(),
-            scroll_steps: Default::default(),
-            cancel_state: Default::default(),
-            ok_state: Default::default(),
-            add_ingredient_button: Default::default(),
-            add_step_button: Default::default(),
         }
     }
 
@@ -157,13 +144,11 @@ impl RecipeDetail {
     pub fn view(&mut self) -> Element<RecipeDetailMessage> {
         let theme = crate::theme();
         let description_input = TextInput::new(
-            &mut self.recipe_description,
             "Recipe Description…",
             self.recipe.comment.as_deref().unwrap_or(""),
             RecipeDetailMessage::DescriptionEdited,
         )
         .on_submit(RecipeDetailMessage::SubmitDescription)
-        .style(theme)
         .padding(10);
 
         let ingredients: Element<'_, RecipeDetailMessage> = self
@@ -179,25 +164,24 @@ impl RecipeDetail {
             })
             .into();
 
-        let title = Text::new(&self.recipe.name).color(theme.foreground()).size(30);
+        let title = text(&self.recipe.name).size(30);
 
         let add_ingredient_button = Button::new(
-            &mut self.add_ingredient_button,
             Row::new()
                 .spacing(10)
                 .push(Icon::Plus.text())
-                .push(Text::new("Add Ingredient")),
+                .push(text("Add Ingredient")),
         )
         .on_press(RecipeDetailMessage::AddIngredient)
         .padding(10)
-        .style(style::Button::Add);
+        .style(iced::theme::Button::Positive);
 
-        let ingredients = Scrollable::new(&mut self.scroll_ingredients)
-            .push(ingredients)
-            .push(add_ingredient_button)
-            .align_items(Alignment::Start)
-            .spacing(20)
-            .height(Length::FillPortion(4));
+        let ingredients = Scrollable::new(
+            iced::widget::column![ingredients, add_ingredient_button]
+                .align_items(Alignment::Start)
+                .spacing(20),
+        )
+        .height(Length::FillPortion(4));
 
         let steps: Element<'_, RecipeDetailMessage> = self
             .steps
@@ -212,39 +196,25 @@ impl RecipeDetail {
             })
             .into();
 
-        let add_step_button = Button::new(
-            &mut self.add_step_button,
-            Row::new()
-                .spacing(10)
-                .push(Icon::Plus.text())
-                .push(Text::new("Add Step")),
-        )
-        .on_press(RecipeDetailMessage::AddStep)
-        .padding(10)
-        .style(style::Button::Add);
+        let add_step_button = Button::new(Row::new().spacing(10).push(Icon::Plus.text()).push(text("Add Step")))
+            .on_press(RecipeDetailMessage::AddStep)
+            .padding(10)
+            .style(iced::theme::Button::Positive);
 
-        let steps = Scrollable::new(&mut self.scroll_steps)
-            .push(steps)
-            .push(add_step_button)
-            .align_items(Alignment::Start)
-            .spacing(20)
-            .height(Length::FillPortion(4));
-
-        let cancel_button = Button::new(
-            &mut self.cancel_state,
-            Text::new("Cancel").horizontal_alignment(Horizontal::Center),
+        let steps = Scrollable::new(
+            iced::widget::column![steps, add_step_button]
+                .align_items(Alignment::Start)
+                .spacing(20),
         )
-        .width(Length::Fill)
-        .style(theme)
-        .on_press(RecipeDetailMessage::Cancel);
+        .height(Length::FillPortion(4));
 
-        let ok_button = Button::new(
-            &mut self.ok_state,
-            Text::new("Save").horizontal_alignment(Horizontal::Center),
-        )
-        .width(Length::Fill)
-        .style(theme)
-        .on_press(RecipeDetailMessage::Save);
+        let cancel_button = Button::new(text("Cancel").horizontal_alignment(Horizontal::Center))
+            .width(Length::Fill)
+            .on_press(RecipeDetailMessage::Cancel);
+
+        let ok_button = Button::new(text("Save").horizontal_alignment(Horizontal::Center))
+            .width(Length::Fill)
+            .on_press(RecipeDetailMessage::Save);
 
         let footer = Row::new()
             .spacing(10)

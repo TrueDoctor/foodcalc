@@ -1,9 +1,10 @@
 use std::sync::RwLock;
 
-use iced::{Column, Command, Container, Element, Radio, Text};
+use iced::theme::Theme;
+use iced::widget::*;
+use iced::{Command, Element};
 use iced_aw::TabLabel;
 
-use crate::app::ui::theme::Theme;
 use crate::app::ui::{Icon, Tab, TabMessage};
 
 lazy_static::lazy_static! {
@@ -114,7 +115,7 @@ impl Tab for SettingsTab {
         let content: Element<'_, SettingsMessage> = Container::new(
             Column::new()
                 .spacing(20)
-                .push(Text::new("TabBar position:").size(20).color(theme.foreground()))
+                .push(Text::new("TabBar position:").size(20))
                 .push(TabBarPosition::ALL.iter().cloned().fold(
                     Column::new().padding(10).spacing(10),
                     |column, position| {
@@ -125,28 +126,26 @@ impl Tab for SettingsTab {
                                 self.settings().tab_bar_position,
                                 SettingsMessage::PositionSelected,
                             )
-                            .style(theme)
                             .size(16),
                         )
                     },
                 ))
-                .push(Text::new("TabBar color:").size(20).color(theme.foreground()))
-                .push(Theme::ALL.iter().cloned().fold(
+                .push(Text::new("TabBar color:").size(20))
+                .push([Theme::Light, Theme::Dark].iter().cloned().fold(
                     Column::new().padding(10).spacing(10),
                     |column, selected_theme| {
                         column.push(
                             Radio::new(
                                 selected_theme,
-                                selected_theme,
+                                super::theme::theme_to_string(selected_theme),
                                 Some(theme),
                                 SettingsMessage::ThemeSelected,
                             )
-                            .style(theme)
                             .size(16),
                         )
                     },
                 ))
-                .push(Text::new("Close on save:").size(20).color(theme.foreground()))
+                .push(Text::new("Close on save:").size(20))
                 .push(iced::widget::Checkbox::new(
                     close_on_save(),
                     "Close on save",

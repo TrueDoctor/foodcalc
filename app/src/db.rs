@@ -592,7 +592,7 @@ impl FoodBase {
             self.format_subrecipe(&mut text, ingredients, steps);
         }
         use std::fmt::Write;
-        #[cfg(feature = "tectonic"]
+        #[cfg(feature = "tectonic")]
         {
             use tectonic::driver::ProcessingSessionBuilder;
             use tectonic::{ctry, status};

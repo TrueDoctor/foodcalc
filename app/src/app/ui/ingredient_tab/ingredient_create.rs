@@ -1,12 +1,9 @@
 use iced::alignment::Horizontal;
-use iced::{button, Alignment, Button, Column, Command, Element, Length, Row, Text, TextInput};
-use log::debug;
-use num::FromPrimitive;
-use sqlx::types::time::PrimitiveDateTime;
+use iced::widget::*;
+use iced::{Alignment, Command, Element, Length};
 use sqlx::types::BigDecimal;
 
 use super::IngredientTabMessage;
-use crate::app::ui::style;
 use crate::app::ui::util::{InputState, OptionString};
 use crate::db::{FoodBase, Ingredient, IngredientCreate};
 
@@ -16,9 +13,6 @@ pub struct IngredientCreationDialog {
     name: InputState<String>,
     energy: InputState<BigDecimal>,
     comment: InputState<OptionString>,
-
-    pub(crate) ok_state: button::State,
-    pub(crate) cancel_state: button::State,
 }
 
 #[derive(Debug, Clone)]
@@ -42,8 +36,6 @@ impl IngredientCreationDialog {
             name: InputState::new(""),
             energy: InputState::new("0"),
             comment: InputState::new(""),
-            ok_state: Default::default(),
-            cancel_state: Default::default(),
         }
     }
     pub fn edit(ingredient: Ingredient) -> Self {
@@ -55,8 +47,6 @@ impl IngredientCreationDialog {
             name: InputState::new(name),
             energy: InputState::new(energy),
             comment: InputState::new(comment),
-            ok_state: Default::default(),
-            cancel_state: Default::default(),
         }
     }
 
@@ -91,52 +81,32 @@ impl IngredientCreationDialog {
     pub fn view(&mut self) -> Element<IngredientCreateMessage> {
         let theme = crate::theme();
 
-        let comment_input = TextInput::new(&mut self.comment.state, "Comment…", &self.comment.value, |value| {
+        let comment_input = TextInput::new("Comment…", &self.comment.value, |value| {
             IngredientCreateMessage::SubmitValue(InputField::Comment, value)
         })
         .width(Length::Fill)
-        .style(style::TextInput::Normal)
         .padding(10);
 
-        let text_theme = match self.name.valid() {
-            true => style::TextInput::Normal,
-            false => style::TextInput::Error,
-        };
-
-        let name_input = TextInput::new(&mut self.name.state, "Name…", &self.name.value, |value| {
+        let name_input = TextInput::new("Name…", &self.name.value, |value| {
             IngredientCreateMessage::SubmitValue(InputField::Name, value)
         })
-        .width(Length::FillPortion(1))
-        .style(text_theme)
         .padding(10);
 
-        let text_theme = match self.energy.valid() {
-            true => style::TextInput::Normal,
-            false => style::TextInput::Error,
-        };
-
-        let energy_input = TextInput::new(&mut self.energy.state, "Energy…", &self.energy.value, |value| {
+        let energy_input = TextInput::new("Energy…", &self.energy.value, |value| {
             IngredientCreateMessage::SubmitValue(InputField::Energy, value)
         })
         .width(Length::FillPortion(1))
-        .style(text_theme)
         .padding(10);
 
-        let cancel_button = Button::new(
-            &mut self.cancel_state,
-            Text::new("Cancel").horizontal_alignment(Horizontal::Center),
-        )
-        .width(Length::Fill)
-        .style(theme)
-        .on_press(IngredientCreateMessage::Cancel);
+        let cancel_button = button(text("Cancel").horizontal_alignment(Horizontal::Center))
+            .width(Length::Fill)
+            .style(iced::theme::Button::Destructive)
+            .on_press(IngredientCreateMessage::Cancel);
 
-        let ok_button = Button::new(
-            &mut self.ok_state,
-            Text::new("Save").horizontal_alignment(Horizontal::Center),
-        )
-        .width(Length::Fill)
-        .style(theme)
-        .on_press(IngredientCreateMessage::Save);
+        let ok_button = button(text("Save").horizontal_alignment(Horizontal::Center))
+            .width(Length::Fill)
+            .style(iced::theme::Button::Primary)
+            .on_press(IngredientCreateMessage::Save);
 
         let buttons = Row::new()
             .spacing(20)
@@ -148,11 +118,11 @@ impl IngredientCreationDialog {
             .spacing(20)
             .max_width(800)
             .align_items(Alignment::Center)
-            .push(Text::new("Ingredient name:").size(10))
+            .push(text("Ingredient name:").size(10))
             .push(name_input)
-            .push(Text::new("Comment:").size(10))
+            .push(text("Comment:").size(10))
             .push(comment_input)
-            .push(Text::new("Energy in kj/g:").size(10))
+            .push(text("Energy in kj/g:").size(10))
             .push(energy_input)
             .push(buttons)
             .into()

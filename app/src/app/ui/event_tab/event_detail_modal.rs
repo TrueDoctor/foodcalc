@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
-use iced::{alignment::Horizontal, button, Alignment, Button, Column, Command, Element, Length, Row, Scrollable, Text};
+use iced::widget::*;
+use iced::{alignment::Horizontal, Alignment, Command, Element, Length};
 use log::debug;
 use sqlx::{postgres::types::PgMoney, types::BigDecimal};
 
 use crate::{
-    app::{
-        ui::{style, Icon},
-        Error,
-    },
+    app::{ui::Icon, Error},
     db::{Event, FoodBase, Meal, Place, Recipe},
 };
 
@@ -30,13 +28,6 @@ pub struct EventDetail {
     all_places: Arc<Vec<Place>>,
     meals: Vec<MealWrapper>,
 
-    title_state: iced::text_input::State,
-    comment_state: iced::text_input::State,
-    budget_state: iced::text_input::State,
-    scroll: iced::scrollable::State,
-    cancel_state: button::State,
-    ok_state: button::State,
-    add_meal_button: button::State,
     meal_modal: Option<MealDetail>,
 
     database: Arc<FoodBase>,
@@ -74,16 +65,9 @@ impl EventDetail {
                 .into_iter()
                 .map(|meal| MealWrapper::new(Some(meal), recipes.clone(), places.clone(), database.clone()))
                 .collect(),
-            scroll: Default::default(),
-            cancel_state: Default::default(),
-            ok_state: Default::default(),
-            add_meal_button: Default::default(),
             meal_modal: None,
             all_recipes: recipes,
             all_places: places,
-            title_state: Default::default(),
-            comment_state: Default::default(),
-            budget_state: Default::default(),
         }
     }
 
@@ -215,27 +199,19 @@ impl EventDetail {
     pub fn view(&mut self) -> Element<EventDetailMessage> {
         let theme = crate::theme();
 
-        let title = iced::TextInput::new(
-            &mut self.title_state,
+        let title = text_input(
             "Event Title...",
             &self.event.event_name,
             EventDetailMessage::TitleChange,
         )
         .width(Length::FillPortion(1))
-        .style(theme)
         .padding(10);
 
         let comment = self.event.comment.clone().unwrap_or_default();
 
-        let comment = iced::TextInput::new(
-            &mut self.comment_state,
-            "Comment ...",
-            &comment,
-            EventDetailMessage::CommentChanged,
-        )
-        .width(Length::FillPortion(2))
-        .style(theme)
-        .padding(10);
+        let comment = text_input("Comment ...", &comment, EventDetailMessage::CommentChanged)
+            .width(Length::FillPortion(2))
+            .padding(10);
 
         let budget = if let Some(budget) = self.event.budget {
             (budget.0 / 100).to_string()
@@ -243,15 +219,9 @@ impl EventDetail {
             "".to_string()
         };
 
-        let budget = iced::TextInput::new(
-            &mut self.budget_state,
-            "Budget ...",
-            &budget,
-            EventDetailMessage::BudgetChanged,
-        )
-        .width(Length::FillPortion(1))
-        .style(theme)
-        .padding(10);
+        let budget = text_input("Budget ...", &budget, EventDetailMessage::BudgetChanged)
+            .width(Length::FillPortion(1))
+            .padding(10);
 
         //let title = Text::new(&self.event.event_name).color(theme.foreground()).size(30);
 
@@ -268,7 +238,6 @@ impl EventDetail {
             .into();
 
         let add_meal_button = Button::new(
-            &mut self.add_meal_button,
             Row::new()
                 .spacing(10)
                 .push(Icon::Plus.text())
@@ -276,30 +245,22 @@ impl EventDetail {
         )
         .on_press(EventDetailMessage::AddMeal)
         .padding(10)
-        .style(style::Button::Add);
+        .style(iced::theme::Button::Positive);
 
-        let meals = Scrollable::new(&mut self.scroll)
-            .push(meals)
-            .push(add_meal_button)
-            .align_items(Alignment::Start)
-            .spacing(20)
-            .height(Length::Fill);
-
-        let cancel_button = Button::new(
-            &mut self.cancel_state,
-            Text::new("Cancel").horizontal_alignment(Horizontal::Center),
+        let meals = Scrollable::new(
+            iced::widget::column![meals, add_meal_button]
+                .align_items(Alignment::Start)
+                .spacing(20),
         )
-        .width(Length::Fill)
-        .style(theme)
-        .on_press(EventDetailMessage::Cancel);
+        .height(Length::Fill);
 
-        let ok_button = Button::new(
-            &mut self.ok_state,
-            Text::new("Save").horizontal_alignment(Horizontal::Center),
-        )
-        .width(Length::Fill)
-        .style(theme)
-        .on_press(EventDetailMessage::Save);
+        let cancel_button = Button::new(Text::new("Cancel").horizontal_alignment(Horizontal::Center))
+            .width(Length::Fill)
+            .on_press(EventDetailMessage::Cancel);
+
+        let ok_button = Button::new(Text::new("Save").horizontal_alignment(Horizontal::Center))
+            .width(Length::Fill)
+            .on_press(EventDetailMessage::Save);
 
         let header = Row::new()
             .spacing(10)

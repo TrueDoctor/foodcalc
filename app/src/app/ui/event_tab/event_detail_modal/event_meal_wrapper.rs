@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
-use iced::{button, Alignment, Button, Command, Element, Row, Text};
+use iced::widget::*;
+use iced::{Alignment, Command, Element};
 
 use crate::{
-    app::ui::{style, Icon},
+    app::ui::Icon,
     db::{FoodBase, Meal, Place, Recipe},
 };
-
-use crate::app::ui::style::Button::Destructive;
 
 use super::EventDetailMessage;
 
@@ -16,9 +15,6 @@ pub struct MealWrapper {
     pub(crate) meal: Option<Meal>,
     all_recipes: Arc<Vec<Recipe>>,
     all_places: Arc<Vec<Place>>,
-    print_button: button::State,
-    delete_button: button::State,
-    edit_button: button::State,
     database: Arc<FoodBase>,
 }
 
@@ -43,9 +39,6 @@ impl MealWrapper {
             meal,
             all_recipes,
             all_places,
-            print_button: Default::default(),
-            delete_button: Default::default(),
-            edit_button: Default::default(),
             database,
         }
     }
@@ -74,9 +67,7 @@ impl MealWrapper {
             .unwrap_or_default()
             .name;
 
-        let recipe = iced::Text::new(label)
-            .width(iced::Length::FillPortion(3))
-            .color(theme.foreground());
+        let recipe = text(label).width(iced::Length::FillPortion(3));
 
         let label = self
             .all_places
@@ -86,21 +77,16 @@ impl MealWrapper {
             .unwrap_or_default()
             .name;
 
-        let place = iced::Text::new(label)
-            .width(iced::Length::FillPortion(3))
-            .color(theme.foreground());
+        let place = text(label).width(iced::Length::FillPortion(3));
 
-        let start = iced::Text::new(self.meal.clone().unwrap_or_default().start_time.to_string())
-            .width(iced::Length::FillPortion(3))
-            .color(theme.foreground());
+        let start =
+            text(self.meal.clone().unwrap_or_default().start_time.to_string()).width(iced::Length::FillPortion(3));
 
-        let print_button = Button::new(&mut self.print_button, Icon::RestaurantMenu.text())
+        let print_button = Button::new(Icon::RestaurantMenu.text())
             .on_press(MealWrapperMessage::PrintMeal(self.meal.clone()))
-            .padding(10)
-            .style(style::Button::Icon);
+            .padding(10);
 
         let delete_button = Button::new(
-            &mut self.delete_button,
             Row::new()
                 .spacing(10)
                 .push(Icon::Delete.text())
@@ -108,7 +94,7 @@ impl MealWrapper {
         )
         .on_press(MealWrapperMessage::Delete)
         .padding(10)
-        .style(Destructive);
+        .style(iced::theme::Button::Destructive);
 
         Row::new()
             .spacing(20)
@@ -118,10 +104,9 @@ impl MealWrapper {
             .push(start)
             .push(print_button)
             .push(
-                Button::new(&mut self.edit_button, Icon::Edit.text())
+                Button::new(Icon::Edit.text())
                     .on_press(MealWrapperMessage::OpenModal(self.meal.clone()))
-                    .padding(10)
-                    .style(style::Button::Icon),
+                    .padding(10),
             )
             .push(delete_button)
             .into()

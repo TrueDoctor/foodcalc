@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use iced::scrollable::{self, Scrollable};
-use iced::{alignment, text_input, Button, Column, Command, Container, Element, Length, Row, Text, TextInput};
+use iced::widget::*;
+use iced::{alignment, Command, Element, Length};
 use log::debug;
 
 use self::event_detail_modal::EventDetailMessage;
-use super::{style, Icon, TabMessage};
+use super::{Icon, TabMessage};
 use crate::app::Error;
 use crate::db::{Event, FoodBase};
 
@@ -18,9 +18,6 @@ pub use event_detail_modal::EventDetail;
 #[derive(Debug, Clone)]
 pub struct EventTab {
     event_list: Vec<EventWrapper>,
-    scroll: scrollable::State,
-    input: text_input::State,
-    add_event_button: iced::button::State,
     input_value: String,
     database: Arc<FoodBase>,
     event_detail_modal: Option<EventDetail>,
@@ -64,11 +61,8 @@ impl EventTab {
 
         let events = EventTab {
             event_list: Vec::new(),
-            scroll: Default::default(),
-            input: Default::default(),
-            add_event_button: Default::default(),
             input_value: Default::default(),
-            database: database,
+            database,
             event_detail_modal: None,
         };
         (events, command.map(|message| TabMessage::EventTab(message.into())))
@@ -159,15 +153,9 @@ impl super::Tab for EventTab {
     fn content(&mut self) -> iced::Element<'_, Self::Message> {
         let theme = crate::theme();
 
-        let input = TextInput::new(
-            &mut self.input,
-            "Event Name",
-            &self.input_value,
-            EventTabMessage::InputChanged,
-        )
-        .padding(15)
-        .style(theme)
-        .size(30);
+        let input = TextInput::new("Event Name", &self.input_value, EventTabMessage::InputChanged)
+            .padding(15)
+            .size(30);
 
         let filtered_events = self
             .event_list
@@ -175,7 +163,6 @@ impl super::Tab for EventTab {
             .filter(|event| crate::similar(&event.event.event_name, &*self.input_value));
 
         let add_event_button = Button::new(
-            &mut self.add_event_button,
             Row::new()
                 .spacing(10)
                 .push(Icon::Plus.text())
@@ -183,7 +170,7 @@ impl super::Tab for EventTab {
         )
         .on_press(EventTabMessage::NewEvent)
         .padding(10)
-        .style(style::Button::Add);
+        .style(iced::theme::Button::Positive);
 
         let events: Element<_> = if filtered_events.clone().count() > 0 {
             self.event_list
@@ -199,10 +186,7 @@ impl super::Tab for EventTab {
             empty_message("No matching event ...")
         };
 
-        let scroll: Element<'_, EventTabMessage> = Scrollable::new(&mut self.scroll)
-            .padding(40)
-            .push(Container::new(events).width(Length::Fill))
-            .into();
+        let scroll: Element<'_, EventTabMessage> = Scrollable::new(Container::new(events).width(Length::Fill)).into();
 
         let element: Element<'_, EventTabMessage> =
             Column::new().max_width(800).spacing(20).push(input).push(scroll).into();

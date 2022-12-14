@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
 use iced::alignment::Horizontal;
-use iced::{button, Alignment, Button, Column, Command, Element, Length, Row, Text, TextInput};
-use log::debug;
-use sqlx::types::time::PrimitiveDateTime;
+use iced::widget::*;
+use iced::{Alignment, Command, Element, Length};
 use sqlx::types::BigDecimal;
 
 use super::EventDetailMessage;
-use crate::app::ui::style;
 use crate::app::ui::util::{DateInput, InputState, OptionString};
 use crate::db::{FoodBase, Meal, Place, Recipe};
 
@@ -30,8 +28,6 @@ pub struct MealDetail {
     energy: InputState<BigDecimal>,
     comment: InputState<OptionString>,
 
-    pub(crate) ok_state: button::State,
-    pub(crate) cancel_state: button::State,
     database: Arc<FoodBase>,
 }
 
@@ -86,8 +82,6 @@ impl MealDetail {
             servings: InputState::new(new_meal.servings.to_string()),
             energy: InputState::new(new_meal.energy.to_string()),
             comment: InputState::new(new_meal.comment.unwrap_or_default()),
-            ok_state: Default::default(),
-            cancel_state: Default::default(),
             database,
         }
     }
@@ -198,8 +192,6 @@ impl MealDetail {
         .on_submit(MealDetailMessage::SubmitFilter)
         .on_focus(MealDetailMessage::FocusRecipe)
         .width(Length::FillPortion(3))
-        .text_style(theme)
-        .style(theme)
         .padding(10);
 
         let selected_place = self
@@ -218,70 +210,52 @@ impl MealDetail {
         .on_submit(MealDetailMessage::SubmitFilter)
         .on_focus(MealDetailMessage::FocusPlace)
         .width(Length::FillPortion(3))
-        .text_style(theme)
-        .style(theme)
         .padding(10);
 
         let text_theme = self.start_time.text_color();
-        let start_input = TextInput::new(
-            &mut self.start_time.state,
-            "Start Time…",
-            &self.start_time.value,
-            |value| MealDetailMessage::ValueChanged(InputField::StartTime, value),
-        )
+        let start_input = TextInput::new("Start Time…", &self.start_time.value, |value| {
+            MealDetailMessage::ValueChanged(InputField::StartTime, value)
+        })
         .width(Length::FillPortion(1))
-        .style(text_theme)
         .padding(10);
 
         let text_theme = self.end_time.text_color();
 
-        let end_input = TextInput::new(&mut self.end_time.state, "End Time…", &self.end_time.value, |value| {
+        let end_input = TextInput::new("End Time…", &self.end_time.value, |value| {
             MealDetailMessage::ValueChanged(InputField::EndTime, value)
         })
         .width(Length::FillPortion(1))
-        .style(text_theme)
         .padding(10);
 
         let text_theme = self.comment.text_color();
-        let comment_input = TextInput::new(&mut self.comment.state, "Comment…", &self.comment.value, |value| {
+        let comment_input = TextInput::new("Comment…", &self.comment.value, |value| {
             MealDetailMessage::ValueChanged(InputField::Comment, value)
         })
         .width(Length::Fill)
-        .style(text_theme)
         .padding(10);
 
         let text_theme = self.servings.text_color();
-        let servings_input = TextInput::new(&mut self.servings.state, "Servings…", &self.servings.value, |value| {
+        let servings_input = TextInput::new("Servings…", &self.servings.value, |value| {
             MealDetailMessage::ValueChanged(InputField::Servings, value)
         })
         .width(Length::FillPortion(1))
-        .style(text_theme)
         .padding(10);
 
         let text_theme = self.energy.text_color();
 
-        let energy_input = TextInput::new(&mut self.energy.state, "Energy…", &self.energy.value, |value| {
+        let energy_input = TextInput::new("Energy…", &self.energy.value, |value| {
             MealDetailMessage::ValueChanged(InputField::Energy, value)
         })
         .width(Length::FillPortion(1))
-        .style(text_theme)
         .padding(10);
 
-        let cancel_button = Button::new(
-            &mut self.cancel_state,
-            Text::new("Cancel").horizontal_alignment(Horizontal::Center),
-        )
-        .width(Length::Fill)
-        .style(theme)
-        .on_press(MealDetailMessage::Cancel);
+        let cancel_button = Button::new(Text::new("Cancel").horizontal_alignment(Horizontal::Center))
+            .width(Length::Fill)
+            .on_press(MealDetailMessage::Cancel);
 
-        let ok_button = Button::new(
-            &mut self.ok_state,
-            Text::new("Save").horizontal_alignment(Horizontal::Center),
-        )
-        .width(Length::Fill)
-        .style(theme)
-        .on_press(MealDetailMessage::Save);
+        let ok_button = Button::new(Text::new("Save").horizontal_alignment(Horizontal::Center))
+            .width(Length::Fill)
+            .on_press(MealDetailMessage::Save);
 
         let row1 = Row::new()
             .spacing(20)

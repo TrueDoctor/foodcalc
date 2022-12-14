@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use iced::button::Button;
-use iced::scrollable::{self, Scrollable};
-use iced::text_input::{self, TextInput};
-use iced::{alignment, button, Alignment, Column, Command, Container, Element, Length, Row, Space, Text};
+use iced::widget::*;
+use iced::{alignment, Alignment, Command, Element, Length};
 
 mod ingredient;
 pub use ingredient::{IngredientMessage, IngredientWrapper};
@@ -12,17 +10,14 @@ mod ingredient_create;
 use ingredient_create::IngredientCreationDialog;
 
 use self::ingredient_create::IngredientCreateMessage;
-use super::{style, Icon, TabMessage};
+use super::{Icon, TabMessage};
 use crate::db::{FoodBase, Ingredient, IngredientCreate};
 
 #[derive(Clone, Debug)]
 pub struct IngredientTab {
     ingredient_list: Vec<IngredientWrapper>,
-    scroll: scrollable::State,
-    input: text_input::State,
     input_value: String,
     database: Arc<FoodBase>,
-    pub(crate) add_ingredient_button: button::State,
     ingredient_create: Option<IngredientCreationDialog>,
 }
 
@@ -61,11 +56,8 @@ impl IngredientTab {
     pub fn new(database: Arc<FoodBase>) -> (Self, Command<TabMessage>) {
         let mut ingredients = IngredientTab {
             database,
-            scroll: scrollable::State::default(),
-            input: text_input::State::default(),
             input_value: String::new(),
             ingredient_list: Vec::new(),
-            add_ingredient_button: button::State::default(),
             ingredient_create: None,
         };
         let command = ingredients.update(IngredientTabMessage::Refresh);
@@ -165,15 +157,9 @@ impl super::Tab for IngredientTab {
     fn content(&mut self) -> Element<'_, Self::Message> {
         let theme = crate::theme();
 
-        let input = TextInput::new(
-            &mut self.input,
-            "Ingredient Name",
-            &self.input_value,
-            IngredientTabMessage::InputChanged,
-        )
-        .padding(15)
-        .style(theme)
-        .size(30);
+        let input = text_input("Ingredient Name", &self.input_value, IngredientTabMessage::InputChanged)
+            .padding(15)
+            .size(30);
         let filtered_ingredients = self.ingredient_list.iter().filter(|ingredient| {
             ingredient
                 .ingredient
@@ -199,18 +185,21 @@ impl super::Tab for IngredientTab {
             empty_message("No matching ingredient...")
         };
 
-        let scroll: Element<'_, IngredientTabMessage> = Scrollable::new(&mut self.scroll)
-            .padding(40)
-            .push(Container::new(ingredients).width(Length::Fill).height(Length::Shrink))
-            .height(Length::Fill)
-            .into();
+        let scroll: Element<'_, IngredientTabMessage> = scrollable(
+            container(ingredients)
+                .width(Length::Fill)
+                .height(Length::Shrink)
+                .padding(40),
+        )
+        .height(Length::Fill)
+        .into();
 
-        let add_ingredient_button = Button::new(&mut self.add_ingredient_button, Icon::Plus.text())
+        let add_ingredient_button = button(Icon::Plus.text())
             .on_press(IngredientTabMessage::AddIngredient)
             .padding(10)
             .height(Length::Units(40))
             .width(Length::Units(60))
-            .style(style::Button::Add);
+            .style(iced::theme::Button::Positive);
 
         let element: Element<'_, IngredientTabMessage> = if let Some(ingredient_create) = &mut self.ingredient_create {
             ingredient_create
@@ -226,7 +215,7 @@ impl super::Tab for IngredientTab {
                 .push(Space::with_height(Length::Units(10)))
                 .into()
         };
-        let element: Element<'_, IngredientTabMessage> = Container::new(element)
+        let element: Element<'_, IngredientTabMessage> = container(element)
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x()
@@ -241,12 +230,11 @@ impl super::Tab for IngredientTab {
 }
 
 fn empty_message<'a>(message: &str) -> Element<'a, IngredientTabMessage> {
-    Container::new(
-        Text::new(message)
+    container(
+        text(message)
             .width(Length::Fill)
             .size(25)
-            .horizontal_alignment(alignment::Horizontal::Center)
-            .color([0.7, 0.7, 0.7]),
+            .horizontal_alignment(alignment::Horizontal::Center),
     )
     .width(Length::Fill)
     .height(Length::Units(200))

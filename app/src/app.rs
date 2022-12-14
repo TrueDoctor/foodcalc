@@ -3,9 +3,8 @@ use std::sync::Arc;
 
 use db::FoodBase;
 use fern::colors::{Color, ColoredLevelConfig};
-use iced::alignment::{self};
-use iced::{Application, Column, Command, Container, Element, Length, Space, Text};
-use log::debug;
+use iced::widget::{button, column, container, text, vertical_space};
+use iced::{Application, Command, Element, Length};
 use sqlx::PgPool;
 
 use self::ui::TabMessage;
@@ -21,7 +20,6 @@ pub struct FoodCalc {
     state: FoodCalcState,
     errors: Vec<String>,
     receiver: std::sync::mpsc::Receiver<String>,
-    ok_state: iced::button::State,
 }
 
 #[derive(Debug)]
@@ -60,6 +58,7 @@ impl Application for FoodCalc {
     type Executor = iced::executor::Default;
     type Message = Message;
     type Flags = ();
+    type Theme = iced::theme::Theme;
 
     fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let colors = ColoredLevelConfig::new()
@@ -101,7 +100,6 @@ impl Application for FoodCalc {
                 state,
                 errors: vec![],
                 receiver,
-                ok_state: iced::button::State::new(),
             },
             command,
         )
@@ -111,8 +109,8 @@ impl Application for FoodCalc {
         "FoodCalc".to_string()
     }
 
-    fn background_color(&self) -> iced::Color {
-        crate::theme().background()
+    fn theme(&self) -> Self::Theme {
+        ui::theme::theme()
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
@@ -158,26 +156,19 @@ impl Application for FoodCalc {
             FoodCalcState::MainView(main_view) => main_view.view(),
         };
         if !self.errors.is_empty() {
-            let error_view: Column<Self::Message> = Column::new().push(Text::new("Errors:"));
-            let view: Column<Self::Message> = self.errors.iter().fold(error_view, |view, error| {
-                view.push(Text::new(error).size(40).color(iced::Color::from_rgb8(255, 0, 0)))
+            let error_view = column![text("Errors:")];
+            let view = self.errors.iter().fold(error_view, |view, error| {
+                view.push(text(error).size(40).color(iced::color!(255, 0, 0)))
             });
-            let view = view.push(
-                iced::Button::new(&mut self.ok_state, Text::new("Ok"))
-                    .on_press(Message::ErrorClosed)
-                    .style(theme),
-            );
-            Column::new()
-                .push(Space::with_height(Length::Units(30)))
-                .push(
-                    Container::new(view)
-                        .width(Length::Fill)
-                        .height(Length::Shrink)
-                        .center_x(),
-                )
-                .push(Space::with_height(Length::Units(30)))
-                .push(main_window)
-                .into()
+            let view = view.push(button("Ok").on_press(Message::ErrorClosed).style(theme));
+
+            column![
+                vertical_space(Length::Units(30)),
+                container(view).width(Length::Fill).height(Length::Shrink).center_x(),
+                vertical_space(Length::Units(30)),
+                main_window
+            ]
+            .into()
         } else {
             main_window
         }
@@ -185,11 +176,11 @@ impl Application for FoodCalc {
 }
 
 fn empty_message<'a>(message: &str) -> Element<'a, Message> {
-    Container::new(
-        Text::new(message)
+    container(
+        text(message)
             .width(Length::Fill)
             .size(25)
-            .horizontal_alignment(alignment::Horizontal::Center)
+            .horizontal_alignment(iced::Alignment::Center)
             .color([0.7, 0.7, 0.7]),
     )
     .width(Length::Fill)

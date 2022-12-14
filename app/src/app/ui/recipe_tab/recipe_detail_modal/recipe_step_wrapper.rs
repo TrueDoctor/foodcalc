@@ -2,14 +2,14 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use chrono::Duration;
-use iced::{button, text_input, Alignment, Button, Column, Element, Length, Row, Text, TextInput};
+use iced::widget::*;
+use iced::{Alignment, Element, Length};
 use num::Num;
 use sqlx::postgres::types::PgInterval;
 use sqlx::types::BigDecimal;
 
-use crate::app::ui::style::Button::Destructive;
 use crate::app::ui::util::{DurationInput, InputState};
-use crate::app::ui::{style, Icon};
+use crate::app::ui::Icon;
 use crate::db::{RecipeIngrdient, RecipeMetaIngredient, RecipeStep, Unit};
 
 #[derive(Debug, Clone, Default)]
@@ -20,8 +20,6 @@ pub struct RecipeStepWrapper {
     fixed_duration: InputState<DurationInput>,
     duration_per_kg: InputState<DurationInput>,
     step_order: InputState<f64>,
-
-    delete_button: button::State,
 }
 
 #[derive(Debug, Clone)]
@@ -120,14 +118,9 @@ impl RecipeStepWrapper {
             .push(Text::new("Name:").size(20))
             .spacing(5)
             .push(
-                TextInput::new(
-                    &mut self.name.state,
-                    "Name",
-                    &self.name.value,
-                    RecipeStepMessage::NameChanged,
-                )
-                .size(20)
-                .style(text_theme),
+                text_input("Name", &self.name.value, RecipeStepMessage::NameChanged)
+                    .size(20)
+                    .style(text_theme),
             )
             .width(Length::Fill);
 
@@ -135,10 +128,10 @@ impl RecipeStepWrapper {
         let step_order = Row::new()
             .push(Text::new("Step Order:").size(20))
             .spacing(5)
-            .max_width(100)
+            // TODO: find replacement
+            //.max_width(100)
             .push(
-                TextInput::new(
-                    &mut self.step_order.state,
+                text_input(
                     "Step Order",
                     &self.step_order.value,
                     RecipeStepMessage::StepOrderChanged,
@@ -150,8 +143,7 @@ impl RecipeStepWrapper {
 
         let text_theme = self.description.text_color();
         let description = Column::new().push(Text::new("Description:").size(20)).spacing(5).push(
-            TextInput::new(
-                &mut self.description.state,
+            text_input(
                 "Description",
                 &self.description.value,
                 RecipeStepMessage::DescriptionChanged,
@@ -164,8 +156,7 @@ impl RecipeStepWrapper {
             .push(Text::new("Fixed Duration:").size(20))
             .spacing(5)
             .push(
-                TextInput::new(
-                    &mut self.fixed_duration.state,
+                text_input(
                     "Fixed Duration",
                     &self.fixed_duration.value,
                     RecipeStepMessage::FixedDurationChanged,
@@ -180,8 +171,7 @@ impl RecipeStepWrapper {
             .push(Text::new("Duration per kg:").size(20))
             .spacing(5)
             .push(
-                TextInput::new(
-                    &mut self.duration_per_kg.state,
+                text_input(
                     "Fixed Duration",
                     &self.duration_per_kg.value,
                     RecipeStepMessage::DurationPerKgChanged,
@@ -192,7 +182,6 @@ impl RecipeStepWrapper {
             .width(Length::FillPortion(2));
 
         let delete_button = Button::new(
-            &mut self.delete_button,
             Row::new()
                 .spacing(10)
                 .push(Icon::Delete.text())
@@ -201,7 +190,7 @@ impl RecipeStepWrapper {
         .on_press(RecipeStepMessage::Delete)
         .padding(10)
         .width(Length::Shrink)
-        .style(Destructive);
+        .style(iced::theme::Button::Destructive);
 
         let row1 = Row::new().spacing(20).push(name).push(step_order);
         let row2 = Row::new().spacing(20).push(fixed_duration).push(duration_per_kg);

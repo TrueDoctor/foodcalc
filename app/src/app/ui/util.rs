@@ -5,14 +5,12 @@ use sqlx::types::time::PrimitiveDateTime;
 
 #[derive(Debug, Clone)]
 pub struct InputState<T> {
-    pub state: iced::text_input::State,
     pub value: String,
     pub value_type: Option<T>,
 }
 impl<T> Default for InputState<T> {
     fn default() -> Self {
         Self {
-            state: Default::default(),
             value: String::new(),
             value_type: None,
         }
@@ -90,11 +88,12 @@ where
         self.value_type = self.input().parse().ok();
     }
 
-    pub fn text_color(&self) -> super::style::TextInput {
+    // TODO fix
+    pub fn text_color(&self) -> iced::theme::TextInput {
         if self.valid() {
-            super::style::TextInput::Normal
+            iced::theme::TextInput::Default
         } else {
-            super::style::TextInput::Error
+            iced::theme::TextInput::Default
         }
     }
 }

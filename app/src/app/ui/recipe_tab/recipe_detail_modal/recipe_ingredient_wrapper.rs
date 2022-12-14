@@ -1,26 +1,38 @@
 use std::sync::Arc;
 
-use iced::{button, text_input, Alignment, Button, Element, Length, Row, Text, TextInput};
+use iced::widget::text_input::Id;
+use iced::{widget::*, Command};
+use iced::{Alignment, Element, Length};
 use num::Num;
 use sqlx::types::BigDecimal;
 
-use crate::app::ui::style::Button::Destructive;
-use crate::app::ui::{style, Icon};
+use crate::app::ui::Icon;
 use crate::db::{RecipeIngrdient, RecipeMetaIngredient, Unit};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RecipeIngredientWrapper {
     pub(crate) entry: RecipeIngrdient,
-    amount: text_input::State,
-    unit_list: iced::pick_list::State<Unit>,
-    ingredient_list: iced_searchable_picklist::State<RecipeMetaIngredient>,
     all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
     all_units: Arc<Vec<Unit>>,
     filtered_ingredients: Option<Vec<RecipeMetaIngredient>>,
     ingredient_filter: String,
     amount_text: String,
-    delete_button: button::State,
     amount_valid: bool,
+    searchable_list_id: Id,
+}
+impl Default for RecipeIngredientWrapper {
+    fn default() -> Self {
+        Self {
+            entry: RecipeIngrdient::default(),
+            all_ingredients: Arc::new(Vec::new()),
+            all_units: Arc::new(Vec::new()),
+            filtered_ingredients: None,
+            ingredient_filter: String::new(),
+            amount_text: String::new(),
+            amount_valid: true,
+            searchable_list_id: Id::unique(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -52,7 +64,7 @@ impl RecipeIngredientWrapper {
         self.amount_valid
     }
 
-    pub fn update(&mut self, message: RecipeIngredientMessage) {
+    pub fn update(&mut self, message: RecipeIngredientMessage) -> Command<_> {
         match message {
             RecipeIngredientMessage::FilterChanged(name) => {
                 self.ingredient_filter = name;
@@ -86,20 +98,19 @@ impl RecipeIngredientWrapper {
             },
             RecipeIngredientMessage::SubmitFilter => {
                 if let Some([elem]) = self.filtered_ingredients.as_deref() {
-                    self.ingredient_list.unfocus();
                     self.entry.ingredient = elem.clone();
                 }
             },
-            RecipeIngredientMessage::Focus => self.ingredient_list.focus(),
-            RecipeIngredientMessage::Unfocus => self.ingredient_list.unfocus(),
+            RecipeIngredientMessage::Focus => return text_input::focus(self.searchable_list_id.clone()),
+            RecipeIngredientMessage::Unfocus => (),
             RecipeIngredientMessage::Delete => (),
-        }
+        };
+        Command::none()
     }
 
     pub fn view(&mut self) -> Element<RecipeIngredientMessage> {
         let theme = crate::theme();
         let ingredient_list = iced_searchable_picklist::PickList::new(
-            &mut self.ingredient_list,
             self.filtered_ingredients.as_ref().unwrap_or(&*self.all_ingredients),
             Some(self.entry.ingredient.clone()),
             RecipeIngredientMessage::PickIngredient,
@@ -109,42 +120,27 @@ impl RecipeIngredientWrapper {
         .on_submit(RecipeIngredientMessage::SubmitFilter)
         .on_focus(RecipeIngredientMessage::Focus)
         .width(Length::FillPortion(3))
-        .text_style(theme)
-        .style(theme)
         .padding(10);
 
-        let text_theme = match self.amount_valid {
-            true => style::TextInput::Normal,
-            false => style::TextInput::Error,
-        };
-        let amount_input = TextInput::new(
-            &mut self.amount,
-            "Amount…",
-            &self.amount_text,
-            RecipeIngredientMessage::AmountChanged,
-        )
-        .on_submit(RecipeIngredientMessage::SubmitAmount)
-        .width(Length::Units(60))
-        .style(text_theme)
-        .padding(10);
+        let amount_input = TextInput::new("Amount…", &self.amount_text, RecipeIngredientMessage::AmountChanged)
+            .on_submit(RecipeIngredientMessage::SubmitAmount)
+            .width(Length::Units(60))
+            .padding(10);
 
         let unit_list = match self.entry.ingredient {
             RecipeMetaIngredient::MetaRecipe(_) => &[Unit::KG][..],
             _ => &self.all_units[..],
         };
 
-        let unit_list = iced::PickList::new(
-            &mut self.unit_list,
+        let unit_list = PickList::new(
             unit_list,
             Some(self.entry.unit.clone()),
             RecipeIngredientMessage::PickUnit,
         )
         .padding(10)
-        .style(theme)
         .width(Length::Shrink);
 
         let delete_button = Button::new(
-            &mut self.delete_button,
             Row::new()
                 .spacing(10)
                 .push(Icon::Delete.text())
@@ -152,7 +148,7 @@ impl RecipeIngredientWrapper {
         )
         .on_press(RecipeIngredientMessage::Delete)
         .padding(10)
-        .style(Destructive);
+        .style(iced::theme::Button::Destructive);
 
         Row::new()
             .spacing(20)

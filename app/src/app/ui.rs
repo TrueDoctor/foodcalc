@@ -1,10 +1,11 @@
-pub mod style;
+//pub mod style;
 pub mod theme;
 
 use std::sync::Arc;
 
 use iced::alignment::{Horizontal, Vertical};
-use iced::{Column, Command, Container, Element, Font, Length, Text};
+use iced::widget::{column, container, text};
+use iced::{Command, Element, Font, Length};
 use iced_aw::{TabLabel, Tabs};
 
 mod ingredient_tab;
@@ -63,9 +64,9 @@ impl From<Icon> for char {
 }
 
 impl Icon {
-    pub fn text(&self) -> Text {
+    pub fn text(&self) -> iced::widget::Text {
         let c: char = (*self).into();
-        Text::new(c.to_string())
+        text(c.to_string())
             .font(ICON_FONT)
             .width(Length::Units(20))
             .height(Length::Shrink)
@@ -155,9 +156,9 @@ trait Tab {
     fn tab_label(&self) -> TabLabel;
 
     fn view(&mut self) -> Element<'_, Self::Message> {
-        let column = Column::new().spacing(20).push(self.content());
+        let column = column![self.content()].spacing(20);
 
-        let element: iced::Element<'_, Self::Message> = Container::new(column)
+        let element: iced::Element<'_, Self::Message> = container(column)
             .width(Length::Fill)
             .height(Length::Fill)
             .align_x(Horizontal::Center)

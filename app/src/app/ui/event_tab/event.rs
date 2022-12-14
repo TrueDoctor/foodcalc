@@ -1,19 +1,15 @@
 use std::fmt::Display;
 
-use iced::{button, Alignment, Button, Element, Length, Row, Text};
+use iced::widget::*;
+use iced::{Alignment, Element, Length};
 
-use crate::{
-    app::ui::{style, Icon},
-    db::Event,
-};
+use crate::{app::ui::Icon, db::Event};
 
 use super::EventTabMessage;
 
 #[derive(Debug, Clone, Default)]
 pub struct EventWrapper {
     pub(crate) event: Event,
-    edit_button: button::State,
-    print_button: button::State,
 }
 
 impl Display for Event {
@@ -33,17 +29,13 @@ impl EventWrapper {
     pub(crate) fn view(&mut self) -> Element<EventTabMessage> {
         let theme = crate::theme();
         let event_id = Text::new(self.event.event_id.to_string()).color(theme.foreground());
-        let name = Text::new(self.event.event_name.to_string())
-            .width(Length::Fill)
-            .color(theme.foreground());
-        let edit_button = Button::new(&mut self.edit_button, Icon::Edit.text())
+        let name = Text::new(self.event.event_name.to_string()).width(Length::Fill);
+        let edit_button = Button::new(Icon::Edit.text())
             .on_press(EventTabMessage::OpenModal(self.event.clone()))
-            .padding(10)
-            .style(style::Button::Icon);
-        let print_button = Button::new(&mut self.print_button, Icon::RestaurantMenu.text())
+            .padding(10);
+        let print_button = Button::new(Icon::RestaurantMenu.text())
             .on_press(EventTabMessage::PrintRecipes(self.event.clone()))
-            .padding(10)
-            .style(style::Button::Icon);
+            .padding(10);
 
         Row::new()
             .spacing(20)

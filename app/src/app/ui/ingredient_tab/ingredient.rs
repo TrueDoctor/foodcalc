@@ -2,18 +2,17 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use iced::alignment::Horizontal;
-use iced::{button, text_input, Alignment, Button, Command, Element, Length, Row, Text, TextInput};
+use iced::widget::*;
+use iced::{Alignment, Command, Element, Length};
 use num::Zero;
 
 use super::IngredientTabMessage;
-use crate::app::ui::{style, Icon};
+use crate::app::ui::Icon;
 use crate::app::Error;
 use crate::db::{FoodBase, Ingredient};
 
 #[derive(Debug, Clone, Default)]
-pub struct IngredientState {
-    edit_button: button::State,
-}
+pub struct IngredientState {}
 
 #[derive(Debug, Clone, Default)]
 pub struct IngredientWrapper {
@@ -52,19 +51,15 @@ impl IngredientWrapper {
         let theme = crate::theme();
         let energy_color = match self.ingredient.energy == sqlx::types::BigDecimal::zero() {
             true => [0.5, 0.5, 0.5].into(),
-            false => theme.foreground(),
+            false => theme.palette().primary,
         };
         Row::new()
             .spacing(20)
             .align_items(Alignment::Center)
-            .push(Text::new(self.ingredient.ingredient_id.to_string()).color(theme.foreground()))
+            .push(text(self.ingredient.ingredient_id.to_string()))
+            .push(text(self.ingredient.name.to_string()).width(Length::Fill))
             .push(
-                Text::new(self.ingredient.name.to_string())
-                    .width(Length::Fill)
-                    .color(theme.foreground()),
-            )
-            .push(
-                Text::new(
+                text(
                     self.ingredient
                         .comment
                         .as_ref()
@@ -72,20 +67,19 @@ impl IngredientWrapper {
                         .unwrap_or_default(),
                 )
                 .horizontal_alignment(Horizontal::Right)
-                .color(theme.foreground())
                 .width(Length::Fill),
             )
             .push(
-                Text::new(format!("{} kj", self.ingredient.energy.round(2)))
+                text(format!("{} kj", self.ingredient.energy.round(2)))
                     .width(Length::Units(100))
-                    .color(energy_color)
+                    .style(iced::theme::Text::Color(energy_color))
                     .horizontal_alignment(Horizontal::Right),
             )
             .push(
-                Button::new(&mut self.state.edit_button, Icon::Edit.text())
+                button(Icon::Edit.text())
                     .on_press(IngredientMessage::Edit)
                     .padding(10)
-                    .style(style::Button::Icon),
+                    .style(iced::theme::Button::Primary),
             )
             .into()
     }
