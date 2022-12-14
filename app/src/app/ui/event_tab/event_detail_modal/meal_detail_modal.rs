@@ -20,8 +20,6 @@ pub struct MealDetail {
     recipe_filter: String,
     place_filter: String,
 
-    recipe_picker: iced_searchable_picklist::State<Recipe>,
-    place_picker: iced_searchable_picklist::State<Place>,
     start_time: InputState<DateInput>,
     end_time: InputState<DateInput>,
     servings: InputState<i32>,
@@ -75,8 +73,6 @@ impl MealDetail {
             filtered_places: None,
             recipe_filter: Default::default(),
             place_filter: Default::default(),
-            recipe_picker: Default::default(),
-            place_picker: Default::default(),
             start_time: InputState::new(new_meal.start_time.to_string()),
             end_time: InputState::new(new_meal.end_time.to_string()),
             servings: InputState::new(new_meal.servings.to_string()),
@@ -111,20 +107,16 @@ impl MealDetail {
                 });
             },
             MealDetailMessage::FocusRecipe => {
-                self.place_picker.unfocus();
-                self.recipe_picker.focus();
+                // TODO:
+
+                //self.recipe_picker.focus();
             },
             MealDetailMessage::FocusPlace => {
-                self.recipe_picker.unfocus();
-                self.place_picker.focus();
+                // TODO:
+                //self.place_picker.focus();
             },
-            MealDetailMessage::Unfocus => {
-                self.place_picker.unfocus();
-                self.recipe_picker.unfocus();
-            },
+            MealDetailMessage::Unfocus => {},
             MealDetailMessage::SubmitFilter => {
-                self.place_picker.unfocus();
-                self.recipe_picker.unfocus();
                 if let Some([recipe]) = self.filtered_recipes.as_deref() {
                     self.new_meal.recipe_id = recipe.recipe_id;
                 }
@@ -182,7 +174,6 @@ impl MealDetail {
             .find(|recipe| recipe.recipe_id == self.new_meal.recipe_id)
             .cloned();
         let recipe_list = iced_searchable_picklist::PickList::new(
-            &mut self.recipe_picker,
             self.filtered_recipes.as_ref().unwrap_or(&*self.all_recipes),
             selected_recipe,
             MealDetailMessage::PickRecipe,
@@ -200,7 +191,6 @@ impl MealDetail {
             .find(|place| place.place_id == self.new_meal.place_id)
             .cloned();
         let place_list = iced_searchable_picklist::PickList::new(
-            &mut self.place_picker,
             self.filtered_places.as_ref().unwrap_or(&*self.all_places),
             selected_place,
             MealDetailMessage::PickPlace,

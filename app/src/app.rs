@@ -143,14 +143,13 @@ impl Application for FoodCalc {
         }
     }
 
-    fn view(&mut self) -> Element<'_, Self::Message> {
-        let theme = crate::theme();
+    fn view(&self) -> Element<'_, Self::Message> {
         self.receiver.try_iter().for_each(|message| {
             if message.contains("[31mERROR") && !message.contains("egl") {
                 self.errors.push(message.splitn(2, ' ').last().unwrap().to_string());
             }
         });
-        let main_window = match &mut self.state {
+        let main_window = match &self.state {
             FoodCalcState::ConnectingToDatabase => empty_message("Connecting To Database"),
             FoodCalcState::ErrorView(error) => empty_message(error),
             FoodCalcState::MainView(main_view) => main_view.view(),
@@ -158,9 +157,13 @@ impl Application for FoodCalc {
         if !self.errors.is_empty() {
             let error_view = column![text("Errors:")];
             let view = self.errors.iter().fold(error_view, |view, error| {
-                view.push(text(error).size(40).color(iced::color!(255, 0, 0)))
+                view.push(
+                    text(error)
+                        .size(40)
+                        .style(iced::theme::Text::Color(iced::color!(255, 0, 0))),
+                )
             });
-            let view = view.push(button("Ok").on_press(Message::ErrorClosed).style(theme));
+            let view = view.push(button("Ok").on_press(Message::ErrorClosed));
 
             column![
                 vertical_space(Length::Units(30)),
@@ -180,8 +183,7 @@ fn empty_message<'a>(message: &str) -> Element<'a, Message> {
         text(message)
             .width(Length::Fill)
             .size(25)
-            .horizontal_alignment(iced::Alignment::Center)
-            .color([0.7, 0.7, 0.7]),
+            .style(iced::theme::Text::Color(iced::Color::from_rgb(0.7, 0.7, 0.7))),
     )
     .width(Length::Fill)
     .height(Length::Units(200))

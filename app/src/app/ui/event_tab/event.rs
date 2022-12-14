@@ -28,7 +28,7 @@ impl EventWrapper {
 
     pub(crate) fn view(&mut self) -> Element<EventTabMessage> {
         let theme = crate::theme();
-        let event_id = Text::new(self.event.event_id.to_string()).color(theme.foreground());
+        let event_id = Text::new(self.event.event_id.to_string());
         let name = Text::new(self.event.event_name.to_string()).width(Length::Fill);
         let edit_button = Button::new(Icon::Edit.text())
             .on_press(EventTabMessage::OpenModal(self.event.clone()))

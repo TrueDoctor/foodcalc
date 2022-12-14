@@ -216,7 +216,7 @@ fn empty_message<'a>(message: &str) -> Element<'a, EventTabMessage> {
             .width(Length::Fill)
             .size(25)
             .horizontal_alignment(alignment::Horizontal::Center)
-            .color([0.7, 0.7, 0.7]),
+            .style(iced::theme::Text::Color(iced::Color::from_rgb(0.7, 0.7, 0.7))),
     )
     .width(Length::Fill)
     .height(Length::Units(200))

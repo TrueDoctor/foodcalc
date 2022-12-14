@@ -127,7 +127,7 @@ impl TabBarExample {
         }
     }
 
-    pub fn view(&mut self) -> Element<'_, Message> {
+    pub fn view(&self) -> Element<'_, Message> {
         let position = self.settings_tab.settings().tab_bar_position.unwrap_or_default();
         let theme = crate::theme();
 
@@ -136,7 +136,8 @@ impl TabBarExample {
             .push(self.recipe_tab.tab_label(), self.recipe_tab.view())
             .push(self.event_tab.tab_label(), self.event_tab.view())
             .push(self.settings_tab.tab_label(), self.settings_tab.view())
-            .tab_bar_style(theme)
+            // TODO: add theme
+            //.tab_bar_style(theme)
             .icon_font(ICON_FONT)
             .tab_bar_position(match position {
                 TabBarPosition::Top => iced_aw::TabBarPosition::Top,

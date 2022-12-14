@@ -64,7 +64,7 @@ impl RecipeIngredientWrapper {
         self.amount_valid
     }
 
-    pub fn update(&mut self, message: RecipeIngredientMessage) -> Command<_> {
+    pub fn update(&mut self, message: RecipeIngredientMessage) -> Command<()> {
         match message {
             RecipeIngredientMessage::FilterChanged(name) => {
                 self.ingredient_filter = name;
@@ -78,7 +78,7 @@ impl RecipeIngredientWrapper {
             },
             RecipeIngredientMessage::AmountChanged(amount) => {
                 self.amount_text = amount;
-                self.update(RecipeIngredientMessage::SubmitAmount)
+                self.update(RecipeIngredientMessage::SubmitAmount);
             },
             RecipeIngredientMessage::PickUnit(unit) => self.entry.unit = unit,
             RecipeIngredientMessage::SubmitAmount => {

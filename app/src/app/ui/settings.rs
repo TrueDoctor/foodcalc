@@ -15,6 +15,25 @@ pub fn close_on_save() -> bool {
     CLOSE_ON_SAVE.read().as_deref().cloned().unwrap_or_default()
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum AppTheme {
+    Light,
+    Dark,
+}
+
+impl AppTheme {
+    const ALL: &'static [Self] = &[Self::Light, Self::Dark];
+}
+
+impl From<AppTheme> for String {
+    fn from(theme: AppTheme) -> Self {
+        match theme {
+            AppTheme::Light => "Light".to_string(),
+            AppTheme::Dark => "Dark".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabBarPosition {
     Top,
@@ -60,19 +79,21 @@ impl TabSettings {
 #[derive(Debug, Clone)]
 pub enum SettingsMessage {
     PositionSelected(TabBarPosition),
-    ThemeSelected(Theme),
+    ThemeSelected(AppTheme),
     CloseOnSaveUpdated(bool),
 }
 
 #[derive(Debug, Clone)]
 pub struct SettingsTab {
     settings: TabSettings,
+    theme: AppTheme,
 }
 
 impl SettingsTab {
     pub fn new() -> Self {
         SettingsTab {
             settings: TabSettings::new(),
+            theme: AppTheme::Light,
         }
     }
 
@@ -80,6 +101,11 @@ impl SettingsTab {
         match message {
             SettingsMessage::PositionSelected(position) => self.settings().tab_bar_position = Some(position),
             SettingsMessage::ThemeSelected(theme) => {
+                self.theme = theme;
+                let theme = match theme {
+                    AppTheme::Light => Theme::Light,
+                    AppTheme::Dark => Theme::Dark,
+                };
                 self.settings().tab_bar_theme = Some(theme);
                 match super::theme::THEME.write() {
                     Ok(mut t) => *t = theme,
@@ -131,14 +157,14 @@ impl Tab for SettingsTab {
                     },
                 ))
                 .push(Text::new("TabBar color:").size(20))
-                .push([Theme::Light, Theme::Dark].iter().cloned().fold(
+                .push(AppTheme::ALL.iter().cloned().fold(
                     Column::new().padding(10).spacing(10),
                     |column, selected_theme| {
                         column.push(
                             Radio::new(
                                 selected_theme,
-                                super::theme::theme_to_string(selected_theme),
-                                Some(theme),
+                                selected_theme,
+                                Some(self.theme),
                                 SettingsMessage::ThemeSelected,
                             )
                             .size(16),

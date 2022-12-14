@@ -25,7 +25,7 @@ chrono = "*"
 
 log = "0.4"
 fern = {version = "0.6", features = ["colored"]}
-iced_aw = { version = "0.2", default-features = false, features = ["tabs"] }
+iced_aw = { git = "https://github.com/iced-rs/iced_aw", rev="5e1c1d0b6b907dc990490034bb3519cf836bd095", default-features = false, features = ["tabs"] }
 
 #reqwest = { version = "0.11" }
 
