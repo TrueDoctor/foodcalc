@@ -306,9 +306,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.77"
+version = "1.0.78"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9f73505338f7d905b19d18738976aae232eb46b8efc15554ffc56deb5d9ebe4"
+checksum = "a20104e2335ce8a659d6dd92a51a767a0c062599c73b343fd152cb401e828c3d"
 
 [[package]]
 name = "cesu8"
@@ -1865,6 +1865,8 @@ dependencies = [
 [[package]]
 name = "iced_searchable_picklist"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20f28b91a89dcedb5aa947a5b1cc994e711b7419c2f4a4a60216f1eb81cc58f2"
 dependencies = [
  "iced_core",
  "iced_native",
