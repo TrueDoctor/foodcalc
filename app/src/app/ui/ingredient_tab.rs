@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use iced::widget::*;
-use iced::{alignment, Alignment, Command, Element, Length};
+use iced::{alignment, Command, Element, Length};
 
 mod ingredient;
 pub use ingredient::{IngredientMessage, IngredientWrapper};
@@ -11,7 +11,7 @@ use ingredient_create::IngredientCreationDialog;
 
 use self::ingredient_create::IngredientCreateMessage;
 use super::{Icon, TabMessage};
-use crate::db::{FoodBase, Ingredient, IngredientCreate};
+use crate::db::{FoodBase, IngredientCreate};
 
 #[derive(Clone, Debug)]
 pub struct IngredientTab {
@@ -155,7 +155,7 @@ impl super::Tab for IngredientTab {
     }
 
     fn content(&self) -> Element<'_, Self::Message> {
-        let theme = crate::theme();
+        let _theme = crate::theme();
 
         let input = text_input("Ingredient Name", &self.input_value, IngredientTabMessage::InputChanged)
             .padding(15)

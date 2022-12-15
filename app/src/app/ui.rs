@@ -129,7 +129,7 @@ impl TabBarExample {
 
     pub fn view(&self) -> Element<'_, Message> {
         let position = self.settings_tab.settings().tab_bar_position.unwrap_or_default();
-        let theme = crate::theme();
+        let _theme = crate::theme();
 
         let element: Element<'_, TabMessage> = Tabs::new(self.active_tab, TabMessage::TabSelected)
             .push(self.ingredient_tab.tab_label(), self.ingredient_tab.view())

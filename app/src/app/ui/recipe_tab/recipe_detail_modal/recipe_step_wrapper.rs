@@ -1,16 +1,9 @@
-use std::str::FromStr;
-use std::sync::Arc;
-
-use chrono::Duration;
 use iced::widget::*;
 use iced::{Alignment, Element, Length};
-use num::Num;
-use sqlx::postgres::types::PgInterval;
-use sqlx::types::BigDecimal;
 
 use crate::app::ui::util::{DurationInput, InputState};
 use crate::app::ui::Icon;
-use crate::db::{RecipeIngrdient, RecipeMetaIngredient, RecipeStep, Unit};
+use crate::db::RecipeStep;
 
 #[derive(Debug, Clone, Default)]
 pub struct RecipeStepWrapper {
@@ -44,7 +37,6 @@ impl RecipeStepWrapper {
             fixed_duration: InputState::new(DurationInput(entry.fixed_duration)),
             duration_per_kg: InputState::new(DurationInput(entry.duration_per_kg)),
             step_order: InputState::new(entry.step_order.to_string()),
-            ..Default::default()
         }
     }
 

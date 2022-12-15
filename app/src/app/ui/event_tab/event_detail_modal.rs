@@ -122,7 +122,7 @@ impl EventDetail {
                     },
                     EventDetailMessage::ShowModal,
                 )
-                .map(|message| EventTabMessage::EventDetailMessage(message.into()));
+                .map(EventTabMessage::EventDetailMessage);
             },
             EventDetailMessage::ShowModal(Ok(meal_modal)) => {
                 self.meal_modal = Some(meal_modal);
@@ -190,7 +190,7 @@ impl EventDetail {
                 self.event.comment = Some(comment);
             },
             _ => {
-                debug!("recieved message without handler: {message:?}")
+                log::error!("recieved message without handler: {message:?}")
             },
         }
         Command::none()

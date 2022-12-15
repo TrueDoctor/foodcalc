@@ -3,6 +3,7 @@ use std::sync::Arc;
 use iced::alignment::Horizontal;
 use iced::widget::*;
 use iced::{Alignment, Command, Element, Length};
+use num::Zero;
 use sqlx::types::BigDecimal;
 
 use super::EventDetailMessage;
@@ -138,27 +139,34 @@ impl MealDetail {
             },
             MealDetailMessage::Save => {
                 let move_database = self.database.clone();
-                let meal = self.new_meal.clone();
+
                 let old_meal = self.old_meal.clone();
                 if vec![
                     self.start_time.valid(),
                     self.end_time.valid(),
                     self.comment.valid(),
-                    self.energy.valid(),
-                    self.servings.valid(),
+                    self.energy.valid() && self.energy.value_type.as_ref().unwrap() > &BigDecimal::zero(),
+                    self.servings.valid() && self.servings.value_type.unwrap() > 0,
                 ]
                 .iter()
                 .all(|input| *input)
                 {
+                    self.new_meal.start_time = self.start_time.value_type.clone().unwrap().0;
+                    self.new_meal.end_time = self.end_time.value_type.clone().unwrap().0;
+                    self.new_meal.servings = self.servings.value_type.unwrap();
+                    self.new_meal.energy = self.energy.value_type.clone().unwrap();
+                    let meal = self.new_meal.clone();
+
                     return Command::perform(
                         async move {
+                            log::trace!("Saving meal: {:?}", meal);
                             move_database.update_single_meal(old_meal, Some(meal)).await?;
                             Ok(())
                         },
                         EventDetailMessage::CloseModal,
                     );
                 } else {
-                    println!("Invalid input {:#?}", self);
+                    log::error!("Invalid input {:#?}", self.new_meal);
                 }
             },
         }
@@ -166,8 +174,6 @@ impl MealDetail {
     }
 
     pub fn view(&self) -> Element<MealDetailMessage> {
-        let theme = crate::theme();
-
         let selected_recipe = self
             .all_recipes
             .iter()
@@ -202,14 +208,14 @@ impl MealDetail {
         .width(Length::FillPortion(3))
         .padding(10);
 
-        let text_theme = self.start_time.text_color();
+        let _text_theme = self.start_time.text_color();
         let start_input = TextInput::new("Start Time…", &self.start_time.value, |value| {
             MealDetailMessage::ValueChanged(InputField::StartTime, value)
         })
         .width(Length::FillPortion(1))
         .padding(10);
 
-        let text_theme = self.end_time.text_color();
+        let _text_theme = self.end_time.text_color();
 
         let end_input = TextInput::new("End Time…", &self.end_time.value, |value| {
             MealDetailMessage::ValueChanged(InputField::EndTime, value)
@@ -217,21 +223,21 @@ impl MealDetail {
         .width(Length::FillPortion(1))
         .padding(10);
 
-        let text_theme = self.comment.text_color();
+        let _text_theme = self.comment.text_color();
         let comment_input = TextInput::new("Comment…", &self.comment.value, |value| {
             MealDetailMessage::ValueChanged(InputField::Comment, value)
         })
         .width(Length::Fill)
         .padding(10);
 
-        let text_theme = self.servings.text_color();
+        let _text_theme = self.servings.text_color();
         let servings_input = TextInput::new("Servings…", &self.servings.value, |value| {
             MealDetailMessage::ValueChanged(InputField::Servings, value)
         })
         .width(Length::FillPortion(1))
         .padding(10);
 
-        let text_theme = self.energy.text_color();
+        let _text_theme = self.energy.text_color();
 
         let energy_input = TextInput::new("Energy…", &self.energy.value, |value| {
             MealDetailMessage::ValueChanged(InputField::Energy, value)

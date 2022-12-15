@@ -46,7 +46,7 @@ fn load_events(database: Arc<FoodBase>) -> Command<EventTabMessage> {
                 .get_events()
                 .await?
                 .into_iter()
-                .map(|event| EventWrapper::new(event))
+                .map(EventWrapper::new)
                 .collect();
             Ok(events)
         },
@@ -151,7 +151,7 @@ impl super::Tab for EventTab {
     }
 
     fn content(&self) -> iced::Element<'_, Self::Message> {
-        let theme = crate::theme();
+        let _theme = crate::theme();
 
         let input = TextInput::new("Event Name", &self.input_value, EventTabMessage::InputChanged)
             .padding(15)
@@ -160,7 +160,7 @@ impl super::Tab for EventTab {
         let filtered_events = self
             .event_list
             .iter()
-            .filter(|event| crate::similar(&event.event.event_name, &*self.input_value));
+            .filter(|event| crate::similar(&event.event.event_name, &self.input_value));
 
         let add_event_button = Button::new(
             Row::new()
@@ -210,7 +210,7 @@ impl super::Tab for EventTab {
     }
 }
 
-fn empty_message<'a>(message: &'a str) -> Element<'a, EventTabMessage> {
+fn empty_message(message: &str) -> Element<'_, EventTabMessage> {
     Container::new(
         Text::new(message)
             .width(Length::Fill)

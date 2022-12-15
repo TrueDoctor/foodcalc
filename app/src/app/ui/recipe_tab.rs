@@ -142,7 +142,7 @@ impl super::Tab for RecipeTab {
     }
 
     fn content(&self) -> Element<'_, Self::Message> {
-        let theme = crate::theme();
+        let _theme = crate::theme();
 
         let input = TextInput::new("Recipe Name", &self.input_value, RecipeTabMessage::InputChanged)
             .padding(15)
@@ -150,7 +150,7 @@ impl super::Tab for RecipeTab {
         let filtered_recipes = self
             .recipe_list
             .iter()
-            .filter(|recipe| crate::similar(&recipe.recipe.name, &*self.input_value));
+            .filter(|recipe| crate::similar(&recipe.recipe.name, &self.input_value));
 
         let recipes: Element<_> = if filtered_recipes.count() > 0 {
             self.recipe_list

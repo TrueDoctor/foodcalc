@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use db::FoodBase;
 use fern::colors::{Color, ColoredLevelConfig};
-use iced::widget::{button, column, container, text, vertical_space};
+use iced::widget::{button, column, container, scrollable, text};
 use iced::{Application, Command, Element, Length};
 use sqlx::PgPool;
 
@@ -155,23 +155,18 @@ impl Application for FoodCalc {
             FoodCalcState::MainView(ref main_view) => main_view.view(),
         };
         if !errors.is_empty() {
-            let error_view = column![text("Errors:")];
+            let error_view = column![text("Errors:").size(40)];
             let view = errors.iter().fold(error_view, |view, error| {
                 view.push(
                     text(error)
-                        .size(40)
+                        .size(20)
                         .style(iced::theme::Text::Color(iced::color!(255, 0, 0))),
                 )
             });
-            let view = view.push(button("Ok").on_press(Message::ErrorClosed));
+            let view = column![view, button("Ok").on_press(Message::ErrorClosed)];
+            let view = scrollable(view);
 
-            column![
-                vertical_space(Length::Units(30)),
-                container(view).width(Length::Fill).height(Length::Shrink).center_x(),
-                vertical_space(Length::Units(30)),
-                main_window
-            ]
-            .into()
+            view.into()
         } else {
             main_window
         }

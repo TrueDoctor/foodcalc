@@ -1,11 +1,11 @@
 use iced::alignment::Horizontal;
 use iced::widget::*;
-use iced::{Alignment, Command, Element, Length};
+use iced::{Alignment, Element, Length};
 use sqlx::types::BigDecimal;
 
 use super::IngredientTabMessage;
 use crate::app::ui::util::{InputState, OptionString};
-use crate::db::{FoodBase, Ingredient, IngredientCreate};
+use crate::db::{Ingredient, IngredientCreate};
 
 #[derive(Debug, Clone)]
 pub struct IngredientCreationDialog {

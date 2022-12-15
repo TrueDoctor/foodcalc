@@ -1,4 +1,5 @@
 /target
+target
 tex
 recipes/*.tex
 recipes/out/

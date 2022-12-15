@@ -90,10 +90,6 @@ where
 
     // TODO fix
     pub fn text_color(&self) -> iced::theme::TextInput {
-        if self.valid() {
-            iced::theme::TextInput::Default
-        } else {
-            iced::theme::TextInput::Default
-        }
+        iced::theme::TextInput::Default
     }
 }

@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::sync::Arc;
 
 use iced::alignment::Horizontal;
 use iced::widget::*;
@@ -8,16 +7,12 @@ use num::Zero;
 
 use super::IngredientTabMessage;
 use crate::app::ui::Icon;
-use crate::app::Error;
-use crate::db::{FoodBase, Ingredient};
 
-#[derive(Debug, Clone, Default)]
-pub struct IngredientState {}
+use crate::db::Ingredient;
 
 #[derive(Debug, Clone, Default)]
 pub struct IngredientWrapper {
     pub(crate) ingredient: Ingredient,
-    pub(crate) state: IngredientState,
 }
 
 impl Display for Ingredient {
@@ -33,10 +28,7 @@ pub enum IngredientMessage {
 
 impl IngredientWrapper {
     pub fn new(ingredient: Ingredient) -> Self {
-        Self {
-            ingredient,
-            ..Default::default()
-        }
+        Self { ingredient }
     }
 
     pub fn update(&mut self, message: IngredientMessage) -> Command<IngredientTabMessage> {

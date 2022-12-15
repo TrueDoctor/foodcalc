@@ -1,15 +1,14 @@
 use std::borrow::Cow;
 use std::fmt::Display;
-use std::path::Path;
-use std::sync::Arc;
 
-use chrono::Duration;
+use std::sync::Arc;
+use std::time::SystemTime;
+
 use num::ToPrimitive;
 use sqlx::postgres::types::{PgInterval, PgMoney};
 use sqlx::postgres::PgPool;
-use sqlx::types::time::PrimitiveDateTime;
+use sqlx::types::time::{PrimitiveDateTime, Time};
 use sqlx::types::BigDecimal;
-use tokio::task::spawn_blocking;
 
 pub const METRO: i32 = 0;
 
@@ -109,6 +108,11 @@ pub struct Meal {
 
 impl Default for Meal {
     fn default() -> Self {
+        let time = SystemTime::now();
+        let time = PrimitiveDateTime::from(time);
+        let date = time.date();
+        let time = Time::try_from_hms(12, 0, 0).unwrap();
+        let start_time = PrimitiveDateTime::new(date, time);
         Self {
             event_id: Default::default(),
             recipe_id: Default::default(),
@@ -116,12 +120,12 @@ impl Default for Meal {
             comment: None,
             place_id: Default::default(),
             place: Default::default(),
-            start_time: PrimitiveDateTime::parse("1970-01-01 00:00:00", "%F %T").unwrap(),
-            end_time: PrimitiveDateTime::parse("1970-01-01 00:00:00", "%F %T").unwrap(),
+            start_time,
+            end_time: start_time,
             weight: Default::default(),
-            energy: Default::default(),
+            energy: BigDecimal::from(2400),
             price: PgMoney::from(0),
-            servings: Default::default(),
+            servings: 1,
         }
     }
 }
@@ -591,7 +595,7 @@ impl FoodBase {
             let steps = self.get_recipe_steps(subrecipe_id).await.unwrap_or_default();
             self.format_subrecipe(&mut text, ingredients, steps);
         }
-        use std::fmt::Write;
+
         #[cfg(feature = "tectonic")]
         {
             use tectonic::driver::ProcessingSessionBuilder;
