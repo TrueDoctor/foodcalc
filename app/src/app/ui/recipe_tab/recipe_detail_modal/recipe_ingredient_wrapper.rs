@@ -108,8 +108,7 @@ impl RecipeIngredientWrapper {
         Command::none()
     }
 
-    pub fn view(&mut self) -> Element<RecipeIngredientMessage> {
-        let theme = crate::theme();
+    pub fn view(&self) -> Element<RecipeIngredientMessage> {
         let ingredient_list = iced_searchable_picklist::PickList::new(
             self.filtered_ingredients.as_ref().unwrap_or(&*self.all_ingredients),
             Some(self.entry.ingredient.clone()),

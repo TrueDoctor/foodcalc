@@ -99,14 +99,14 @@ impl SettingsTab {
 
     pub fn update(&mut self, message: SettingsMessage) -> Command<TabMessage> {
         match message {
-            SettingsMessage::PositionSelected(position) => self.settings().tab_bar_position = Some(position),
+            SettingsMessage::PositionSelected(position) => self.settings.tab_bar_position = Some(position),
             SettingsMessage::ThemeSelected(theme) => {
                 self.theme = theme;
                 let theme = match theme {
                     AppTheme::Light => Theme::Light,
                     AppTheme::Dark => Theme::Dark,
                 };
-                self.settings().tab_bar_theme = Some(theme);
+                self.settings.tab_bar_theme = Some(theme.clone());
                 match super::theme::THEME.write() {
                     Ok(mut t) => *t = theme,
                     Err(_) => log::error!("error setting theme"),
@@ -119,8 +119,8 @@ impl SettingsTab {
         Command::none()
     }
 
-    pub fn settings(&mut self) -> &mut TabSettings {
-        &mut self.settings
+    pub fn settings(&self) -> &TabSettings {
+        &self.settings
     }
 }
 
@@ -136,8 +136,7 @@ impl Tab for SettingsTab {
         TabLabel::IconText(Icon::CogAlt.into(), self.title())
     }
 
-    fn content(&mut self) -> Element<'_, Self::Message> {
-        let theme = crate::theme();
+    fn content(&self) -> Element<'_, Self::Message> {
         let content: Element<'_, SettingsMessage> = Container::new(
             Column::new()
                 .spacing(20)

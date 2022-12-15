@@ -154,7 +154,7 @@ impl super::Tab for IngredientTab {
         "Ingredients".to_string()
     }
 
-    fn content(&mut self) -> Element<'_, Self::Message> {
+    fn content(&self) -> Element<'_, Self::Message> {
         let theme = crate::theme();
 
         let input = text_input("Ingredient Name", &self.input_value, IngredientTabMessage::InputChanged)
@@ -170,7 +170,7 @@ impl super::Tab for IngredientTab {
 
         let ingredients: Element<_> = if filtered_ingredients.count() > 0 {
             self.ingredient_list
-                .iter_mut()
+                .iter()
                 .enumerate()
                 .filter(|(_, ingredient)| crate::similar(&ingredient.ingredient.name, &self.input_value))
                 .fold(Column::new().spacing(00), |column, (i, ingredient)| {
@@ -201,7 +201,7 @@ impl super::Tab for IngredientTab {
             .width(Length::Units(60))
             .style(iced::theme::Button::Positive);
 
-        let element: Element<'_, IngredientTabMessage> = if let Some(ingredient_create) = &mut self.ingredient_create {
+        let element: Element<'_, IngredientTabMessage> = if let Some(ingredient_create) = &self.ingredient_create {
             ingredient_create
                 .view()
                 .map(IngredientTabMessage::IngredientDetailMessage)

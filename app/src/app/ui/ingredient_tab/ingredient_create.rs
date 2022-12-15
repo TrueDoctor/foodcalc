@@ -78,9 +78,7 @@ impl IngredientCreationDialog {
         None
     }
 
-    pub fn view(&mut self) -> Element<IngredientCreateMessage> {
-        let theme = crate::theme();
-
+    pub fn view(&self) -> Element<IngredientCreateMessage> {
         let comment_input = TextInput::new("Comment…", &self.comment.value, |value| {
             IngredientCreateMessage::SubmitValue(InputField::Comment, value)
         })

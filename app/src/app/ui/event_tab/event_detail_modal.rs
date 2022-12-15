@@ -196,9 +196,7 @@ impl EventDetail {
         Command::none()
     }
 
-    pub fn view(&mut self) -> Element<EventDetailMessage> {
-        let theme = crate::theme();
-
+    pub fn view(&self) -> Element<EventDetailMessage> {
         let title = text_input(
             "Event Title...",
             &self.event.event_name,
@@ -227,7 +225,7 @@ impl EventDetail {
 
         let meals: Element<'_, EventDetailMessage> = self
             .meals
-            .iter_mut()
+            .iter()
             .enumerate()
             .fold(Column::new(), |column, (i, meal)| {
                 column.push(
@@ -287,7 +285,7 @@ impl EventDetail {
             .push(meals)
             .push(footer)
             .into();
-        match self.meal_modal.as_mut() {
+        match self.meal_modal.as_ref() {
             Some(modal) => modal.view().map(EventDetailMessage::MealDetailMessage),
             None => element,
         }

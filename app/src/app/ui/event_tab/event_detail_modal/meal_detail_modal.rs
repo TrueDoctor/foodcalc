@@ -165,7 +165,7 @@ impl MealDetail {
         Command::none()
     }
 
-    pub fn view(&mut self) -> Element<MealDetailMessage> {
+    pub fn view(&self) -> Element<MealDetailMessage> {
         let theme = crate::theme();
 
         let selected_recipe = self

@@ -141,7 +141,7 @@ impl super::Tab for RecipeTab {
         "Recipes".to_string()
     }
 
-    fn content(&mut self) -> Element<'_, Self::Message> {
+    fn content(&self) -> Element<'_, Self::Message> {
         let theme = crate::theme();
 
         let input = TextInput::new("Recipe Name", &self.input_value, RecipeTabMessage::InputChanged)
@@ -154,7 +154,7 @@ impl super::Tab for RecipeTab {
 
         let recipes: Element<_> = if filtered_recipes.count() > 0 {
             self.recipe_list
-                .iter_mut()
+                .iter()
                 .enumerate()
                 .filter(|(_, recipe)| crate::similar(&recipe.recipe.name, &self.input_value))
                 .fold(Column::new().spacing(00), |column, (_i, recipe)| {
@@ -177,7 +177,7 @@ impl super::Tab for RecipeTab {
             .center_x()
             .into();
 
-        let element: Element<'_, RecipeTabMessage> = match self.recipe_detail_modal.as_mut() {
+        let element: Element<'_, RecipeTabMessage> = match self.recipe_detail_modal.as_ref() {
             Some(modal) => modal.view().map(RecipeTabMessage::RecipeDetailMessage),
             None => element,
         };

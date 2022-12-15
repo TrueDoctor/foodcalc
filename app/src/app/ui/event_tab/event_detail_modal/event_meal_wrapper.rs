@@ -56,9 +56,7 @@ impl MealWrapper {
         Command::none()
     }
 
-    pub fn view(&mut self) -> Element<MealWrapperMessage> {
-        let theme = crate::theme();
-
+    pub fn view(&self) -> Element<MealWrapperMessage> {
         let label = self
             .all_recipes
             .iter()

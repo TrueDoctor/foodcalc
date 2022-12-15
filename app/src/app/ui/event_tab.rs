@@ -150,7 +150,7 @@ impl super::Tab for EventTab {
         "Events".to_string()
     }
 
-    fn content(&mut self) -> iced::Element<'_, Self::Message> {
+    fn content(&self) -> iced::Element<'_, Self::Message> {
         let theme = crate::theme();
 
         let input = TextInput::new("Event Name", &self.input_value, EventTabMessage::InputChanged)
@@ -174,7 +174,7 @@ impl super::Tab for EventTab {
 
         let events: Element<_> = if filtered_events.clone().count() > 0 {
             self.event_list
-                .iter_mut()
+                .iter()
                 .enumerate()
                 .filter(|(_, event)| crate::similar(&event.event.event_name, &self.input_value))
                 .fold(Column::new().spacing(00), |column, (_i, event)| {
@@ -197,7 +197,7 @@ impl super::Tab for EventTab {
             .center_x()
             .into();
 
-        let element: Element<'_, EventTabMessage> = match self.event_detail_modal.as_mut() {
+        let element: Element<'_, EventTabMessage> = match self.event_detail_modal.as_ref() {
             Some(modal) => modal.view().map(EventTabMessage::EventDetailMessage),
             None => element,
         };
@@ -210,7 +210,7 @@ impl super::Tab for EventTab {
     }
 }
 
-fn empty_message<'a>(message: &str) -> Element<'a, EventTabMessage> {
+fn empty_message<'a>(message: &'a str) -> Element<'a, EventTabMessage> {
     Container::new(
         Text::new(message)
             .width(Length::Fill)

@@ -41,13 +41,13 @@ impl IngredientWrapper {
 
     pub fn update(&mut self, message: IngredientMessage) -> Command<IngredientTabMessage> {
         let move_id = self.ingredient.ingredient_id;
-        let command = match message {
+
+        match message {
             IngredientMessage::Edit => Command::perform(async move { move_id }, IngredientTabMessage::EditIngredient),
-        };
-        command
+        }
     }
 
-    pub fn view(&mut self) -> Element<IngredientMessage> {
+    pub fn view(&self) -> Element<IngredientMessage> {
         let theme = crate::theme();
         let energy_color = match self.ingredient.energy == sqlx::types::BigDecimal::zero() {
             true => [0.5, 0.5, 0.5].into(),
@@ -79,7 +79,7 @@ impl IngredientWrapper {
                 button(Icon::Edit.text())
                     .on_press(IngredientMessage::Edit)
                     .padding(10)
-                    .style(iced::theme::Button::Primary),
+                    .style(iced::theme::Button::Text),
             )
             .into()
     }

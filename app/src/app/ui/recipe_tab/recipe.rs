@@ -20,14 +20,10 @@ impl Display for Recipe {
 
 impl RecipeWrapper {
     pub fn new(recipe: Recipe) -> Self {
-        Self {
-            recipe,
-            ..Default::default()
-        }
+        Self { recipe }
     }
 
-    pub fn view(&mut self) -> Element<RecipeTabMessage> {
-        let theme = crate::theme();
+    pub fn view(&self) -> Element<RecipeTabMessage> {
         Row::new()
             .spacing(20)
             .align_items(Alignment::Center)
@@ -37,7 +33,7 @@ impl RecipeWrapper {
                 button(Icon::Edit.text())
                     .on_press(RecipeTabMessage::OpenModal(self.recipe.clone()))
                     .padding(10)
-                    .style(iced::theme::Button::Primary),
+                    .style(iced::theme::Button::Text),
             )
             .into()
     }

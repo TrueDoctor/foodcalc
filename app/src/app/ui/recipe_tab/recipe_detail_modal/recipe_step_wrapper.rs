@@ -112,7 +112,7 @@ impl RecipeStepWrapper {
         }
     }
 
-    pub fn view(&mut self) -> Element<RecipeStepMessage> {
+    pub fn view(&self) -> Element<RecipeStepMessage> {
         let text_theme = self.name.text_color();
         let name = Row::new()
             .push(Text::new("Name:").size(20))

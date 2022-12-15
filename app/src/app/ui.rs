@@ -156,7 +156,7 @@ trait Tab {
 
     fn tab_label(&self) -> TabLabel;
 
-    fn view(&mut self) -> Element<'_, Self::Message> {
+    fn view(&self) -> Element<'_, Self::Message> {
         let column = column![self.content()].spacing(20);
 
         let element: iced::Element<'_, Self::Message> = container(column)
@@ -170,5 +170,5 @@ trait Tab {
         //element.explain(iced::Color::from_rgb(1.0,0.0,0.0))
     }
 
-    fn content(&mut self) -> Element<'_, Self::Message>;
+    fn content(&self) -> Element<'_, Self::Message>;
 }

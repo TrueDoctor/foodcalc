@@ -1,5 +1,6 @@
+use std::cell::RefCell;
 use std::env;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use db::FoodBase;
 use fern::colors::{Color, ColoredLevelConfig};
@@ -15,14 +16,12 @@ pub mod scraping;
 
 pub mod ui;
 
-#[derive(Debug)]
 pub struct FoodCalc {
     state: FoodCalcState,
-    errors: Vec<String>,
+    errors: RefCell<Vec<String>>,
     receiver: std::sync::mpsc::Receiver<String>,
 }
 
-#[derive(Debug)]
 pub enum FoodCalcState {
     ConnectingToDatabase,
     ErrorView(String),
@@ -98,7 +97,7 @@ impl Application for FoodCalc {
         (
             FoodCalc {
                 state,
-                errors: vec![],
+                errors: RefCell::new(vec![]),
                 receiver,
             },
             command,
@@ -129,7 +128,7 @@ impl Application for FoodCalc {
             },
             FoodCalcState::MainView(main_view) => match message {
                 Message::ErrorClosed => {
-                    self.errors.clear();
+                    self.errors.borrow_mut().clear();
                     Command::none()
                 },
                 Message::MainMessage(message) => main_view.update(message).map(Message::MainMessage),
@@ -144,19 +143,20 @@ impl Application for FoodCalc {
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
+        let mut errors = self.errors.borrow_mut();
         self.receiver.try_iter().for_each(|message| {
             if message.contains("[31mERROR") && !message.contains("egl") {
-                self.errors.push(message.splitn(2, ' ').last().unwrap().to_string());
+                errors.push(message.splitn(2, ' ').last().unwrap().to_string());
             }
         });
-        let main_window = match &self.state {
+        let main_window = match self.state {
             FoodCalcState::ConnectingToDatabase => empty_message("Connecting To Database"),
-            FoodCalcState::ErrorView(error) => empty_message(error),
-            FoodCalcState::MainView(main_view) => main_view.view(),
+            FoodCalcState::ErrorView(ref error) => empty_message(error),
+            FoodCalcState::MainView(ref main_view) => main_view.view(),
         };
-        if !self.errors.is_empty() {
+        if !errors.is_empty() {
             let error_view = column![text("Errors:")];
-            let view = self.errors.iter().fold(error_view, |view, error| {
+            let view = errors.iter().fold(error_view, |view, error| {
                 view.push(
                     text(error)
                         .size(40)

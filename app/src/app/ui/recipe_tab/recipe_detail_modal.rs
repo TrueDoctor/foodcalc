@@ -141,8 +141,7 @@ impl RecipeDetail {
         Command::none()
     }
 
-    pub fn view(&mut self) -> Element<RecipeDetailMessage> {
-        let theme = crate::theme();
+    pub fn view(&self) -> Element<RecipeDetailMessage> {
         let description_input = TextInput::new(
             "Recipe Description…",
             self.recipe.comment.as_deref().unwrap_or(""),
@@ -153,7 +152,7 @@ impl RecipeDetail {
 
         let ingredients: Element<'_, RecipeDetailMessage> = self
             .ingredients
-            .iter_mut()
+            .iter()
             .enumerate()
             .fold(Column::new().spacing(10), |column, (i, recipe)| {
                 column.push(
@@ -185,7 +184,7 @@ impl RecipeDetail {
 
         let steps: Element<'_, RecipeDetailMessage> = self
             .steps
-            .iter_mut()
+            .iter()
             .enumerate()
             .fold(Column::new().spacing(40), |column, (i, recipe)| {
                 column.push(
