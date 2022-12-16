@@ -24,7 +24,7 @@ pub struct Article {
     pub locale: String,
     pub variants: HashMap<String, Variant>,
     pub variant_selector: HashMap<String, String>,
-    pub brand_name: String,
+    pub brand_name: Option<String>,
     pub anonymous_visible: bool,
     pub anonymous_searchable: bool,
     pub food_non_food: bool,
@@ -80,10 +80,10 @@ pub struct Bundle {
     pub price_request_ids: Vec<Id>,
     pub ean_number: Vec<Option<serde_json::Value>>,
     pub description: String,
-    pub variant_text: String,
+    pub variant_text: Option<String>,
     pub bundle_size: String,
     pub is_weight_article: String,
-    pub brand_name: String,
+    pub brand_name: Option<String>,
     pub own_brand: Option<String>,
     pub empties_article_number: Option<serde_json::Value>,
     pub bundle_volume: String,
@@ -91,14 +91,14 @@ pub struct Bundle {
     pub bundle_height: String,
     pub bundle_width: String,
     pub gross_weight: String,
-    pub bundle_depth_measure_unit: String,
-    pub bundle_height_measure_unit: String,
-    pub bundle_width_measure_unit: String,
+    pub bundle_depth_measure_unit: Option<UnitOfMeasure>,
+    pub bundle_height_measure_unit: Option<UnitOfMeasure>,
+    pub bundle_width_measure_unit: Option<UnitOfMeasure>,
     pub warranty_months: String,
-    pub season: String,
-    pub image_url: String,
-    pub image_url_s: String,
-    pub image_url_l: String,
+    pub season: Option<String>,
+    pub image_url: Option<String>,
+    pub image_url_s: Option<String>,
+    pub image_url_l: Option<String>,
     pub long_description: String,
     pub selector: Selector,
     pub ref_bundle_ids: Vec<RefBundleId>,
@@ -109,7 +109,7 @@ pub struct Bundle {
     pub service_options: Vec<Option<serde_json::Value>>,
     pub content_data: ContentData,
     pub weight_per_piece: Option<serde_json::Value>,
-    pub brand_image: String,
+    pub brand_image: Option<String>,
     pub tracking_info: TrackingInfo,
     pub use_min_quantity_multiplier: Option<bool>,
     pub brand_info: BrandInfo,
@@ -140,7 +140,7 @@ pub struct BrandInfo {
     pub own_brand: bool,
     pub brand_image: String,
     pub image_info: ImageInfo,
-    pub display_brand_name: String,
+    pub display_brand_name: Option<String>,
     pub display_sub_brand_name: Option<serde_json::Value>,
 }
 
@@ -167,7 +167,7 @@ pub struct Level {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentData {
-    pub net_piece_weight: Net,
+    pub net_piece_weight: Option<Net>,
     pub net_content_volume: Option<Net>,
 }
 
@@ -445,7 +445,7 @@ pub struct EmptiesInfo {
 pub struct Supplier {
     pub supplier_name: String,
     pub supplier_number: String,
-    pub article_number: String,
+    pub article_number: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -460,9 +460,24 @@ pub enum UnitOfMeasure {
     Empty,
     #[serde(rename = "%")]
     Percent,
+    #[serde(rename = "°C")]
+    DegreeCelsius,
+    #[serde(rename = "m")]
+    Meter,
+    #[serde(rename = "cm")]
+    Centimeter,
+    #[serde(rename = "mm")]
+    Millimeter,
     #[serde(rename = "g")]
-    G,
+    Gramm,
+    #[serde(rename = "µg")]
+    Microgramm,
+    #[serde(rename = "mg")]
+    Milligramm,
+    #[serde(rename = "kg")]
+    Kilogramm,
     #[serde(rename = "kJ")]
+    #[serde(alias = "kj")]
     KJ,
     #[serde(rename = "kcal")]
     Kcal,
@@ -480,6 +495,17 @@ pub enum RowMetaInfo {
 pub enum FeatureMetaInfo {
     Contains,
     Annotations,
+    SubListStart,
+    SubListEnd,
+    #[serde(rename = "Additive_Class")]
+    AdditiveClass,
+    Allergen,
+    #[serde(rename = "Free from")]
+    FreeFrom,
+    #[serde(rename = "E_Numbers")]
+    ENumbers,
+    #[serde(rename = "May_Contain")]
+    MayContain,
     Header,
     #[serde(rename = "")]
     Empty,
@@ -494,9 +520,10 @@ pub enum ValueType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum AppliedAdjustment {
-    #[serde(rename = "shelf")]
     Shelf,
+    Promotion,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

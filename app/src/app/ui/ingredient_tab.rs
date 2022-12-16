@@ -109,6 +109,13 @@ impl IngredientTab {
                 let move_database = self.database.clone();
                 Command::perform(
                     async move {
+                        let urls: Vec<String> = move_database
+                            .get_metro_ingredient_sources(None)
+                            .await?
+                            .iter()
+                            .filter_map(|is| is.url.clone())
+                            .collect();
+                        metro_scrape::request::fetch_articles_from_urls(&urls).await?;
                         let ingredients = move_database
                             .get_ingredients()
                             .await?

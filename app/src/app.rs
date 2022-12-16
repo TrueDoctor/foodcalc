@@ -11,8 +11,8 @@ use sqlx::PgPool;
 use self::ui::TabMessage;
 pub use crate::db;
 
-#[cfg(feature = "scraping")]
-pub mod scraping;
+//#[cfg(feature = "scraping")]
+//pub mod scraping;
 
 pub mod ui;
 

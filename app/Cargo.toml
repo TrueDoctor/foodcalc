@@ -7,13 +7,14 @@ authors = ["Dennis Kobert <dennis@kobert.dev>"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = []
-scraping = ["inline-python"]
+default = ["scraping"]
+scraping = ["metro-scrape"]
 tectonic = ["dep:tectonic", "tectonic_bundles"]
 
 [dependencies]
 sqlx = { version = "0.5.13", features = ["postgres", "macros", "migrate", "uuid", "runtime-tokio-rustls", "offline", "bigdecimal", "time"]}
 tokio = { version = "1", features = ["full"] }
+metro-scrape = {path = "../metro-scrape", optional = true}
 
 futures = "0.3"
 dotenv = "0.15.0"

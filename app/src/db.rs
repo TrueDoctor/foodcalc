@@ -939,7 +939,7 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn fetch_metro_prices(&self, ingredient_id: Option<i32>) -> eyre::Result<()> {
+    /*pub async fn fetch_metro_prices(&self, ingredient_id: Option<i32>) -> eyre::Result<()> {
         let sources = self.get_metro_ingredient_sources(ingredient_id).await?;
         for _source in sources {
             #[cfg(feature = "scraping")]
@@ -954,7 +954,7 @@ impl FoodBase {
             }
         }
         Ok(())
-    }
+    }*/
 
     pub async fn get_metro_ingredient_sources(&self, ingredient_id: Option<i32>) -> eyre::Result<Vec<IngredientSorce>> {
         let records = match ingredient_id {
