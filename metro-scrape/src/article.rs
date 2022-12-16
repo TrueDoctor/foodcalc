@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 pub type Articles = Vec<Article>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Article {
     pub betty_article_id: ArticleId,
@@ -31,14 +31,14 @@ pub struct Article {
     pub article_id: ArticleId,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArticleId {
     pub betty_article_id: String,
     pub article_number: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Variant {
     pub betty_variant_id: VariantId,
@@ -58,7 +58,7 @@ pub struct Variant {
     pub variant_id: VariantId,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VariantId {
     pub article_number: String,
@@ -66,7 +66,7 @@ pub struct VariantId {
     pub betty_variant_id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bundle {
     pub details: Details,
@@ -124,7 +124,7 @@ pub struct Bundle {
     pub referenced_subsystem_numbers: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BundleId {
     pub betty_bundle_id: String,
@@ -134,7 +134,7 @@ pub struct BundleId {
     pub bundle_number: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrandInfo {
     pub own_brand: bool,
@@ -144,40 +144,40 @@ pub struct BrandInfo {
     pub display_sub_brand_name: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageInfo {
     pub width: Option<String>,
     pub height: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Category {
     pub name: String,
     pub id: String,
     pub levels: Vec<Level>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Level {
     pub id: String,
 
-    pub display_name: String,
+    pub display_name: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentData {
     pub net_piece_weight: Net,
     pub net_content_volume: Option<Net>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Net {
     pub value: i64,
     pub uom: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Details {
     pub header: Header,
@@ -190,14 +190,14 @@ pub struct Details {
     pub energy_efficiency_info: EnergyEfficiencyInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Table {
     pub column_labels: Vec<String>,
     pub rows: Vec<Row>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Row {
     pub row_label: String,
@@ -206,14 +206,14 @@ pub struct Row {
     pub meta_info: RowMetaInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Cell {
     pub value: String,
     pub unit_of_measure: UnitOfMeasure,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnergyEfficiencyInfo {
     pub directive: Option<serde_json::Value>,
@@ -223,7 +223,7 @@ pub struct EnergyEfficiencyInfo {
     pub label_image_url: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Feature {
     pub label: String,
@@ -237,14 +237,14 @@ pub struct Feature {
     pub leafs: Vec<Feature>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Header {
     pub misc_name_webshop: String,
     pub misc_summary: String,
     pub misc_main_features: Vec<Option<serde_json::Value>>,
     pub misc_search_keywords: Vec<String>,
-    pub misc_picture_url: String,
+    pub misc_picture_url: Option<String>,
     pub misc_pdf_url: String,
     pub misc_alternative_article: String,
     pub misc_article_details: String,
@@ -254,10 +254,10 @@ pub struct Header {
     pub misc_crossselling_articles: String,
     pub misc_erp_variant_description: String,
     pub misc_metro_excl_recommendation: String,
-    pub misc_guarantee_id: String,
+    pub misc_guarantee_id: Option<String>,
     pub misc_guarantee_text: String,
     pub misc_name: String,
-    pub misc_quantum_id: String,
+    pub misc_quantum_id: Option<String>,
     pub misc_quantum_text: String,
     pub misc_short_text2: String,
     pub misc_short_text_webshop: String,
@@ -267,14 +267,14 @@ pub struct Header {
     pub misc_upselling: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Media {
     pub images: Vec<Image>,
     pub videos: Vec<Option<serde_json::Value>>,
     pub documents: Vec<Document>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Document {
     pub url: String,
@@ -283,13 +283,13 @@ pub struct Document {
     pub asset_types: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Image {
-    pub sequence_number: i64,
+    pub sequence_number: Option<i64>,
     pub url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
     pub main_group_name: String,
@@ -297,17 +297,17 @@ pub struct Group {
     pub sub_group_name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogisticInfo {
     pub options: Vec<Option<serde_json::Value>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Id {
     pub id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RefBundleId {
     pub article_number: String,
@@ -321,17 +321,17 @@ pub struct RefBundleId {
     pub variant_id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Selector {
     pub packaging_type: PackagingType,
     pub content_size: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackagingType {}
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Store {
     pub country: String,
@@ -341,7 +341,7 @@ pub struct Store {
     pub possible_delivery_modes: PossibleDeliveryModes,
     pub selected_delivery_mode: String,
     pub selected_fulfillment_type: String,
-    pub selected_ft_evaluate_promotions: Vec<Option<serde_json::Value>>,
+    pub selected_ft_evaluate_promotions: Option<Vec<Option<serde_json::Value>>>,
     pub store_level_flags: Vec<Option<serde_json::Value>>,
     pub anonymous_visible: bool,
     pub anonymous_searchable: bool,
@@ -349,23 +349,23 @@ pub struct Store {
     pub customer_buyable: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PossibleDeliveryModes {
-    pub store: PossibleDeliveryModesStore,
+    pub store: Option<PossibleDeliveryModesStore>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PossibleDeliveryModesStore {
     pub possible_fulfillment_types: PossibleFulfillmentTypes,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PossibleFulfillmentTypes {
-    pub store: PossibleFulfillmentTypesStore,
+    pub store: Option<PossibleFulfillmentTypesStore>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PossibleFulfillmentTypesStore {
     pub selling_price_info: SellingPriceInfo,
@@ -379,12 +379,12 @@ pub struct PossibleFulfillmentTypesStore {
     pub service_option_i_ds: Vec<Option<serde_json::Value>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnonymousFlags {
     pub buyable: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SellingPriceInfo {
     pub customer_individual_price: Option<serde_json::Value>,
@@ -424,7 +424,7 @@ pub struct SellingPriceInfo {
     pub available_promotions: Vec<Option<serde_json::Value>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppliedPromotionInfo {
     pub name: String,
@@ -433,14 +433,14 @@ pub struct AppliedPromotionInfo {
     pub end_time: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmptiesInfo {
     pub empties_article_id: Option<serde_json::Value>,
     pub empties_vat: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Supplier {
     pub supplier_name: String,
@@ -448,16 +448,18 @@ pub struct Supplier {
     pub article_number: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackingInfo {
     pub tracking_id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UnitOfMeasure {
     #[serde(rename = "")]
     Empty,
+    #[serde(rename = "%")]
+    Percent,
     #[serde(rename = "g")]
     G,
     #[serde(rename = "kJ")]
@@ -466,7 +468,7 @@ pub enum UnitOfMeasure {
     Kcal,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RowMetaInfo {
     #[serde(rename = "")]
     Empty,
@@ -474,26 +476,30 @@ pub enum RowMetaInfo {
     Headline,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FeatureMetaInfo {
     Contains,
+    Annotations,
+    Header,
     #[serde(rename = "")]
     Empty,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ValueType {
     #[serde(rename = "TEXT")]
     Text,
+    #[serde(rename = "NUMBER")]
+    Number,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AppliedAdjustment {
     #[serde(rename = "shelf")]
     Shelf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Currency {
     #[serde(rename = "EUR")]
     Eur,

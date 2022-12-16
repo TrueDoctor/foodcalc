@@ -2259,8 +2259,12 @@ dependencies = [
 name = "metro-scrape"
 version = "0.1.0"
 dependencies = [
+ "eyre",
+ "regex",
+ "reqwest",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
