@@ -115,7 +115,13 @@ impl IngredientTab {
                             .iter()
                             .filter_map(|is| is.url.clone())
                             .collect();
-                        metro_scrape::request::fetch_articles_from_urls(&urls).await?;
+                        let articles = metro_scrape::request::fetch_articles_from_urls(&urls).await?;
+                        for article in articles {
+                            let variant = article.variants.values().next().unwrap();
+                            let bundle = variant.bundles.values().next().unwrap();
+                            let price = bundle.stores.values().next().unwrap().selling_price_info.gross_price;
+                            println!("{}: {}", bundle.details.header.misc_name_webshop, price);
+                        }
                         let ingredients = move_database
                             .get_ingredients()
                             .await?
