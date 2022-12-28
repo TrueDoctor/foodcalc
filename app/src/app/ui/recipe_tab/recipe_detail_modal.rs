@@ -21,6 +21,7 @@ pub struct RecipeDetail {
     pub(crate) all_units: Arc<Vec<Unit>>,
     pub(crate) ingredients: Vec<RecipeIngredientWrapper>,
     pub(crate) steps: Vec<RecipeStepWrapper>,
+    is_new: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -55,8 +56,24 @@ impl RecipeDetail {
                 .map(|ingredient| RecipeIngredientWrapper::new(all_ingredients.clone(), all_units.clone(), ingredient))
                 .collect(),
             steps: recipe_steps.into_iter().map(RecipeStepWrapper::edit).collect(),
+            is_new: false,
         }
     }
+
+    pub fn create(
+        all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
+        all_units: Arc<Vec<Unit>>,database: Arc<FoodBase>) -> Self {
+        Self {
+            recipe: Recipe::default(),
+            all_ingredients: all_ingredients.clone(),
+            all_units: all_units.clone(),
+            database,
+            ingredients: Vec::new(),
+            steps: Vec::new(),
+            is_new: true,
+        }
+    }
+    
 
     pub fn valid(&self) -> bool {
         self.ingredients.iter().all(|ingredient| ingredient.valid()) && self.steps.iter().all(|step| step.valid())
@@ -107,8 +124,14 @@ impl RecipeDetail {
                     .collect();
 
                 if self.valid() {
+                    let is_new = self.is_new;
                     return Command::perform(
                         async move {
+                            if is_new {
+                                move_database.insert_recipe(&recipe).await?;
+                            } else {
+                                move_database.update_recipe(&recipe).await?;
+                            }
                             move_database.update_recipe(&recipe).await?;
                             move_database
                                 .update_recipe_entries(&recipe, ingredients.into_iter())

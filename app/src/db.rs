@@ -669,6 +669,7 @@ impl FoodBase {
     }
 
     pub async fn update_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
+        
         let recipe = sqlx::query_as!(
             Recipe,
             r#"
@@ -680,6 +681,23 @@ impl FoodBase {
             recipe.name,
             recipe.comment,
             recipe.recipe_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(recipe)
+    }
+
+    pub async fn insert_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
+        
+        let recipe = sqlx::query_as!(
+            Recipe,
+            r#"
+                INSERT INTO recipes (name, comment)
+                VALUES ($1, $2)
+                RETURNING *
+            "#,
+            recipe.name,
+            recipe.comment,
         )
         .fetch_one(&*self.pg_pool)
         .await?;

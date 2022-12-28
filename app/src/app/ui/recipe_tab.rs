@@ -4,7 +4,7 @@ use iced::widget::*;
 use iced::{alignment, Command, Element, Length};
 use log::debug;
 
-use super::TabMessage;
+use super::{Icon, TabMessage};
 use crate::app::Error;
 use crate::db::{FoodBase, Recipe};
 
@@ -28,6 +28,7 @@ pub enum RecipeTabMessage {
     RecipeDetailMessage(RecipeDetailMessage),
     UpdateData(Result<Vec<RecipeWrapper>, Error>),
     OpenModal(Recipe),
+    NewModal,
     ShowModal(Result<RecipeDetail, Error>),
     CloseModal,
     CancelButtonPressed,
@@ -126,10 +127,27 @@ impl RecipeTab {
                 );
                 return command.map(|message| TabMessage::RecipeTab(message.into()));
             },
+            RecipeTabMessage::NewModal => {
+                let move_database = self.database.clone();
+                return Command::perform(
+                    async move {
+                        let all_ingredients = move_database.get_all_meta_ingredients().await?;
+                        let all_units = move_database.get_units().await?;
+                        Ok(RecipeDetail::create(
+                            Arc::new(all_ingredients),
+                            Arc::new(all_units),
+                            move_database.clone(),
+                        ))
+                    },
+                    RecipeTabMessage::ShowModal,
+                )
+                .map(|message| TabMessage::RecipeTab(message.into()));
+            },
             _ => {
                 debug!("recieved message without handler: {message:?}")
             },
         }
+
         Command::none()
     }
 }
@@ -166,10 +184,22 @@ impl super::Tab for RecipeTab {
         };
 
         let scroll: Element<'_, RecipeTabMessage> =
-            Scrollable::new(Container::new(recipes).width(Length::Fill).padding(40)).into();
+            Scrollable::new(Container::new(recipes).width(Length::Fill).padding(40)).height(Length::Fill).into();
 
-        let element: Element<'_, RecipeTabMessage> =
-            Column::new().max_width(800).spacing(20).push(input).push(scroll).into();
+        let add_recipe_button = button(Icon::Plus.text())
+            .on_press(RecipeTabMessage::NewModal)
+            .padding(10)
+            .height(Length::Units(40))
+            .width(Length::Units(60))
+            .style(iced::theme::Button::Positive);
+
+        let element: Element<'_, RecipeTabMessage> = Column::new()
+            .max_width(800)
+            .spacing(20)
+            .push(input)
+            .push(scroll)
+            .push(add_recipe_button)
+            .into();
 
         let element: Element<'_, RecipeTabMessage> = Container::new(element)
             .width(Length::Fill)
