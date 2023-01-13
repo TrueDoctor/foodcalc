@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use super::article::*;
 use regex::Regex;
-use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
 fn extract_betty_identifier_from_url(url: &str) -> Option<ArticleIdentifier> {
@@ -62,10 +61,19 @@ async fn fetch_articles_batched(
 pub async fn fetch_articles_from_urls<S: AsRef<str>>(
     urls: &[S],
 ) -> Result<Vec<Article>, eyre::Error> {
-    let articles = urls
+    let article_identifiers = urls
         .iter()
         .filter_map(|url| extract_betty_identifier_from_url(url.as_ref()))
         .collect::<Vec<_>>();
 
-    fetch_articles_batched(&articles).await
+    let mut articles = fetch_articles_batched(&article_identifiers).await?;
+
+    // sort articles by identifier
+    articles.sort_by_key(|article| {
+        article_identifiers
+            .iter()
+            .position(|identifier| identifier.betty_id == article.betty_article_id.betty_article_id)
+            .unwrap()
+    });
+    Ok(articles)
 }

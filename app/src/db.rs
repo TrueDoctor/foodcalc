@@ -1,9 +1,11 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use num::FromPrimitive;
 use num::ToPrimitive;
 use sqlx::postgres::types::{PgInterval, PgMoney};
 use sqlx::postgres::PgPool;
@@ -598,9 +600,13 @@ impl FoodBase {
 
         #[cfg(feature = "tectonic")]
         {
+            use std::fmt::Write as FmtWrite;
+            use std::io::Write;
+            use std::path::Path;
             use tectonic::driver::ProcessingSessionBuilder;
             use tectonic::{ctry, status};
             use tectonic_bundles::dir::DirBundle;
+            use tokio::task::spawn_blocking;
 
             writeln!(text, "\\end{{document}}").unwrap();
             let mut status = status::NoopStatusBackend::default();
@@ -957,22 +963,45 @@ impl FoodBase {
         Ok(records)
     }
 
-    /*pub async fn fetch_metro_prices(&self, ingredient_id: Option<i32>) -> eyre::Result<()> {
-        let sources = self.get_metro_ingredient_sources(ingredient_id).await?;
-        for _source in sources {
-            #[cfg(feature = "scraping")]
-            if let Some(url) = _source.url.clone() {
-                if let Some(price) =
-                    tokio::task::spawn_blocking(move || super::scraping::fetch_metro_price_python(&url)).await?
-                {
-                    log::debug!("{} cents", price.0);
-                    self.update_ingredient_source_price(_source.ingredient_id, _source.url, price)
-                        .await?;
-                }
-            }
+    pub async fn fetch_metro_prices(&self, ingredient_id: Option<i32>) -> eyre::Result<()> {
+        // get urls of metro articles
+        let urls: Vec<IngredientSorce> = self
+            .get_metro_ingredient_sources(ingredient_id)
+            .await?
+            .into_iter()
+            .filter(|is| is.url.is_some())
+            .collect();
+
+        // fetch article descriptions from the metro api
+        let articles = metro_scrape::request::fetch_articles_from_urls(
+            &urls
+                .iter()
+                .map(|s| s.url.as_ref().unwrap().clone())
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )
+        .await?;
+
+        for (s, article) in urls.into_iter().zip(articles) {
+            let variant = article.variants.values().next().unwrap();
+            let bundle = variant.bundles.values().next().unwrap();
+            let price = bundle.stores.values().next().unwrap().selling_price_info.gross_price;
+            let weight = &bundle.gross_weight;
+            println!(
+                "{}€ {}kg {} {:?}",
+                price,
+                weight,
+                bundle.bundle_size,
+                bundle.weight_per_piece.as_ref().map(|w| w.to_string())
+            );
+            println!("{}: {}", bundle.details.header.misc_name_webshop, price);
+            let price =
+                sqlx::postgres::types::PgMoney::from_bigdecimal(BigDecimal::from_f64(price).unwrap(), 2).unwrap();
+            self.update_ingredient_source_price(s.ingredient_id, s.url, price, BigDecimal::from_str(weight).unwrap())
+                .await?;
         }
         Ok(())
-    }*/
+    }
 
     pub async fn get_metro_ingredient_sources(&self, ingredient_id: Option<i32>) -> eyre::Result<Vec<IngredientSorce>> {
         let records = match ingredient_id {
@@ -1001,16 +1030,18 @@ impl FoodBase {
         ingredient_id: i32,
         url: Option<String>,
         price: PgMoney,
+        weight: BigDecimal,
     ) -> eyre::Result<u64> {
         sqlx::query!(
             r#"
                 UPDATE ingredient_sources
-                SET price = $3
+                SET price = $3, package_size = $4, unit_id = 0
                 WHERE ingredient_id = $1 AND url = $2
             "#,
             ingredient_id,
             url,
             price,
+            weight,
         )
         .execute(&*self.pg_pool)
         .await

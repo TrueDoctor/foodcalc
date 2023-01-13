@@ -8,10 +8,12 @@ pub use ingredient::{IngredientMessage, IngredientWrapper};
 
 mod ingredient_create;
 use ingredient_create::IngredientCreationDialog;
+use num::FromPrimitive;
+use sqlx::types::BigDecimal;
 
 use self::ingredient_create::IngredientCreateMessage;
 use super::{Icon, TabMessage};
-use crate::db::{FoodBase, IngredientCreate};
+use crate::db::{FoodBase, IngredientCreate, IngredientSorce};
 
 #[derive(Clone, Debug)]
 pub struct IngredientTab {
@@ -31,6 +33,7 @@ pub enum IngredientTabMessage {
     EditIngredient(i32),
     CloseCreateIngredient,
     UpdateIngredient(IngredientCreate),
+    FetchPrices,
     Refresh,
 }
 
@@ -104,24 +107,22 @@ impl IngredientTab {
                 self.ingredient_create = None;
                 Command::none()
             },
+            IngredientTabMessage::FetchPrices => {
+                log::debug!("Fetching prices");
+                let move_database = self.database.clone();
+                Command::perform(
+                    async move {
+                        move_database.fetch_metro_prices(None).await;
+                    },
+                    |_| IngredientTabMessage::Refresh,
+                )
+                .map(|message| TabMessage::IngredientTab(message.into()))
+            },
             IngredientTabMessage::Refresh => {
                 log::debug!("Refreshing ingredient list");
                 let move_database = self.database.clone();
                 Command::perform(
                     async move {
-                        let urls: Vec<String> = move_database
-                            .get_metro_ingredient_sources(None)
-                            .await?
-                            .iter()
-                            .filter_map(|is| is.url.clone())
-                            .collect();
-                        let articles = metro_scrape::request::fetch_articles_from_urls(&urls).await?;
-                        for article in articles {
-                            let variant = article.variants.values().next().unwrap();
-                            let bundle = variant.bundles.values().next().unwrap();
-                            let price = bundle.stores.values().next().unwrap().selling_price_info.gross_price;
-                            println!("{}: {}", bundle.details.header.misc_name_webshop, price);
-                        }
                         let ingredients = move_database
                             .get_ingredients()
                             .await?
@@ -173,6 +174,11 @@ impl super::Tab for IngredientTab {
         let input = text_input("Ingredient Name", &self.input_value, IngredientTabMessage::InputChanged)
             .padding(15)
             .size(30);
+
+        let fetch_button = button("Fetch Prices")
+            .on_press(IngredientTabMessage::FetchPrices)
+            .padding(15);
+
         let filtered_ingredients = self.ingredient_list.iter().filter(|ingredient| {
             ingredient
                 .ingredient
@@ -223,6 +229,7 @@ impl super::Tab for IngredientTab {
                 .max_width(800)
                 .spacing(20)
                 .push(input)
+                .push(fetch_button)
                 .push(scroll)
                 .push(add_ingredient_button)
                 .push(Space::with_height(Length::Units(10)))
