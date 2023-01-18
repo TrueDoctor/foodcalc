@@ -39,15 +39,20 @@ pub enum EventTabMessage {
     NewEvent,
 }
 
+async fn load_events_with_price(database: Arc<FoodBase>) -> Result<Vec<EventWrapper>, Error> {
+    let events = database.get_events().await?;
+    let mut event_list = Vec::new();
+    for event in events {
+        let price = database.get_event_cost(event.event_id).await?.0;
+        event_list.push(EventWrapper::new(event, (price as f64) / 100.0));
+    }
+    Ok(event_list)
+}
+
 fn load_events(database: Arc<FoodBase>) -> Command<EventTabMessage> {
     Command::perform(
         async move {
-            let events = database
-                .get_events()
-                .await?
-                .into_iter()
-                .map(EventWrapper::new)
-                .collect();
+            let events = load_events_with_price(database).await?;
             Ok(events)
         },
         EventTabMessage::UpdateData,
@@ -122,7 +127,7 @@ impl EventTab {
                     |event| TabMessage::EventTab(EventTabMessage::AddEvent(event).into()),
                 );
             },
-            EventTabMessage::AddEvent(Ok(event)) => self.event_list.push(EventWrapper::new(event)),
+            EventTabMessage::AddEvent(Ok(event)) => self.event_list.push(EventWrapper::new(event,0.0)),
             EventTabMessage::PrintRecipes(event) => {
                 let move_database = self.database.clone();
                 return Command::perform(

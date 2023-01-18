@@ -248,6 +248,13 @@ impl std::string::ToString for RecipeIngrdient {
     }
 }
 
+pub struct ShoppingListItem {
+    pub ingredient_id: i32,
+    pub ingredient_name: String,
+    pub price: PgMoney,
+    pub weight: BigDecimal,
+}
+
 #[derive(Clone)]
 pub struct IngredientSorce {
     pub ingredient_id: i32,
@@ -1223,6 +1230,20 @@ impl FoodBase {
         .fetch_all(&*self.pg_pool)
         .await?;
         Ok(records)
+    }
+    
+    pub async fn get_event_cost(&self, event_id: i32) -> eyre::Result<PgMoney> {
+        let records= sqlx::query!(
+            r#"
+                SELECT
+                    SUM(price) as price
+                FROM shopping_list
+                WHERE event_id = $1
+            "#,
+            event_id
+        ).fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(records.price.unwrap())
     }
 }
 
