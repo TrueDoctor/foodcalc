@@ -1243,7 +1243,7 @@ impl FoodBase {
             event_id
         ).fetch_one(&*self.pg_pool)
         .await?;
-        Ok(records.price.unwrap())
+        Ok(records.price.unwrap_or_else(|| PgMoney(0)))
     }
 }
 
