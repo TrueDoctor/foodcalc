@@ -18,7 +18,7 @@ impl<T> Default for InputState<T> {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct OptionString(Option<String>);
+pub struct OptionString(pub Option<String>);
 
 impl FromStr for OptionString {
     type Err = ();

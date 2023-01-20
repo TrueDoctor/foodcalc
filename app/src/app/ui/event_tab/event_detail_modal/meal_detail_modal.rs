@@ -155,6 +155,7 @@ impl MealDetail {
                     self.new_meal.end_time = self.end_time.value_type.clone().unwrap().0;
                     self.new_meal.servings = self.servings.value_type.unwrap();
                     self.new_meal.energy = self.energy.value_type.clone().unwrap();
+                    self.new_meal.comment = self.comment.value_type.clone().unwrap().0;
                     let meal = self.new_meal.clone();
 
                     return Command::perform(
