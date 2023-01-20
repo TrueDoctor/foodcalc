@@ -8,12 +8,10 @@ pub use ingredient::{IngredientMessage, IngredientWrapper};
 
 mod ingredient_create;
 use ingredient_create::IngredientCreationDialog;
-use num::FromPrimitive;
-use sqlx::types::BigDecimal;
 
 use self::ingredient_create::IngredientCreateMessage;
 use super::{Icon, TabMessage};
-use crate::db::{FoodBase, IngredientCreate, IngredientSorce};
+use crate::db::{FoodBase, IngredientCreate};
 
 #[derive(Clone, Debug)]
 pub struct IngredientTab {
@@ -112,9 +110,10 @@ impl IngredientTab {
                 let move_database = self.database.clone();
                 Command::perform(
                     async move {
-                        move_database.fetch_metro_prices(None).await;
+                        move_database.fetch_metro_prices(None).await?;
+                        Ok(())
                     },
-                    |_| IngredientTabMessage::Refresh,
+                    |_:Result<(), Error>| IngredientTabMessage::Refresh,
                 )
                 .map(|message| TabMessage::IngredientTab(message.into()))
             },
