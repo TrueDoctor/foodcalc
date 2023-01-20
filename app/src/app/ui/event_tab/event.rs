@@ -27,7 +27,8 @@ impl EventWrapper {
     pub(crate) fn view(&self) -> Element<EventTabMessage> {
         let event_id = Text::new(self.event.event_id.to_string());
         let name = Text::new(self.event.event_name.to_string()).width(Length::Fill);
-        let price = Text::new(self.price.to_string()).width(Length::Units(50));
+        let price = Text::new(format!("{:.2}",self.price) + "€").width(Length::Shrink);
+        let price = Container::new(price).align_x(iced::alignment::Horizontal::Right).width(Length::Units(75));
         let edit_button = Button::new(Icon::Edit.text())
             .on_press(EventTabMessage::OpenModal(self.event.clone()))
             .style(iced::theme::Button::Text)
