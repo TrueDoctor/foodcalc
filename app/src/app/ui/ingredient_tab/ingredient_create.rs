@@ -54,7 +54,7 @@ impl IngredientCreationDialog {
         match message {
             IngredientCreateMessage::SubmitValue(field, string) => {
                 let input = string.trim();
-                match field {
+                    match field {
                     InputField::Name => self.name.update(input),
                     InputField::Energy => self.energy.update(input),
                     InputField::Comment => self.comment.update(input),
@@ -69,6 +69,9 @@ impl IngredientCreationDialog {
                     .iter()
                     .all(|input| **input)
                 {
+                    self.ingredient.name = self.name.clone().value_type.unwrap();
+                    self.ingredient.comment = self.comment.clone().value_type.unwrap().0;
+                    self.ingredient.energy = self.energy.clone().value_type.unwrap();
                     return Some(IngredientTabMessage::UpdateIngredient(self.ingredient.clone()));
                 } else {
                     println!("Invalid input {:#?}", self);
