@@ -28,7 +28,9 @@ pub struct RecipeDetail {
 pub enum RecipeDetailMessage {
     RecipeIngredientMessage(usize, RecipeIngredientMessage),
     RecipeStepMessage(usize, RecipeStepMessage),
+    NameEdited(String),
     DescriptionEdited(String),
+    SubmitName,
     SubmitDescription,
     AddIngredient,
     AddStep,
@@ -81,10 +83,14 @@ impl RecipeDetail {
 
     pub fn update(&mut self, message: RecipeDetailMessage) -> Command<RecipeTabMessage> {
         match message {
+            RecipeDetailMessage::NameEdited(new_name) => {
+                self.recipe.name = new_name;
+            },
             RecipeDetailMessage::DescriptionEdited(new_description) => {
                 self.recipe.comment = Some(new_description);
             },
             RecipeDetailMessage::Delete => {},
+            RecipeDetailMessage::SubmitName => {},
             RecipeDetailMessage::SubmitDescription => {},
             RecipeDetailMessage::RecipeIngredientMessage(i, RecipeIngredientMessage::Focus) => {
                 for (j, ingredient) in self.ingredients.iter_mut().enumerate() {
@@ -165,6 +171,14 @@ impl RecipeDetail {
     }
 
     pub fn view(&self) -> Element<RecipeDetailMessage> {
+        let name_input = TextInput::new(
+            "Recipe name…",
+            self.recipe.name.as_str(),
+            RecipeDetailMessage::NameEdited,
+        )
+        .on_submit(RecipeDetailMessage::SubmitName)
+        .padding(10);
+
         let description_input = TextInput::new(
             "Recipe Description…",
             self.recipe.comment.as_deref().unwrap_or(""),
@@ -250,6 +264,7 @@ impl RecipeDetail {
             .spacing(20)
             .align_items(Alignment::Center)
             .push(title)
+            .push(name_input)
             .push(description_input)
             .push(ingredients)
             .push(steps)
