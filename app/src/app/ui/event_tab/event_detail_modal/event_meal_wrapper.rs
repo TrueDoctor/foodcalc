@@ -48,7 +48,7 @@ impl MealWrapper {
             let move_database = self.database.clone();
             return Command::perform(
                 async move {
-                    move_database.fetch_subrecipes_export(meal.recipe_id, meal.weight).await;
+                    move_database.fetch_subrecipes_export(meal.recipe_id, meal.weight).await.unwrap_or_else(|e| log::error!("{e}"));
                 },
                 |_| EventDetailMessage::MealWrapperMessage(0, MealWrapperMessage::Nothing),
             );

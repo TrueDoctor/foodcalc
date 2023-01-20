@@ -560,7 +560,7 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn fetch_subrecipes_export(&self, recipe_id: i32, weight: BigDecimal) {
+    pub async fn fetch_subrecipes_export(&self, recipe_id: i32, weight: BigDecimal) -> Result<(),eyre::Error> {
         let subrecipes = sqlx::query_as!(
             SubRecipe,
             r#"
@@ -580,8 +580,7 @@ impl FoodBase {
             weight,
         )
         .fetch_all(&*self.pg_pool)
-        .await
-        .unwrap();
+        .await?;
         let mut keys = subrecipes.iter().map(|sr| sr.subrecipe_id).collect::<Vec<i32>>();
         keys.dedup();
 
@@ -602,7 +601,7 @@ impl FoodBase {
         for subrecipe_id in keys {
             let ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.subrecipe_id == subrecipe_id).collect();
             let steps = self.get_recipe_steps(subrecipe_id).await.unwrap_or_default();
-            self.format_subrecipe(&mut text, ingredients, steps);
+            self.format_subrecipe(&mut text, ingredients, steps).unwrap_or_else(|e| log::error!("{e}"));
         }
 
         #[cfg(feature = "tectonic")]
@@ -611,13 +610,12 @@ impl FoodBase {
             use std::io::Write;
             use std::path::Path;
             use tectonic::driver::ProcessingSessionBuilder;
-            use tectonic::{ctry, status};
-            use tectonic_bundles::dir::DirBundle;
+            use tectonic::status;
             use tokio::task::spawn_blocking;
 
-            writeln!(text, "\\end{{document}}").unwrap();
+            writeln!(text, "\\end{{document}}")?;
             let mut status = status::NoopStatusBackend::default();
-            let name = subrecipes.first().unwrap().recipe.clone();
+            let name = subrecipes.first().ok_or(eyre!("No recipe name found"))?.recipe.clone();
 
             let mut files = {
                 spawn_blocking(move || {
@@ -640,7 +638,6 @@ impl FoodBase {
                         .bundle(bundle)
                         .do_not_write_output_files()
                         .print_stdout(false);
-                    //.bundle(Box::new(DirBundle::new(Path::new("./recipes"))));
                     let mut sess = sb
                         .create(&mut status)
                         .expect("failed to initialize the LaTeX processing session");
@@ -649,36 +646,25 @@ impl FoodBase {
                     }
                     sess.into_file_data()
                 })
-                .await
-                .unwrap()
+                .await?
             };
 
             let Some(pdf) = files.remove("texput.pdf")  else {
-
-                log::error!(
-                    "LaTeX didn't report failure, but no PDF was created (??)"
-                );
-                return;
+                return Err(eyre!("LaTeX didn't report failure, but no PDF was created (??)"));
             };
             let pdf_data = pdf.data;
-            /*
-                    let pdf_data: Vec<u8> = spawn_blocking(move || tectonic::latex_to_pdf(text).expect("processing failed"))
-                        .await
-                        .unwrap();
-            */
             println!("Output PDF size is {} bytes", pdf_data.len());
 
             let create_result = std::fs::create_dir("recipes/out");
             if let Err(e) = create_result {
                 if e.kind() != std::io::ErrorKind::AlreadyExists {
-                    log::error!("failed to create output directory: {}", e);
-                    return;
+                    return Err(eyre!("failed to create output directory: {}", e));
                 }
             }
-            let mut file = std::fs::File::create(format!("recipes/out/{}.pdf", name)).unwrap();
-            use std::io::prelude::Write as WF;
-            file.write_all(&pdf_data).unwrap();
+            let mut file = std::fs::File::create(format!("recipes/out/{}.pdf", name))?;
+            file.write_all(&pdf_data)?;
         }
+        Ok(())
     }
 
     pub async fn update_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
@@ -840,8 +826,8 @@ impl FoodBase {
         Ok(())
     }
 
-    pub fn format_subrecipe(&self, text: &mut String, subrecipes: Vec<&SubRecipe>, steps: Vec<RecipeStep>) {
-        let title = escape_underscore(&subrecipes.first().unwrap().subrecipe);
+    pub fn format_subrecipe(&self, text: &mut String, subrecipes: Vec<&SubRecipe>, steps: Vec<RecipeStep>) -> Result<(),eyre::Error> {
+        let title = escape_underscore(&subrecipes.first().ok_or(eyre!("No subrecipe provided"))?.subrecipe);
         let ingredients: Vec<_> = subrecipes.iter().filter(|sr| !sr.is_subrecipe).collect();
         let meta_ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.is_subrecipe).collect();
         let weight: BigDecimal = ingredients.iter().map(|ingredient| ingredient.weight.clone()).sum();
@@ -850,7 +836,7 @@ impl FoodBase {
             s.replace('_', " ")
         }
         use std::fmt::Write;
-        writeln!(text, "\\addrecipe{{{title}}}").unwrap();
+        writeln!(text, "\\addrecipe{{{title}}}")?;
         for ingredient in meta_ingredients {
             writeln!(
                 text,
@@ -858,8 +844,7 @@ impl FoodBase {
                 title,
                 escape_underscore(&ingredient.ingredient),
                 ingredient.weight.round(3)
-            )
-            .unwrap();
+            )?;
         }
         for ingredient in ingredients {
             writeln!(
@@ -868,8 +853,7 @@ impl FoodBase {
                 title,
                 escape_underscore(&ingredient.ingredient),
                 ingredient.weight.round(3)
-            )
-            .unwrap();
+            )?;
         }
         for step in steps {
             fn to_minutes(duration: PgInterval) -> f64 {
@@ -883,10 +867,10 @@ impl FoodBase {
                 text,
                 "\\addstep{{{}}}{{{}}}{{{}}}{{{:.3} min}}",
                 title, step.step_name, step.step_description, duration
-            )
-            .unwrap();
+            )?;
         }
-        writeln!(text, "\\printrecipe{{{title}}}").unwrap();
+        writeln!(text, "\\printrecipe{{{title}}}")?;
+        Ok(())
     }
 
     pub async fn get_events(&self) -> eyre::Result<Vec<Event>> {
@@ -983,16 +967,16 @@ impl FoodBase {
         let articles = metro_scrape::request::fetch_articles_from_urls(
             &urls
                 .iter()
-                .map(|s| s.url.as_ref().unwrap().clone())
+                .flat_map(|s| s.url.as_ref().clone())
                 .collect::<Vec<_>>()
                 .as_slice(),
         )
         .await?;
 
-        for (s, article) in urls.into_iter().zip(articles) {
-            let variant = article.variants.values().next().unwrap();
-            let bundle = variant.bundles.values().next().unwrap();
-            let price = bundle.stores.values().next().unwrap().selling_price_info.gross_price;
+        async fn update_ingredient_price(foodbase: &FoodBase, article: metro_scrape::article::Article, s: IngredientSorce) -> Result<(), eyre::ErrReport> {
+            let variant = article.variants.values().next().ok_or(eyre!("Variant not found for id {}", s.ingredient_id))?;
+            let bundle = variant.bundles.values().next().ok_or(eyre!("Bundle not found for id {}", s.ingredient_id))?;
+            let price = bundle.stores.values().next().ok_or(eyre!("Store not found for id {}", s.ingredient_id))?.selling_price_info.gross_price;
             let weight = &bundle.gross_weight;
             println!(
                 "{}€ {}kg {} {:?}",
@@ -1003,12 +987,18 @@ impl FoodBase {
             );
             println!("{}: {}", bundle.details.header.misc_name_webshop, price);
             let price =
-                sqlx::postgres::types::PgMoney::from_bigdecimal(BigDecimal::from_f64(price).unwrap(), 2).unwrap();
-            self.update_ingredient_source_price(s.ingredient_id, s.url, price, BigDecimal::from_str(weight).unwrap())
+                sqlx::postgres::types::PgMoney::from_bigdecimal(BigDecimal::from_f64(price).ok_or(eyre!("Failed to represent as BigDecimal"))?, 2).map_err(|e| eyre!(e))?;
+            foodbase.update_ingredient_source_price(s.ingredient_id, s.url, price, BigDecimal::from_str(weight)?)
                 .await?;
+            Ok(())
+        }
+
+        for (source, article) in urls.into_iter().zip(articles) {
+            update_ingredient_price(self,article, source).await.unwrap_or_else(|e| log::error!("{e}"));
         }
         Ok(())
     }
+
 
     pub async fn get_metro_ingredient_sources(&self, ingredient_id: Option<i32>) -> eyre::Result<Vec<IngredientSorce>> {
         let records = match ingredient_id {

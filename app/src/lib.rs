@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate eyre;
 pub mod app;
 pub mod db;
 
