@@ -604,16 +604,17 @@ impl FoodBase {
             self.format_subrecipe(&mut text, ingredients, steps).unwrap_or_else(|e| log::error!("{e}"));
         }
 
+        use std::fmt::Write as FmtWrite;
+        writeln!(text, "\\end{{document}}")?;
+
         #[cfg(feature = "tectonic")]
         {
-            use std::fmt::Write as FmtWrite;
             use std::io::Write;
             use std::path::Path;
             use tectonic::driver::ProcessingSessionBuilder;
             use tectonic::status;
             use tokio::task::spawn_blocking;
 
-            writeln!(text, "\\end{{document}}")?;
             let mut status = status::NoopStatusBackend::default();
             let name = subrecipes.first().ok_or(eyre!("No recipe name found"))?.recipe.clone();
 
@@ -663,6 +664,12 @@ impl FoodBase {
             }
             let mut file = std::fs::File::create(format!("recipes/out/{}.pdf", name))?;
             file.write_all(&pdf_data)?;
+        }
+        #[cfg(not(feature = "tectonic"))]
+        {
+        let mut file = std::fs::File::create(format!("recipes/{}.tex", subrecipes.first().unwrap().recipe)).unwrap();
+        use std::io::prelude::Write as WF;
+        file.write_all(text.as_bytes()).unwrap();
         }
         Ok(())
     }
