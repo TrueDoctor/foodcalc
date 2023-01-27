@@ -560,7 +560,7 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn fetch_subrecipes_export(&self, recipe_id: i32, weight: BigDecimal) -> Result<(),eyre::Error> {
+    pub async fn fetch_subrecipes_export(&self, recipe_id: i32, weight: BigDecimal) -> Result<(), eyre::Error> {
         let subrecipes = sqlx::query_as!(
             SubRecipe,
             r#"
@@ -587,9 +587,18 @@ impl FoodBase {
         let mut text = r#"
             \documentclass[11pt,a4paper]{article}
 
-            \usepackage[T1]{fontenc}
+
             \usepackage[ngerman]{babel}
-            \usepackage[utf8]{inputenc}
+            \usepackage{ifxetex}
+
+            \ifxetex
+              \usepackage{fontspec}
+            \else
+              \usepackage[T1]{fontenc}
+              \usepackage[utf8]{inputenc}
+              \usepackage{lmodern}
+            \fi
+
             \usepackage{gensymb}
 
             \usepackage{recipe}
@@ -601,7 +610,8 @@ impl FoodBase {
         for subrecipe_id in keys {
             let ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.subrecipe_id == subrecipe_id).collect();
             let steps = self.get_recipe_steps(subrecipe_id).await.unwrap_or_default();
-            self.format_subrecipe(&mut text, ingredients, steps).unwrap_or_else(|e| log::error!("{e}"));
+            self.format_subrecipe(&mut text, ingredients, steps)
+                .unwrap_or_else(|e| log::error!("{e}"));
         }
 
         use std::fmt::Write as FmtWrite;
@@ -675,7 +685,6 @@ impl FoodBase {
     }
 
     pub async fn update_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
-        
         let recipe = sqlx::query_as!(
             Recipe,
             r#"
@@ -694,7 +703,6 @@ impl FoodBase {
     }
 
     pub async fn insert_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
-        
         let recipe = sqlx::query_as!(
             Recipe,
             r#"
@@ -833,7 +841,12 @@ impl FoodBase {
         Ok(())
     }
 
-    pub fn format_subrecipe(&self, text: &mut String, subrecipes: Vec<&SubRecipe>, steps: Vec<RecipeStep>) -> Result<(),eyre::Error> {
+    pub fn format_subrecipe(
+        &self,
+        text: &mut String,
+        subrecipes: Vec<&SubRecipe>,
+        steps: Vec<RecipeStep>,
+    ) -> Result<(), eyre::Error> {
         let title = escape_underscore(&subrecipes.first().ok_or(eyre!("No subrecipe provided"))?.subrecipe);
         let ingredients: Vec<_> = subrecipes.iter().filter(|sr| !sr.is_subrecipe).collect();
         let meta_ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.is_subrecipe).collect();
@@ -980,10 +993,28 @@ impl FoodBase {
         )
         .await?;
 
-        async fn update_ingredient_price(foodbase: &FoodBase, article: metro_scrape::article::Article, s: IngredientSorce) -> Result<(), eyre::ErrReport> {
-            let variant = article.variants.values().next().ok_or(eyre!("Variant not found for id {}", s.ingredient_id))?;
-            let bundle = variant.bundles.values().next().ok_or(eyre!("Bundle not found for id {}", s.ingredient_id))?;
-            let price = bundle.stores.values().next().ok_or(eyre!("Store not found for id {}", s.ingredient_id))?.selling_price_info.gross_price;
+        async fn update_ingredient_price(
+            foodbase: &FoodBase,
+            article: metro_scrape::article::Article,
+            s: IngredientSorce,
+        ) -> Result<(), eyre::ErrReport> {
+            let variant = article
+                .variants
+                .values()
+                .next()
+                .ok_or(eyre!("Variant not found for id {}", s.ingredient_id))?;
+            let bundle = variant
+                .bundles
+                .values()
+                .next()
+                .ok_or(eyre!("Bundle not found for id {}", s.ingredient_id))?;
+            let price = bundle
+                .stores
+                .values()
+                .next()
+                .ok_or(eyre!("Store not found for id {}", s.ingredient_id))?
+                .selling_price_info
+                .gross_price;
             let weight = &bundle.gross_weight;
             println!(
                 "{}€ {}kg {} {:?}",
@@ -993,19 +1024,24 @@ impl FoodBase {
                 bundle.weight_per_piece.as_ref().map(|w| w.to_string())
             );
             println!("{}: {}", bundle.details.header.misc_name_webshop, price);
-            let price =
-                sqlx::postgres::types::PgMoney::from_bigdecimal(BigDecimal::from_f64(price).ok_or(eyre!("Failed to represent as BigDecimal"))?, 2).map_err(|e| eyre!(e))?;
-            foodbase.update_ingredient_source_price(s.ingredient_id, s.url, price, BigDecimal::from_str(weight)?)
+            let price = sqlx::postgres::types::PgMoney::from_bigdecimal(
+                BigDecimal::from_f64(price).ok_or(eyre!("Failed to represent as BigDecimal"))?,
+                2,
+            )
+            .map_err(|e| eyre!(e))?;
+            foodbase
+                .update_ingredient_source_price(s.ingredient_id, s.url, price, BigDecimal::from_str(weight)?)
                 .await?;
             Ok(())
         }
 
         for (source, article) in urls.into_iter().zip(articles) {
-            update_ingredient_price(self,article, source).await.unwrap_or_else(|e| log::error!("{e}"));
+            update_ingredient_price(self, article, source)
+                .await
+                .unwrap_or_else(|e| log::error!("{e}"));
         }
         Ok(())
     }
-
 
     pub async fn get_metro_ingredient_sources(&self, ingredient_id: Option<i32>) -> eyre::Result<Vec<IngredientSorce>> {
         let records = match ingredient_id {
@@ -1228,9 +1264,9 @@ impl FoodBase {
         .await?;
         Ok(records)
     }
-    
+
     pub async fn get_event_cost(&self, event_id: i32) -> eyre::Result<PgMoney> {
-        let records= sqlx::query!(
+        let records = sqlx::query!(
             r#"
                 SELECT
                     SUM(price) as price
@@ -1238,7 +1274,8 @@ impl FoodBase {
                 WHERE event_id = $1
             "#,
             event_id
-        ).fetch_one(&*self.pg_pool)
+        )
+        .fetch_one(&*self.pg_pool)
         .await?;
         Ok(records.price.unwrap_or_else(|| PgMoney(0)))
     }
