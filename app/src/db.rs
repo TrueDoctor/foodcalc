@@ -677,9 +677,10 @@ impl FoodBase {
         }
         #[cfg(not(feature = "tectonic"))]
         {
-        let mut file = std::fs::File::create(format!("recipes/{}.tex", subrecipes.first().unwrap().recipe)).unwrap();
-        use std::io::prelude::Write as WF;
-        file.write_all(text.as_bytes()).unwrap();
+            let mut file =
+                std::fs::File::create(format!("recipes/{}.tex", subrecipes.first().unwrap().recipe)).unwrap();
+            use std::io::prelude::Write as WF;
+            file.write_all(text.as_bytes()).unwrap();
         }
         Ok(())
     }
@@ -985,11 +986,8 @@ impl FoodBase {
 
         // fetch article descriptions from the metro api
         let articles = metro_scrape::request::fetch_articles_from_urls(
-            &urls
-                .iter()
-                .flat_map(|s| s.url.as_ref().clone())
-                .collect::<Vec<_>>()
-                .as_slice(),
+            urls.iter()
+                .flat_map(|s| s.url.is_some().then(|| (s.ingredient_id, s.url.clone().unwrap()))),
         )
         .await?;
 
@@ -1034,9 +1032,17 @@ impl FoodBase {
                 .await?;
             Ok(())
         }
+        for source in urls.iter() {
+            if !articles.iter().any(|x| x.0 == source.ingredient_id) {
+                log::error!("No article found for {}", source.ingredient_id);
+            }
+        }
+        let source_articles = articles
+            .into_iter()
+            .map(|(id, article)| (urls.iter().find(|x| x.ingredient_id == id).clone().unwrap(), article));
 
-        for (source, article) in urls.into_iter().zip(articles) {
-            update_ingredient_price(self, article, source)
+        for (source, article) in source_articles {
+            update_ingredient_price(self, article, source.clone())
                 .await
                 .unwrap_or_else(|e| log::error!("{e}"));
         }
