@@ -878,9 +878,11 @@ impl FoodBase {
             Event,
             r#" SELECT event_id as "event_id!",
                     event_name as "event_name!",
-                    comment as "comment",
+                    events.comment as "comment",
                     budget as "budget"
-                FROM events
+                FROM events INNER JOIN event_meals USING (event_id)
+                GROUP BY event_id, event_name, events.comment, budget
+                ORDER BY MIN(start_time) DESC
             "#
         )
         .fetch_all(&*self.pg_pool)
@@ -979,7 +981,8 @@ impl FoodBase {
             let price = bundle.stores.values().next().ok_or(eyre!("Store not found for id {}", s.ingredient_id))?.selling_price_info.gross_price;
             let weight = &bundle.gross_weight;
             println!(
-                "{}€ {}kg {} {:?}",
+                "#{}: {}€ {}kg {} {:?}",
+                s.ingredient_id,
                 price,
                 weight,
                 bundle.bundle_size,
