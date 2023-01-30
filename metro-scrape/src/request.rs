@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 
 use super::article::*;
 use regex::Regex;
@@ -20,7 +20,7 @@ struct Response {
     context: serde_json::Value,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
 pub struct ArticleIdentifier {
     betty_id: String,
     variant_id: String,
@@ -34,7 +34,6 @@ async fn fetch_articles(articles: &[ArticleIdentifier]) -> Result<Vec<Article>, 
     let url = format!("https://produkte.metro.de/evaluate.article.v1/betty-variants?storeIds=00062&country=DE&locale=de-DE&details=true{article_parameters}");
     //let url = format!("https://produkte.metro.de/evaluate.article.v1/betty-variants?country=DE&locale=de-DE&storeIds=00062&details=true{article_parameters}");
 
-    dbg!(&url);
     let client = reqwest::Client::new();
     let result = client
         .get(url)
@@ -58,22 +57,34 @@ async fn fetch_articles_batched(
     }
     Ok(result)
 }
-pub async fn fetch_articles_from_urls<S: AsRef<str>>(
-    urls: &[S],
-) -> Result<Vec<Article>, eyre::Error> {
+pub async fn fetch_articles_from_urls<S: AsRef<str> + Hash>(
+    urls: impl IntoIterator<Item = (i32, S)>,
+) -> Result<Vec<(i32, Article)>, eyre::Error> {
     let article_identifiers = urls
-        .iter()
-        .filter_map(|url| extract_betty_identifier_from_url(url.as_ref()))
+        .into_iter()
+        .map(|(id, url)| {
+            let ident = extract_betty_identifier_from_url(url.as_ref())
+                .unwrap_or_else(|| panic!("invalid url {}", url.as_ref()));
+            (ident.betty_id.clone(), (ident, id))
+        })
+        .collect::<HashMap<_, _>>();
+
+    let identifiers = article_identifiers
+        .values()
+        .map(|x| x.0.clone())
         .collect::<Vec<_>>();
 
-    let mut articles = fetch_articles_batched(&article_identifiers).await?;
+    let articles = fetch_articles_batched(&identifiers).await?;
 
+    let mut result = articles
+        .iter()
+        .map(|article| {
+            let betty_id = &article.betty_article_id.betty_article_id;
+            let ingredient_id = article_identifiers.get(betty_id).unwrap();
+            (ingredient_id.1, article.clone())
+        })
+        .collect::<Vec<_>>();
     // sort articles by identifier
-    articles.sort_by_key(|article| {
-        article_identifiers
-            .iter()
-            .position(|identifier| identifier.betty_id == article.betty_article_id.betty_article_id)
-            .unwrap()
-    });
-    Ok(articles)
+    result.sort_by_key(|article| article.0);
+    Ok(result)
 }
