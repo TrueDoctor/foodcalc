@@ -32,7 +32,6 @@ async fn fetch_articles(articles: &[ArticleIdentifier]) -> Result<Vec<Article>, 
     });
 
     let url = format!("https://produkte.metro.de/evaluate.article.v1/betty-variants?storeIds=00062&country=DE&locale=de-DE&details=true{article_parameters}");
-    //let url = format!("https://produkte.metro.de/evaluate.article.v1/betty-variants?country=DE&locale=de-DE&storeIds=00062&details=true{article_parameters}");
 
     let client = reqwest::Client::new();
     let result = client

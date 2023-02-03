@@ -992,6 +992,7 @@ impl FoodBase {
                 .flat_map(|s| s.url.is_some().then(|| (s.ingredient_id, s.url.clone().unwrap()))),
         )
         .await?;
+        print!("Fetched {} articles from metro api", articles.len());
 
         async fn update_ingredient_price(
             foodbase: &FoodBase,

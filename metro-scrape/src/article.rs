@@ -458,6 +458,10 @@ pub struct TrackingInfo {
 pub enum UnitOfMeasure {
     #[serde(rename = "")]
     Empty,
+    #[serde(rename = "E14")]
+    E14,
+    #[serde(rename = "KJO")]
+    KJO,
     #[serde(rename = "%")]
     Percent,
     #[serde(rename = "°C")]
@@ -468,6 +472,8 @@ pub enum UnitOfMeasure {
     Centimeter,
     #[serde(rename = "mm")]
     Millimeter,
+    #[serde(rename = "GRM")]
+    GRM,
     #[serde(rename = "g")]
     Gramm,
     #[serde(rename = "µg")]

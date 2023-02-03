@@ -110,10 +110,13 @@ impl IngredientTab {
                 let move_database = self.database.clone();
                 Command::perform(
                     async move {
-                        move_database.fetch_metro_prices(None).await?;
+                        move_database.fetch_metro_prices(None).await.map_err(|e| {
+                            log::error!("Error fetching prices: {}", e);
+                            e
+                        })?;
                         Ok(())
                     },
-                    |_:Result<(), Error>| IngredientTabMessage::Refresh,
+                    |_: Result<(), Error>| IngredientTabMessage::Refresh,
                 )
                 .map(|message| TabMessage::IngredientTab(message.into()))
             },
