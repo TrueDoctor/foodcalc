@@ -5,5 +5,5 @@ members = [
     "metro-scrape",
     "backend"
 ]
-default-members = ["app"]
+default-members = ["app", "backend"]
     
