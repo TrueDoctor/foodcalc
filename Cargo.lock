@@ -216,7 +216,9 @@ name = "backend"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "bigdecimal",
  "chrono",
+ "dotenv",
  "eyre",
  "log",
  "metro-scrape",
@@ -266,6 +268,7 @@ dependencies = [
  "num-bigint 0.3.3",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]

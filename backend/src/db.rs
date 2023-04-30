@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
+use serde::{Serialize, Deserialize};
 
 use num::FromPrimitive;
 use num::ToPrimitive;
@@ -14,7 +15,7 @@ use sqlx::types::BigDecimal;
 
 pub const METRO: i32 = 0;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ingredient {
     pub ingredient_id: i32,
     pub name: String,
@@ -66,7 +67,7 @@ impl IngredientCreate {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Recipe {
     pub recipe_id: i32,
     pub name: String,
@@ -159,7 +160,7 @@ pub struct Store {
     pub name: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Unit {
     pub unit_id: i32,
     pub name: Cow<'static, str>,
@@ -184,7 +185,7 @@ impl std::string::ToString for Unit {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum RecipeMetaIngredient {
     Ingredient(Ingredient),
     MetaRecipe(Recipe),
@@ -196,7 +197,7 @@ impl Default for RecipeMetaIngredient {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Eq, PartialEq, Default, Serialize, Deserialize)]
 pub struct RecipeIngrdient {
     pub ingredient: RecipeMetaIngredient,
     pub amount: BigDecimal,
@@ -722,7 +723,7 @@ impl FoodBase {
     // TODO: Human race condition, add proper locking / edit notifications
     pub async fn update_recipe_entries(
         &self,
-        recipe: &Recipe,
+        recipe_id: i32,
         entries: impl Iterator<Item = RecipeIngrdient>,
     ) -> eyre::Result<()> {
         let mut transaction = self.pg_pool.begin().await?;
@@ -768,7 +769,7 @@ impl FoodBase {
                 DELETE FROM recipe_ingredients
                 WHERE recipe_id = $1
             "#,
-            recipe.recipe_id,
+            recipe_id,
         )
         .execute(&mut transaction)
         .await?;
@@ -779,14 +780,14 @@ impl FoodBase {
                 DELETE FROM meta_recipes
                 WHERE parent_id = $1
             "#,
-            recipe.recipe_id,
+            recipe_id,
         )
         .execute(&mut transaction)
         .await?;
         log::debug!("Deleted {} meta_recipes", count.rows_affected());
 
         for entry in entries {
-            insert_recipe_entry(&mut transaction, recipe.recipe_id, entry).await?;
+            insert_recipe_entry(&mut transaction, recipe_id, entry).await?;
         }
         transaction.commit().await?;
         Ok(())
@@ -795,7 +796,7 @@ impl FoodBase {
     // TODO: Human race condition, add proper locking / edit notifications
     pub async fn update_recipe_steps(
         &self,
-        recipe: &Recipe,
+        recipe_id: i32,
         entries: impl Iterator<Item = RecipeStep>,
     ) -> eyre::Result<()> {
         let mut transaction = self.pg_pool.begin().await?;
@@ -829,14 +830,14 @@ impl FoodBase {
                 DELETE FROM steps
                 WHERE recipe_id = $1
             "#,
-            recipe.recipe_id,
+            recipe_id,
         )
         .execute(&mut transaction)
         .await?;
         log::debug!("Deleted {} steps", count.rows_affected());
 
         for entry in entries {
-            insert_recipe_step(&mut transaction, recipe.recipe_id, entry).await?;
+            insert_recipe_step(&mut transaction, recipe_id, entry).await?;
         }
         transaction.commit().await?;
         Ok(())
