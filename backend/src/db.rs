@@ -141,7 +141,7 @@ pub struct Event {
     pub budget: Option<PgMoney>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Place {
     pub place_id: i32,
     pub name: String,
@@ -1217,7 +1217,7 @@ impl FoodBase {
         Ok(())
     }
 
-    pub async fn update_event_meals(&self, event: &Event, meals: impl Iterator<Item = Meal>) -> eyre::Result<()> {
+    pub async fn update_event_meals(&self, event_id: i32, meals: impl Iterator<Item = Meal>) -> eyre::Result<()> {
         let mut transaction = self.pg_pool.begin().await?;
         pub async fn insert_meal<'a>(
             executor: impl sqlx::Executor<'a, Database = sqlx::Postgres>,
@@ -1250,7 +1250,7 @@ impl FoodBase {
                 DELETE FROM event_meals
                 WHERE event_id = $1
             "#,
-            event.event_id,
+            event_id,
         )
         .execute(&mut transaction)
         .await?
@@ -1258,7 +1258,7 @@ impl FoodBase {
         log::debug!("Deleted {} event_meals", count);
 
         for meal in meals {
-            insert_meal(&mut transaction, event.event_id, meal).await?;
+            insert_meal(&mut transaction, event_id, meal).await?;
         }
         transaction.commit().await?;
         Ok(())
