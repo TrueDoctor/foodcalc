@@ -4,5 +4,5 @@ import Tabs.Ingredients as Ingredients
 import Html exposing (Html)
 
 
-viewIngredients: WebData (List Ingredient) -> Html Msg
+viewIngredients: {ingredients : WebData (List Ingredient), filter: String} -> Html Msg
 viewIngredients = Ingredients.view

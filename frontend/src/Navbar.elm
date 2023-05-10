@@ -2,7 +2,6 @@ module Navbar exposing (..)
 
 import Cursor exposing (Cursor)
 import Html exposing (a, li, nav, strong, ul)
-import Html.Attributes exposing (attribute, class)
 import Html.Events exposing (onClick)
 import State exposing (Msg(..), Tab)
 import Util exposing (roleAttr)

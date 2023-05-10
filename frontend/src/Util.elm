@@ -3,6 +3,7 @@ module Util exposing (..)
 import Http 
 import State exposing (..)
 import Html.Attributes exposing (..)
+import Html.Events exposing (..)
 import Html exposing (..)
 
 mapWebdata : Result Http.Error a -> WebData a

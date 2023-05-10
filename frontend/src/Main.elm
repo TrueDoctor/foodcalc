@@ -42,7 +42,7 @@ renderSelectedView : Model -> Html.Html Msg
 renderSelectedView model =
     case Cursor.active model.tabs of
         Ingredients i ->
-            viewIngredients i.ingredients
+            viewIngredients i
 
         Recipes ->
             text "Recipes"

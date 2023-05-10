@@ -6534,30 +6534,50 @@ var $author$project$Cursor$modifyAt = F3(
 	});
 var $author$project$Tabs$Ingredients$handleMsg = F2(
 	function (msg, model) {
-		if (msg.$ === 'GotIngredients') {
-			var r = msg.a;
-			var save = function (tab) {
+		var mapTab = F2(
+			function (f, tab) {
 				if (tab.$ === 'Ingredients') {
 					var i = tab.a;
-					return $author$project$State$Ingredients(
-						{
-							filter: i.filter,
-							ingredients: $author$project$Util$mapWebdata(r)
-						});
+					return f(i);
 				} else {
 					var any = tab;
 					return any;
 				}
-			};
-			return _Utils_Tuple2(
-				_Utils_update(
-					model,
-					{
-						tabs: A3($author$project$Cursor$modifyAt, 0, save, model.tabs)
-					}),
-				$elm$core$Platform$Cmd$none);
-		} else {
-			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+			});
+		switch (msg.$) {
+			case 'GotIngredients':
+				var r = msg.a;
+				var save = mapTab(
+					function (i) {
+						return $author$project$State$Ingredients(
+							{
+								filter: i.filter,
+								ingredients: $author$project$Util$mapWebdata(r)
+							});
+					});
+				return _Utils_Tuple2(
+					_Utils_update(
+						model,
+						{
+							tabs: A3($author$project$Cursor$modifyAt, 0, save, model.tabs)
+						}),
+					$elm$core$Platform$Cmd$none);
+			case 'EditFilter':
+				var s = msg.a;
+				var save = mapTab(
+					function (i) {
+						return $author$project$State$Ingredients(
+							{filter: s, ingredients: i.ingredients});
+					});
+				return _Utils_Tuple2(
+					_Utils_update(
+						model,
+						{
+							tabs: A3($author$project$Cursor$modifyAt, 0, save, model.tabs)
+						}),
+					$elm$core$Platform$Cmd$none);
+			default:
+				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
 	});
 var $author$project$Main$update = F2(
@@ -6719,7 +6739,41 @@ var $author$project$Navbar$generateNavbar = F2(
 						A2($elm$core$List$cons, a, r)))
 				]));
 	});
+var $author$project$State$EditFilter = function (a) {
+	return {$: 'EditFilter', a: a};
+};
 var $elm$html$Html$input = _VirtualDom_node('input');
+var $elm$html$Html$Events$alwaysStop = function (x) {
+	return _Utils_Tuple2(x, true);
+};
+var $elm$virtual_dom$VirtualDom$MayStopPropagation = function (a) {
+	return {$: 'MayStopPropagation', a: a};
+};
+var $elm$html$Html$Events$stopPropagationOn = F2(
+	function (event, decoder) {
+		return A2(
+			$elm$virtual_dom$VirtualDom$on,
+			event,
+			$elm$virtual_dom$VirtualDom$MayStopPropagation(decoder));
+	});
+var $elm$json$Json$Decode$at = F2(
+	function (fields, decoder) {
+		return A3($elm$core$List$foldr, $elm$json$Json$Decode$field, decoder, fields);
+	});
+var $elm$html$Html$Events$targetValue = A2(
+	$elm$json$Json$Decode$at,
+	_List_fromArray(
+		['target', 'value']),
+	$elm$json$Json$Decode$string);
+var $elm$html$Html$Events$onInput = function (tagger) {
+	return A2(
+		$elm$html$Html$Events$stopPropagationOn,
+		'input',
+		A2(
+			$elm$json$Json$Decode$map,
+			$elm$html$Html$Events$alwaysStop,
+			A2($elm$json$Json$Decode$map, tagger, $elm$html$Html$Events$targetValue)));
+};
 var $elm$html$Html$Attributes$placeholder = $elm$html$Html$Attributes$stringProperty('placeholder');
 var $elm$core$String$fromFloat = _String_fromNumber;
 var $elm$html$Html$td = _VirtualDom_node('td');
@@ -6768,17 +6822,28 @@ var $author$project$Tabs$Ingredients$renderIngredients = function (ingredients) 
 				A2($elm$core$List$map, $author$project$Tabs$Ingredients$renderSingleIngredient, ingredients))
 			]));
 };
+var $elm$core$String$toLower = _String_toLower;
 var $elm$html$Html$Attributes$type_ = $elm$html$Html$Attributes$stringProperty('type');
 var $author$project$Tabs$Ingredients$view = function (ingredients) {
 	var list = function () {
-		switch (ingredients.$) {
+		var _v0 = ingredients.ingredients;
+		switch (_v0.$) {
 			case 'NotAsked':
 				return $elm$html$Html$text('Not Asked');
 			case 'Loading':
 				return $elm$html$Html$text('Loading');
 			case 'Success':
-				var is = ingredients.a;
-				return $author$project$Tabs$Ingredients$renderIngredients(is);
+				var is = _v0.a;
+				return $author$project$Tabs$Ingredients$renderIngredients(
+					A2(
+						$elm$core$List$filter,
+						function (i) {
+							return A2(
+								$elm$core$String$contains,
+								$elm$core$String$toLower(ingredients.filter),
+								$elm$core$String$toLower(i.name));
+						},
+						is));
 			default:
 				return $elm$html$Html$text('Failure');
 		}
@@ -6799,7 +6864,9 @@ var $author$project$Tabs$Ingredients$view = function (ingredients) {
 							[
 								$elm$html$Html$Attributes$class('search'),
 								$elm$html$Html$Attributes$type_('text'),
-								$elm$html$Html$Attributes$placeholder('Search')
+								$elm$html$Html$Attributes$placeholder('Search'),
+								$elm$html$Html$Events$onInput(
+								A2($elm$core$Basics$composeL, $author$project$State$IngredientMessage, $author$project$State$EditFilter))
 							]),
 						_List_Nil)
 					])),
@@ -6812,7 +6879,7 @@ var $author$project$Main$renderSelectedView = function (model) {
 	switch (_v0.$) {
 		case 'Ingredients':
 			var i = _v0.a;
-			return $author$project$Tabs$Main$viewIngredients(i.ingredients);
+			return $author$project$Tabs$Main$viewIngredients(i);
 		case 'Recipes':
 			return $elm$html$Html$text('Recipes');
 		default:
