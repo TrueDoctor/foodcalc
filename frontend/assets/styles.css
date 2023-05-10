@@ -1,0 +1,43 @@
+ul.navbar {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #ececec;
+  }
+  
+  li.navbar-item {
+    float: left;
+  }
+  
+  li.navbar-item a {
+    display: block;
+    color: #000000;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+  }
+  
+  /* Change the link color to #111 (black) on hover */
+  li.navbar-item a:hover, li.navbar-item.active a {
+    background-color: #85c3c7;
+  }
+
+  .ingredient-items {
+    display: inline-grid;
+    grid-template-columns: 10rem 10rem;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  tr:nth-child(0) {
+    width: 5rem;
+  }
+
+  .ingredient-items>tr:nth-child(1) {
+    width: 50%;
+  }

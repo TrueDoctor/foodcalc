@@ -3,6 +3,7 @@ use std::env;
 use db::FoodBase;
 use sqlx::PgPool;
 use tokio;
+use tower_http::cors::CorsLayer;
 
 mod api;
 mod db;
@@ -15,7 +16,9 @@ async fn main() {
             .await
             .unwrap();
     // build our application with a route
-    let app = api::foodbase(FoodBase::new(pool));
+    let app = api::foodbase(FoodBase::new(pool))
+                .layer(CorsLayer::permissive());
+    println!("Listening on http://localhost:3000");
 
     // run it
     axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
