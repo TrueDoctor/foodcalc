@@ -1,39 +1,67 @@
 module Tabs.Ingredients exposing (..)
 
-import Html exposing (Html, div, li)
-import State exposing (Ingredient, Msg, Tab(..), WebData)
-import Html.Attributes exposing (class)
-import Html exposing (ul)
-import Html exposing (span)
-import Html exposing (tr)
-import Html exposing (table)
-import Html exposing (td)
-import Json.Decode as Decode
-
+import Cursor exposing (..)
+import Html exposing (Html, div, input, table, td, tr)
+import Html.Attributes exposing (class, placeholder, type_)
+import State exposing (Ingredient, IngredientMsg(..), Model, Msg, Tab(..), WebData)
+import Util exposing (mapWebdata, roleAttr)
+import Html exposing (tbody)
 
 
 view : WebData (List Ingredient) -> Html Msg
 view ingredients =
-    case ingredients of
-        State.NotAsked ->
-            div [] [ Html.text "Not Asked" ]
+    let
+        list =
+            case ingredients of
+                State.NotAsked ->
+                    Html.text "Not Asked"
 
-        State.Loading ->
-            div [] [ Html.text "Loading" ]
+                State.Loading ->
+                    Html.text "Loading"
 
-        State.Success is ->
-            renderIngredients is
+                State.Success is ->
+                    renderIngredients is
 
-        State.Failure _ ->
-            div [] [ Html.text "Failure" ]
+                State.Failure _ ->
+                    Html.text "Failure"
+    in
+    div []
+        [ div [] [ input [ class "search", type_ "text", placeholder "Search" ] [] ]
+        , list
+        ]
+
+
+handleMsg : IngredientMsg -> Model -> ( Model, Cmd Msg )
+handleMsg msg model =
+    case msg of
+        GotIngredients r ->
+            let
+                save tab =
+                    case tab of
+                        Ingredients i ->
+                            Ingredients { ingredients = mapWebdata r, filter = i.filter }
+
+                        any ->
+                            any
+            in
+            ( { model | tabs = Cursor.modifyAt 0 save model.tabs }, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
+
 
 renderIngredients : List Ingredient -> Html Msg
 renderIngredients ingredients =
-    div [] [table [] (ingredients |> List.map renderSingleIngredient)]
+    table [ roleAttr "grid" ] [ tbody [] (ingredients |> List.map renderSingleIngredient)]
+
 
 renderSingleIngredient : Ingredient -> Html Msg
 renderSingleIngredient ingredient =
-    tr [class "ingredient-item"] ([ 
-        Html.text ingredient.name 
-        , Html.text (String.fromFloat ingredient.energy)
-        ] |> List.map (\x -> td [] [x]))
+    tr [ class "ingredient-item" ]
+        ([ Html.text (String.fromInt ingredient.id)
+         , Html.text ingredient.name
+         , Html.text (String.fromFloat ingredient.energy)
+         , Html.text (ingredient.comment |> Maybe.withDefault "")
+         ]
+            |> List.map (\x -> td [] [ x ])
+        )

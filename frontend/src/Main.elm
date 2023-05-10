@@ -2,13 +2,14 @@ module Main exposing (..)
 
 import Browser
 import Cursor
+import Decoding exposing (decodeIngredientList)
 import Html exposing (div, text)
 import Http exposing (get)
-import Json.Decode exposing (Decoder)
 import Navbar exposing (generateNavbar)
-import State exposing (Ingredient, Model, Msg(..), RemoteData(..), Tab(..), WebData)
-import Decoding exposing (decodeIngredientList)
+import State exposing (..)
 import Tabs.Main exposing (viewIngredients)
+import Tabs.Ingredients exposing (handleMsg)
+import Html.Attributes exposing (class)
 
 
 tabName : Tab -> String
@@ -31,7 +32,7 @@ backend path =
 
 view : Model -> Html.Html Msg
 view model =
-    div []
+    div [class "container"]
         [ generateNavbar tabName model.tabs
         , renderSelectedView model
         ]
@@ -41,7 +42,7 @@ renderSelectedView : Model -> Html.Html Msg
 renderSelectedView model =
     case Cursor.active model.tabs of
         Ingredients i ->
-            viewIngredients i
+            viewIngredients i.ingredients
 
         Recipes ->
             text "Recipes"
@@ -59,57 +60,37 @@ update msg model =
         ChangeTab tab ->
             changeTab (Debug.log "new tab" tab) model
 
-        GotIngredients r ->
-            ( { model | tabs = Cursor.modifyAt 0 (\_ -> Ingredients <| mapWebdata r) model.tabs }, Cmd.none )
+        IngredientMessage m ->
+            handleMsg m model
 
 
-mapWebdata : Result Http.Error a -> WebData a
-mapWebdata r =
-    case r of
-        Ok a ->
-            Success a
-
-        Err e ->
-            Failure (Debug.log "" e)
 
 
 changeTab : Tab -> Model -> ( Model, Cmd Msg )
 changeTab tab model =
     Cursor.setActiveBy (\t -> tabName t == tabName tab) (Debug.log "tabs" model.tabs)
-        |> (\c -> ( Debug.log "new tabs" { model | tabs = c }, Cmd.none ))
+        |> (\c -> ( { model | tabs = c }, Cmd.none ))
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     let
-        i =
-            Ingredients
-                (Success
-                    [ Ingredient "Mehl" 10
-                    , Ingredient "Zucker" 11
-                    , Ingredient "Salz" 0
-                    ]
-                )
-
-        r =
-            Recipes
-
-        e =
-            Events
-
         tabs =
-            Cursor.create (Debug.log "ingredients" i) [ r, e ]
+            Cursor.create (Ingredients { ingredients = NotAsked, filter = "" })
+                [ Recipes
+                , Events
+                ]
     in
     ( Model tabs
     , get
         { url = backend "/ingredients/list"
-        , expect = Http.expectJson GotIngredients decodeIngredientList
+        , expect = Http.expectJson (IngredientMessage << GotIngredients) decodeIngredientList
         }
     )
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions _ =
     Sub.none
 
 

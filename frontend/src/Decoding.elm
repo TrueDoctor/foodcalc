@@ -1,25 +1,27 @@
 module Decoding exposing (..)
 
-import Json.Decode as Decode
+import Json.Decode exposing (..)
 import State exposing (..)
 
-decodeStringFloat : Decode.Decoder Float
+decodeStringFloat : Decoder Float
 decodeStringFloat =
     let
         parseFloat s =
             String.toFloat s
-                |> Maybe.map Decode.succeed
-                |> Maybe.withDefault (Decode.fail "Could not parse float")
+                |> Maybe.map succeed
+                |> Maybe.withDefault (fail "Could not parse float")
     in
     
-    Decode.string |> Decode.andThen parseFloat
+    string |> andThen parseFloat
 
-decodeIngredientList : Decode.Decoder (List Ingredient)
+decodeIngredientList : Decoder (List Ingredient)
 decodeIngredientList =
-    Decode.list decodeIngredient
+    list decodeIngredient
 
-decodeIngredient : Decode.Decoder Ingredient
+decodeIngredient : Decoder Ingredient
 decodeIngredient =
-    Decode.map2 Ingredient
-        (Decode.field "name" Decode.string)
-        (Decode.field "energy" decodeStringFloat)
+    map4 Ingredient
+        (field "ingredient_id" int)
+        (field "name" string)
+        (field "energy" decodeStringFloat)
+        (field "comment" (nullable string))

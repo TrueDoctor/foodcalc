@@ -5338,26 +5338,32 @@ var $author$project$State$Events = {$: 'Events'};
 var $author$project$State$GotIngredients = function (a) {
 	return {$: 'GotIngredients', a: a};
 };
-var $author$project$State$Ingredient = F2(
-	function (name, energy) {
-		return {energy: energy, name: name};
-	});
+var $author$project$State$IngredientMessage = function (a) {
+	return {$: 'IngredientMessage', a: a};
+};
 var $author$project$State$Ingredients = function (a) {
 	return {$: 'Ingredients', a: a};
 };
 var $author$project$State$Model = function (tabs) {
 	return {tabs: tabs};
 };
+var $author$project$State$NotAsked = {$: 'NotAsked'};
 var $author$project$State$Recipes = {$: 'Recipes'};
-var $author$project$State$Success = function (a) {
-	return {$: 'Success', a: a};
-};
 var $author$project$Main$backend = function (path) {
 	return 'http://localhost:3000' + path;
 };
+var $elm$core$Basics$composeL = F3(
+	function (g, f, x) {
+		return g(
+			f(x));
+	});
 var $author$project$Cursor$create = F2(
 	function (a, r) {
 		return {active: a, left: _List_Nil, right: r};
+	});
+var $author$project$State$Ingredient = F4(
+	function (id, name, energy, comment) {
+		return {comment: comment, energy: energy, id: id, name: name};
 	});
 var $elm$json$Json$Decode$andThen = _Json_andThen;
 var $elm$json$Json$Decode$fail = _Json_fail;
@@ -5395,11 +5401,28 @@ var $author$project$Decoding$decodeStringFloat = function () {
 	return A2($elm$json$Json$Decode$andThen, parseFloat, $elm$json$Json$Decode$string);
 }();
 var $elm$json$Json$Decode$field = _Json_decodeField;
-var $author$project$Decoding$decodeIngredient = A3(
-	$elm$json$Json$Decode$map2,
+var $elm$json$Json$Decode$int = _Json_decodeInt;
+var $elm$json$Json$Decode$map4 = _Json_map4;
+var $elm$json$Json$Decode$null = _Json_decodeNull;
+var $elm$json$Json$Decode$oneOf = _Json_oneOf;
+var $elm$json$Json$Decode$nullable = function (decoder) {
+	return $elm$json$Json$Decode$oneOf(
+		_List_fromArray(
+			[
+				$elm$json$Json$Decode$null($elm$core$Maybe$Nothing),
+				A2($elm$json$Json$Decode$map, $elm$core$Maybe$Just, decoder)
+			]));
+};
+var $author$project$Decoding$decodeIngredient = A5(
+	$elm$json$Json$Decode$map4,
 	$author$project$State$Ingredient,
+	A2($elm$json$Json$Decode$field, 'ingredient_id', $elm$json$Json$Decode$int),
 	A2($elm$json$Json$Decode$field, 'name', $elm$json$Json$Decode$string),
-	A2($elm$json$Json$Decode$field, 'energy', $author$project$Decoding$decodeStringFloat));
+	A2($elm$json$Json$Decode$field, 'energy', $author$project$Decoding$decodeStringFloat),
+	A2(
+		$elm$json$Json$Decode$field,
+		'comment',
+		$elm$json$Json$Decode$nullable($elm$json$Json$Decode$string)));
 var $elm$json$Json$Decode$list = _Json_decodeList;
 var $author$project$Decoding$decodeIngredientList = $elm$json$Json$Decode$list($author$project$Decoding$decodeIngredient);
 var $elm$json$Json$Decode$decodeString = _Json_runOnString;
@@ -6189,43 +6212,32 @@ var $elm$http$Http$get = function (r) {
 	return $elm$http$Http$request(
 		{body: $elm$http$Http$emptyBody, expect: r.expect, headers: _List_Nil, method: 'GET', timeout: $elm$core$Maybe$Nothing, tracker: $elm$core$Maybe$Nothing, url: r.url});
 };
-var $elm$core$Debug$log = _Debug_log;
 var $author$project$Main$init = function (_v0) {
-	var r = $author$project$State$Recipes;
-	var i = $author$project$State$Ingredients(
-		$author$project$State$Success(
-			_List_fromArray(
-				[
-					A2($author$project$State$Ingredient, 'Mehl', 10),
-					A2($author$project$State$Ingredient, 'Zucker', 11),
-					A2($author$project$State$Ingredient, 'Salz', 0)
-				])));
-	var e = $author$project$State$Events;
 	var tabs = A2(
 		$author$project$Cursor$create,
-		A2($elm$core$Debug$log, 'ingredients', i),
+		$author$project$State$Ingredients(
+			{filter: '', ingredients: $author$project$State$NotAsked}),
 		_List_fromArray(
-			[r, e]));
+			[$author$project$State$Recipes, $author$project$State$Events]));
 	return _Utils_Tuple2(
 		$author$project$State$Model(tabs),
 		$elm$http$Http$get(
 			{
-				expect: A2($elm$http$Http$expectJson, $author$project$State$GotIngredients, $author$project$Decoding$decodeIngredientList),
+				expect: A2(
+					$elm$http$Http$expectJson,
+					A2($elm$core$Basics$composeL, $author$project$State$IngredientMessage, $author$project$State$GotIngredients),
+					$author$project$Decoding$decodeIngredientList),
 				url: $author$project$Main$backend('/ingredients/list')
 			}));
 };
 var $elm$core$Platform$Sub$batch = _Platform_batch;
 var $elm$core$Platform$Sub$none = $elm$core$Platform$Sub$batch(_List_Nil);
-var $author$project$Main$subscriptions = function (model) {
+var $author$project$Main$subscriptions = function (_v0) {
 	return $elm$core$Platform$Sub$none;
 };
+var $elm$core$Debug$log = _Debug_log;
 var $elm$core$Platform$Cmd$batch = _Platform_batch;
 var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
-var $elm$core$Basics$composeL = F3(
-	function (g, f, x) {
-		return g(
-			f(x));
-	});
 var $elm$core$List$filter = F2(
 	function (isGood, list) {
 		return A3(
@@ -6461,12 +6473,9 @@ var $author$project$Main$changeTab = F2(
 	function (tab, model) {
 		return function (c) {
 			return _Utils_Tuple2(
-				A2(
-					$elm$core$Debug$log,
-					'new tabs',
-					_Utils_update(
-						model,
-						{tabs: c})),
+				_Utils_update(
+					model,
+					{tabs: c}),
 				$elm$core$Platform$Cmd$none);
 		}(
 			A2(
@@ -6481,7 +6490,10 @@ var $author$project$Main$changeTab = F2(
 var $author$project$State$Failure = function (a) {
 	return {$: 'Failure', a: a};
 };
-var $author$project$Main$mapWebdata = function (r) {
+var $author$project$State$Success = function (a) {
+	return {$: 'Success', a: a};
+};
+var $author$project$Util$mapWebdata = function (r) {
 	if (r.$ === 'Ok') {
 		var a = r.a;
 		return $author$project$State$Success(a);
@@ -6520,6 +6532,34 @@ var $author$project$Cursor$modifyAt = F3(
 					cursor.right)
 			})));
 	});
+var $author$project$Tabs$Ingredients$handleMsg = F2(
+	function (msg, model) {
+		if (msg.$ === 'GotIngredients') {
+			var r = msg.a;
+			var save = function (tab) {
+				if (tab.$ === 'Ingredients') {
+					var i = tab.a;
+					return $author$project$State$Ingredients(
+						{
+							filter: i.filter,
+							ingredients: $author$project$Util$mapWebdata(r)
+						});
+				} else {
+					var any = tab;
+					return any;
+				}
+			};
+			return _Utils_Tuple2(
+				_Utils_update(
+					model,
+					{
+						tabs: A3($author$project$Cursor$modifyAt, 0, save, model.tabs)
+					}),
+				$elm$core$Platform$Cmd$none);
+		} else {
+			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+		}
+	});
 var $author$project$Main$update = F2(
 	function (msg, model) {
 		switch (msg.$) {
@@ -6532,27 +6572,10 @@ var $author$project$Main$update = F2(
 					A2($elm$core$Debug$log, 'new tab', tab),
 					model);
 			default:
-				var r = msg.a;
-				return _Utils_Tuple2(
-					_Utils_update(
-						model,
-						{
-							tabs: A3(
-								$author$project$Cursor$modifyAt,
-								0,
-								function (_v1) {
-									return $author$project$State$Ingredients(
-										$author$project$Main$mapWebdata(r));
-								},
-								model.tabs)
-						}),
-					$elm$core$Platform$Cmd$none);
+				var m = msg.a;
+				return A2($author$project$Tabs$Ingredients$handleMsg, m, model);
 		}
 	});
-var $elm$html$Html$div = _VirtualDom_node('div');
-var $author$project$Cursor$active = function (cursor) {
-	return cursor.active;
-};
 var $elm$json$Json$Encode$string = _Json_wrap;
 var $elm$html$Html$Attributes$stringProperty = F2(
 	function (key, string) {
@@ -6562,6 +6585,10 @@ var $elm$html$Html$Attributes$stringProperty = F2(
 			$elm$json$Json$Encode$string(string));
 	});
 var $elm$html$Html$Attributes$class = $elm$html$Html$Attributes$stringProperty('className');
+var $elm$html$Html$div = _VirtualDom_node('div');
+var $author$project$Cursor$active = function (cursor) {
+	return cursor.active;
+};
 var $author$project$State$ChangeTab = function (a) {
 	return {$: 'ChangeTab', a: a};
 };
@@ -6584,6 +6611,15 @@ var $elm$html$Html$Events$onClick = function (msg) {
 		'click',
 		$elm$json$Json$Decode$succeed(msg));
 };
+var $elm$virtual_dom$VirtualDom$attribute = F2(
+	function (key, value) {
+		return A2(
+			_VirtualDom_attribute,
+			_VirtualDom_noOnOrFormAction(key),
+			_VirtualDom_noJavaScriptOrHtmlUri(value));
+	});
+var $elm$html$Html$Attributes$attribute = $elm$virtual_dom$VirtualDom$attribute;
+var $author$project$Util$roleAttr = $elm$html$Html$Attributes$attribute('role');
 var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
 var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
 var $author$project$Navbar$generateNavbarItem = F3(
@@ -6592,7 +6628,6 @@ var $author$project$Navbar$generateNavbarItem = F3(
 			$elm$html$Html$li,
 			_List_fromArray(
 				[
-					$elm$html$Html$Attributes$class('navbar-item active'),
 					$elm$html$Html$Events$onClick(
 					$author$project$State$ChangeTab(tab))
 				]),
@@ -6602,7 +6637,7 @@ var $author$project$Navbar$generateNavbarItem = F3(
 					$elm$html$Html$a,
 					_List_fromArray(
 						[
-							$elm$html$Html$Attributes$class('navbar-link')
+							$author$project$Util$roleAttr('button')
 						]),
 					_List_fromArray(
 						[
@@ -6613,7 +6648,6 @@ var $author$project$Navbar$generateNavbarItem = F3(
 			$elm$html$Html$li,
 			_List_fromArray(
 				[
-					$elm$html$Html$Attributes$class('navbar-item'),
 					$elm$html$Html$Events$onClick(
 					$author$project$State$ChangeTab(tab))
 				]),
@@ -6621,10 +6655,7 @@ var $author$project$Navbar$generateNavbarItem = F3(
 				[
 					A2(
 					$elm$html$Html$a,
-					_List_fromArray(
-						[
-							$elm$html$Html$Attributes$class('navbar-link')
-						]),
+					_List_Nil,
 					_List_fromArray(
 						[
 							$elm$html$Html$text(
@@ -6635,9 +6666,11 @@ var $author$project$Navbar$generateNavbarItem = F3(
 var $author$project$Cursor$left = function (cursor) {
 	return cursor.left;
 };
+var $elm$html$Html$nav = _VirtualDom_node('nav');
 var $author$project$Cursor$right = function (cursor) {
 	return cursor.right;
 };
+var $elm$html$Html$strong = _VirtualDom_node('strong');
 var $elm$html$Html$ul = _VirtualDom_node('ul');
 var $author$project$Navbar$generateNavbar = F2(
 	function (view, tabs) {
@@ -6655,16 +6688,39 @@ var $author$project$Navbar$generateNavbar = F2(
 			view,
 			$author$project$Cursor$active(tabs));
 		return A2(
-			$elm$html$Html$ul,
-			A2(
-				$elm$core$List$map,
-				$elm$html$Html$Attributes$class,
-				_List_fromArray(
-					['navbar'])),
-			_Utils_ap(
-				l,
-				A2($elm$core$List$cons, a, r)));
+			$elm$html$Html$nav,
+			_List_Nil,
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$ul,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$li,
+							_List_Nil,
+							_List_fromArray(
+								[
+									A2(
+									$elm$html$Html$strong,
+									_List_Nil,
+									_List_fromArray(
+										[
+											$elm$html$Html$text('foodcalc')
+										]))
+								]))
+						])),
+					A2(
+					$elm$html$Html$ul,
+					_List_Nil,
+					_Utils_ap(
+						l,
+						A2($elm$core$List$cons, a, r)))
+				]));
 	});
+var $elm$html$Html$input = _VirtualDom_node('input');
+var $elm$html$Html$Attributes$placeholder = $elm$html$Html$Attributes$stringProperty('placeholder');
 var $elm$core$String$fromFloat = _String_fromNumber;
 var $elm$html$Html$td = _VirtualDom_node('td');
 var $elm$html$Html$tr = _VirtualDom_node('tr');
@@ -6686,54 +6742,69 @@ var $author$project$Tabs$Ingredients$renderSingleIngredient = function (ingredie
 			},
 			_List_fromArray(
 				[
+					$elm$html$Html$text(
+					$elm$core$String$fromInt(ingredient.id)),
 					$elm$html$Html$text(ingredient.name),
 					$elm$html$Html$text(
-					$elm$core$String$fromFloat(ingredient.energy))
+					$elm$core$String$fromFloat(ingredient.energy)),
+					$elm$html$Html$text(
+					A2($elm$core$Maybe$withDefault, '', ingredient.comment))
 				])));
 };
 var $elm$html$Html$table = _VirtualDom_node('table');
+var $elm$html$Html$tbody = _VirtualDom_node('tbody');
 var $author$project$Tabs$Ingredients$renderIngredients = function (ingredients) {
+	return A2(
+		$elm$html$Html$table,
+		_List_fromArray(
+			[
+				$author$project$Util$roleAttr('grid')
+			]),
+		_List_fromArray(
+			[
+				A2(
+				$elm$html$Html$tbody,
+				_List_Nil,
+				A2($elm$core$List$map, $author$project$Tabs$Ingredients$renderSingleIngredient, ingredients))
+			]));
+};
+var $elm$html$Html$Attributes$type_ = $elm$html$Html$Attributes$stringProperty('type');
+var $author$project$Tabs$Ingredients$view = function (ingredients) {
+	var list = function () {
+		switch (ingredients.$) {
+			case 'NotAsked':
+				return $elm$html$Html$text('Not Asked');
+			case 'Loading':
+				return $elm$html$Html$text('Loading');
+			case 'Success':
+				var is = ingredients.a;
+				return $author$project$Tabs$Ingredients$renderIngredients(is);
+			default:
+				return $elm$html$Html$text('Failure');
+		}
+	}();
 	return A2(
 		$elm$html$Html$div,
 		_List_Nil,
 		_List_fromArray(
 			[
 				A2(
-				$elm$html$Html$table,
+				$elm$html$Html$div,
 				_List_Nil,
-				A2($elm$core$List$map, $author$project$Tabs$Ingredients$renderSingleIngredient, ingredients))
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$input,
+						_List_fromArray(
+							[
+								$elm$html$Html$Attributes$class('search'),
+								$elm$html$Html$Attributes$type_('text'),
+								$elm$html$Html$Attributes$placeholder('Search')
+							]),
+						_List_Nil)
+					])),
+				list
 			]));
-};
-var $author$project$Tabs$Ingredients$view = function (ingredients) {
-	switch (ingredients.$) {
-		case 'NotAsked':
-			return A2(
-				$elm$html$Html$div,
-				_List_Nil,
-				_List_fromArray(
-					[
-						$elm$html$Html$text('Not Asked')
-					]));
-		case 'Loading':
-			return A2(
-				$elm$html$Html$div,
-				_List_Nil,
-				_List_fromArray(
-					[
-						$elm$html$Html$text('Loading')
-					]));
-		case 'Success':
-			var is = ingredients.a;
-			return $author$project$Tabs$Ingredients$renderIngredients(is);
-		default:
-			return A2(
-				$elm$html$Html$div,
-				_List_Nil,
-				_List_fromArray(
-					[
-						$elm$html$Html$text('Failure')
-					]));
-	}
 };
 var $author$project$Tabs$Main$viewIngredients = $author$project$Tabs$Ingredients$view;
 var $author$project$Main$renderSelectedView = function (model) {
@@ -6741,7 +6812,7 @@ var $author$project$Main$renderSelectedView = function (model) {
 	switch (_v0.$) {
 		case 'Ingredients':
 			var i = _v0.a;
-			return $author$project$Tabs$Main$viewIngredients(i);
+			return $author$project$Tabs$Main$viewIngredients(i.ingredients);
 		case 'Recipes':
 			return $elm$html$Html$text('Recipes');
 		default:
@@ -6751,7 +6822,10 @@ var $author$project$Main$renderSelectedView = function (model) {
 var $author$project$Main$view = function (model) {
 	return A2(
 		$elm$html$Html$div,
-		_List_Nil,
+		_List_fromArray(
+			[
+				$elm$html$Html$Attributes$class('container')
+			]),
 		_List_fromArray(
 			[
 				A2($author$project$Navbar$generateNavbar, $author$project$Main$tabName, model.tabs),
