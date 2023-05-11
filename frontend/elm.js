@@ -5334,34 +5334,30 @@ var $elm$core$Task$perform = F2(
 				A2($elm$core$Task$map, toMessage, task)));
 	});
 var $elm$browser$Browser$element = _Browser_element;
-var $author$project$State$Events = {$: 'Events'};
-var $author$project$State$GotIngredients = function (a) {
-	return {$: 'GotIngredients', a: a};
-};
-var $author$project$State$IngredientMessage = function (a) {
+var $author$project$Model$Events = {$: 'Events'};
+var $author$project$Model$IngredientMessage = function (a) {
 	return {$: 'IngredientMessage', a: a};
 };
-var $author$project$State$Ingredients = function (a) {
+var $author$project$Model$Ingredients = function (a) {
 	return {$: 'Ingredients', a: a};
 };
-var $author$project$State$Model = function (tabs) {
+var $author$project$Utils$Model$Loading = {$: 'Loading'};
+var $author$project$Model$Model = function (tabs) {
 	return {tabs: tabs};
 };
-var $author$project$State$NotAsked = {$: 'NotAsked'};
-var $author$project$State$Recipes = {$: 'Recipes'};
-var $author$project$Main$backend = function (path) {
-	return 'http://localhost:3000' + path;
-};
-var $elm$core$Basics$composeL = F3(
-	function (g, f, x) {
-		return g(
-			f(x));
-	});
-var $author$project$Cursor$create = F2(
+var $author$project$Ingredients$Model$None = {$: 'None'};
+var $author$project$Model$Recipes = {$: 'Recipes'};
+var $author$project$Utils$Cursor$create = F2(
 	function (a, r) {
 		return {active: a, left: _List_Nil, right: r};
 	});
-var $author$project$State$Ingredient = F4(
+var $author$project$Ingredients$Model$GotIngredients = function (a) {
+	return {$: 'GotIngredients', a: a};
+};
+var $author$project$Settings$backend = function (path) {
+	return 'http://localhost:3000' + path;
+};
+var $author$project$Ingredients$Model$Ingredient = F4(
 	function (id, name, energy, comment) {
 		return {comment: comment, energy: energy, id: id, name: name};
 	});
@@ -5388,7 +5384,7 @@ var $elm$core$Maybe$withDefault = F2(
 			return _default;
 		}
 	});
-var $author$project$Decoding$decodeStringFloat = function () {
+var $author$project$Utils$Decoding$decodeStringFloat = function () {
 	var parseFloat = function (s) {
 		return A2(
 			$elm$core$Maybe$withDefault,
@@ -5413,18 +5409,18 @@ var $elm$json$Json$Decode$nullable = function (decoder) {
 				A2($elm$json$Json$Decode$map, $elm$core$Maybe$Just, decoder)
 			]));
 };
-var $author$project$Decoding$decodeIngredient = A5(
+var $author$project$Ingredients$Service$decodeIngredient = A5(
 	$elm$json$Json$Decode$map4,
-	$author$project$State$Ingredient,
+	$author$project$Ingredients$Model$Ingredient,
 	A2($elm$json$Json$Decode$field, 'ingredient_id', $elm$json$Json$Decode$int),
 	A2($elm$json$Json$Decode$field, 'name', $elm$json$Json$Decode$string),
-	A2($elm$json$Json$Decode$field, 'energy', $author$project$Decoding$decodeStringFloat),
+	A2($elm$json$Json$Decode$field, 'energy', $author$project$Utils$Decoding$decodeStringFloat),
 	A2(
 		$elm$json$Json$Decode$field,
 		'comment',
 		$elm$json$Json$Decode$nullable($elm$json$Json$Decode$string)));
 var $elm$json$Json$Decode$list = _Json_decodeList;
-var $author$project$Decoding$decodeIngredientList = $elm$json$Json$Decode$list($author$project$Decoding$decodeIngredient);
+var $author$project$Ingredients$Service$decodeIngredientList = $elm$json$Json$Decode$list($author$project$Ingredients$Service$decodeIngredient);
 var $elm$json$Json$Decode$decodeString = _Json_runOnString;
 var $elm$http$Http$BadStatus_ = F2(
 	function (a, b) {
@@ -6212,23 +6208,22 @@ var $elm$http$Http$get = function (r) {
 	return $elm$http$Http$request(
 		{body: $elm$http$Http$emptyBody, expect: r.expect, headers: _List_Nil, method: 'GET', timeout: $elm$core$Maybe$Nothing, tracker: $elm$core$Maybe$Nothing, url: r.url});
 };
+var $author$project$Ingredients$Service$fetchIngredients = $elm$http$Http$get(
+	{
+		expect: A2($elm$http$Http$expectJson, $author$project$Ingredients$Model$GotIngredients, $author$project$Ingredients$Service$decodeIngredientList),
+		url: $author$project$Settings$backend('/ingredients/list')
+	});
+var $elm$core$Platform$Cmd$map = _Platform_map;
 var $author$project$Main$init = function (_v0) {
 	var tabs = A2(
-		$author$project$Cursor$create,
-		$author$project$State$Ingredients(
-			{filter: '', ingredients: $author$project$State$NotAsked}),
+		$author$project$Utils$Cursor$create,
+		$author$project$Model$Ingredients(
+			{filter: '', ingredients: $author$project$Utils$Model$Loading, modal: $author$project$Ingredients$Model$None}),
 		_List_fromArray(
-			[$author$project$State$Recipes, $author$project$State$Events]));
+			[$author$project$Model$Recipes, $author$project$Model$Events]));
 	return _Utils_Tuple2(
-		$author$project$State$Model(tabs),
-		$elm$http$Http$get(
-			{
-				expect: A2(
-					$elm$http$Http$expectJson,
-					A2($elm$core$Basics$composeL, $author$project$State$IngredientMessage, $author$project$State$GotIngredients),
-					$author$project$Decoding$decodeIngredientList),
-				url: $author$project$Main$backend('/ingredients/list')
-			}));
+		$author$project$Model$Model(tabs),
+		A2($elm$core$Platform$Cmd$map, $author$project$Model$IngredientMessage, $author$project$Ingredients$Service$fetchIngredients));
 };
 var $elm$core$Platform$Sub$batch = _Platform_batch;
 var $elm$core$Platform$Sub$none = $elm$core$Platform$Sub$batch(_List_Nil);
@@ -6238,6 +6233,11 @@ var $author$project$Main$subscriptions = function (_v0) {
 var $elm$core$Debug$log = _Debug_log;
 var $elm$core$Platform$Cmd$batch = _Platform_batch;
 var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
+var $elm$core$Basics$composeL = F3(
+	function (g, f, x) {
+		return g(
+			f(x));
+	});
 var $elm$core$List$filter = F2(
 	function (isGood, list) {
 		return A3(
@@ -6249,7 +6249,7 @@ var $elm$core$List$filter = F2(
 			_List_Nil,
 			list);
 	});
-var $author$project$Cursor$list = function (cursor) {
+var $author$project$Utils$Cursor$list = function (cursor) {
 	return _Utils_ap(
 		cursor.left,
 		A2($elm$core$List$cons, cursor.active, cursor.right));
@@ -6414,21 +6414,21 @@ var $elm$core$List$take = F2(
 	function (n, list) {
 		return A3($elm$core$List$takeFast, 0, n, list);
 	});
-var $author$project$Cursor$setActive = F2(
+var $author$project$Utils$Cursor$setActive = F2(
 	function (index, cursor) {
 		var r = A2(
 			$elm$core$List$drop,
 			index + 1,
-			$author$project$Cursor$list(cursor));
+			$author$project$Utils$Cursor$list(cursor));
 		var newActive = $elm$core$List$head(
 			A2(
 				$elm$core$List$drop,
 				index,
-				$author$project$Cursor$list(cursor)));
+				$author$project$Utils$Cursor$list(cursor)));
 		var l = A2(
 			$elm$core$List$take,
 			index,
-			$author$project$Cursor$list(cursor));
+			$author$project$Utils$Cursor$list(cursor));
 		if (newActive.$ === 'Just') {
 			var a = newActive.a;
 			return _Utils_update(
@@ -6438,7 +6438,7 @@ var $author$project$Cursor$setActive = F2(
 			return cursor;
 		}
 	});
-var $author$project$Cursor$setActiveBy = F2(
+var $author$project$Utils$Cursor$setActiveBy = F2(
 	function (f, cursor) {
 		var indexed = A2(
 			$elm$core$List$indexedMap,
@@ -6446,7 +6446,7 @@ var $author$project$Cursor$setActiveBy = F2(
 				function (i, a) {
 					return _Utils_Tuple2(i, a);
 				}),
-			$author$project$Cursor$list(cursor));
+			$author$project$Utils$Cursor$list(cursor));
 		var _v0 = A2(
 			$elm$core$List$filter,
 			A2($elm$core$Basics$composeL, f, $elm$core$Tuple$second),
@@ -6456,10 +6456,10 @@ var $author$project$Cursor$setActiveBy = F2(
 		} else {
 			var _v1 = _v0.a;
 			var i = _v1.a;
-			return A2($author$project$Cursor$setActive, i, cursor);
+			return A2($author$project$Utils$Cursor$setActive, i, cursor);
 		}
 	});
-var $author$project$Main$tabName = function (tab) {
+var $author$project$Settings$tabName = function (tab) {
 	switch (tab.$) {
 		case 'Ingredients':
 			return 'Ingredients';
@@ -6479,31 +6479,66 @@ var $author$project$Main$changeTab = F2(
 				$elm$core$Platform$Cmd$none);
 		}(
 			A2(
-				$author$project$Cursor$setActiveBy,
+				$author$project$Utils$Cursor$setActiveBy,
 				function (t) {
 					return _Utils_eq(
-						$author$project$Main$tabName(t),
-						$author$project$Main$tabName(tab));
+						$author$project$Settings$tabName(t),
+						$author$project$Settings$tabName(tab));
 				},
 				A2($elm$core$Debug$log, 'tabs', model.tabs)));
 	});
-var $author$project$State$Failure = function (a) {
-	return {$: 'Failure', a: a};
+var $author$project$Ingredients$Model$Edit = function (a) {
+	return {$: 'Edit', a: a};
 };
-var $author$project$State$Success = function (a) {
-	return {$: 'Success', a: a};
+var $author$project$Ingredients$Model$IngredientEditor = F4(
+	function (id, name, energy, comment) {
+		return {comment: comment, energy: energy, id: id, name: name};
+	});
+var $elm$core$String$fromFloat = _String_fromNumber;
+var $author$project$Ingredients$Update$editor = F2(
+	function (itab, id) {
+		var _v0 = itab.ingredients;
+		if (_v0.$ === 'Success') {
+			var ingredients = _v0.a;
+			return A2(
+				$elm$core$Maybe$withDefault,
+				itab.modal,
+				A2(
+					$elm$core$Maybe$map,
+					function (i) {
+						return $author$project$Ingredients$Model$Edit(
+							A4(
+								$author$project$Ingredients$Model$IngredientEditor,
+								i.id,
+								i.name,
+								$elm$core$String$fromFloat(i.energy),
+								A2($elm$core$Maybe$withDefault, '', i.comment)));
+					},
+					$elm$core$List$head(
+						A2(
+							$elm$core$List$filter,
+							function (i) {
+								return _Utils_eq(i.id, id);
+							},
+							ingredients))));
+		} else {
+			return itab.modal;
+		}
+	});
+var $author$project$Ingredients$Model$Add = function (a) {
+	return {$: 'Add', a: a};
 };
-var $author$project$Util$mapWebdata = function (r) {
-	if (r.$ === 'Ok') {
-		var a = r.a;
-		return $author$project$State$Success(a);
-	} else {
-		var e = r.a;
-		return $author$project$State$Failure(
-			A2($elm$core$Debug$log, '', e));
-	}
-};
-var $author$project$Cursor$modifyAt = F3(
+var $author$project$Ingredients$Update$mapTab = F2(
+	function (f, tab) {
+		if (tab.$ === 'Ingredients') {
+			var i = tab.a;
+			return f(i);
+		} else {
+			var any = tab;
+			return any;
+		}
+	});
+var $author$project$Utils$Cursor$modifyAt = F3(
 	function (index, f, cursor) {
 		var mapper = F3(
 			function (m, i, a) {
@@ -6532,54 +6567,163 @@ var $author$project$Cursor$modifyAt = F3(
 					cursor.right)
 			})));
 	});
-var $author$project$Tabs$Ingredients$handleMsg = F2(
+var $author$project$Ingredients$Update$updateModel = F2(
+	function (f, model) {
+		return _Utils_update(
+			model,
+			{
+				tabs: A3($author$project$Utils$Cursor$modifyAt, 0, f, model.tabs)
+			});
+	});
+var $author$project$Ingredients$Update$handleModalMsg = F2(
 	function (msg, model) {
-		var mapTab = F2(
-			function (f, tab) {
-				if (tab.$ === 'Ingredients') {
-					var i = tab.a;
-					return f(i);
-				} else {
-					var any = tab;
-					return any;
+		var update = F2(
+			function (modal, f) {
+				switch (modal.$) {
+					case 'Edit':
+						var e = modal.a;
+						return $author$project$Ingredients$Model$Edit(
+							f(e));
+					case 'Add':
+						var e = modal.a;
+						return $author$project$Ingredients$Model$Add(
+							f(e));
+					default:
+						var any = modal;
+						return any;
 				}
 			});
+		var mapUpdate = function (f) {
+			return $author$project$Ingredients$Update$mapTab(
+				function (i) {
+					return $author$project$Model$Ingredients(
+						_Utils_update(
+							i,
+							{
+								modal: A2(update, i.modal, f)
+							}));
+				});
+		};
+		switch (msg.$) {
+			case 'EditName':
+				var name = msg.a;
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Ingredients$Update$updateModel,
+						mapUpdate(
+							function (e) {
+								return _Utils_update(
+									e,
+									{name: name});
+							}),
+						model),
+					$elm$core$Platform$Cmd$none);
+			case 'EditEnergy':
+				var energy = msg.a;
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Ingredients$Update$updateModel,
+						mapUpdate(
+							function (e) {
+								return _Utils_update(
+									e,
+									{energy: energy});
+							}),
+						model),
+					$elm$core$Platform$Cmd$none);
+			default:
+				var comment = msg.a;
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Ingredients$Update$updateModel,
+						mapUpdate(
+							function (e) {
+								return _Utils_update(
+									e,
+									{comment: comment});
+							}),
+						model),
+					$elm$core$Platform$Cmd$none);
+		}
+	});
+var $author$project$Utils$Model$Failure = function (a) {
+	return {$: 'Failure', a: a};
+};
+var $author$project$Utils$Model$Success = function (a) {
+	return {$: 'Success', a: a};
+};
+var $author$project$Utils$Main$mapWebdata = function (r) {
+	if (r.$ === 'Ok') {
+		var a = r.a;
+		return $author$project$Utils$Model$Success(a);
+	} else {
+		var e = r.a;
+		return $author$project$Utils$Model$Failure(
+			A2($elm$core$Debug$log, '', e));
+	}
+};
+var $author$project$Ingredients$Update$handleMsg = F2(
+	function (msg, model) {
 		switch (msg.$) {
 			case 'GotIngredients':
 				var r = msg.a;
-				var save = mapTab(
+				var save = $author$project$Ingredients$Update$mapTab(
 					function (i) {
-						return $author$project$State$Ingredients(
-							{
-								filter: i.filter,
-								ingredients: $author$project$Util$mapWebdata(r)
-							});
+						return $author$project$Model$Ingredients(
+							_Utils_update(
+								i,
+								{
+									ingredients: $author$project$Utils$Main$mapWebdata(r)
+								}));
 					});
 				return _Utils_Tuple2(
-					_Utils_update(
-						model,
-						{
-							tabs: A3($author$project$Cursor$modifyAt, 0, save, model.tabs)
-						}),
+					A2($author$project$Ingredients$Update$updateModel, save, model),
 					$elm$core$Platform$Cmd$none);
 			case 'EditFilter':
 				var s = msg.a;
-				var save = mapTab(
+				var save = $author$project$Ingredients$Update$mapTab(
 					function (i) {
-						return $author$project$State$Ingredients(
-							{filter: s, ingredients: i.ingredients});
+						return $author$project$Model$Ingredients(
+							_Utils_update(
+								i,
+								{filter: s}));
 					});
 				return _Utils_Tuple2(
-					_Utils_update(
-						model,
-						{
-							tabs: A3($author$project$Cursor$modifyAt, 0, save, model.tabs)
-						}),
+					A2($author$project$Ingredients$Update$updateModel, save, model),
 					$elm$core$Platform$Cmd$none);
+			case 'EditIngredient':
+				var id = msg.a;
+				var save = $author$project$Ingredients$Update$mapTab(
+					function (i) {
+						return $author$project$Model$Ingredients(
+							_Utils_update(
+								i,
+								{
+									modal: A2($author$project$Ingredients$Update$editor, i, id)
+								}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Ingredients$Update$updateModel, save, model),
+					$elm$core$Platform$Cmd$none);
+			case 'CloseModal':
+				var save = $author$project$Ingredients$Update$mapTab(
+					function (i) {
+						return $author$project$Model$Ingredients(
+							_Utils_update(
+								i,
+								{modal: $author$project$Ingredients$Model$None}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Ingredients$Update$updateModel, save, model),
+					$elm$core$Platform$Cmd$none);
+			case 'ModalMsg':
+				var m = msg.a;
+				return A2($author$project$Ingredients$Update$handleModalMsg, m, model);
 			default:
 				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
 	});
+var $author$project$Ingredients$Main$handleIngredientsMsg = $author$project$Ingredients$Update$handleMsg;
 var $author$project$Main$update = F2(
 	function (msg, model) {
 		switch (msg.$) {
@@ -6593,7 +6737,7 @@ var $author$project$Main$update = F2(
 					model);
 			default:
 				var m = msg.a;
-				return A2($author$project$Tabs$Ingredients$handleMsg, m, model);
+				return A2($author$project$Ingredients$Main$handleIngredientsMsg, m, model);
 		}
 	});
 var $elm$json$Json$Encode$string = _Json_wrap;
@@ -6606,10 +6750,10 @@ var $elm$html$Html$Attributes$stringProperty = F2(
 	});
 var $elm$html$Html$Attributes$class = $elm$html$Html$Attributes$stringProperty('className');
 var $elm$html$Html$div = _VirtualDom_node('div');
-var $author$project$Cursor$active = function (cursor) {
+var $author$project$Utils$Cursor$active = function (cursor) {
 	return cursor.active;
 };
-var $author$project$State$ChangeTab = function (a) {
+var $author$project$Model$ChangeTab = function (a) {
 	return {$: 'ChangeTab', a: a};
 };
 var $elm$html$Html$a = _VirtualDom_node('a');
@@ -6639,7 +6783,7 @@ var $elm$virtual_dom$VirtualDom$attribute = F2(
 			_VirtualDom_noJavaScriptOrHtmlUri(value));
 	});
 var $elm$html$Html$Attributes$attribute = $elm$virtual_dom$VirtualDom$attribute;
-var $author$project$Util$roleAttr = $elm$html$Html$Attributes$attribute('role');
+var $author$project$Utils$Main$roleAttr = $elm$html$Html$Attributes$attribute('role');
 var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
 var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
 var $author$project$Navbar$generateNavbarItem = F3(
@@ -6649,7 +6793,7 @@ var $author$project$Navbar$generateNavbarItem = F3(
 			_List_fromArray(
 				[
 					$elm$html$Html$Events$onClick(
-					$author$project$State$ChangeTab(tab))
+					$author$project$Model$ChangeTab(tab))
 				]),
 			_List_fromArray(
 				[
@@ -6657,7 +6801,7 @@ var $author$project$Navbar$generateNavbarItem = F3(
 					$elm$html$Html$a,
 					_List_fromArray(
 						[
-							$author$project$Util$roleAttr('button')
+							$author$project$Utils$Main$roleAttr('button')
 						]),
 					_List_fromArray(
 						[
@@ -6669,7 +6813,7 @@ var $author$project$Navbar$generateNavbarItem = F3(
 			_List_fromArray(
 				[
 					$elm$html$Html$Events$onClick(
-					$author$project$State$ChangeTab(tab))
+					$author$project$Model$ChangeTab(tab))
 				]),
 			_List_fromArray(
 				[
@@ -6683,11 +6827,11 @@ var $author$project$Navbar$generateNavbarItem = F3(
 						]))
 				]));
 	});
-var $author$project$Cursor$left = function (cursor) {
+var $author$project$Utils$Cursor$left = function (cursor) {
 	return cursor.left;
 };
 var $elm$html$Html$nav = _VirtualDom_node('nav');
-var $author$project$Cursor$right = function (cursor) {
+var $author$project$Utils$Cursor$right = function (cursor) {
 	return cursor.right;
 };
 var $elm$html$Html$strong = _VirtualDom_node('strong');
@@ -6697,16 +6841,16 @@ var $author$project$Navbar$generateNavbar = F2(
 		var r = A2(
 			$elm$core$List$map,
 			A2($author$project$Navbar$generateNavbarItem, false, view),
-			$author$project$Cursor$right(tabs));
+			$author$project$Utils$Cursor$right(tabs));
 		var l = A2(
 			$elm$core$List$map,
 			A2($author$project$Navbar$generateNavbarItem, false, view),
-			$author$project$Cursor$left(tabs));
+			$author$project$Utils$Cursor$left(tabs));
 		var a = A3(
 			$author$project$Navbar$generateNavbarItem,
 			true,
 			view,
-			$author$project$Cursor$active(tabs));
+			$author$project$Utils$Cursor$active(tabs));
 		return A2(
 			$elm$html$Html$nav,
 			_List_Nil,
@@ -6739,10 +6883,35 @@ var $author$project$Navbar$generateNavbar = F2(
 						A2($elm$core$List$cons, a, r)))
 				]));
 	});
-var $author$project$State$EditFilter = function (a) {
+var $author$project$Ingredients$Model$EditFilter = function (a) {
 	return {$: 'EditFilter', a: a};
 };
 var $elm$html$Html$input = _VirtualDom_node('input');
+var $author$project$Ingredients$Model$CloseModal = {$: 'CloseModal'};
+var $author$project$Ingredients$Model$EditComment = function (a) {
+	return {$: 'EditComment', a: a};
+};
+var $author$project$Ingredients$Model$EditEnergy = function (a) {
+	return {$: 'EditEnergy', a: a};
+};
+var $author$project$Ingredients$Model$EditName = function (a) {
+	return {$: 'EditName', a: a};
+};
+var $author$project$Ingredients$Model$IngredientChanged = function (a) {
+	return {$: 'IngredientChanged', a: a};
+};
+var $author$project$Ingredients$Model$ModalMsg = function (a) {
+	return {$: 'ModalMsg', a: a};
+};
+var $elm$html$Html$article = _VirtualDom_node('article');
+var $elm$html$Html$button = _VirtualDom_node('button');
+var $elm$html$Html$footer = _VirtualDom_node('footer');
+var $elm$html$Html$h3 = _VirtualDom_node('h3');
+var $elm$virtual_dom$VirtualDom$node = function (tag) {
+	return _VirtualDom_node(
+		_VirtualDom_noScript(tag));
+};
+var $elm$html$Html$node = $elm$virtual_dom$VirtualDom$node;
 var $elm$html$Html$Events$alwaysStop = function (x) {
 	return _Utils_Tuple2(x, true);
 };
@@ -6775,10 +6944,319 @@ var $elm$html$Html$Events$onInput = function (tagger) {
 			A2($elm$json$Json$Decode$map, tagger, $elm$html$Html$Events$targetValue)));
 };
 var $elm$html$Html$Attributes$placeholder = $elm$html$Html$Attributes$stringProperty('placeholder');
-var $elm$core$String$fromFloat = _String_fromNumber;
+var $elm$svg$Svg$Attributes$class = _VirtualDom_attribute('class');
+var $elm$svg$Svg$Attributes$fill = _VirtualDom_attribute('fill');
+var $elm$svg$Svg$Attributes$height = _VirtualDom_attribute('height');
+var $elm$virtual_dom$VirtualDom$map = _VirtualDom_map;
+var $elm$svg$Svg$map = $elm$virtual_dom$VirtualDom$map;
+var $elm$svg$Svg$Attributes$stroke = _VirtualDom_attribute('stroke');
+var $elm$svg$Svg$Attributes$strokeLinecap = _VirtualDom_attribute('stroke-linecap');
+var $elm$svg$Svg$Attributes$strokeLinejoin = _VirtualDom_attribute('stroke-linejoin');
+var $elm$svg$Svg$Attributes$strokeWidth = _VirtualDom_attribute('stroke-width');
+var $elm$svg$Svg$trustedNode = _VirtualDom_nodeNS('http://www.w3.org/2000/svg');
+var $elm$svg$Svg$svg = $elm$svg$Svg$trustedNode('svg');
+var $elm$svg$Svg$Attributes$viewBox = _VirtualDom_attribute('viewBox');
+var $elm$svg$Svg$Attributes$width = _VirtualDom_attribute('width');
+var $feathericons$elm_feather$FeatherIcons$toHtml = F2(
+	function (attributes, _v0) {
+		var src = _v0.a.src;
+		var attrs = _v0.a.attrs;
+		var strSize = $elm$core$String$fromFloat(attrs.size);
+		var baseAttributes = _List_fromArray(
+			[
+				$elm$svg$Svg$Attributes$fill('none'),
+				$elm$svg$Svg$Attributes$height(
+				_Utils_ap(strSize, attrs.sizeUnit)),
+				$elm$svg$Svg$Attributes$width(
+				_Utils_ap(strSize, attrs.sizeUnit)),
+				$elm$svg$Svg$Attributes$stroke('currentColor'),
+				$elm$svg$Svg$Attributes$strokeLinecap('round'),
+				$elm$svg$Svg$Attributes$strokeLinejoin('round'),
+				$elm$svg$Svg$Attributes$strokeWidth(
+				$elm$core$String$fromFloat(attrs.strokeWidth)),
+				$elm$svg$Svg$Attributes$viewBox(attrs.viewBox)
+			]);
+		var combinedAttributes = _Utils_ap(
+			function () {
+				var _v1 = attrs._class;
+				if (_v1.$ === 'Just') {
+					var c = _v1.a;
+					return A2(
+						$elm$core$List$cons,
+						$elm$svg$Svg$Attributes$class(c),
+						baseAttributes);
+				} else {
+					return baseAttributes;
+				}
+			}(),
+			attributes);
+		return A2(
+			$elm$svg$Svg$svg,
+			combinedAttributes,
+			A2(
+				$elm$core$List$map,
+				$elm$svg$Svg$map($elm$core$Basics$never),
+				src));
+	});
+var $elm$html$Html$Attributes$type_ = $elm$html$Html$Attributes$stringProperty('type');
+var $elm$html$Html$Attributes$value = $elm$html$Html$Attributes$stringProperty('value');
+var $elm$svg$Svg$line = $elm$svg$Svg$trustedNode('line');
+var $feathericons$elm_feather$FeatherIcons$Icon = function (a) {
+	return {$: 'Icon', a: a};
+};
+var $feathericons$elm_feather$FeatherIcons$defaultAttributes = function (name) {
+	return {
+		_class: $elm$core$Maybe$Just('feather feather-' + name),
+		size: 24,
+		sizeUnit: '',
+		strokeWidth: 2,
+		viewBox: '0 0 24 24'
+	};
+};
+var $feathericons$elm_feather$FeatherIcons$makeBuilder = F2(
+	function (name, src) {
+		return $feathericons$elm_feather$FeatherIcons$Icon(
+			{
+				attrs: $feathericons$elm_feather$FeatherIcons$defaultAttributes(name),
+				src: src
+			});
+	});
+var $elm$svg$Svg$Attributes$x1 = _VirtualDom_attribute('x1');
+var $elm$svg$Svg$Attributes$x2 = _VirtualDom_attribute('x2');
+var $elm$svg$Svg$Attributes$y1 = _VirtualDom_attribute('y1');
+var $elm$svg$Svg$Attributes$y2 = _VirtualDom_attribute('y2');
+var $feathericons$elm_feather$FeatherIcons$x = A2(
+	$feathericons$elm_feather$FeatherIcons$makeBuilder,
+	'x',
+	_List_fromArray(
+		[
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('18'),
+					$elm$svg$Svg$Attributes$y1('6'),
+					$elm$svg$Svg$Attributes$x2('6'),
+					$elm$svg$Svg$Attributes$y2('18')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('6'),
+					$elm$svg$Svg$Attributes$y1('6'),
+					$elm$svg$Svg$Attributes$x2('18'),
+					$elm$svg$Svg$Attributes$y2('18')
+				]),
+			_List_Nil)
+		]));
+var $author$project$Ingredients$View$ingredientDetails = F3(
+	function (submit, title, ingredient) {
+		return A3(
+			$elm$html$Html$node,
+			'dialog',
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$attribute, 'open', '')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$article,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$a,
+							_List_fromArray(
+								[
+									$elm$html$Html$Events$onClick(
+									$author$project$Model$IngredientMessage($author$project$Ingredients$Model$CloseModal))
+								]),
+							_List_fromArray(
+								[
+									A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$x)
+								])),
+							A2(
+							$elm$html$Html$h3,
+							_List_Nil,
+							_List_fromArray(
+								[
+									$elm$html$Html$text(
+									title + (' (id: ' + ($elm$core$String$fromInt(ingredient.id) + ')')))
+								])),
+							A2(
+							$elm$html$Html$div,
+							_List_fromArray(
+								[
+									$elm$html$Html$Attributes$class('grid')
+								]),
+							_List_fromArray(
+								[
+									A2(
+									$elm$html$Html$input,
+									_List_fromArray(
+										[
+											$elm$html$Html$Attributes$type_('text'),
+											$elm$html$Html$Attributes$placeholder('name'),
+											$elm$html$Html$Events$onInput(
+											A2(
+												$elm$core$Basics$composeL,
+												A2($elm$core$Basics$composeL, $author$project$Model$IngredientMessage, $author$project$Ingredients$Model$ModalMsg),
+												$author$project$Ingredients$Model$EditName)),
+											$elm$html$Html$Attributes$value(ingredient.name)
+										]),
+									_List_Nil),
+									A2(
+									$elm$html$Html$input,
+									_List_fromArray(
+										[
+											$elm$html$Html$Attributes$type_('number'),
+											$elm$html$Html$Attributes$placeholder('energy'),
+											$elm$html$Html$Events$onInput(
+											A2(
+												$elm$core$Basics$composeL,
+												A2($elm$core$Basics$composeL, $author$project$Model$IngredientMessage, $author$project$Ingredients$Model$ModalMsg),
+												$author$project$Ingredients$Model$EditEnergy)),
+											$elm$html$Html$Attributes$value(ingredient.energy)
+										]),
+									_List_Nil)
+								])),
+							A2(
+							$elm$html$Html$input,
+							_List_fromArray(
+								[
+									$elm$html$Html$Attributes$type_('text'),
+									$elm$html$Html$Attributes$placeholder('comment'),
+									$elm$html$Html$Events$onInput(
+									A2(
+										$elm$core$Basics$composeL,
+										A2($elm$core$Basics$composeL, $author$project$Model$IngredientMessage, $author$project$Ingredients$Model$ModalMsg),
+										$author$project$Ingredients$Model$EditComment)),
+									$elm$html$Html$Attributes$value(ingredient.comment)
+								]),
+							_List_Nil),
+							A2(
+							$elm$html$Html$footer,
+							_List_fromArray(
+								[
+									$elm$html$Html$Attributes$class('grid')
+								]),
+							_List_fromArray(
+								[
+									A2(
+									$elm$html$Html$button,
+									_List_fromArray(
+										[
+											$elm$html$Html$Events$onClick(
+											$author$project$Model$IngredientMessage($author$project$Ingredients$Model$CloseModal))
+										]),
+									_List_fromArray(
+										[
+											$elm$html$Html$text('Cancel')
+										])),
+									A2(
+									$elm$html$Html$button,
+									_List_fromArray(
+										[
+											$elm$html$Html$Events$onClick(
+											$author$project$Model$IngredientMessage(
+												$author$project$Ingredients$Model$IngredientChanged(ingredient)))
+										]),
+									_List_fromArray(
+										[
+											$elm$html$Html$text(submit)
+										]))
+								]))
+						]))
+				]));
+	});
+var $author$project$Ingredients$View$modal = function (m) {
+	switch (m.$) {
+		case 'Add':
+			var ingredient = m.a;
+			return A3($author$project$Ingredients$View$ingredientDetails, 'Add', 'Add ingredient', ingredient);
+		case 'Edit':
+			var ingredient = m.a;
+			return A3($author$project$Ingredients$View$ingredientDetails, 'Save', 'Edit ingredient', ingredient);
+		default:
+			return A3($elm$html$Html$node, 'dialog', _List_Nil, _List_Nil);
+	}
+};
+var $author$project$Ingredients$Model$DeleteIngredient = function (a) {
+	return {$: 'DeleteIngredient', a: a};
+};
+var $author$project$Ingredients$Model$EditIngredient = function (a) {
+	return {$: 'EditIngredient', a: a};
+};
+var $elm$svg$Svg$Attributes$d = _VirtualDom_attribute('d');
+var $elm$svg$Svg$path = $elm$svg$Svg$trustedNode('path');
+var $feathericons$elm_feather$FeatherIcons$edit = A2(
+	$feathericons$elm_feather$FeatherIcons$makeBuilder,
+	'edit',
+	_List_fromArray(
+		[
+			A2(
+			$elm$svg$Svg$path,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$d('M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$path,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$d('M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z')
+				]),
+			_List_Nil)
+		]));
 var $elm$html$Html$td = _VirtualDom_node('td');
 var $elm$html$Html$tr = _VirtualDom_node('tr');
-var $author$project$Tabs$Ingredients$renderSingleIngredient = function (ingredient) {
+var $elm$svg$Svg$Attributes$points = _VirtualDom_attribute('points');
+var $elm$svg$Svg$polyline = $elm$svg$Svg$trustedNode('polyline');
+var $feathericons$elm_feather$FeatherIcons$trash2 = A2(
+	$feathericons$elm_feather$FeatherIcons$makeBuilder,
+	'trash-2',
+	_List_fromArray(
+		[
+			A2(
+			$elm$svg$Svg$polyline,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$points('3 6 5 6 21 6')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$path,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$d('M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('10'),
+					$elm$svg$Svg$Attributes$y1('11'),
+					$elm$svg$Svg$Attributes$x2('10'),
+					$elm$svg$Svg$Attributes$y2('17')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('14'),
+					$elm$svg$Svg$Attributes$y1('11'),
+					$elm$svg$Svg$Attributes$x2('14'),
+					$elm$svg$Svg$Attributes$y2('17')
+				]),
+			_List_Nil)
+		]));
+var $author$project$Ingredients$View$renderSingleIngredient = function (ingredient) {
 	return A2(
 		$elm$html$Html$tr,
 		_List_fromArray(
@@ -6802,29 +7280,52 @@ var $author$project$Tabs$Ingredients$renderSingleIngredient = function (ingredie
 					$elm$html$Html$text(
 					$elm$core$String$fromFloat(ingredient.energy)),
 					$elm$html$Html$text(
-					A2($elm$core$Maybe$withDefault, '', ingredient.comment))
+					A2($elm$core$Maybe$withDefault, '', ingredient.comment)),
+					A2(
+					$elm$html$Html$a,
+					_List_fromArray(
+						[
+							$elm$html$Html$Events$onClick(
+							$author$project$Model$IngredientMessage(
+								$author$project$Ingredients$Model$EditIngredient(ingredient.id)))
+						]),
+					_List_fromArray(
+						[
+							A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$edit)
+						])),
+					A2(
+					$elm$html$Html$a,
+					_List_fromArray(
+						[
+							$elm$html$Html$Events$onClick(
+							$author$project$Model$IngredientMessage(
+								$author$project$Ingredients$Model$DeleteIngredient(ingredient.id)))
+						]),
+					_List_fromArray(
+						[
+							A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$trash2)
+						]))
 				])));
 };
 var $elm$html$Html$table = _VirtualDom_node('table');
 var $elm$html$Html$tbody = _VirtualDom_node('tbody');
-var $author$project$Tabs$Ingredients$renderIngredients = function (ingredients) {
+var $author$project$Ingredients$View$renderIngredients = function (ingredients) {
 	return A2(
 		$elm$html$Html$table,
 		_List_fromArray(
 			[
-				$author$project$Util$roleAttr('grid')
+				$author$project$Utils$Main$roleAttr('grid')
 			]),
 		_List_fromArray(
 			[
 				A2(
 				$elm$html$Html$tbody,
 				_List_Nil,
-				A2($elm$core$List$map, $author$project$Tabs$Ingredients$renderSingleIngredient, ingredients))
+				A2($elm$core$List$map, $author$project$Ingredients$View$renderSingleIngredient, ingredients))
 			]));
 };
 var $elm$core$String$toLower = _String_toLower;
-var $elm$html$Html$Attributes$type_ = $elm$html$Html$Attributes$stringProperty('type');
-var $author$project$Tabs$Ingredients$view = function (ingredients) {
+var $author$project$Ingredients$View$view = function (ingredients) {
 	var list = function () {
 		var _v0 = ingredients.ingredients;
 		switch (_v0.$) {
@@ -6834,7 +7335,7 @@ var $author$project$Tabs$Ingredients$view = function (ingredients) {
 				return $elm$html$Html$text('Loading');
 			case 'Success':
 				var is = _v0.a;
-				return $author$project$Tabs$Ingredients$renderIngredients(
+				return $author$project$Ingredients$View$renderIngredients(
 					A2(
 						$elm$core$List$filter,
 						function (i) {
@@ -6866,20 +7367,21 @@ var $author$project$Tabs$Ingredients$view = function (ingredients) {
 								$elm$html$Html$Attributes$type_('text'),
 								$elm$html$Html$Attributes$placeholder('Search'),
 								$elm$html$Html$Events$onInput(
-								A2($elm$core$Basics$composeL, $author$project$State$IngredientMessage, $author$project$State$EditFilter))
+								A2($elm$core$Basics$composeL, $author$project$Model$IngredientMessage, $author$project$Ingredients$Model$EditFilter))
 							]),
 						_List_Nil)
 					])),
+				$author$project$Ingredients$View$modal(ingredients.modal),
 				list
 			]));
 };
-var $author$project$Tabs$Main$viewIngredients = $author$project$Tabs$Ingredients$view;
+var $author$project$Ingredients$Main$viewIngredients = $author$project$Ingredients$View$view;
 var $author$project$Main$renderSelectedView = function (model) {
-	var _v0 = $author$project$Cursor$active(model.tabs);
+	var _v0 = $author$project$Utils$Cursor$active(model.tabs);
 	switch (_v0.$) {
 		case 'Ingredients':
 			var i = _v0.a;
-			return $author$project$Tabs$Main$viewIngredients(i);
+			return $author$project$Ingredients$Main$viewIngredients(i);
 		case 'Recipes':
 			return $elm$html$Html$text('Recipes');
 		default:
@@ -6895,7 +7397,7 @@ var $author$project$Main$view = function (model) {
 			]),
 		_List_fromArray(
 			[
-				A2($author$project$Navbar$generateNavbar, $author$project$Main$tabName, model.tabs),
+				A2($author$project$Navbar$generateNavbar, $author$project$Settings$tabName, model.tabs),
 				$author$project$Main$renderSelectedView(model)
 			]));
 };

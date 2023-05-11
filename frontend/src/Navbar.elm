@@ -1,23 +1,23 @@
 module Navbar exposing (..)
 
-import Cursor exposing (Cursor)
+import Utils.Cursor exposing (Cursor)
 import Html exposing (a, li, nav, strong, ul)
 import Html.Events exposing (onClick)
-import State exposing (Msg(..), Tab)
-import Util exposing (roleAttr)
+import Model exposing (Msg(..), Tab)
+import Utils.Main exposing (roleAttr)
 
 
 generateNavbar : (Tab -> String) -> Cursor Tab -> Html.Html Msg
 generateNavbar view tabs =
     let
         l =
-            Cursor.left tabs |> List.map (generateNavbarItem False view)
+            Utils.Cursor.left tabs |> List.map (generateNavbarItem False view)
 
         a =
-            generateNavbarItem True view (Cursor.active tabs)
+            generateNavbarItem True view (Utils.Cursor.active tabs)
 
         r =
-            Cursor.right tabs |> List.map (generateNavbarItem False view)
+            Utils.Cursor.right tabs |> List.map (generateNavbarItem False view)
     in
     nav []
         [ ul [] [ li [] [ strong [] [ Html.text "foodcalc" ] ] ]

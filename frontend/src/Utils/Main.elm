@@ -1,7 +1,7 @@
-module Util exposing (..)
+module Utils.Main exposing (..)
 
 import Http 
-import State exposing (..)
+import Utils.Model exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Html exposing (..)

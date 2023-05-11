@@ -1,4 +1,4 @@
-module Cursor exposing (..)
+module Utils.Cursor exposing (..)
 
 {-| A cursor is a pointer to an element in a list. It is used to keep track of
 which element is currently active in a list.
