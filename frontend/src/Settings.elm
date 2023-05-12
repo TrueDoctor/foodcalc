@@ -8,7 +8,7 @@ tabName tab =
         Ingredients _ ->
             "Ingredients"
 
-        Recipes ->
+        Recipes _ ->
             "Recipes"
 
         Events ->

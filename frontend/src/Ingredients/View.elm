@@ -1,8 +1,8 @@
 module Ingredients.View exposing (..)
 
 import FeatherIcons as FI
-import Html exposing (Html, a, article, button, div, footer, h3, i, input, node, p, table, tbody, td, tr)
-import Html.Attributes exposing (attribute, class, placeholder, style, type_, value)
+import Html exposing (Html, a, article, button, div, footer, h3, i, input, table, tbody, td, tr)
+import Html.Attributes exposing (attribute, class, placeholder, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Ingredients.Model as IM exposing (Ingredient, IngredientEditor, IngredientTabData, Modal)
 import Model exposing (..)
@@ -54,7 +54,7 @@ modal m =
         IM.Edit ingredient ->
             ingredientDetails "Save" "Edit ingredient" ingredient
 
-        IM.None ->
+        IM.NoModal ->
             Html.node "dialog" [] []
 
 
@@ -90,7 +90,7 @@ renderIngredients ingredients =
 
 renderSingleIngredient : Ingredient -> Html Msg
 renderSingleIngredient ingredient =
-    tr [ class "ingredient-item" ]
+    tr [ ]
         ([ Html.text (String.fromInt ingredient.id)
          , Html.text ingredient.name
          , Html.text (String.fromFloat ingredient.energy)

@@ -8,6 +8,8 @@ import Ingredients.Model as IModel exposing (IngredientMsg(..))
 import Ingredients.Service exposing (fetchIngredients)
 import Model exposing (..)
 import Navbar exposing (generateNavbar)
+import Recipes.Main exposing (handleRecipesMsg, viewRecipes)
+import Recipes.Model as RModel
 import Settings exposing (..)
 import Utils.Cursor
 import Utils.Model exposing (RemoteData(..))
@@ -27,8 +29,8 @@ renderSelectedView model =
         Ingredients i ->
             viewIngredients i
 
-        Recipes ->
-            text "Recipes"
+        Recipes r ->
+            viewRecipes r
 
         Events ->
             text "Events"
@@ -41,24 +43,43 @@ update msg model =
             ( model, Cmd.none )
 
         ChangeTab tab ->
-            changeTab (Debug.log "new tab" tab) model
+            changeTab tab model
 
         IngredientMessage m ->
             handleIngredientsMsg m model
 
+        RecipeMessage m ->
+            handleRecipesMsg m model
+
+
+initTab : Model  -> (Model, Cmd Msg)
+initTab model =
+    case model.tabs.active of
+        Ingredients _ ->
+            (model, Cmd.none)
+
+        Recipes _ ->
+            update (RecipeMessage RModel.InitTab) model
+
+        Events ->
+            (model, Cmd.none)
+
 
 changeTab : Tab -> Model -> ( Model, Cmd Msg )
 changeTab tab model =
-    Utils.Cursor.setActiveBy (\t -> tabName t == tabName tab) (Debug.log "tabs" model.tabs)
-        |> (\c -> ( { model | tabs = c }, Cmd.none ))
+    let
+        c =
+            Utils.Cursor.setActiveBy (\t -> tabName t == tabName tab) model.tabs
+    in
+    initTab (Model  c )
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     let
         tabs =
-            Utils.Cursor.create (Ingredients { ingredients = Loading, filter = "", modal = IModel.None })
-                [ Recipes
+            Utils.Cursor.create (Ingredients { ingredients = Loading, filter = "", modal = IModel.NoModal })
+                [ Recipes { recipes = NotAsked, filter = "", modal = RModel.NoModal }
                 , Events
                 ]
     in

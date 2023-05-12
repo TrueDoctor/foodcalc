@@ -30,7 +30,7 @@ type IngredientMsg
 
 type ModalMsg = EditName String | EditEnergy String | EditComment String
 
-type Modal = Add IngredientEditor | Edit IngredientEditor | None
+type Modal = Add IngredientEditor | Edit IngredientEditor | NoModal
 
 type alias IngredientTabData =
     { ingredients : WebData (List Ingredient)

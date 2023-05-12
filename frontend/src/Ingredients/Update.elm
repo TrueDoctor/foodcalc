@@ -70,7 +70,7 @@ handleMsg msg model =
         CloseModal ->
             let
                 save =
-                    mapTab <| \i -> Ingredients { i | modal = Ingredients.Model.None }
+                    mapTab <| \i -> Ingredients { i | modal = Ingredients.Model.NoModal }
             in
             ( updateModel save model, Cmd.none )
 

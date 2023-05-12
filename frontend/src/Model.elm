@@ -1,9 +1,8 @@
 module Model exposing (..)
 
+import Ingredients.Model exposing (IngredientMsg, IngredientTabData)
+import Recipes.Model exposing (RecipeMsg, RecipeTabData)
 import Utils.Cursor exposing (Cursor)
-
-import Ingredients.Model exposing ( IngredientMsg)
-import Ingredients.Model exposing (IngredientTabData)
 
 
 type alias Model =
@@ -15,13 +14,10 @@ type Msg
     = None
     | ChangeTab Tab
     | IngredientMessage IngredientMsg
-
-
-
-
+    | RecipeMessage RecipeMsg
 
 
 type Tab
     = Ingredients IngredientTabData
-    | Recipes
+    | Recipes RecipeTabData
     | Events
