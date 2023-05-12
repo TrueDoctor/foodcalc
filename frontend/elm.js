@@ -6487,13 +6487,16 @@ var $author$project$Main$changeTab = F2(
 				},
 				A2($elm$core$Debug$log, 'tabs', model.tabs)));
 	});
-var $author$project$Ingredients$Model$Edit = function (a) {
-	return {$: 'Edit', a: a};
+var $author$project$Ingredients$Model$Add = function (a) {
+	return {$: 'Add', a: a};
 };
 var $author$project$Ingredients$Model$IngredientEditor = F4(
 	function (id, name, energy, comment) {
 		return {comment: comment, energy: energy, id: id, name: name};
 	});
+var $author$project$Ingredients$Model$Edit = function (a) {
+	return {$: 'Edit', a: a};
+};
 var $elm$core$String$fromFloat = _String_fromNumber;
 var $author$project$Ingredients$Update$editor = F2(
 	function (itab, id) {
@@ -6509,7 +6512,7 @@ var $author$project$Ingredients$Update$editor = F2(
 						return $author$project$Ingredients$Model$Edit(
 							A4(
 								$author$project$Ingredients$Model$IngredientEditor,
-								i.id,
+								$elm$core$Maybe$Just(i.id),
 								i.name,
 								$elm$core$String$fromFloat(i.energy),
 								A2($elm$core$Maybe$withDefault, '', i.comment)));
@@ -6525,9 +6528,6 @@ var $author$project$Ingredients$Update$editor = F2(
 			return itab.modal;
 		}
 	});
-var $author$project$Ingredients$Model$Add = function (a) {
-	return {$: 'Add', a: a};
-};
 var $author$project$Ingredients$Update$mapTab = F2(
 	function (f, tab) {
 		if (tab.$ === 'Ingredients') {
@@ -6687,6 +6687,20 @@ var $author$project$Ingredients$Update$handleMsg = F2(
 							_Utils_update(
 								i,
 								{filter: s}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Ingredients$Update$updateModel, save, model),
+					$elm$core$Platform$Cmd$none);
+			case 'AddIngredient':
+				var save = $author$project$Ingredients$Update$mapTab(
+					function (i) {
+						return $author$project$Model$Ingredients(
+							_Utils_update(
+								i,
+								{
+									modal: $author$project$Ingredients$Model$Add(
+										A4($author$project$Ingredients$Model$IngredientEditor, $elm$core$Maybe$Nothing, '', '', ''))
+								}));
 					});
 				return _Utils_Tuple2(
 					A2($author$project$Ingredients$Update$updateModel, save, model),
@@ -6883,10 +6897,6 @@ var $author$project$Navbar$generateNavbar = F2(
 						A2($elm$core$List$cons, a, r)))
 				]));
 	});
-var $author$project$Ingredients$Model$EditFilter = function (a) {
-	return {$: 'EditFilter', a: a};
-};
-var $elm$html$Html$input = _VirtualDom_node('input');
 var $author$project$Ingredients$Model$CloseModal = {$: 'CloseModal'};
 var $author$project$Ingredients$Model$EditComment = function (a) {
 	return {$: 'EditComment', a: a};
@@ -6907,6 +6917,7 @@ var $elm$html$Html$article = _VirtualDom_node('article');
 var $elm$html$Html$button = _VirtualDom_node('button');
 var $elm$html$Html$footer = _VirtualDom_node('footer');
 var $elm$html$Html$h3 = _VirtualDom_node('h3');
+var $elm$html$Html$input = _VirtualDom_node('input');
 var $elm$virtual_dom$VirtualDom$node = function (tag) {
 	return _VirtualDom_node(
 		_VirtualDom_noScript(tag));
@@ -7053,6 +7064,15 @@ var $feathericons$elm_feather$FeatherIcons$x = A2(
 		]));
 var $author$project$Ingredients$View$ingredientDetails = F3(
 	function (submit, title, ingredient) {
+		var id_text = function () {
+			var _v0 = ingredient.id;
+			if (_v0.$ === 'Nothing') {
+				return '';
+			} else {
+				var i = _v0.a;
+				return ' (id: ' + ($elm$core$String$fromInt(i) + ')');
+			}
+		}();
 		return A3(
 			$elm$html$Html$node,
 			'dialog',
@@ -7084,7 +7104,7 @@ var $author$project$Ingredients$View$ingredientDetails = F3(
 							_List_fromArray(
 								[
 									$elm$html$Html$text(
-									title + (' (id: ' + ($elm$core$String$fromInt(ingredient.id) + ')')))
+									_Utils_ap(title, id_text))
 								])),
 							A2(
 							$elm$html$Html$div,
@@ -7325,6 +7345,82 @@ var $author$project$Ingredients$View$renderIngredients = function (ingredients) 
 			]));
 };
 var $elm$core$String$toLower = _String_toLower;
+var $author$project$Ingredients$Model$AddIngredient = {$: 'AddIngredient'};
+var $author$project$Ingredients$Model$EditFilter = function (a) {
+	return {$: 'EditFilter', a: a};
+};
+var $feathericons$elm_feather$FeatherIcons$plus = A2(
+	$feathericons$elm_feather$FeatherIcons$makeBuilder,
+	'plus',
+	_List_fromArray(
+		[
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('12'),
+					$elm$svg$Svg$Attributes$y1('5'),
+					$elm$svg$Svg$Attributes$x2('12'),
+					$elm$svg$Svg$Attributes$y2('19')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('5'),
+					$elm$svg$Svg$Attributes$y1('12'),
+					$elm$svg$Svg$Attributes$x2('19'),
+					$elm$svg$Svg$Attributes$y2('12')
+				]),
+			_List_Nil)
+		]));
+var $author$project$Ingredients$View$topBar = A2(
+	$elm$html$Html$table,
+	_List_Nil,
+	_List_fromArray(
+		[
+			A2(
+			$elm$html$Html$tr,
+			_List_Nil,
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$td,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$input,
+							_List_fromArray(
+								[
+									$elm$html$Html$Attributes$class('search'),
+									$elm$html$Html$Attributes$type_('text'),
+									$elm$html$Html$Attributes$placeholder('Search'),
+									$elm$html$Html$Events$onInput(
+									A2($elm$core$Basics$composeL, $author$project$Model$IngredientMessage, $author$project$Ingredients$Model$EditFilter))
+								]),
+							_List_Nil)
+						])),
+					A2(
+					$elm$html$Html$td,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$button,
+							_List_fromArray(
+								[
+									$elm$html$Html$Events$onClick(
+									$author$project$Model$IngredientMessage($author$project$Ingredients$Model$AddIngredient))
+								]),
+							_List_fromArray(
+								[
+									A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$plus)
+								]))
+						]))
+				]))
+		]));
 var $author$project$Ingredients$View$view = function (ingredients) {
 	var list = function () {
 		var _v0 = ingredients.ingredients;
@@ -7354,23 +7450,7 @@ var $author$project$Ingredients$View$view = function (ingredients) {
 		_List_Nil,
 		_List_fromArray(
 			[
-				A2(
-				$elm$html$Html$div,
-				_List_Nil,
-				_List_fromArray(
-					[
-						A2(
-						$elm$html$Html$input,
-						_List_fromArray(
-							[
-								$elm$html$Html$Attributes$class('search'),
-								$elm$html$Html$Attributes$type_('text'),
-								$elm$html$Html$Attributes$placeholder('Search'),
-								$elm$html$Html$Events$onInput(
-								A2($elm$core$Basics$composeL, $author$project$Model$IngredientMessage, $author$project$Ingredients$Model$EditFilter))
-							]),
-						_List_Nil)
-					])),
+				$author$project$Ingredients$View$topBar,
 				$author$project$Ingredients$View$modal(ingredients.modal),
 				list
 			]));

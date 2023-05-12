@@ -14,7 +14,7 @@ editor itab id =
             ingredients
                 |> List.filter (\i -> i.id == id)
                 |> List.head
-                |> Maybe.map (\i -> Edit (IngredientEditor i.id i.name (String.fromFloat i.energy) (i.comment |> Maybe.withDefault "")))
+                |> Maybe.map (\i -> Edit (IngredientEditor (Just i.id) i.name (String.fromFloat i.energy) (i.comment |> Maybe.withDefault "")))
                 |> Maybe.withDefault itab.modal
 
         _ ->
@@ -50,6 +50,13 @@ handleMsg msg model =
             let
                 save =
                     mapTab <| \i -> Ingredients { i | filter = s }
+            in
+            ( updateModel save model, Cmd.none )
+
+        AddIngredient ->
+            let
+                save =
+                    mapTab <| \i -> Ingredients { i | modal = Add (IngredientEditor Nothing "" "" "") }
             in
             ( updateModel save model, Cmd.none )
 

@@ -12,7 +12,7 @@ type alias Ingredient =
     }
 
 type alias IngredientEditor =
-    { id : Int
+    { id : Maybe Int
     , name : String
     , energy : String
     , comment : String

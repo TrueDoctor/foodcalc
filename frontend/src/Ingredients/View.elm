@@ -1,12 +1,11 @@
 module Ingredients.View exposing (..)
 
 import FeatherIcons as FI
-import Html exposing (Html, a, article, button, div, footer, h3, i, input, table, tbody, td, tr)
-import Html.Attributes exposing (attribute, class, placeholder, type_, value)
+import Html exposing (Html, a, article, button, div, footer, h3, i, input, node, p, table, tbody, td, tr)
+import Html.Attributes exposing (attribute, class, placeholder, style, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Ingredients.Model as IM exposing (Ingredient, IngredientEditor, IngredientTabData, Modal)
 import Model exposing (..)
-import Svg.Attributes exposing (attributeName, d)
 import Utils.Cursor exposing (..)
 import Utils.Main exposing (..)
 import Utils.Model exposing (..)
@@ -30,9 +29,19 @@ view ingredients =
                     Html.text "Failure"
     in
     div []
-        [ div [] [ input [ class "search", type_ "text", placeholder "Search", onInput <| IngredientMessage << IM.EditFilter ] [] ]
+        [ topBar
         , modal ingredients.modal
         , list
+        ]
+
+
+topBar : Html Msg
+topBar =
+    table []
+        [ tr []
+            [ td [] [ input [ class "search", type_ "text", placeholder "Search", onInput <| IngredientMessage << IM.EditFilter ] [] ]
+            , td [] [ button [ onClick <| IngredientMessage IM.AddIngredient ] [ FI.toHtml [] FI.plus ] ]
+            ]
         ]
 
 
@@ -51,11 +60,16 @@ modal m =
 
 ingredientDetails : String -> String -> IngredientEditor -> Html Msg
 ingredientDetails submit title ingredient =
+    let 
+        id_text = case ingredient.id of
+            Nothing -> ""
+            Just i -> " (id: " ++ String.fromInt i ++ ")"
+    in
     Html.node "dialog"
         [ attribute "open" "" ]
         [ article []
             [ a [ onClick <| IngredientMessage IM.CloseModal ] [ FI.toHtml [] FI.x ]
-            , h3 [] [ Html.text (title ++ " (id: " ++ String.fromInt ingredient.id ++ ")") ]
+            , h3 [] [ Html.text (title ++ id_text) ]
             , div [ class "grid" ]
                 [ input [ type_ "text", placeholder "name", onInput <| IngredientMessage << IM.ModalMsg << IM.EditName, value ingredient.name ] []
                 , input [ type_ "number", placeholder "energy", onInput <| IngredientMessage << IM.ModalMsg << IM.EditEnergy, value ingredient.energy ] []
