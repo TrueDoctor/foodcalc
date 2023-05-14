@@ -7885,13 +7885,30 @@ var $author$project$Recipes$Model$RecipeChanged = function (a) {
 var $author$project$Recipes$Model$EditActiveIngredientIndex = function (a) {
 	return {$: 'EditActiveIngredientIndex', a: a};
 };
+var $author$project$Recipes$Model$EditIngredient = function (a) {
+	return {$: 'EditIngredient', a: a};
+};
 var $author$project$Recipes$Model$EditIngredientAmount = function (a) {
 	return {$: 'EditIngredientAmount', a: a};
 };
 var $author$project$Recipes$Model$EditIngredientFilter = function (a) {
 	return {$: 'EditIngredientFilter', a: a};
 };
-var $elm$html$Html$details = _VirtualDom_node('details');
+var $elm$core$Maybe$map2 = F3(
+	function (func, ma, mb) {
+		if (ma.$ === 'Nothing') {
+			return $elm$core$Maybe$Nothing;
+		} else {
+			var a = ma.a;
+			if (mb.$ === 'Nothing') {
+				return $elm$core$Maybe$Nothing;
+			} else {
+				var b = mb.a;
+				return $elm$core$Maybe$Just(
+					A2(func, a, b));
+			}
+		}
+	});
 var $author$project$Recipes$ViewModal$metaIngredientName = function (ig) {
 	return A2(
 		$elm$core$Maybe$withDefault,
@@ -7909,111 +7926,95 @@ var $author$project$Recipes$ViewModal$metaIngredientName = function (ig) {
 			},
 			ig));
 };
-var $author$project$Recipes$ViewModal$picoOption = function (content) {
-	return A2(
-		$elm$html$Html$li,
-		_List_Nil,
-		_List_fromArray(
-			[
-				A2($elm$html$Html$a, _List_Nil, content)
-			]));
-};
-var $author$project$Recipes$ViewModal$dropdownList2 = F2(
-	function (ingredients, selected) {
-		return A2(
-			$elm$core$List$map,
-			function (x) {
-				return $author$project$Recipes$ViewModal$picoOption(
-					_List_fromArray(
-						[
-							$elm$html$Html$text(
-							$author$project$Recipes$ViewModal$metaIngredientName(
-								$elm$core$Maybe$Just(x)))
-						]));
-			},
-			A2($elm$core$Debug$log, 'ingredients', ingredients));
-	});
-var $elm$html$Html$summary = _VirtualDom_node('summary');
-var $author$project$Recipes$ViewModal$ingredientsDropdown2 = F4(
-	function (ingredients, filter, hasDropdown, selected) {
-		var visible = A2(
-			$elm$html$Html$summary,
-			_List_fromArray(
-				[
-					A2($elm$html$Html$Attributes$attribute, 'aria-haspopup', 'listbox')
-				]),
-			_List_fromArray(
-				[
-					$elm$html$Html$text(
-					$author$project$Recipes$ViewModal$metaIngredientName(
-						A2(
-							$elm$core$Maybe$map,
-							function (x) {
-								return x.metaIngredient;
-							},
-							selected)))
-				]));
-		var search = A2(
-			$elm$html$Html$input,
-			_List_fromArray(
-				[
-					$elm$html$Html$Attributes$class('search'),
-					$elm$html$Html$Attributes$type_('text'),
-					$elm$html$Html$Attributes$placeholder('Search'),
-					$elm$html$Html$Events$onInput(
-					A2(
-						$elm$core$Basics$composeL,
-						A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
-						$author$project$Recipes$Model$EditIngredientFilter)),
-					$elm$html$Html$Attributes$value(filter)
-				]),
-			_List_Nil);
-		return A2(
-			$elm$html$Html$details,
-			_List_fromArray(
-				[
-					$author$project$Utils$Main$role('list')
-				]),
-			_List_fromArray(
-				[
-					visible,
-					A2(
-					$elm$html$Html$ul,
-					_List_fromArray(
-						[
-							$author$project$Utils$Main$role('listbox')
-						]),
-					hasDropdown ? A2(
-						$elm$core$List$cons,
-						$author$project$Recipes$ViewModal$picoOption(
-							_List_fromArray(
-								[search])),
-						A2(
-							$author$project$Recipes$ViewModal$dropdownList2,
-							A2(
-								$elm$core$List$filter,
-								A2(
-									$elm$core$Basics$composeL,
-									A2(
-										$elm$core$Basics$composeL,
-										$elm$core$String$contains(filter),
-										$author$project$Recipes$ViewModal$metaIngredientName),
-									$elm$core$Maybe$Just),
-								ingredients),
-							A2(
-								$elm$core$Maybe$map,
-								function (x) {
-									return x.metaIngredient;
-								},
-								selected))) : _List_fromArray(
-						[visible]))
-				]));
-	});
 var $elm$html$Html$Events$onFocus = function (msg) {
 	return A2(
 		$elm$html$Html$Events$on,
 		'focus',
 		$elm$json$Json$Decode$succeed(msg));
+};
+var $elm$html$Html$details = _VirtualDom_node('details');
+var $author$project$Utils$Main$nameFilter = F2(
+	function (filter, name) {
+		return A2(
+			$elm$core$String$contains,
+			$elm$core$String$toLower(filter),
+			$elm$core$String$toLower(name));
+	});
+var $author$project$Utils$View$search = F2(
+	function (action, value) {
+		return A2(
+			$elm$html$Html$input,
+			_List_fromArray(
+				[
+					$elm$html$Html$Attributes$class('search'),
+					$elm$html$Html$Attributes$type_('text'),
+					$elm$html$Html$Attributes$placeholder('Filter...'),
+					$elm$html$Html$Events$onInput(action),
+					$elm$html$Html$Attributes$value(value)
+				]),
+			_List_Nil);
+	});
+var $elm$html$Html$summary = _VirtualDom_node('summary');
+var $author$project$Utils$View$searchableDropdown = function (data) {
+	var filteredList = A2(
+		$elm$core$List$filter,
+		A2(
+			$elm$core$Basics$composeL,
+			$author$project$Utils$Main$nameFilter(data.filter),
+			data.property),
+		data.list);
+	var options = A2(
+		$elm$core$List$map,
+		function (x) {
+			return A2(
+				$elm$html$Html$li,
+				_List_Nil,
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$a,
+						_List_fromArray(
+							[
+								$elm$html$Html$Events$onClick(
+								data.onSelect(x))
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text(
+								data.property(x))
+							]))
+					]));
+		},
+		filteredList);
+	return A2(
+		$elm$html$Html$details,
+		_List_fromArray(
+			[
+				$author$project$Utils$Main$role('list')
+			]),
+		_List_fromArray(
+			[
+				A2(
+				$elm$html$Html$summary,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$attribute, 'aria-haspopup', 'listbox')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text(data.filter)
+					])),
+				A2(
+				$elm$html$Html$ul,
+				_List_fromArray(
+					[
+						$author$project$Utils$Main$role('listbox')
+					]),
+				A2(
+					$elm$core$List$cons,
+					A2($author$project$Utils$View$search, data.filterChange, data.filter),
+					options))
+			]));
 };
 var $author$project$Recipes$ViewModal$renderRecipeIngredient = F4(
 	function (data, editor, index, ingredient) {
@@ -8028,18 +8029,40 @@ var $author$project$Recipes$ViewModal$renderRecipeIngredient = F4(
 					return $elm$html$Html$text('Error loading ingredients');
 				default:
 					var ingredients = _v0.a;
-					return A4(
-						$author$project$Recipes$ViewModal$ingredientsDropdown2,
-						ingredients,
-						editor.filter,
-						A2(
-							$elm$core$Maybe$withDefault,
-							false,
-							A2(
+					return $author$project$Utils$View$searchableDropdown(
+						{
+							filter: editor.filter,
+							filterChange: A2(
+								$elm$core$Basics$composeL,
+								A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+								$author$project$Recipes$Model$EditIngredientFilter),
+							list: A2($elm$core$List$map, $elm$core$Maybe$Just, ingredients),
+							onSelect: function (i) {
+								return $author$project$Model$RecipeMessage(
+									$author$project$Recipes$Model$ModalMsg(
+										$author$project$Recipes$Model$EditIngredient(
+											{
+												_new: A3(
+													$elm$core$Maybe$map2,
+													F2(
+														function (x, y) {
+															return _Utils_update(
+																x,
+																{metaIngredient: y});
+														}),
+													ingredient,
+													i),
+												old: ingredient
+											})));
+							},
+							property: $author$project$Recipes$ViewModal$metaIngredientName,
+							selected: A2(
 								$elm$core$Maybe$map,
-								$elm$core$Basics$eq(index),
-								editor.activeIngredientIndex)),
-						ingredient);
+								function (i) {
+									return i.metaIngredient;
+								},
+								ingredient)
+						});
 			}
 		}();
 		return _List_fromArray(

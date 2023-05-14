@@ -86,7 +86,7 @@ type RecipeMsg
 
 type ModalMsg
     = AddIngredient
-    | EditIngredient Int
+    | EditIngredient {old: Maybe WeightedMetaIngredient, new: Maybe WeightedMetaIngredient}
     | DeleteIngredient Int
     | EditName String
     | EditComment String

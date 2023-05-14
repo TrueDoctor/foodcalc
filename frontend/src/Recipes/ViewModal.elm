@@ -8,7 +8,7 @@ import Model exposing (Msg(..))
 import Recipes.Model exposing (..)
 import Utils.Main exposing (..)
 import Utils.Model exposing (..)
-import Utils.View exposing (listView)
+import Utils.View exposing (listView, searchableDropdown)
 
 
 modal : RecipeTabData -> Html Msg
@@ -89,7 +89,16 @@ renderRecipeIngredient data editor index ingredient =
                     text "Error loading ingredients"
 
                 Success ingredients ->
-                    ingredientsDropdown2 ingredients editor.filter (Maybe.map ((==) index) editor.activeIngredientIndex |> Maybe.withDefault False) ingredient
+                    searchableDropdown
+                        { filterChange = RecipeMessage << ModalMsg << EditIngredientFilter
+                        , onSelect = \i -> RecipeMessage <| ModalMsg <| EditIngredient { old = ingredient, new = Maybe.map2 (\x y -> { x | metaIngredient = y }) ingredient i }
+                        , property = metaIngredientName
+                        , filter = editor.filter
+                        , list = List.map Just ingredients
+                        , selected = Maybe.map (\i -> i.metaIngredient) ingredient
+                        }
+
+        -- ingredientsDropdown2 ingredients editor.filter (Maybe.map ((==) index) editor.activeIngredientIndex |> Maybe.withDefault False) ingredient
     in
     [ dropdown
     , input

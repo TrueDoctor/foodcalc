@@ -17,3 +17,7 @@ mapWebdata r =
 
 role : String -> Attribute msg
 role = attribute "role"
+
+nameFilter: String -> String -> Bool
+nameFilter filter name =
+    String.contains (String.toLower filter) (String.toLower name)
