@@ -3,7 +3,6 @@ module Ingredients.Model exposing (..)
 import Http
 import Utils.Model exposing (WebData)
 
-
 type alias Ingredient =
     { id : Int
     , name : String

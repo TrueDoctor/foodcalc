@@ -12,3 +12,8 @@ type RemoteData a e
 
 type alias WebData a =
     RemoteData a Http.Error
+
+type alias Unit =
+    { unit_id : Int
+    , name : String
+    }

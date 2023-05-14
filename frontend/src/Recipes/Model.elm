@@ -1,8 +1,9 @@
 module Recipes.Model exposing (..)
 
 import Http
-import Ingredients.Model exposing (IngredientMsg(..))
-import Utils.Model exposing (WebData)
+import Ingredients.Model exposing (Ingredient, IngredientMsg(..))
+import Utils.Model exposing (Unit, WebData)
+import Utils.Model exposing (RemoteData(..))
 
 
 type alias Recipe =
@@ -16,16 +17,46 @@ type alias RecipeEditor =
     { id : Maybe Int
     , name : String
     , comment : Maybe String
-    , ingredient_ids : List RecipeIngredient
-    , steps : List Step
+    , ingredients : WebData (List WeightedMetaIngredient)
+    , activeIngredientIndex : Maybe Int
+    , steps : WebData (List Step)
+    , filter : String
+    }
+
+emptyRecipeEditor : RecipeEditor
+emptyRecipeEditor =
+    { id = Nothing
+    , name = ""
+    , comment = Nothing
+    , ingredients = Success []
+    , activeIngredientIndex = Nothing
+    , steps = Success []
+    , filter = ""
+    }
+
+editorFromReipe : Recipe -> RecipeEditor
+editorFromReipe recipe =
+    { id = Just recipe.id
+    , name = recipe.name
+    , comment = recipe.comment
+    , ingredients = NotAsked
+    , activeIngredientIndex = Nothing
+    , steps = NotAsked
+    , filter = ""
     }
 
 
-type alias RecipeIngredient =
-    { ingredient_id : Int
-    , amount : Float
-    , unit : String
+type MetaIngredient
+    = IsDirect Ingredient
+    | IsSubRecipe Recipe
+
+
+type alias WeightedMetaIngredient =
+    { metaIngredient : MetaIngredient
+    , amount : String
+    , unit : Unit
     }
+
 
 type alias Step =
     { id : Maybe Int
@@ -35,33 +66,45 @@ type alias Step =
     }
 
 
+type RecipeWebData
+    = RecipesData (Result Http.Error (List Recipe))
+    | MetaIngredientData (Result Http.Error (List MetaIngredient))
+    | RecipeIngredientData (Result Http.Error (List WeightedMetaIngredient))
+
+
 type RecipeMsg
     = AddRecipe
     | EditRecipe Int
     | DeleteRecipe Int
     | CloseModal
     | ModalMsg ModalMsg
-    | GotRecipes (Result Http.Error (List Recipe))
+    | GotWebData RecipeWebData
     | RecipeChanged RecipeEditor
     | EditFilter String
     | InitTab
+
 
 type ModalMsg
     = AddIngredient
     | EditIngredient Int
     | DeleteIngredient Int
-    | CloseIngredientModal
-    | IngredientMsg IngredientMsg
+    | EditName String
+    | EditComment String
+    | EditIngredientFilter String
+    | EditActiveIngredientIndex Int
+    | EditIngredientAmount String
+    | EditIngredientUnit Unit
+
 
 type Modal
     = NoModal
     | Add RecipeEditor
     | Edit RecipeEditor
 
+
 type alias RecipeTabData =
- {
-    recipes: WebData (List Recipe)
-    , filter: String
-    , modal: Modal
-    
- } 
+    { recipes : WebData (List Recipe)
+    , filter : String
+    , modal : Modal
+    , allIngredients : WebData (List MetaIngredient)
+    }

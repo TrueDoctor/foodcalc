@@ -4,12 +4,12 @@ import Browser
 import Html exposing (div, text)
 import Html.Attributes exposing (class)
 import Ingredients.Main exposing (handleIngredientsMsg, viewIngredients)
-import Ingredients.Model as IModel exposing (IngredientMsg(..))
+import Ingredients.Model as IModel exposing (IngredientMsg(..), IngredientTabData)
 import Ingredients.Service exposing (fetchIngredients)
 import Model exposing (..)
 import Navbar exposing (generateNavbar)
 import Recipes.Main exposing (handleRecipesMsg, viewRecipes)
-import Recipes.Model as RModel
+import Recipes.Model as RModel exposing (RecipeTabData)
 import Settings exposing (..)
 import Utils.Cursor
 import Utils.Model exposing (RemoteData(..))
@@ -52,17 +52,17 @@ update msg model =
             handleRecipesMsg m model
 
 
-initTab : Model  -> (Model, Cmd Msg)
+initTab : Model -> ( Model, Cmd Msg )
 initTab model =
     case model.tabs.active of
         Ingredients _ ->
-            (model, Cmd.none)
+            ( model, Cmd.none )
 
         Recipes _ ->
             update (RecipeMessage RModel.InitTab) model
 
         Events ->
-            (model, Cmd.none)
+            ( model, Cmd.none )
 
 
 changeTab : Tab -> Model -> ( Model, Cmd Msg )
@@ -71,15 +71,15 @@ changeTab tab model =
         c =
             Utils.Cursor.setActiveBy (\t -> tabName t == tabName tab) model.tabs
     in
-    initTab (Model  c )
+    initTab (Model c)
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     let
         tabs =
-            Utils.Cursor.create (Ingredients { ingredients = Loading, filter = "", modal = IModel.NoModal })
-                [ Recipes { recipes = NotAsked, filter = "", modal = RModel.NoModal }
+            Utils.Cursor.create (Ingredients <| IngredientTabData Loading "" IModel.NoModal)
+                [ Recipes <| RecipeTabData NotAsked "" RModel.NoModal NotAsked
                 , Events
                 ]
     in

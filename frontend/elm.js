@@ -5338,6 +5338,10 @@ var $author$project$Model$Events = {$: 'Events'};
 var $author$project$Model$IngredientMessage = function (a) {
 	return {$: 'IngredientMessage', a: a};
 };
+var $author$project$Ingredients$Model$IngredientTabData = F3(
+	function (ingredients, filter, modal) {
+		return {filter: filter, ingredients: ingredients, modal: modal};
+	});
 var $author$project$Model$Ingredients = function (a) {
 	return {$: 'Ingredients', a: a};
 };
@@ -5348,6 +5352,10 @@ var $author$project$Model$Model = function (tabs) {
 var $author$project$Ingredients$Model$NoModal = {$: 'NoModal'};
 var $author$project$Recipes$Model$NoModal = {$: 'NoModal'};
 var $author$project$Utils$Model$NotAsked = {$: 'NotAsked'};
+var $author$project$Recipes$Model$RecipeTabData = F4(
+	function (recipes, filter, modal, allIngredients) {
+		return {allIngredients: allIngredients, filter: filter, modal: modal, recipes: recipes};
+	});
 var $author$project$Model$Recipes = function (a) {
 	return {$: 'Recipes', a: a};
 };
@@ -6222,11 +6230,11 @@ var $author$project$Main$init = function (_v0) {
 	var tabs = A2(
 		$author$project$Utils$Cursor$create,
 		$author$project$Model$Ingredients(
-			{filter: '', ingredients: $author$project$Utils$Model$Loading, modal: $author$project$Ingredients$Model$NoModal}),
+			A3($author$project$Ingredients$Model$IngredientTabData, $author$project$Utils$Model$Loading, '', $author$project$Ingredients$Model$NoModal)),
 		_List_fromArray(
 			[
 				$author$project$Model$Recipes(
-				{filter: '', modal: $author$project$Recipes$Model$NoModal, recipes: $author$project$Utils$Model$NotAsked}),
+				A4($author$project$Recipes$Model$RecipeTabData, $author$project$Utils$Model$NotAsked, '', $author$project$Recipes$Model$NoModal, $author$project$Utils$Model$NotAsked)),
 				$author$project$Model$Events
 			]));
 	return _Utils_Tuple2(
@@ -6516,8 +6524,34 @@ var $author$project$Ingredients$Update$handleMsg = F2(
 		}
 	});
 var $author$project$Ingredients$Main$handleIngredientsMsg = $author$project$Ingredients$Update$handleMsg;
-var $author$project$Recipes$Model$GotRecipes = function (a) {
-	return {$: 'GotRecipes', a: a};
+var $author$project$Recipes$Model$Add = function (a) {
+	return {$: 'Add', a: a};
+};
+var $author$project$Recipes$Model$emptyRecipeEditor = {
+	activeIngredientIndex: $elm$core$Maybe$Nothing,
+	comment: $elm$core$Maybe$Nothing,
+	filter: '',
+	id: $elm$core$Maybe$Nothing,
+	ingredients: $author$project$Utils$Model$Success(_List_Nil),
+	name: '',
+	steps: $author$project$Utils$Model$Success(_List_Nil)
+};
+var $author$project$Recipes$Model$GotWebData = function (a) {
+	return {$: 'GotWebData', a: a};
+};
+var $author$project$Recipes$Model$MetaIngredientData = function (a) {
+	return {$: 'MetaIngredientData', a: a};
+};
+var $elm$core$Basics$composeL = F3(
+	function (g, f, x) {
+		return g(
+			f(x));
+	});
+var $author$project$Recipes$Model$IsDirect = function (a) {
+	return {$: 'IsDirect', a: a};
+};
+var $author$project$Recipes$Model$IsSubRecipe = function (a) {
+	return {$: 'IsSubRecipe', a: a};
 };
 var $author$project$Recipes$Model$Recipe = F3(
 	function (id, name, comment) {
@@ -6533,10 +6567,37 @@ var $author$project$Recipes$Service$decodeRecipe = A4(
 		$elm$json$Json$Decode$field,
 		'comment',
 		$elm$json$Json$Decode$nullable($elm$json$Json$Decode$string)));
+var $author$project$Recipes$Service$decodeMetaIngredient = $elm$json$Json$Decode$oneOf(
+	_List_fromArray(
+		[
+			A2(
+			$elm$json$Json$Decode$map,
+			$author$project$Recipes$Model$IsSubRecipe,
+			A2($elm$json$Json$Decode$field, 'MetaRecipe', $author$project$Recipes$Service$decodeRecipe)),
+			A2(
+			$elm$json$Json$Decode$map,
+			$author$project$Recipes$Model$IsDirect,
+			A2($elm$json$Json$Decode$field, 'Ingredient', $author$project$Ingredients$Service$decodeIngredient))
+		]));
+var $author$project$Recipes$Service$decodeMetaIngredients = $elm$json$Json$Decode$list($author$project$Recipes$Service$decodeMetaIngredient);
+var $author$project$Recipes$Service$fetchAllMetaIngredients = $elm$http$Http$get(
+	{
+		expect: A2(
+			$elm$http$Http$expectJson,
+			A2($elm$core$Basics$composeL, $author$project$Recipes$Model$GotWebData, $author$project$Recipes$Model$MetaIngredientData),
+			$author$project$Recipes$Service$decodeMetaIngredients),
+		url: 'http://localhost:3000/recipes/meta_ingredients/list'
+	});
+var $author$project$Recipes$Model$RecipesData = function (a) {
+	return {$: 'RecipesData', a: a};
+};
 var $author$project$Recipes$Service$decodeRecipes = $elm$json$Json$Decode$list($author$project$Recipes$Service$decodeRecipe);
 var $author$project$Recipes$Service$fetchRecipes = $elm$http$Http$get(
 	{
-		expect: A2($elm$http$Http$expectJson, $author$project$Recipes$Model$GotRecipes, $author$project$Recipes$Service$decodeRecipes),
+		expect: A2(
+			$elm$http$Http$expectJson,
+			A2($elm$core$Basics$composeL, $author$project$Recipes$Model$GotWebData, $author$project$Recipes$Model$RecipesData),
+			$author$project$Recipes$Service$decodeRecipes),
 		url: 'http://localhost:3000/recipes/list'
 	});
 var $author$project$Recipes$Update$mapTab = F2(
@@ -6549,6 +6610,36 @@ var $author$project$Recipes$Update$mapTab = F2(
 			return any;
 		}
 	});
+var $author$project$Recipes$Model$Edit = function (a) {
+	return {$: 'Edit', a: a};
+};
+var $author$project$Recipes$Update$updateModal = F2(
+	function (modal, f) {
+		switch (modal.$) {
+			case 'Edit':
+				var e = modal.a;
+				return $author$project$Recipes$Model$Edit(
+					f(e));
+			case 'Add':
+				var e = modal.a;
+				return $author$project$Recipes$Model$Add(
+					f(e));
+			default:
+				var any = modal;
+				return any;
+		}
+	});
+var $author$project$Recipes$Update$mapModalUpdate = function (f) {
+	return $author$project$Recipes$Update$mapTab(
+		function (i) {
+			return $author$project$Model$Recipes(
+				_Utils_update(
+					i,
+					{
+						modal: A2($author$project$Recipes$Update$updateModal, i.modal, f)
+					}));
+		});
+};
 var $author$project$Recipes$Update$updateModel = F2(
 	function (f, model) {
 		return _Utils_update(
@@ -6557,23 +6648,123 @@ var $author$project$Recipes$Update$updateModel = F2(
 				tabs: A3($author$project$Utils$Cursor$modifyAt, 1, f, model.tabs)
 			});
 	});
-var $author$project$Recipes$Update$handleMsg = F2(
+var $author$project$Recipes$Update$handleModalMsg = F2(
 	function (msg, model) {
 		switch (msg.$) {
-			case 'GotRecipes':
-				var result = msg.a;
+			case 'EditComment':
+				var comment = msg.a;
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Recipes$Update$updateModel,
+						$author$project$Recipes$Update$mapModalUpdate(
+							function (e) {
+								return _Utils_update(
+									e,
+									{
+										comment: $elm$core$Maybe$Just(comment)
+									});
+							}),
+						model),
+					$elm$core$Platform$Cmd$none);
+			case 'EditName':
+				var name = msg.a;
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Recipes$Update$updateModel,
+						$author$project$Recipes$Update$mapModalUpdate(
+							function (e) {
+								return _Utils_update(
+									e,
+									{name: name});
+							}),
+						model),
+					$elm$core$Platform$Cmd$none);
+			case 'EditActiveIngredientIndex':
+				var index = msg.a;
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Recipes$Update$updateModel,
+						$author$project$Recipes$Update$mapModalUpdate(
+							function (e) {
+								return _Utils_update(
+									e,
+									{
+										activeIngredientIndex: $elm$core$Maybe$Just(index)
+									});
+							}),
+						model),
+					$elm$core$Platform$Cmd$none);
+			case 'EditIngredientFilter':
+				var filter = msg.a;
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Recipes$Update$updateModel,
+						$author$project$Recipes$Update$mapModalUpdate(
+							function (e) {
+								return _Utils_update(
+									e,
+									{filter: filter});
+							}),
+						model),
+					$elm$core$Platform$Cmd$none);
+			default:
+				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+		}
+	});
+var $author$project$Recipes$Update$handleWebData = F2(
+	function (result, model) {
+		switch (result.$) {
+			case 'RecipesData':
+				var recipes = result.a;
 				var save = $author$project$Recipes$Update$mapTab(
 					function (r) {
 						return $author$project$Model$Recipes(
 							_Utils_update(
 								r,
 								{
-									recipes: $author$project$Utils$Main$mapWebdata(result)
+									recipes: $author$project$Utils$Main$mapWebdata(recipes)
 								}));
 					});
 				return _Utils_Tuple2(
 					A2($author$project$Recipes$Update$updateModel, save, model),
 					$elm$core$Platform$Cmd$none);
+			case 'MetaIngredientData':
+				var meta = result.a;
+				var save = $author$project$Recipes$Update$mapTab(
+					function (r) {
+						return $author$project$Model$Recipes(
+							_Utils_update(
+								r,
+								{
+									allIngredients: $author$project$Utils$Main$mapWebdata(meta)
+								}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Recipes$Update$updateModel, save, model),
+					$elm$core$Platform$Cmd$none);
+			default:
+				var meta = result.a;
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Recipes$Update$updateModel,
+						$author$project$Recipes$Update$mapModalUpdate(
+							function (editor) {
+								return _Utils_update(
+									editor,
+									{
+										ingredients: $author$project$Utils$Main$mapWebdata(meta)
+									});
+							}),
+						model),
+					$elm$core$Platform$Cmd$none);
+		}
+	});
+var $author$project$Recipes$Update$handleMsg = F2(
+	function (msg, model) {
+		switch (msg.$) {
+			case 'GotWebData':
+				var data = msg.a;
+				return A2($author$project$Recipes$Update$handleWebData, data, model);
 			case 'InitTab':
 				var save = $author$project$Recipes$Update$mapTab(
 					function (r) {
@@ -6584,17 +6775,47 @@ var $author$project$Recipes$Update$handleMsg = F2(
 					});
 				return _Utils_Tuple2(
 					A2($author$project$Recipes$Update$updateModel, save, model),
+					$elm$core$Platform$Cmd$batch(
+						_List_fromArray(
+							[
+								A2($elm$core$Platform$Cmd$map, $author$project$Model$RecipeMessage, $author$project$Recipes$Service$fetchAllMetaIngredients),
+								A2($elm$core$Platform$Cmd$map, $author$project$Model$RecipeMessage, $author$project$Recipes$Service$fetchRecipes)
+							])));
+			case 'AddRecipe':
+				var save = $author$project$Recipes$Update$mapTab(
+					function (r) {
+						return $author$project$Model$Recipes(
+							_Utils_update(
+								r,
+								{
+									modal: $author$project$Recipes$Model$Add($author$project$Recipes$Model$emptyRecipeEditor)
+								}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Recipes$Update$updateModel, save, model),
 					A2($elm$core$Platform$Cmd$map, $author$project$Model$RecipeMessage, $author$project$Recipes$Service$fetchRecipes));
+			case 'CloseModal':
+				var save = $author$project$Recipes$Update$mapTab(
+					function (r) {
+						return $author$project$Model$Recipes(
+							_Utils_update(
+								r,
+								{modal: $author$project$Recipes$Model$NoModal}));
+					});
+				return _Utils_Tuple2(
+					A2(
+						$elm$core$Debug$log,
+						'',
+						A2($author$project$Recipes$Update$updateModel, save, model)),
+					$elm$core$Platform$Cmd$none);
+			case 'ModalMsg':
+				var m = msg.a;
+				return A2($author$project$Recipes$Update$handleModalMsg, m, model);
 			default:
 				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
 	});
 var $author$project$Recipes$Main$handleRecipesMsg = $author$project$Recipes$Update$handleMsg;
-var $elm$core$Basics$composeL = F3(
-	function (g, f, x) {
-		return g(
-			f(x));
-	});
 var $author$project$Utils$Cursor$list = function (cursor) {
 	return _Utils_ap(
 		cursor.left,
@@ -7548,6 +7769,408 @@ var $author$project$Ingredients$View$view = function (ingredients) {
 			]));
 };
 var $author$project$Ingredients$Main$viewIngredients = $author$project$Ingredients$View$view;
+var $author$project$Recipes$Model$CloseModal = {$: 'CloseModal'};
+var $author$project$Recipes$Model$EditComment = function (a) {
+	return {$: 'EditComment', a: a};
+};
+var $author$project$Recipes$Model$EditName = function (a) {
+	return {$: 'EditName', a: a};
+};
+var $author$project$Recipes$Model$ModalMsg = function (a) {
+	return {$: 'ModalMsg', a: a};
+};
+var $author$project$Recipes$Model$RecipeChanged = function (a) {
+	return {$: 'RecipeChanged', a: a};
+};
+var $author$project$Recipes$Model$EditActiveIngredientIndex = function (a) {
+	return {$: 'EditActiveIngredientIndex', a: a};
+};
+var $author$project$Recipes$Model$EditIngredientAmount = function (a) {
+	return {$: 'EditIngredientAmount', a: a};
+};
+var $author$project$Recipes$Model$EditIngredientFilter = function (a) {
+	return {$: 'EditIngredientFilter', a: a};
+};
+var $elm$html$Html$details = _VirtualDom_node('details');
+var $author$project$Recipes$ViewModal$metaIngredientName = function (ig) {
+	return A2(
+		$elm$core$Maybe$withDefault,
+		'',
+		A2(
+			$elm$core$Maybe$map,
+			function (e) {
+				if (e.$ === 'IsDirect') {
+					var i = e.a;
+					return i.name;
+				} else {
+					var r = e.a;
+					return r.name;
+				}
+			},
+			ig));
+};
+var $author$project$Recipes$ViewModal$picoOption = function (content) {
+	return A2(
+		$elm$html$Html$li,
+		_List_Nil,
+		_List_fromArray(
+			[
+				A2($elm$html$Html$a, _List_Nil, content)
+			]));
+};
+var $author$project$Recipes$ViewModal$dropdownList2 = F2(
+	function (ingredients, selected) {
+		return A2(
+			$elm$core$List$map,
+			function (x) {
+				return $author$project$Recipes$ViewModal$picoOption(
+					_List_fromArray(
+						[
+							$elm$html$Html$text(
+							$author$project$Recipes$ViewModal$metaIngredientName(
+								$elm$core$Maybe$Just(x)))
+						]));
+			},
+			A2($elm$core$Debug$log, 'ingredients', ingredients));
+	});
+var $elm$html$Html$summary = _VirtualDom_node('summary');
+var $author$project$Recipes$ViewModal$ingredientsDropdown2 = F4(
+	function (ingredients, filter, hasDropdown, selected) {
+		var visible = A2(
+			$elm$html$Html$summary,
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$attribute, 'aria-haspopup', 'listbox')
+				]),
+			_List_fromArray(
+				[
+					$elm$html$Html$text(
+					$author$project$Recipes$ViewModal$metaIngredientName(
+						A2(
+							$elm$core$Maybe$map,
+							function (x) {
+								return x.metaIngredient;
+							},
+							selected)))
+				]));
+		var search = A2(
+			$elm$html$Html$input,
+			_List_fromArray(
+				[
+					$elm$html$Html$Attributes$class('search'),
+					$elm$html$Html$Attributes$type_('text'),
+					$elm$html$Html$Attributes$placeholder('Search'),
+					$elm$html$Html$Events$onInput(
+					A2(
+						$elm$core$Basics$composeL,
+						A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+						$author$project$Recipes$Model$EditIngredientFilter)),
+					$elm$html$Html$Attributes$value(filter)
+				]),
+			_List_Nil);
+		return A2(
+			$elm$html$Html$details,
+			_List_fromArray(
+				[
+					$author$project$Utils$Main$roleAttr('list')
+				]),
+			_List_fromArray(
+				[
+					visible,
+					A2(
+					$elm$html$Html$ul,
+					_List_fromArray(
+						[
+							$author$project$Utils$Main$roleAttr('listbox')
+						]),
+					hasDropdown ? A2(
+						$elm$core$List$cons,
+						$author$project$Recipes$ViewModal$picoOption(
+							_List_fromArray(
+								[search])),
+						A2(
+							$author$project$Recipes$ViewModal$dropdownList2,
+							A2(
+								$elm$core$List$filter,
+								A2(
+									$elm$core$Basics$composeL,
+									A2(
+										$elm$core$Basics$composeL,
+										$elm$core$String$contains(filter),
+										$author$project$Recipes$ViewModal$metaIngredientName),
+									$elm$core$Maybe$Just),
+								ingredients),
+							A2(
+								$elm$core$Maybe$map,
+								function (x) {
+									return x.metaIngredient;
+								},
+								selected))) : _List_fromArray(
+						[visible]))
+				]));
+	});
+var $elm$html$Html$Events$onFocus = function (msg) {
+	return A2(
+		$elm$html$Html$Events$on,
+		'focus',
+		$elm$json$Json$Decode$succeed(msg));
+};
+var $author$project$Recipes$ViewModal$renderRecipeIngredient = F4(
+	function (data, editor, index, ingredient) {
+		var dropdown = function () {
+			var _v0 = data.allIngredients;
+			switch (_v0.$) {
+				case 'NotAsked':
+					return $elm$html$Html$text('Loading ingredients not initiated');
+				case 'Loading':
+					return $elm$html$Html$text('Loading ingredients ...');
+				case 'Failure':
+					return $elm$html$Html$text('Error loading ingredients');
+				default:
+					var ingredients = _v0.a;
+					return A4(
+						$author$project$Recipes$ViewModal$ingredientsDropdown2,
+						ingredients,
+						editor.filter,
+						A2(
+							$elm$core$Maybe$withDefault,
+							false,
+							A2(
+								$elm$core$Maybe$map,
+								$elm$core$Basics$eq(index),
+								editor.activeIngredientIndex)),
+						ingredient);
+			}
+		}();
+		return A2(
+			$elm$html$Html$tr,
+			_List_Nil,
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$td,
+					_List_Nil,
+					_List_fromArray(
+						[dropdown])),
+					A2(
+					$elm$html$Html$td,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$input,
+							_List_fromArray(
+								[
+									$elm$html$Html$Attributes$class('amount'),
+									$elm$html$Html$Attributes$type_('text'),
+									$elm$html$Html$Attributes$placeholder('Amount'),
+									$elm$html$Html$Events$onInput(
+									A2(
+										$elm$core$Basics$composeL,
+										A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+										$author$project$Recipes$Model$EditIngredientAmount)),
+									$elm$html$Html$Events$onFocus(
+									$author$project$Model$RecipeMessage(
+										$author$project$Recipes$Model$ModalMsg(
+											$author$project$Recipes$Model$EditActiveIngredientIndex(index))))
+								]),
+							_List_Nil)
+						]))
+				]));
+	});
+var $elm$html$Html$thead = _VirtualDom_node('thead');
+var $author$project$Recipes$ViewModal$recipeIngredientsList = F2(
+	function (data, editor) {
+		var list = function () {
+			var _v0 = editor.ingredients;
+			switch (_v0.$) {
+				case 'NotAsked':
+					return _List_fromArray(
+						[
+							$elm$html$Html$text('Loading ingredients not initiated')
+						]);
+				case 'Loading':
+					return _List_fromArray(
+						[
+							$elm$html$Html$text('Loading ingredients ...')
+						]);
+				case 'Failure':
+					return _List_fromArray(
+						[
+							$elm$html$Html$text('Error loading ingredients')
+						]);
+				default:
+					var ingredients = _v0.a;
+					return _List_fromArray(
+						[
+							A2(
+							$elm$html$Html$thead,
+							_List_Nil,
+							_List_fromArray(
+								[
+									A2(
+									$elm$html$Html$tr,
+									_List_Nil,
+									_List_fromArray(
+										[
+											A2(
+											$elm$html$Html$td,
+											_List_Nil,
+											_List_fromArray(
+												[
+													$elm$html$Html$text('Ingredient')
+												])),
+											A2(
+											$elm$html$Html$td,
+											_List_Nil,
+											_List_fromArray(
+												[
+													$elm$html$Html$text('Amount')
+												]))
+										]))
+								])),
+							A2(
+							$elm$html$Html$tbody,
+							_List_Nil,
+							A2(
+								$elm$core$List$indexedMap,
+								A2($author$project$Recipes$ViewModal$renderRecipeIngredient, data, editor),
+								A2(
+									$elm$core$List$cons,
+									$elm$core$Maybe$Nothing,
+									A2($elm$core$List$map, $elm$core$Maybe$Just, ingredients))))
+						]);
+			}
+		}();
+		return A2(
+			$elm$html$Html$table,
+			_List_fromArray(
+				[
+					$author$project$Utils$Main$roleAttr('grid')
+				]),
+			list);
+	});
+var $author$project$Recipes$ViewModal$recipeDetails = F4(
+	function (data, submit, title, editor) {
+		var id_text = function () {
+			var _v0 = editor.id;
+			if (_v0.$ === 'Just') {
+				var i = _v0.a;
+				return ' (id: ' + ($elm$core$String$fromInt(i) + ')');
+			} else {
+				return '';
+			}
+		}();
+		return A3(
+			$elm$html$Html$node,
+			'dialog',
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$attribute, 'open', '')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$article,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$a,
+							_List_fromArray(
+								[
+									$elm$html$Html$Events$onClick(
+									$author$project$Model$RecipeMessage($author$project$Recipes$Model$CloseModal))
+								]),
+							_List_fromArray(
+								[
+									A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$x)
+								])),
+							A2(
+							$elm$html$Html$h3,
+							_List_Nil,
+							_List_fromArray(
+								[
+									$elm$html$Html$text(
+									_Utils_ap(title, id_text))
+								])),
+							A2(
+							$elm$html$Html$input,
+							_List_fromArray(
+								[
+									$elm$html$Html$Attributes$class('name'),
+									$elm$html$Html$Attributes$type_('text'),
+									$elm$html$Html$Attributes$placeholder('Name'),
+									$elm$html$Html$Events$onInput(
+									A2(
+										$elm$core$Basics$composeL,
+										A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+										$author$project$Recipes$Model$EditName))
+								]),
+							_List_Nil),
+							A2(
+							$elm$html$Html$input,
+							_List_fromArray(
+								[
+									$elm$html$Html$Attributes$class('comment'),
+									$elm$html$Html$Attributes$type_('text'),
+									$elm$html$Html$Attributes$placeholder('Comment'),
+									$elm$html$Html$Events$onInput(
+									A2(
+										$elm$core$Basics$composeL,
+										A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+										$author$project$Recipes$Model$EditComment))
+								]),
+							_List_Nil),
+							A2($author$project$Recipes$ViewModal$recipeIngredientsList, data, editor),
+							A2(
+							$elm$html$Html$footer,
+							_List_fromArray(
+								[
+									$elm$html$Html$Attributes$class('grid')
+								]),
+							_List_fromArray(
+								[
+									A2(
+									$elm$html$Html$button,
+									_List_fromArray(
+										[
+											$elm$html$Html$Events$onClick(
+											$author$project$Model$RecipeMessage($author$project$Recipes$Model$CloseModal))
+										]),
+									_List_fromArray(
+										[
+											$elm$html$Html$text('Cancel')
+										])),
+									A2(
+									$elm$html$Html$button,
+									_List_fromArray(
+										[
+											$elm$html$Html$Events$onClick(
+											$author$project$Model$RecipeMessage(
+												$author$project$Recipes$Model$RecipeChanged(editor)))
+										]),
+									_List_fromArray(
+										[
+											$elm$html$Html$text(submit)
+										]))
+								]))
+						]))
+				]));
+	});
+var $author$project$Recipes$ViewModal$modal = function (data) {
+	var _v0 = data.modal;
+	switch (_v0.$) {
+		case 'NoModal':
+			return A3($elm$html$Html$node, 'dialog', _List_Nil, _List_Nil);
+		case 'Add':
+			var recipe = _v0.a;
+			return A4($author$project$Recipes$ViewModal$recipeDetails, data, 'Add', 'Add recipe', recipe);
+		default:
+			var recipe = _v0.a;
+			return A4($author$project$Recipes$ViewModal$recipeDetails, data, 'Save', 'Edit recipe', recipe);
+	}
+};
 var $author$project$Recipes$Model$DeleteRecipe = function (a) {
 	return {$: 'DeleteRecipe', a: a};
 };
@@ -7684,7 +8307,11 @@ var $author$project$Recipes$View$view = function (recipeData) {
 		$elm$html$Html$div,
 		_List_Nil,
 		_List_fromArray(
-			[$author$project$Recipes$View$topBar, list]));
+			[
+				$author$project$Recipes$View$topBar,
+				$author$project$Recipes$ViewModal$modal(recipeData),
+				list
+			]));
 };
 var $author$project$Recipes$Main$viewRecipes = $author$project$Recipes$View$view;
 var $author$project$Main$renderSelectedView = function (model) {
