@@ -8,6 +8,7 @@ import Model exposing (Msg(..))
 import Recipes.Model exposing (..)
 import Utils.Main exposing (..)
 import Utils.Model exposing (..)
+import Utils.View exposing (listView)
 
 
 modal : RecipeTabData -> Html Msg
@@ -52,27 +53,28 @@ recipeDetails data submit title editor =
 
 recipeIngredientsList : RecipeTabData -> RecipeEditor -> Html Msg
 recipeIngredientsList data editor =
-    let
-        list =
-            case editor.ingredients of
-                NotAsked ->
-                    [ text "Loading ingredients not initiated" ]
+    case editor.ingredients of
+        NotAsked ->
+            text "Loading ingredients not initiated"
 
-                Loading ->
-                    [ text "Loading ingredients ..." ]
+        Loading ->
+            text "Loading ingredients ..."
 
-                Failure _ ->
-                    [ text "Error loading ingredients" ]
+        Failure _ ->
+            text "Error loading ingredients"
 
-                Success ingredients ->
-                    [ thead [] [ tr [] [ td [] [ text "Ingredient" ], td [] [ text "Amount" ] ] ]
-                    , tbody [] <| List.indexedMap (renderRecipeIngredient data editor) <| Nothing :: List.map Just ingredients
-                    ]
-    in
-    table [ roleAttr "grid" ] list
+        Success ingredients ->
+            listView (renderRecipeIngredient data editor 0) ((ingredients |> List.map Just) ++ [ Nothing ])
 
 
-renderRecipeIngredient : RecipeTabData -> RecipeEditor -> Int -> Maybe WeightedMetaIngredient -> Html Msg
+
+{- [ thead [] [ tr [] [ td [] [ text "Ingredient" ], td [] [ text "Amount" ] ] ]
+   , tbody [] <| List.indexedMap (renderRecipeIngredient data editor) <| Nothing :: List.map Just ingredients
+   ]
+-}
+
+
+renderRecipeIngredient : RecipeTabData -> RecipeEditor -> Int -> Maybe WeightedMetaIngredient -> List (Html Msg)
 renderRecipeIngredient data editor index ingredient =
     let
         dropdown =
@@ -89,19 +91,16 @@ renderRecipeIngredient data editor index ingredient =
                 Success ingredients ->
                     ingredientsDropdown2 ingredients editor.filter (Maybe.map ((==) index) editor.activeIngredientIndex |> Maybe.withDefault False) ingredient
     in
-    tr []
-        [ td [] [ dropdown ]
-        , td []
-            [ input
-                [ class "amount"
-                , type_ "text"
-                , placeholder "Amount"
-                , onInput <| RecipeMessage << ModalMsg << EditIngredientAmount
-                , onFocus <| RecipeMessage <| ModalMsg <| EditActiveIngredientIndex index
-                ]
-                []
-            ]
+    [ dropdown
+    , input
+        [ class "amount"
+        , type_ "text"
+        , placeholder "Amount"
+        , onInput <| RecipeMessage << ModalMsg << EditIngredientAmount
+        , onFocus <| RecipeMessage <| ModalMsg <| EditActiveIngredientIndex index
         ]
+        []
+    ]
 
 
 ingredientsDropdown2 : List MetaIngredient -> String -> Bool -> Maybe WeightedMetaIngredient -> Html Msg
@@ -122,10 +121,10 @@ ingredientsDropdown2 ingredients filter hasDropdown selected =
                 ]
                 []
     in
-    details [ roleAttr "list" ]
-        [ visible,
-            ul
-            [ roleAttr "listbox" ]
+    details [ role "list" ]
+        [ visible
+        , ul
+            [ role "listbox" ]
             (if hasDropdown then
                 picoOption [ search ]
                     :: dropdownList2

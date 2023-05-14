@@ -6527,6 +6527,29 @@ var $author$project$Ingredients$Main$handleIngredientsMsg = $author$project$Ingr
 var $author$project$Recipes$Model$Add = function (a) {
 	return {$: 'Add', a: a};
 };
+var $author$project$Recipes$Model$Edit = function (a) {
+	return {$: 'Edit', a: a};
+};
+var $elm$core$Maybe$andThen = F2(
+	function (callback, maybeValue) {
+		if (maybeValue.$ === 'Just') {
+			var value = maybeValue.a;
+			return callback(value);
+		} else {
+			return $elm$core$Maybe$Nothing;
+		}
+	});
+var $author$project$Recipes$Model$editorFromReipe = function (recipe) {
+	return {
+		activeIngredientIndex: $elm$core$Maybe$Nothing,
+		comment: recipe.comment,
+		filter: '',
+		id: $elm$core$Maybe$Just(recipe.id),
+		ingredients: $author$project$Utils$Model$NotAsked,
+		name: recipe.name,
+		steps: $author$project$Utils$Model$NotAsked
+	};
+};
 var $author$project$Recipes$Model$emptyRecipeEditor = {
 	activeIngredientIndex: $elm$core$Maybe$Nothing,
 	comment: $elm$core$Maybe$Nothing,
@@ -6610,9 +6633,6 @@ var $author$project$Recipes$Update$mapTab = F2(
 			return any;
 		}
 	});
-var $author$project$Recipes$Model$Edit = function (a) {
-	return {$: 'Edit', a: a};
-};
 var $author$project$Recipes$Update$updateModal = F2(
 	function (modal, f) {
 		switch (modal.$) {
@@ -6759,6 +6779,21 @@ var $author$project$Recipes$Update$handleWebData = F2(
 					$elm$core$Platform$Cmd$none);
 		}
 	});
+var $author$project$Recipes$Update$recipeList = function (model) {
+	var _v0 = model.tabs.active;
+	if (_v0.$ === 'Recipes') {
+		var r = _v0.a;
+		var _v1 = r.recipes;
+		if (_v1.$ === 'Success') {
+			var recipes = _v1.a;
+			return $elm$core$Maybe$Just(recipes);
+		} else {
+			return $elm$core$Maybe$Nothing;
+		}
+	} else {
+		return $elm$core$Maybe$Nothing;
+	}
+};
 var $author$project$Recipes$Update$handleMsg = F2(
 	function (msg, model) {
 		switch (msg.$) {
@@ -6789,6 +6824,48 @@ var $author$project$Recipes$Update$handleMsg = F2(
 								r,
 								{
 									modal: $author$project$Recipes$Model$Add($author$project$Recipes$Model$emptyRecipeEditor)
+								}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Recipes$Update$updateModel, save, model),
+					A2($elm$core$Platform$Cmd$map, $author$project$Model$RecipeMessage, $author$project$Recipes$Service$fetchRecipes));
+			case 'EditFilter':
+				var filter = msg.a;
+				var save = $author$project$Recipes$Update$mapTab(
+					function (r) {
+						return $author$project$Model$Recipes(
+							_Utils_update(
+								r,
+								{filter: filter}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Recipes$Update$updateModel, save, model),
+					$elm$core$Platform$Cmd$none);
+			case 'EditRecipe':
+				var id = msg.a;
+				var editor = A2(
+					$elm$core$Maybe$withDefault,
+					$author$project$Recipes$Model$emptyRecipeEditor,
+					A2(
+						$elm$core$Maybe$map,
+						$author$project$Recipes$Model$editorFromReipe,
+						A2(
+							$elm$core$Maybe$andThen,
+							$elm$core$List$head,
+							A2(
+								$elm$core$Maybe$map,
+								$elm$core$List$filter(
+									function (r) {
+										return _Utils_eq(r.id, id);
+									}),
+								$author$project$Recipes$Update$recipeList(model)))));
+				var save = $author$project$Recipes$Update$mapTab(
+					function (r) {
+						return $author$project$Model$Recipes(
+							_Utils_update(
+								r,
+								{
+									modal: $author$project$Recipes$Model$Edit(editor)
 								}));
 					});
 				return _Utils_Tuple2(
@@ -7113,7 +7190,7 @@ var $elm$virtual_dom$VirtualDom$attribute = F2(
 			_VirtualDom_noJavaScriptOrHtmlUri(value));
 	});
 var $elm$html$Html$Attributes$attribute = $elm$virtual_dom$VirtualDom$attribute;
-var $author$project$Utils$Main$roleAttr = $elm$html$Html$Attributes$attribute('role');
+var $author$project$Utils$Main$role = $elm$html$Html$Attributes$attribute('role');
 var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
 var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
 var $author$project$Navbar$generateNavbarItem = F3(
@@ -7131,7 +7208,7 @@ var $author$project$Navbar$generateNavbarItem = F3(
 					$elm$html$Html$a,
 					_List_fromArray(
 						[
-							$author$project$Utils$Main$roleAttr('button')
+							$author$project$Utils$Main$role('button')
 						]),
 					_List_fromArray(
 						[
@@ -7213,32 +7290,46 @@ var $author$project$Navbar$generateNavbar = F2(
 						A2($elm$core$List$cons, a, r)))
 				]));
 	});
-var $author$project$Ingredients$Model$CloseModal = {$: 'CloseModal'};
-var $author$project$Ingredients$Model$EditComment = function (a) {
-	return {$: 'EditComment', a: a};
+var $author$project$Ingredients$Model$AddIngredient = {$: 'AddIngredient'};
+var $author$project$Ingredients$Model$EditFilter = function (a) {
+	return {$: 'EditFilter', a: a};
 };
-var $author$project$Ingredients$Model$EditEnergy = function (a) {
-	return {$: 'EditEnergy', a: a};
-};
-var $author$project$Ingredients$Model$EditName = function (a) {
-	return {$: 'EditName', a: a};
-};
-var $author$project$Ingredients$Model$IngredientChanged = function (a) {
-	return {$: 'IngredientChanged', a: a};
-};
-var $author$project$Ingredients$Model$ModalMsg = function (a) {
-	return {$: 'ModalMsg', a: a};
-};
-var $elm$html$Html$article = _VirtualDom_node('article');
+var $elm$html$Html$table = _VirtualDom_node('table');
+var $elm$html$Html$tbody = _VirtualDom_node('tbody');
+var $elm$html$Html$td = _VirtualDom_node('td');
+var $elm$html$Html$tr = _VirtualDom_node('tr');
+var $author$project$Utils$View$listView = F2(
+	function (row, list) {
+		var rows = A2(
+			$elm$core$List$map,
+			A2(
+				$elm$core$Basics$composeL,
+				A2(
+					$elm$core$Basics$composeL,
+					$elm$html$Html$tr(_List_Nil),
+					$elm$core$List$map(
+						function (x) {
+							return A2(
+								$elm$html$Html$td,
+								_List_Nil,
+								_List_fromArray(
+									[x]));
+						})),
+				row),
+			list);
+		return A2(
+			$elm$html$Html$table,
+			_List_fromArray(
+				[
+					$author$project$Utils$Main$role('grid')
+				]),
+			_List_fromArray(
+				[
+					A2($elm$html$Html$tbody, _List_Nil, rows)
+				]));
+	});
 var $elm$html$Html$button = _VirtualDom_node('button');
-var $elm$html$Html$footer = _VirtualDom_node('footer');
-var $elm$html$Html$h3 = _VirtualDom_node('h3');
 var $elm$html$Html$input = _VirtualDom_node('input');
-var $elm$virtual_dom$VirtualDom$node = function (tag) {
-	return _VirtualDom_node(
-		_VirtualDom_noScript(tag));
-};
-var $elm$html$Html$node = $elm$virtual_dom$VirtualDom$node;
 var $elm$html$Html$Events$alwaysStop = function (x) {
 	return _Utils_Tuple2(x, true);
 };
@@ -7271,6 +7362,58 @@ var $elm$html$Html$Events$onInput = function (tagger) {
 			A2($elm$json$Json$Decode$map, tagger, $elm$html$Html$Events$targetValue)));
 };
 var $elm$html$Html$Attributes$placeholder = $elm$html$Html$Attributes$stringProperty('placeholder');
+var $elm$svg$Svg$trustedNode = _VirtualDom_nodeNS('http://www.w3.org/2000/svg');
+var $elm$svg$Svg$line = $elm$svg$Svg$trustedNode('line');
+var $feathericons$elm_feather$FeatherIcons$Icon = function (a) {
+	return {$: 'Icon', a: a};
+};
+var $feathericons$elm_feather$FeatherIcons$defaultAttributes = function (name) {
+	return {
+		_class: $elm$core$Maybe$Just('feather feather-' + name),
+		size: 24,
+		sizeUnit: '',
+		strokeWidth: 2,
+		viewBox: '0 0 24 24'
+	};
+};
+var $feathericons$elm_feather$FeatherIcons$makeBuilder = F2(
+	function (name, src) {
+		return $feathericons$elm_feather$FeatherIcons$Icon(
+			{
+				attrs: $feathericons$elm_feather$FeatherIcons$defaultAttributes(name),
+				src: src
+			});
+	});
+var $elm$svg$Svg$Attributes$x1 = _VirtualDom_attribute('x1');
+var $elm$svg$Svg$Attributes$x2 = _VirtualDom_attribute('x2');
+var $elm$svg$Svg$Attributes$y1 = _VirtualDom_attribute('y1');
+var $elm$svg$Svg$Attributes$y2 = _VirtualDom_attribute('y2');
+var $feathericons$elm_feather$FeatherIcons$plus = A2(
+	$feathericons$elm_feather$FeatherIcons$makeBuilder,
+	'plus',
+	_List_fromArray(
+		[
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('12'),
+					$elm$svg$Svg$Attributes$y1('5'),
+					$elm$svg$Svg$Attributes$x2('12'),
+					$elm$svg$Svg$Attributes$y2('19')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('5'),
+					$elm$svg$Svg$Attributes$y1('12'),
+					$elm$svg$Svg$Attributes$x2('19'),
+					$elm$svg$Svg$Attributes$y2('12')
+				]),
+			_List_Nil)
+		]));
 var $elm$svg$Svg$Attributes$class = _VirtualDom_attribute('class');
 var $elm$svg$Svg$Attributes$fill = _VirtualDom_attribute('fill');
 var $elm$svg$Svg$Attributes$height = _VirtualDom_attribute('height');
@@ -7280,7 +7423,6 @@ var $elm$svg$Svg$Attributes$stroke = _VirtualDom_attribute('stroke');
 var $elm$svg$Svg$Attributes$strokeLinecap = _VirtualDom_attribute('stroke-linecap');
 var $elm$svg$Svg$Attributes$strokeLinejoin = _VirtualDom_attribute('stroke-linejoin');
 var $elm$svg$Svg$Attributes$strokeWidth = _VirtualDom_attribute('stroke-width');
-var $elm$svg$Svg$trustedNode = _VirtualDom_nodeNS('http://www.w3.org/2000/svg');
 var $elm$svg$Svg$svg = $elm$svg$Svg$trustedNode('svg');
 var $elm$svg$Svg$Attributes$viewBox = _VirtualDom_attribute('viewBox');
 var $elm$svg$Svg$Attributes$width = _VirtualDom_attribute('width');
@@ -7326,32 +7468,90 @@ var $feathericons$elm_feather$FeatherIcons$toHtml = F2(
 				src));
 	});
 var $elm$html$Html$Attributes$type_ = $elm$html$Html$Attributes$stringProperty('type');
-var $elm$html$Html$Attributes$value = $elm$html$Html$Attributes$stringProperty('value');
-var $elm$svg$Svg$line = $elm$svg$Svg$trustedNode('line');
-var $feathericons$elm_feather$FeatherIcons$Icon = function (a) {
-	return {$: 'Icon', a: a};
-};
-var $feathericons$elm_feather$FeatherIcons$defaultAttributes = function (name) {
-	return {
-		_class: $elm$core$Maybe$Just('feather feather-' + name),
-		size: 24,
-		sizeUnit: '',
-		strokeWidth: 2,
-		viewBox: '0 0 24 24'
-	};
-};
-var $feathericons$elm_feather$FeatherIcons$makeBuilder = F2(
-	function (name, src) {
-		return $feathericons$elm_feather$FeatherIcons$Icon(
-			{
-				attrs: $feathericons$elm_feather$FeatherIcons$defaultAttributes(name),
-				src: src
-			});
+var $author$project$Utils$View$searchBar = F2(
+	function (filterChange, add) {
+		return A2(
+			$elm$html$Html$table,
+			_List_Nil,
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$tr,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$td,
+							_List_Nil,
+							_List_fromArray(
+								[
+									A2(
+									$elm$html$Html$input,
+									_List_fromArray(
+										[
+											$elm$html$Html$Attributes$class('search'),
+											$elm$html$Html$Attributes$type_('text'),
+											$elm$html$Html$Attributes$placeholder('Search'),
+											$elm$html$Html$Events$onInput(filterChange)
+										]),
+									_List_Nil)
+								])),
+							A2(
+							$elm$html$Html$td,
+							_List_Nil,
+							_List_fromArray(
+								[
+									A2(
+									$elm$html$Html$button,
+									_List_fromArray(
+										[
+											$elm$html$Html$Events$onClick(add)
+										]),
+									_List_fromArray(
+										[
+											A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$plus)
+										]))
+								]))
+						]))
+				]));
 	});
-var $elm$svg$Svg$Attributes$x1 = _VirtualDom_attribute('x1');
-var $elm$svg$Svg$Attributes$x2 = _VirtualDom_attribute('x2');
-var $elm$svg$Svg$Attributes$y1 = _VirtualDom_attribute('y1');
-var $elm$svg$Svg$Attributes$y2 = _VirtualDom_attribute('y2');
+var $author$project$Utils$View$filterListView = F2(
+	function (options, list) {
+		var filtered = A2($elm$core$List$filter, options.filter, list);
+		return A2(
+			$elm$html$Html$div,
+			_List_Nil,
+			_List_fromArray(
+				[
+					A2($author$project$Utils$View$searchBar, options.filterChange, options.onAdd),
+					A2($author$project$Utils$View$listView, options.row, filtered)
+				]));
+	});
+var $author$project$Ingredients$Model$CloseModal = {$: 'CloseModal'};
+var $author$project$Ingredients$Model$EditComment = function (a) {
+	return {$: 'EditComment', a: a};
+};
+var $author$project$Ingredients$Model$EditEnergy = function (a) {
+	return {$: 'EditEnergy', a: a};
+};
+var $author$project$Ingredients$Model$EditName = function (a) {
+	return {$: 'EditName', a: a};
+};
+var $author$project$Ingredients$Model$IngredientChanged = function (a) {
+	return {$: 'IngredientChanged', a: a};
+};
+var $author$project$Ingredients$Model$ModalMsg = function (a) {
+	return {$: 'ModalMsg', a: a};
+};
+var $elm$html$Html$article = _VirtualDom_node('article');
+var $elm$html$Html$footer = _VirtualDom_node('footer');
+var $elm$html$Html$h3 = _VirtualDom_node('h3');
+var $elm$virtual_dom$VirtualDom$node = function (tag) {
+	return _VirtualDom_node(
+		_VirtualDom_noScript(tag));
+};
+var $elm$html$Html$node = $elm$virtual_dom$VirtualDom$node;
+var $elm$html$Html$Attributes$value = $elm$html$Html$Attributes$stringProperty('value');
 var $feathericons$elm_feather$FeatherIcons$x = A2(
 	$feathericons$elm_feather$FeatherIcons$makeBuilder,
 	'x',
@@ -7548,8 +7748,6 @@ var $feathericons$elm_feather$FeatherIcons$edit = A2(
 				]),
 			_List_Nil)
 		]));
-var $elm$html$Html$td = _VirtualDom_node('td');
-var $elm$html$Html$tr = _VirtualDom_node('tr');
 var $elm$svg$Svg$Attributes$points = _VirtualDom_attribute('points');
 var $elm$svg$Svg$polyline = $elm$svg$Svg$trustedNode('polyline');
 var $feathericons$elm_feather$FeatherIcons$trash2 = A2(
@@ -7593,147 +7791,42 @@ var $feathericons$elm_feather$FeatherIcons$trash2 = A2(
 			_List_Nil)
 		]));
 var $author$project$Ingredients$View$renderSingleIngredient = function (ingredient) {
-	return A2(
-		$elm$html$Html$tr,
-		_List_Nil,
-		A2(
-			$elm$core$List$map,
-			function (x) {
-				return A2(
-					$elm$html$Html$td,
-					_List_Nil,
-					_List_fromArray(
-						[x]));
-			},
+	return _List_fromArray(
+		[
+			$elm$html$Html$text(
+			$elm$core$String$fromInt(ingredient.id)),
+			$elm$html$Html$text(ingredient.name),
+			$elm$html$Html$text(
+			$elm$core$String$fromFloat(ingredient.energy)),
+			$elm$html$Html$text(
+			A2($elm$core$Maybe$withDefault, '', ingredient.comment)),
+			A2(
+			$elm$html$Html$a,
 			_List_fromArray(
 				[
-					$elm$html$Html$text(
-					$elm$core$String$fromInt(ingredient.id)),
-					$elm$html$Html$text(ingredient.name),
-					$elm$html$Html$text(
-					$elm$core$String$fromFloat(ingredient.energy)),
-					$elm$html$Html$text(
-					A2($elm$core$Maybe$withDefault, '', ingredient.comment)),
-					A2(
-					$elm$html$Html$a,
-					_List_fromArray(
-						[
-							$elm$html$Html$Events$onClick(
-							$author$project$Model$IngredientMessage(
-								$author$project$Ingredients$Model$EditIngredient(ingredient.id)))
-						]),
-					_List_fromArray(
-						[
-							A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$edit)
-						])),
-					A2(
-					$elm$html$Html$a,
-					_List_fromArray(
-						[
-							$elm$html$Html$Events$onClick(
-							$author$project$Model$IngredientMessage(
-								$author$project$Ingredients$Model$DeleteIngredient(ingredient.id)))
-						]),
-					_List_fromArray(
-						[
-							A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$trash2)
-						]))
-				])));
-};
-var $elm$html$Html$table = _VirtualDom_node('table');
-var $elm$html$Html$tbody = _VirtualDom_node('tbody');
-var $author$project$Ingredients$View$renderIngredients = function (ingredients) {
-	return A2(
-		$elm$html$Html$table,
-		_List_fromArray(
-			[
-				$author$project$Utils$Main$roleAttr('grid')
-			]),
-		_List_fromArray(
-			[
-				A2(
-				$elm$html$Html$tbody,
-				_List_Nil,
-				A2($elm$core$List$map, $author$project$Ingredients$View$renderSingleIngredient, ingredients))
-			]));
+					$elm$html$Html$Events$onClick(
+					$author$project$Model$IngredientMessage(
+						$author$project$Ingredients$Model$EditIngredient(ingredient.id)))
+				]),
+			_List_fromArray(
+				[
+					A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$edit)
+				])),
+			A2(
+			$elm$html$Html$a,
+			_List_fromArray(
+				[
+					$elm$html$Html$Events$onClick(
+					$author$project$Model$IngredientMessage(
+						$author$project$Ingredients$Model$DeleteIngredient(ingredient.id)))
+				]),
+			_List_fromArray(
+				[
+					A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$trash2)
+				]))
+		]);
 };
 var $elm$core$String$toLower = _String_toLower;
-var $author$project$Ingredients$Model$AddIngredient = {$: 'AddIngredient'};
-var $author$project$Ingredients$Model$EditFilter = function (a) {
-	return {$: 'EditFilter', a: a};
-};
-var $feathericons$elm_feather$FeatherIcons$plus = A2(
-	$feathericons$elm_feather$FeatherIcons$makeBuilder,
-	'plus',
-	_List_fromArray(
-		[
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('12'),
-					$elm$svg$Svg$Attributes$y1('5'),
-					$elm$svg$Svg$Attributes$x2('12'),
-					$elm$svg$Svg$Attributes$y2('19')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('5'),
-					$elm$svg$Svg$Attributes$y1('12'),
-					$elm$svg$Svg$Attributes$x2('19'),
-					$elm$svg$Svg$Attributes$y2('12')
-				]),
-			_List_Nil)
-		]));
-var $author$project$Ingredients$View$topBar = A2(
-	$elm$html$Html$table,
-	_List_Nil,
-	_List_fromArray(
-		[
-			A2(
-			$elm$html$Html$tr,
-			_List_Nil,
-			_List_fromArray(
-				[
-					A2(
-					$elm$html$Html$td,
-					_List_Nil,
-					_List_fromArray(
-						[
-							A2(
-							$elm$html$Html$input,
-							_List_fromArray(
-								[
-									$elm$html$Html$Attributes$class('search'),
-									$elm$html$Html$Attributes$type_('text'),
-									$elm$html$Html$Attributes$placeholder('Search'),
-									$elm$html$Html$Events$onInput(
-									A2($elm$core$Basics$composeL, $author$project$Model$IngredientMessage, $author$project$Ingredients$Model$EditFilter))
-								]),
-							_List_Nil)
-						])),
-					A2(
-					$elm$html$Html$td,
-					_List_Nil,
-					_List_fromArray(
-						[
-							A2(
-							$elm$html$Html$button,
-							_List_fromArray(
-								[
-									$elm$html$Html$Events$onClick(
-									$author$project$Model$IngredientMessage($author$project$Ingredients$Model$AddIngredient))
-								]),
-							_List_fromArray(
-								[
-									A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$plus)
-								]))
-						]))
-				]))
-		]));
 var $author$project$Ingredients$View$view = function (ingredients) {
 	var list = function () {
 		var _v0 = ingredients.ingredients;
@@ -7744,16 +7837,20 @@ var $author$project$Ingredients$View$view = function (ingredients) {
 				return $elm$html$Html$text('Loading');
 			case 'Success':
 				var is = _v0.a;
-				return $author$project$Ingredients$View$renderIngredients(
-					A2(
-						$elm$core$List$filter,
-						function (i) {
+				return A2(
+					$author$project$Utils$View$filterListView,
+					{
+						filter: function (i) {
 							return A2(
 								$elm$core$String$contains,
 								$elm$core$String$toLower(ingredients.filter),
 								$elm$core$String$toLower(i.name));
 						},
-						is));
+						filterChange: A2($elm$core$Basics$composeL, $author$project$Model$IngredientMessage, $author$project$Ingredients$Model$EditFilter),
+						onAdd: $author$project$Model$IngredientMessage($author$project$Ingredients$Model$AddIngredient),
+						row: $author$project$Ingredients$View$renderSingleIngredient
+					},
+					is);
 			default:
 				return $elm$html$Html$text('Failure');
 		}
@@ -7763,12 +7860,15 @@ var $author$project$Ingredients$View$view = function (ingredients) {
 		_List_Nil,
 		_List_fromArray(
 			[
-				$author$project$Ingredients$View$topBar,
-				$author$project$Ingredients$View$modal(ingredients.modal),
-				list
+				list,
+				$author$project$Ingredients$View$modal(ingredients.modal)
 			]));
 };
 var $author$project$Ingredients$Main$viewIngredients = $author$project$Ingredients$View$view;
+var $author$project$Recipes$Model$AddRecipe = {$: 'AddRecipe'};
+var $author$project$Recipes$Model$EditFilter = function (a) {
+	return {$: 'EditFilter', a: a};
+};
 var $author$project$Recipes$Model$CloseModal = {$: 'CloseModal'};
 var $author$project$Recipes$Model$EditComment = function (a) {
 	return {$: 'EditComment', a: a};
@@ -7872,7 +7972,7 @@ var $author$project$Recipes$ViewModal$ingredientsDropdown2 = F4(
 			$elm$html$Html$details,
 			_List_fromArray(
 				[
-					$author$project$Utils$Main$roleAttr('list')
+					$author$project$Utils$Main$role('list')
 				]),
 			_List_fromArray(
 				[
@@ -7881,7 +7981,7 @@ var $author$project$Recipes$ViewModal$ingredientsDropdown2 = F4(
 					$elm$html$Html$ul,
 					_List_fromArray(
 						[
-							$author$project$Utils$Main$roleAttr('listbox')
+							$author$project$Utils$Main$role('listbox')
 						]),
 					hasDropdown ? A2(
 						$elm$core$List$cons,
@@ -7942,113 +8042,49 @@ var $author$project$Recipes$ViewModal$renderRecipeIngredient = F4(
 						ingredient);
 			}
 		}();
-		return A2(
-			$elm$html$Html$tr,
-			_List_Nil,
-			_List_fromArray(
-				[
-					A2(
-					$elm$html$Html$td,
-					_List_Nil,
-					_List_fromArray(
-						[dropdown])),
-					A2(
-					$elm$html$Html$td,
-					_List_Nil,
-					_List_fromArray(
-						[
-							A2(
-							$elm$html$Html$input,
-							_List_fromArray(
-								[
-									$elm$html$Html$Attributes$class('amount'),
-									$elm$html$Html$Attributes$type_('text'),
-									$elm$html$Html$Attributes$placeholder('Amount'),
-									$elm$html$Html$Events$onInput(
-									A2(
-										$elm$core$Basics$composeL,
-										A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
-										$author$project$Recipes$Model$EditIngredientAmount)),
-									$elm$html$Html$Events$onFocus(
-									$author$project$Model$RecipeMessage(
-										$author$project$Recipes$Model$ModalMsg(
-											$author$project$Recipes$Model$EditActiveIngredientIndex(index))))
-								]),
-							_List_Nil)
-						]))
-				]));
+		return _List_fromArray(
+			[
+				dropdown,
+				A2(
+				$elm$html$Html$input,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('amount'),
+						$elm$html$Html$Attributes$type_('text'),
+						$elm$html$Html$Attributes$placeholder('Amount'),
+						$elm$html$Html$Events$onInput(
+						A2(
+							$elm$core$Basics$composeL,
+							A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+							$author$project$Recipes$Model$EditIngredientAmount)),
+						$elm$html$Html$Events$onFocus(
+						$author$project$Model$RecipeMessage(
+							$author$project$Recipes$Model$ModalMsg(
+								$author$project$Recipes$Model$EditActiveIngredientIndex(index))))
+					]),
+				_List_Nil)
+			]);
 	});
-var $elm$html$Html$thead = _VirtualDom_node('thead');
 var $author$project$Recipes$ViewModal$recipeIngredientsList = F2(
 	function (data, editor) {
-		var list = function () {
-			var _v0 = editor.ingredients;
-			switch (_v0.$) {
-				case 'NotAsked':
-					return _List_fromArray(
-						[
-							$elm$html$Html$text('Loading ingredients not initiated')
-						]);
-				case 'Loading':
-					return _List_fromArray(
-						[
-							$elm$html$Html$text('Loading ingredients ...')
-						]);
-				case 'Failure':
-					return _List_fromArray(
-						[
-							$elm$html$Html$text('Error loading ingredients')
-						]);
-				default:
-					var ingredients = _v0.a;
-					return _List_fromArray(
-						[
-							A2(
-							$elm$html$Html$thead,
-							_List_Nil,
-							_List_fromArray(
-								[
-									A2(
-									$elm$html$Html$tr,
-									_List_Nil,
-									_List_fromArray(
-										[
-											A2(
-											$elm$html$Html$td,
-											_List_Nil,
-											_List_fromArray(
-												[
-													$elm$html$Html$text('Ingredient')
-												])),
-											A2(
-											$elm$html$Html$td,
-											_List_Nil,
-											_List_fromArray(
-												[
-													$elm$html$Html$text('Amount')
-												]))
-										]))
-								])),
-							A2(
-							$elm$html$Html$tbody,
-							_List_Nil,
-							A2(
-								$elm$core$List$indexedMap,
-								A2($author$project$Recipes$ViewModal$renderRecipeIngredient, data, editor),
-								A2(
-									$elm$core$List$cons,
-									$elm$core$Maybe$Nothing,
-									A2($elm$core$List$map, $elm$core$Maybe$Just, ingredients))))
-						]);
-			}
-		}();
-		return A2(
-			$elm$html$Html$table,
-			_List_fromArray(
-				[
-					$author$project$Utils$Main$roleAttr('grid')
-				]),
-			list);
+		var _v0 = editor.ingredients;
+		switch (_v0.$) {
+			case 'NotAsked':
+				return $elm$html$Html$text('Loading ingredients not initiated');
+			case 'Loading':
+				return $elm$html$Html$text('Loading ingredients ...');
+			case 'Failure':
+				return $elm$html$Html$text('Error loading ingredients');
+			default:
+				var ingredients = _v0.a;
+				return A2(
+					$author$project$Utils$View$listView,
+					A3($author$project$Recipes$ViewModal$renderRecipeIngredient, data, editor, 0),
+					_Utils_ap(
+						A2($elm$core$List$map, $elm$core$Maybe$Just, ingredients),
+						_List_fromArray(
+							[$elm$core$Maybe$Nothing])));
+		}
 	});
 var $author$project$Recipes$ViewModal$recipeDetails = F4(
 	function (data, submit, title, editor) {
@@ -8178,116 +8214,39 @@ var $author$project$Recipes$Model$EditRecipe = function (a) {
 	return {$: 'EditRecipe', a: a};
 };
 var $author$project$Recipes$View$renderRecipe = function (recipe) {
-	return A2(
-		$elm$html$Html$tr,
-		_List_Nil,
-		A2(
-			$elm$core$List$map,
-			function (x) {
-				return A2(
-					$elm$html$Html$td,
-					_List_Nil,
-					_List_fromArray(
-						[x]));
-			},
-			_List_fromArray(
-				[
-					$elm$html$Html$text(
-					$elm$core$String$fromInt(recipe.id)),
-					$elm$html$Html$text(recipe.name),
-					$elm$html$Html$text(
-					A2($elm$core$Maybe$withDefault, '', recipe.comment)),
-					A2(
-					$elm$html$Html$a,
-					_List_fromArray(
-						[
-							$elm$html$Html$Events$onClick(
-							$author$project$Model$RecipeMessage(
-								$author$project$Recipes$Model$EditRecipe(recipe.id)))
-						]),
-					_List_fromArray(
-						[
-							A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$edit)
-						])),
-					A2(
-					$elm$html$Html$a,
-					_List_fromArray(
-						[
-							$elm$html$Html$Events$onClick(
-							$author$project$Model$RecipeMessage(
-								$author$project$Recipes$Model$DeleteRecipe(recipe.id)))
-						]),
-					_List_fromArray(
-						[
-							A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$trash2)
-						]))
-				])));
-};
-var $author$project$Recipes$View$renderRecipes = function (recipes) {
-	return A2(
-		$elm$html$Html$table,
-		_List_fromArray(
-			[
-				$author$project$Utils$Main$roleAttr('grid')
-			]),
-		_List_fromArray(
-			[
-				A2(
-				$elm$html$Html$tbody,
-				_List_Nil,
-				A2($elm$core$List$map, $author$project$Recipes$View$renderRecipe, recipes))
-			]));
-};
-var $author$project$Recipes$Model$AddRecipe = {$: 'AddRecipe'};
-var $author$project$Recipes$Model$EditFilter = function (a) {
-	return {$: 'EditFilter', a: a};
-};
-var $author$project$Recipes$View$topBar = A2(
-	$elm$html$Html$table,
-	_List_Nil,
-	_List_fromArray(
+	return _List_fromArray(
 		[
+			$elm$html$Html$text(
+			$elm$core$String$fromInt(recipe.id)),
+			$elm$html$Html$text(recipe.name),
+			$elm$html$Html$text(
+			A2($elm$core$Maybe$withDefault, '', recipe.comment)),
 			A2(
-			$elm$html$Html$tr,
-			_List_Nil,
+			$elm$html$Html$a,
 			_List_fromArray(
 				[
-					A2(
-					$elm$html$Html$td,
-					_List_Nil,
-					_List_fromArray(
-						[
-							A2(
-							$elm$html$Html$input,
-							_List_fromArray(
-								[
-									$elm$html$Html$Attributes$class('search'),
-									$elm$html$Html$Attributes$type_('text'),
-									$elm$html$Html$Attributes$placeholder('Search'),
-									$elm$html$Html$Events$onInput(
-									A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$EditFilter))
-								]),
-							_List_Nil)
-						])),
-					A2(
-					$elm$html$Html$td,
-					_List_Nil,
-					_List_fromArray(
-						[
-							A2(
-							$elm$html$Html$button,
-							_List_fromArray(
-								[
-									$elm$html$Html$Events$onClick(
-									$author$project$Model$RecipeMessage($author$project$Recipes$Model$AddRecipe))
-								]),
-							_List_fromArray(
-								[
-									A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$plus)
-								]))
-						]))
+					$elm$html$Html$Events$onClick(
+					$author$project$Model$RecipeMessage(
+						$author$project$Recipes$Model$EditRecipe(recipe.id)))
+				]),
+			_List_fromArray(
+				[
+					A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$edit)
+				])),
+			A2(
+			$elm$html$Html$a,
+			_List_fromArray(
+				[
+					$elm$html$Html$Events$onClick(
+					$author$project$Model$RecipeMessage(
+						$author$project$Recipes$Model$DeleteRecipe(recipe.id)))
+				]),
+			_List_fromArray(
+				[
+					A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$trash2)
 				]))
-		]));
+		]);
+};
 var $author$project$Recipes$View$view = function (recipeData) {
 	var list = function () {
 		var _v0 = recipeData.recipes;
@@ -8300,7 +8259,20 @@ var $author$project$Recipes$View$view = function (recipeData) {
 				return $elm$html$Html$text('Error loading recipes');
 			default:
 				var recipes = _v0.a;
-				return $author$project$Recipes$View$renderRecipes(recipes);
+				return A2(
+					$author$project$Utils$View$filterListView,
+					{
+						filter: function (r) {
+							return A2(
+								$elm$core$String$contains,
+								$elm$core$String$toLower(recipeData.filter),
+								$elm$core$String$toLower(r.name));
+						},
+						filterChange: A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$EditFilter),
+						onAdd: $author$project$Model$RecipeMessage($author$project$Recipes$Model$AddRecipe),
+						row: $author$project$Recipes$View$renderRecipe
+					},
+					recipes);
 		}
 	}();
 	return A2(
@@ -8308,9 +8280,8 @@ var $author$project$Recipes$View$view = function (recipeData) {
 		_List_Nil,
 		_List_fromArray(
 			[
-				$author$project$Recipes$View$topBar,
-				$author$project$Recipes$ViewModal$modal(recipeData),
-				list
+				list,
+				$author$project$Recipes$ViewModal$modal(recipeData)
 			]));
 };
 var $author$project$Recipes$Main$viewRecipes = $author$project$Recipes$View$view;

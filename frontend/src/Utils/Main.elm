@@ -15,5 +15,5 @@ mapWebdata r =
         Err e ->
             Failure (Debug.log "" e)
 
-roleAttr : String -> Attribute msg
-roleAttr = attribute "role"
+role : String -> Attribute msg
+role = attribute "role"

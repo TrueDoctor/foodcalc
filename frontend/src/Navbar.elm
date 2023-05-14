@@ -4,7 +4,7 @@ import Utils.Cursor exposing (Cursor)
 import Html exposing (a, li, nav, strong, ul)
 import Html.Events exposing (onClick)
 import Model exposing (Msg(..), Tab)
-import Utils.Main exposing (roleAttr)
+import Utils.Main exposing (role)
 
 
 generateNavbar : (Tab -> String) -> Cursor Tab -> Html.Html Msg
@@ -30,7 +30,7 @@ generateNavbarItem active view tab =
     if active then
         li
             [ onClick (ChangeTab <| tab) ]
-            [ a [ roleAttr "button" ] [ Html.text <| view <| tab ] ]
+            [ a [ role "button" ] [ Html.text <| view <| tab ] ]
 
     else
         li

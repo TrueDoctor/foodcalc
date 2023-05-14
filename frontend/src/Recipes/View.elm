@@ -1,24 +1,13 @@
 module Recipes.View exposing (..)
 
 import FeatherIcons as FI
-import Html exposing (Html, a, button, div, input, table, tbody, td, text, tr)
-import Html.Attributes exposing (class, placeholder, type_)
-import Html.Events exposing (onClick, onInput)
+import Html exposing (Html, a, div, text)
+import Html.Events exposing (onClick)
 import Model exposing (Msg(..))
 import Recipes.Model exposing (..)
-import Utils.Main exposing (roleAttr)
-import Utils.Model exposing (RemoteData(..))
 import Recipes.ViewModal exposing (modal)
-
-
-topBar : Html Msg
-topBar =
-    table []
-        [ tr []
-            [ td [] [ input [ class "search", type_ "text", placeholder "Search", onInput <| RecipeMessage << EditFilter ] [] ]
-            , td [] [ button [ onClick <| RecipeMessage AddRecipe ] [ FI.toHtml [] FI.plus ] ]
-            ]
-        ]
+import Utils.Model exposing (RemoteData(..))
+import Utils.View exposing (filterListView)
 
 
 view : RecipeTabData -> Html Msg
@@ -36,29 +25,25 @@ view recipeData =
                     text "Error loading recipes"
 
                 Success recipes ->
-                    renderRecipes recipes
+                    filterListView
+                        { row = renderRecipe
+                        , filter = \r -> String.contains (String.toLower recipeData.filter) (String.toLower r.name)
+                        , filterChange = RecipeMessage << EditFilter
+                        , onAdd = RecipeMessage AddRecipe
+                        }
+                        recipes
     in
     div []
-        [ topBar
+        [ list
         , modal recipeData
-        , list
         ]
 
 
-renderRecipes : List Recipe -> Html Msg
-renderRecipes recipes =
-    table [ roleAttr "grid" ] [ tbody [] (List.map renderRecipe recipes) ]
-
-
-renderRecipe : Recipe -> Html Msg
+renderRecipe : Recipe -> List (Html Msg)
 renderRecipe recipe =
-    tr []
-        ([ Html.text (String.fromInt recipe.id)
-         , Html.text recipe.name
-         , Html.text (Maybe.withDefault "" recipe.comment)
-         , a [ onClick <| RecipeMessage <| EditRecipe recipe.id ] [ FI.toHtml [] FI.edit ]
-         , a [ onClick <| RecipeMessage <| DeleteRecipe recipe.id ] [ FI.toHtml [] FI.trash2 ]
-         ]
-            |> List.map (\x -> td [] [ x ])
-        )
-
+    [ Html.text (String.fromInt recipe.id)
+    , Html.text recipe.name
+    , Html.text (Maybe.withDefault "" recipe.comment)
+    , a [ onClick <| RecipeMessage <| EditRecipe recipe.id ] [ FI.toHtml [] FI.edit ]
+    , a [ onClick <| RecipeMessage <| DeleteRecipe recipe.id ] [ FI.toHtml [] FI.trash2 ]
+    ]
