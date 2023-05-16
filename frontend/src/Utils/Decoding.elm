@@ -22,3 +22,4 @@ decodeUnit =
     map2 Unit
         (field "id" int)
         (field "unit" string)
+

@@ -7,6 +7,7 @@ import Svg.Attributes exposing (from)
 import Utils.Cursor
 import Utils.Main exposing (mapWebdata)
 import Utils.Model exposing (RemoteData(..))
+import Recipes.Service exposing (fetchRecipeIngredients)
 
 
 mapTab : (RecipeTabData -> Tab) -> Tab -> Tab
@@ -104,14 +105,16 @@ handleMsg msg model =
                 save =
                     mapTab <| \r -> Recipes <| { r | modal = Edit editor }
             in
-            ( updateModel save model, Cmd.map RecipeMessage fetchRecipes )
+            ( updateModel save model, Cmd.map RecipeMessage (fetchRecipeIngredients id)  )
 
         CloseModal ->
             let
                 save =
                     mapTab <| \r -> Recipes <| { r | modal = NoModal }
             in
-            ( Debug.log "" <| updateModel save model, Cmd.none )
+            (  updateModel save model, Cmd.none )
+
+        
 
         ModalMsg m ->
             handleModalMsg m model

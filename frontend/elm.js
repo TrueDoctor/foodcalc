@@ -5363,12 +5363,20 @@ var $author$project$Utils$Cursor$create = F2(
 	function (a, r) {
 		return {active: a, left: _List_Nil, right: r};
 	});
-var $author$project$Ingredients$Model$GotIngredients = function (a) {
-	return {$: 'GotIngredients', a: a};
+var $author$project$Ingredients$Model$GotWebData = function (a) {
+	return {$: 'GotWebData', a: a};
+};
+var $author$project$Ingredients$Model$IngredientsList = function (a) {
+	return {$: 'IngredientsList', a: a};
 };
 var $author$project$Settings$backend = function (path) {
 	return 'http://localhost:3000' + path;
 };
+var $elm$core$Basics$composeL = F3(
+	function (g, f, x) {
+		return g(
+			f(x));
+	});
 var $author$project$Ingredients$Model$Ingredient = F4(
 	function (id, name, energy, comment) {
 		return {comment: comment, energy: energy, id: id, name: name};
@@ -6222,7 +6230,10 @@ var $elm$http$Http$get = function (r) {
 };
 var $author$project$Ingredients$Service$fetchIngredients = $elm$http$Http$get(
 	{
-		expect: A2($elm$http$Http$expectJson, $author$project$Ingredients$Model$GotIngredients, $author$project$Ingredients$Service$decodeIngredientList),
+		expect: A2(
+			$elm$http$Http$expectJson,
+			A2($elm$core$Basics$composeL, $author$project$Ingredients$Model$GotWebData, $author$project$Ingredients$Model$IngredientsList),
+			$author$project$Ingredients$Service$decodeIngredientList),
 		url: $author$project$Settings$backend('/ingredients/list')
 	});
 var $elm$core$Platform$Cmd$map = _Platform_map;
@@ -6311,6 +6322,84 @@ var $author$project$Ingredients$Update$editor = F2(
 			return itab.modal;
 		}
 	});
+var $author$project$Ingredients$Model$CloseModal = {$: 'CloseModal'};
+var $author$project$Ingredients$Model$SuccessfulPost = function (a) {
+	return {$: 'SuccessfulPost', a: a};
+};
+var $elm$json$Json$Encode$int = _Json_wrap;
+var $elm$json$Json$Encode$null = _Json_encodeNull;
+var $elm$json$Json$Encode$object = function (pairs) {
+	return _Json_wrap(
+		A3(
+			$elm$core$List$foldl,
+			F2(
+				function (_v0, obj) {
+					var k = _v0.a;
+					var v = _v0.b;
+					return A3(_Json_addField, k, v, obj);
+				}),
+			_Json_emptyObject(_Utils_Tuple0),
+			pairs));
+};
+var $elm$json$Json$Encode$string = _Json_wrap;
+var $author$project$Ingredients$Service$encodeIngredient = function (ingredient) {
+	return $elm$json$Json$Encode$object(
+		_List_fromArray(
+			[
+				_Utils_Tuple2(
+				'ingredient_id',
+				A2(
+					$elm$core$Maybe$withDefault,
+					$elm$json$Json$Encode$null,
+					A2($elm$core$Maybe$map, $elm$json$Json$Encode$int, ingredient.id))),
+				_Utils_Tuple2(
+				'name',
+				$elm$json$Json$Encode$string(ingredient.name)),
+				_Utils_Tuple2(
+				'energy',
+				$elm$json$Json$Encode$string(ingredient.energy)),
+				_Utils_Tuple2(
+				'comment',
+				$elm$json$Json$Encode$string(ingredient.comment))
+			]));
+};
+var $elm$http$Http$jsonBody = function (value) {
+	return A2(
+		_Http_pair,
+		'application/json',
+		A2($elm$json$Json$Encode$encode, 0, value));
+};
+var $elm$core$Debug$log = _Debug_log;
+var $elm$http$Http$post = function (r) {
+	return $elm$http$Http$request(
+		{body: r.body, expect: r.expect, headers: _List_Nil, method: 'POST', timeout: $elm$core$Maybe$Nothing, tracker: $elm$core$Maybe$Nothing, url: r.url});
+};
+var $author$project$Ingredients$Service$addOrUpdateIngredient = function (ingredient) {
+	var url = function () {
+		var _v0 = ingredient.id;
+		if (_v0.$ === 'Just') {
+			var id = _v0.a;
+			return $author$project$Settings$backend(
+				'/ingredients/update/' + $elm$core$String$fromInt(id));
+		} else {
+			return $author$project$Settings$backend('/ingredients/create');
+		}
+	}();
+	return $elm$http$Http$post(
+		{
+			body: A2(
+				$elm$core$Debug$log,
+				'',
+				$elm$http$Http$jsonBody(
+					$author$project$Ingredients$Service$encodeIngredient(ingredient))),
+			expect: A2(
+				$elm$http$Http$expectJson,
+				A2($elm$core$Basics$composeL, $author$project$Ingredients$Model$GotWebData, $author$project$Ingredients$Model$SuccessfulPost),
+				$elm$json$Json$Decode$succeed(_Utils_Tuple0)),
+			url: $author$project$Settings$backend(url)
+		});
+};
+var $elm$core$Platform$Cmd$batch = _Platform_batch;
 var $author$project$Ingredients$Update$mapTab = F2(
 	function (f, tab) {
 		if (tab.$ === 'Ingredients') {
@@ -6321,7 +6410,6 @@ var $author$project$Ingredients$Update$mapTab = F2(
 			return any;
 		}
 	});
-var $elm$core$Platform$Cmd$batch = _Platform_batch;
 var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
 var $author$project$Utils$Cursor$modifyAt = F3(
 	function (index, f, cursor) {
@@ -6416,7 +6504,7 @@ var $author$project$Ingredients$Update$handleModalMsg = F2(
 							}),
 						model),
 					$elm$core$Platform$Cmd$none);
-			default:
+			case 'EditComment':
 				var comment = msg.a;
 				return _Utils_Tuple2(
 					A2(
@@ -6429,6 +6517,31 @@ var $author$project$Ingredients$Update$handleModalMsg = F2(
 							}),
 						model),
 					$elm$core$Platform$Cmd$none);
+			default:
+				var e = msg.a;
+				var save = $author$project$Ingredients$Update$mapTab(
+					function (i) {
+						return $author$project$Model$Ingredients(
+							_Utils_update(
+								i,
+								{modal: $author$project$Ingredients$Model$NoModal}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Ingredients$Update$updateModel, save, model),
+					$elm$core$Platform$Cmd$batch(
+						_List_fromArray(
+							[
+								A2(
+								$elm$core$Platform$Cmd$map,
+								$author$project$Model$IngredientMessage,
+								$author$project$Ingredients$Service$addOrUpdateIngredient(e)),
+								A2(
+								$elm$core$Platform$Cmd$map,
+								function (_v1) {
+									return $author$project$Model$IngredientMessage($author$project$Ingredients$Model$CloseModal);
+								},
+								$elm$core$Platform$Cmd$none)
+							])));
 		}
 	});
 var $author$project$Utils$Model$Failure = function (a) {
@@ -6437,7 +6550,6 @@ var $author$project$Utils$Model$Failure = function (a) {
 var $author$project$Utils$Model$Success = function (a) {
 	return {$: 'Success', a: a};
 };
-var $elm$core$Debug$log = _Debug_log;
 var $author$project$Utils$Main$mapWebdata = function (r) {
 	if (r.$ === 'Ok') {
 		var a = r.a;
@@ -6448,23 +6560,32 @@ var $author$project$Utils$Main$mapWebdata = function (r) {
 			A2($elm$core$Debug$log, '', e));
 	}
 };
+var $author$project$Ingredients$Update$handleWebData = F2(
+	function (data, model) {
+		if (data.$ === 'IngredientsList') {
+			var ingredients = data.a;
+			var save = $author$project$Ingredients$Update$mapTab(
+				function (i) {
+					return $author$project$Model$Ingredients(
+						_Utils_update(
+							i,
+							{
+								ingredients: $author$project$Utils$Main$mapWebdata(ingredients)
+							}));
+				});
+			return _Utils_Tuple2(
+				A2($author$project$Ingredients$Update$updateModel, save, model),
+				$elm$core$Platform$Cmd$none);
+		} else {
+			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+		}
+	});
 var $author$project$Ingredients$Update$handleMsg = F2(
 	function (msg, model) {
 		switch (msg.$) {
-			case 'GotIngredients':
-				var r = msg.a;
-				var save = $author$project$Ingredients$Update$mapTab(
-					function (i) {
-						return $author$project$Model$Ingredients(
-							_Utils_update(
-								i,
-								{
-									ingredients: $author$project$Utils$Main$mapWebdata(r)
-								}));
-					});
-				return _Utils_Tuple2(
-					A2($author$project$Ingredients$Update$updateModel, save, model),
-					$elm$core$Platform$Cmd$none);
+			case 'GotWebData':
+				var data = msg.a;
+				return A2($author$project$Ingredients$Update$handleWebData, data, model);
 			case 'EditFilter':
 				var s = msg.a;
 				var save = $author$project$Ingredients$Update$mapTab(
@@ -6565,11 +6686,6 @@ var $author$project$Recipes$Model$GotWebData = function (a) {
 var $author$project$Recipes$Model$MetaIngredientData = function (a) {
 	return {$: 'MetaIngredientData', a: a};
 };
-var $elm$core$Basics$composeL = F3(
-	function (g, f, x) {
-		return g(
-			f(x));
-	});
 var $author$project$Recipes$Model$IsDirect = function (a) {
 	return {$: 'IsDirect', a: a};
 };
@@ -6611,6 +6727,39 @@ var $author$project$Recipes$Service$fetchAllMetaIngredients = $elm$http$Http$get
 			$author$project$Recipes$Service$decodeMetaIngredients),
 		url: 'http://localhost:3000/recipes/meta_ingredients/list'
 	});
+var $author$project$Recipes$Model$RecipeIngredientData = function (a) {
+	return {$: 'RecipeIngredientData', a: a};
+};
+var $author$project$Recipes$Model$WeightedMetaIngredient = F3(
+	function (metaIngredient, amount, unit) {
+		return {amount: amount, metaIngredient: metaIngredient, unit: unit};
+	});
+var $author$project$Utils$Model$Unit = F2(
+	function (unit_id, name) {
+		return {name: name, unit_id: unit_id};
+	});
+var $author$project$Utils$Decoding$decodeUnit = A3(
+	$elm$json$Json$Decode$map2,
+	$author$project$Utils$Model$Unit,
+	A2($elm$json$Json$Decode$field, 'id', $elm$json$Json$Decode$int),
+	A2($elm$json$Json$Decode$field, 'unit', $elm$json$Json$Decode$string));
+var $author$project$Recipes$Service$decodeNestedWeightedMetaIngredient = A4(
+	$elm$json$Json$Decode$map3,
+	$author$project$Recipes$Model$WeightedMetaIngredient,
+	A2($elm$json$Json$Decode$field, 'meta_ingredient', $author$project$Recipes$Service$decodeMetaIngredient),
+	A2($elm$json$Json$Decode$field, 'weight', $elm$json$Json$Decode$string),
+	A2($elm$json$Json$Decode$field, 'unit', $author$project$Utils$Decoding$decodeUnit));
+var $author$project$Recipes$Service$fetchRecipeIngredients = function (recipeId) {
+	return $elm$http$Http$get(
+		{
+			expect: A2(
+				$elm$http$Http$expectJson,
+				A2($elm$core$Basics$composeL, $author$project$Recipes$Model$GotWebData, $author$project$Recipes$Model$RecipeIngredientData),
+				$elm$json$Json$Decode$list(
+					A2($elm$json$Json$Decode$field, 'ingredient', $author$project$Recipes$Service$decodeNestedWeightedMetaIngredient))),
+			url: 'http://localhost:3000/recipes/' + ($elm$core$String$fromInt(recipeId) + '/meta_ingredients/list')
+		});
+};
 var $author$project$Recipes$Model$RecipesData = function (a) {
 	return {$: 'RecipesData', a: a};
 };
@@ -6870,7 +7019,10 @@ var $author$project$Recipes$Update$handleMsg = F2(
 					});
 				return _Utils_Tuple2(
 					A2($author$project$Recipes$Update$updateModel, save, model),
-					A2($elm$core$Platform$Cmd$map, $author$project$Model$RecipeMessage, $author$project$Recipes$Service$fetchRecipes));
+					A2(
+						$elm$core$Platform$Cmd$map,
+						$author$project$Model$RecipeMessage,
+						$author$project$Recipes$Service$fetchRecipeIngredients(id)));
 			case 'CloseModal':
 				var save = $author$project$Recipes$Update$mapTab(
 					function (r) {
@@ -6880,10 +7032,7 @@ var $author$project$Recipes$Update$handleMsg = F2(
 								{modal: $author$project$Recipes$Model$NoModal}));
 					});
 				return _Utils_Tuple2(
-					A2(
-						$elm$core$Debug$log,
-						'',
-						A2($author$project$Recipes$Update$updateModel, save, model)),
+					A2($author$project$Recipes$Update$updateModel, save, model),
 					$elm$core$Platform$Cmd$none);
 			case 'ModalMsg':
 				var m = msg.a;
@@ -7147,7 +7296,6 @@ var $author$project$Main$update = F2(
 				return A2($author$project$Recipes$Main$handleRecipesMsg, m, model);
 		}
 	});
-var $elm$json$Json$Encode$string = _Json_wrap;
 var $elm$html$Html$Attributes$stringProperty = F2(
 	function (key, string) {
 		return A2(
@@ -7527,7 +7675,6 @@ var $author$project$Utils$View$filterListView = F2(
 					A2($author$project$Utils$View$listView, options.row, filtered)
 				]));
 	});
-var $author$project$Ingredients$Model$CloseModal = {$: 'CloseModal'};
 var $author$project$Ingredients$Model$EditComment = function (a) {
 	return {$: 'EditComment', a: a};
 };
@@ -7537,11 +7684,11 @@ var $author$project$Ingredients$Model$EditEnergy = function (a) {
 var $author$project$Ingredients$Model$EditName = function (a) {
 	return {$: 'EditName', a: a};
 };
-var $author$project$Ingredients$Model$IngredientChanged = function (a) {
-	return {$: 'IngredientChanged', a: a};
-};
 var $author$project$Ingredients$Model$ModalMsg = function (a) {
 	return {$: 'ModalMsg', a: a};
+};
+var $author$project$Ingredients$Model$Save = function (a) {
+	return {$: 'Save', a: a};
 };
 var $elm$html$Html$article = _VirtualDom_node('article');
 var $elm$html$Html$footer = _VirtualDom_node('footer');
@@ -7698,7 +7845,8 @@ var $author$project$Ingredients$View$ingredientDetails = F3(
 										[
 											$elm$html$Html$Events$onClick(
 											$author$project$Model$IngredientMessage(
-												$author$project$Ingredients$Model$IngredientChanged(ingredient)))
+												$author$project$Ingredients$Model$ModalMsg(
+													$author$project$Ingredients$Model$Save(ingredient))))
 										]),
 									_List_fromArray(
 										[

@@ -15,17 +15,17 @@ decodeRecipe =
         (field "comment" (nullable string))
 
 
-decodeWeightedMetaIngredients : Decoder (List WeightedMetaIngredient)
-decodeWeightedMetaIngredients =
-    list decodeWeightedMetaIngredient
+decodeNestedWeightedMetaIngredients : Decoder (List WeightedMetaIngredient)
+decodeNestedWeightedMetaIngredients =
+    list decodeNestedWeightedMetaIngredient
 
 
-decodeWeightedMetaIngredient : Decoder WeightedMetaIngredient
-decodeWeightedMetaIngredient =
+decodeNestedWeightedMetaIngredient : Decoder WeightedMetaIngredient
+decodeNestedWeightedMetaIngredient =
     map3 WeightedMetaIngredient
         (field "meta_ingredient" decodeMetaIngredient)
         (field "weight" string)
-        (field "unit" decodeUnit    )
+        (field "unit" decodeUnit)
 
 
 decodeMetaIngredient : Decoder MetaIngredient
@@ -60,3 +60,12 @@ fetchAllMetaIngredients =
         { url = "http://localhost:3000/recipes/meta_ingredients/list"
         , expect = Http.expectJson (GotWebData << MetaIngredientData) decodeMetaIngredients
         }
+
+
+fetchRecipeIngredients : Int -> Cmd RecipeMsg
+fetchRecipeIngredients recipeId =
+    Http.get
+        { url = "http://localhost:3000/recipes/" ++ String.fromInt recipeId ++ "/meta_ingredients/list"
+        , expect = Http.expectJson (GotWebData << RecipeIngredientData) (list <| field "ingredient" decodeNestedWeightedMetaIngredient)
+        }
+

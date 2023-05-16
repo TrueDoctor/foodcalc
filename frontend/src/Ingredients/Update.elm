@@ -1,7 +1,9 @@
 module Ingredients.Update exposing (handleMsg)
 
 import Ingredients.Model exposing (..)
+import Ingredients.Service exposing (addOrUpdateIngredient)
 import Model exposing (..)
+import Svg.Attributes exposing (in_, type_)
 import Utils.Cursor
 import Utils.Main exposing (..)
 import Utils.Model exposing (RemoteData(..))
@@ -39,12 +41,8 @@ updateModel f model =
 handleMsg : IngredientMsg -> Model -> ( Model, Cmd Msg )
 handleMsg msg model =
     case msg of
-        GotIngredients r ->
-            let
-                save =
-                    mapTab <| \i -> Ingredients { i | ingredients = mapWebdata r }
-            in
-            ( updateModel save model, Cmd.none )
+        GotWebData data ->
+            handleWebData data model
 
         EditFilter s ->
             let
@@ -81,23 +79,56 @@ handleMsg msg model =
             ( model, Cmd.none )
 
 
+handleWebData : IngredientWebData -> Model -> ( Model, Cmd Msg )
+handleWebData data model =
+    case data of
+        IngredientsList ingredients ->
+            let
+                save =
+                    mapTab <| \i -> Ingredients { i | ingredients = mapWebdata ingredients }
+            in
+            ( updateModel save model, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
+
+
 handleModalMsg : ModalMsg -> Model -> ( Model, Cmd Msg )
 handleModalMsg msg model =
     let
-        update modal f = case modal of
-            Edit e -> Edit (f e)
-            Add e -> Add (f e)
-            any -> any
-        mapUpdate f = mapTab <| \i -> Ingredients { i | modal = update i.modal f }
+        update modal f =
+            case modal of
+                Edit e ->
+                    Edit (f e)
+
+                Add e ->
+                    Add (f e)
+
+                any ->
+                    any
+
+        mapUpdate f =
+            mapTab <| \i -> Ingredients { i | modal = update i.modal f }
     in
-    
     case msg of
         EditName name ->
-
-            ( updateModel (mapUpdate (\e -> {e | name=name})) model, Cmd.none )
+            ( updateModel (mapUpdate (\e -> { e | name = name })) model, Cmd.none )
 
         EditEnergy energy ->
-            ( updateModel (mapUpdate (\e -> {e | energy=energy})) model, Cmd.none )
+            ( updateModel (mapUpdate (\e -> { e | energy = energy })) model, Cmd.none )
 
         EditComment comment ->
-            ( updateModel (mapUpdate (\e -> {e | comment=comment})) model, Cmd.none )
+            ( updateModel (mapUpdate (\e -> { e | comment = comment })) model, Cmd.none )
+
+        Save e ->
+            let
+                save =
+                    mapTab <| \i -> Ingredients { i | modal = Ingredients.Model.NoModal }
+                
+            in
+            ( updateModel save model
+            , Cmd.batch
+                [ Cmd.map IngredientMessage (addOrUpdateIngredient e)
+                , Cmd.map (\_ -> IngredientMessage CloseModal) Cmd.none
+                ]
+            )

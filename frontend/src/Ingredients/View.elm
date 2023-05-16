@@ -77,7 +77,7 @@ ingredientDetails submit title ingredient =
             , input [ type_ "text", placeholder "comment", onInput <| IngredientMessage << IM.ModalMsg << IM.EditComment, value ingredient.comment ] []
             , footer [ class "grid" ]
                 [ button [ onClick <| IngredientMessage IM.CloseModal ] [ Html.text "Cancel" ]
-                , button [ onClick <| IngredientMessage <| IM.IngredientChanged ingredient ] [ Html.text submit ]
+                , button [ onClick <| IngredientMessage <| IM.ModalMsg <| IM.Save ingredient ] [ Html.text submit ]
                 ]
             ]
         ]

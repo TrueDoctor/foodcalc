@@ -185,7 +185,7 @@ dropdownList2 ingredients selected =
             picoOption
                 [ text <| metaIngredientName <| Just x ]
         )
-        (Debug.log "ingredients" ingredients)
+        ingredients
 
 
 dropdownList : List MetaIngredient -> Maybe MetaIngredient -> List (Html Msg)
@@ -196,7 +196,7 @@ dropdownList ingredients selected =
                 [ value <| metaIngredientName <| Just x ]
                 [ text <| metaIngredientName <| Just x ]
         )
-        (Debug.log "ingredients" ingredients)
+        ingredients
 
 
 metaIngredientName : Maybe MetaIngredient -> String
