@@ -70,6 +70,8 @@ type RecipeWebData
     = RecipesData (Result Http.Error (List Recipe))
     | MetaIngredientData (Result Http.Error (List MetaIngredient))
     | RecipeIngredientData (Result Http.Error (List WeightedMetaIngredient))
+    | RecipeId RecipeEditor (Result Http.Error Int)
+    | PostResult (Result Http.Error ())
 
 
 type RecipeMsg

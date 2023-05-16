@@ -6650,6 +6650,74 @@ var $author$project$Recipes$Model$Add = function (a) {
 var $author$project$Recipes$Model$Edit = function (a) {
 	return {$: 'Edit', a: a};
 };
+var $author$project$Recipes$Model$GotWebData = function (a) {
+	return {$: 'GotWebData', a: a};
+};
+var $author$project$Recipes$Model$RecipeId = F2(
+	function (a, b) {
+		return {$: 'RecipeId', a: a, b: b};
+	});
+var $author$project$Utils$Decoding$maybe = F2(
+	function (f, m) {
+		if (m.$ === 'Just') {
+			var value = m.a;
+			return f(value);
+		} else {
+			return $elm$json$Json$Encode$null;
+		}
+	});
+var $author$project$Recipes$Service$encodeRecipeEditor = function (editor) {
+	return $elm$json$Json$Encode$object(
+		_List_fromArray(
+			[
+				_Utils_Tuple2(
+				'recipe_id',
+				A2($author$project$Utils$Decoding$maybe, $elm$json$Json$Encode$int, editor.id)),
+				_Utils_Tuple2(
+				'name',
+				$elm$json$Json$Encode$string(editor.name)),
+				_Utils_Tuple2(
+				'comment',
+				A2($author$project$Utils$Decoding$maybe, $elm$json$Json$Encode$string, editor.comment))
+			]));
+};
+var $author$project$Recipes$Service$updateRecipeEditor = F2(
+	function (url, editor) {
+		return $elm$http$Http$post(
+			{
+				body: $elm$http$Http$jsonBody(
+					$author$project$Recipes$Service$encodeRecipeEditor(editor)),
+				expect: A2(
+					$elm$http$Http$expectJson,
+					A2(
+						$elm$core$Basics$composeL,
+						$author$project$Recipes$Model$GotWebData,
+						$author$project$Recipes$Model$RecipeId(editor)),
+					$elm$json$Json$Decode$int),
+				url: 'http://localhost:3000/recipes' + url
+			});
+	});
+var $author$project$Recipes$Service$addOrUpdateRecipe = function (modal) {
+	switch (modal.$) {
+		case 'Add':
+			var editor = modal.a;
+			return A2($author$project$Recipes$Service$updateRecipeEditor, '/create', editor);
+		case 'Edit':
+			var editor = modal.a;
+			var _v1 = editor.id;
+			if (_v1.$ === 'Just') {
+				var id = _v1.a;
+				return A2(
+					$author$project$Recipes$Service$updateRecipeEditor,
+					'/' + ($elm$core$String$fromInt(id) + '/update'),
+					editor);
+			} else {
+				return $elm$core$Platform$Cmd$none;
+			}
+		default:
+			return $elm$core$Platform$Cmd$none;
+	}
+};
 var $elm$core$Maybe$andThen = F2(
 	function (callback, maybeValue) {
 		if (maybeValue.$ === 'Just') {
@@ -6678,9 +6746,6 @@ var $author$project$Recipes$Model$emptyRecipeEditor = {
 	ingredients: $author$project$Utils$Model$Success(_List_Nil),
 	name: '',
 	steps: $author$project$Utils$Model$Success(_List_Nil)
-};
-var $author$project$Recipes$Model$GotWebData = function (a) {
-	return {$: 'GotWebData', a: a};
 };
 var $author$project$Recipes$Model$MetaIngredientData = function (a) {
 	return {$: 'MetaIngredientData', a: a};
@@ -6923,6 +6988,7 @@ var $author$project$Recipes$Update$handleModalMsg = F2(
 						return _Utils_update(
 							e,
 							{
+								activeIngredientIndex: $elm$core$Maybe$Nothing,
 								ingredients: updated(e.ingredients)
 							});
 					});
@@ -6935,6 +7001,167 @@ var $author$project$Recipes$Update$handleModalMsg = F2(
 			default:
 				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
+	});
+var $author$project$Recipes$Model$PostResult = function (a) {
+	return {$: 'PostResult', a: a};
+};
+var $author$project$Recipes$Service$encodeRecipe = function (recipe) {
+	return $elm$json$Json$Encode$object(
+		_List_fromArray(
+			[
+				_Utils_Tuple2(
+				'recipe_id',
+				$elm$json$Json$Encode$int(recipe.id)),
+				_Utils_Tuple2(
+				'name',
+				$elm$json$Json$Encode$string(recipe.name)),
+				_Utils_Tuple2(
+				'comment',
+				A2($author$project$Utils$Decoding$maybe, $elm$json$Json$Encode$string, recipe.comment))
+			]));
+};
+var $elm$json$Json$Encode$float = _Json_wrap;
+var $author$project$Recipes$Service$encodeMetaIngredient = function (ingredient) {
+	if (ingredient.$ === 'IsSubRecipe') {
+		var recipe = ingredient.a;
+		return $elm$json$Json$Encode$object(
+			_List_fromArray(
+				[
+					_Utils_Tuple2(
+					'MetaRecipe',
+					$author$project$Recipes$Service$encodeRecipe(recipe))
+				]));
+	} else {
+		var i = ingredient.a;
+		return $elm$json$Json$Encode$object(
+			_List_fromArray(
+				[
+					_Utils_Tuple2(
+					'Ingredient',
+					$elm$json$Json$Encode$object(
+						_List_fromArray(
+							[
+								_Utils_Tuple2(
+								'ingredient_id',
+								$elm$json$Json$Encode$int(i.id)),
+								_Utils_Tuple2(
+								'name',
+								$elm$json$Json$Encode$string(i.name)),
+								_Utils_Tuple2(
+								'comment',
+								A2($author$project$Utils$Decoding$maybe, $elm$json$Json$Encode$string, i.comment)),
+								_Utils_Tuple2(
+								'energy',
+								$elm$json$Json$Encode$float(i.energy))
+							])))
+				]));
+	}
+};
+var $author$project$Utils$Decoding$encodeUnit = function (unit) {
+	return $elm$json$Json$Encode$object(
+		_List_fromArray(
+			[
+				_Utils_Tuple2(
+				'unit_id',
+				$elm$json$Json$Encode$int(unit.unit_id)),
+				_Utils_Tuple2(
+				'name',
+				$elm$json$Json$Encode$string(unit.name))
+			]));
+};
+var $author$project$Recipes$Service$encodeWeightedMetaIngredient = function (ingredient) {
+	return $elm$json$Json$Encode$object(
+		_List_fromArray(
+			[
+				_Utils_Tuple2(
+				'ingredient',
+				$author$project$Recipes$Service$encodeMetaIngredient(ingredient.metaIngredient)),
+				_Utils_Tuple2(
+				'amount',
+				$elm$json$Json$Encode$string(
+					(ingredient.amount === '') ? '0' : ingredient.amount)),
+				_Utils_Tuple2(
+				'unit',
+				$author$project$Utils$Decoding$encodeUnit(ingredient.unit))
+			]));
+};
+var $elm$json$Json$Encode$list = F2(
+	function (func, entries) {
+		return _Json_wrap(
+			A3(
+				$elm$core$List$foldl,
+				_Json_addEntry(func),
+				_Json_emptyArray(_Utils_Tuple0),
+				entries));
+	});
+var $author$project$Recipes$Service$encodeMetaIngredients = function (ingredients) {
+	if (ingredients.$ === 'Success') {
+		var i = ingredients.a;
+		return A2($elm$json$Json$Encode$list, $author$project$Recipes$Service$encodeWeightedMetaIngredient, i);
+	} else {
+		return $elm$json$Json$Encode$null;
+	}
+};
+var $author$project$Recipes$Service$updateRecipeIngredients = F2(
+	function (editor, id) {
+		return $elm$http$Http$post(
+			{
+				body: $elm$http$Http$jsonBody(
+					$author$project$Recipes$Service$encodeMetaIngredients(editor.ingredients)),
+				expect: A2(
+					$elm$http$Http$expectJson,
+					A2($elm$core$Basics$composeL, $author$project$Recipes$Model$GotWebData, $author$project$Recipes$Model$PostResult),
+					$elm$json$Json$Decode$succeed(_Utils_Tuple0)),
+				url: 'http://localhost:3000/recipes/' + ($elm$core$String$fromInt(id) + '/meta_ingredients/update')
+			});
+	});
+var $author$project$Recipes$Service$encodeStep = function (step) {
+	return $elm$json$Json$Encode$object(
+		_List_fromArray(
+			[
+				_Utils_Tuple2(
+				'step_id',
+				A2($author$project$Utils$Decoding$maybe, $elm$json$Json$Encode$int, step.id)),
+				_Utils_Tuple2(
+				'title',
+				$elm$json$Json$Encode$string(step.title)),
+				_Utils_Tuple2(
+				'description',
+				$elm$json$Json$Encode$string(step.description)),
+				_Utils_Tuple2(
+				'order',
+				$elm$json$Json$Encode$float(step.order))
+			]));
+};
+var $author$project$Recipes$Service$encodeSteps = function (steps) {
+	if (steps.$ === 'Success') {
+		var s = steps.a;
+		return A2($elm$json$Json$Encode$list, $author$project$Recipes$Service$encodeStep, s);
+	} else {
+		return $elm$json$Json$Encode$null;
+	}
+};
+var $author$project$Recipes$Service$updateRecipeSteps = F2(
+	function (editor, id) {
+		return $elm$http$Http$post(
+			{
+				body: $elm$http$Http$jsonBody(
+					$author$project$Recipes$Service$encodeSteps(editor.steps)),
+				expect: A2(
+					$elm$http$Http$expectJson,
+					A2($elm$core$Basics$composeL, $author$project$Recipes$Model$GotWebData, $author$project$Recipes$Model$PostResult),
+					$elm$json$Json$Decode$succeed(_Utils_Tuple0)),
+				url: 'http://localhost:3000/recipes/' + ($elm$core$String$fromInt(id) + '/steps/update')
+			});
+	});
+var $author$project$Recipes$Service$updateRecipeExtras = F2(
+	function (editor, id) {
+		return $elm$core$Platform$Cmd$batch(
+			_List_fromArray(
+				[
+					A2($author$project$Recipes$Service$updateRecipeIngredients, editor, id),
+					A2($author$project$Recipes$Service$updateRecipeSteps, editor, id)
+				]));
 	});
 var $author$project$Recipes$Update$handleWebData = F2(
 	function (result, model) {
@@ -6967,7 +7194,7 @@ var $author$project$Recipes$Update$handleWebData = F2(
 				return _Utils_Tuple2(
 					A2($author$project$Recipes$Update$updateModel, save, model),
 					$elm$core$Platform$Cmd$none);
-			default:
+			case 'RecipeIngredientData':
 				var meta = result.a;
 				return _Utils_Tuple2(
 					A2(
@@ -6983,6 +7210,22 @@ var $author$project$Recipes$Update$handleWebData = F2(
 							}),
 						model),
 					$elm$core$Platform$Cmd$none);
+			case 'RecipeId':
+				var editor = result.a;
+				var meta = result.b;
+				if (meta.$ === 'Ok') {
+					var id = meta.a;
+					return _Utils_Tuple2(
+						model,
+						A2(
+							$elm$core$Platform$Cmd$map,
+							$author$project$Model$RecipeMessage,
+							A2($author$project$Recipes$Service$updateRecipeExtras, editor, id)));
+				} else {
+					return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+				}
+			default:
+				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
 	});
 var $author$project$Recipes$Update$recipeList = function (model) {
@@ -7091,6 +7334,22 @@ var $author$project$Recipes$Update$handleMsg = F2(
 				return _Utils_Tuple2(
 					A2($author$project$Recipes$Update$updateModel, save, model),
 					$elm$core$Platform$Cmd$none);
+			case 'RecipeChanged':
+				var modal = function () {
+					var _v1 = model.tabs.active;
+					if (_v1.$ === 'Recipes') {
+						var r = _v1.a;
+						return r.modal;
+					} else {
+						return $author$project$Recipes$Model$NoModal;
+					}
+				}();
+				return _Utils_Tuple2(
+					model,
+					A2(
+						$elm$core$Platform$Cmd$map,
+						$author$project$Model$RecipeMessage,
+						$author$project$Recipes$Service$addOrUpdateRecipe(modal)));
 			case 'ModalMsg':
 				var m = msg.a;
 				return A2($author$project$Recipes$Update$handleModalMsg, m, model);

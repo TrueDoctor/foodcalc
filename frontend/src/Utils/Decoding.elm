@@ -1,25 +1,41 @@
 module Utils.Decoding exposing (..)
 
 import Ingredients.Model exposing (..)
-import Json.Decode exposing (..)
+import Json.Decode as Decode
+import Json.Encode as Encode
 import Model exposing (..)
 import Utils.Model exposing (Unit)
 
 
-decodeStringFloat : Decoder Float
+decodeStringFloat : Decode.Decoder Float
 decodeStringFloat =
     let
         parseFloat s =
             String.toFloat s
-                |> Maybe.map succeed
-                |> Maybe.withDefault (fail "Could not parse float")
+                |> Maybe.map Decode.succeed
+                |> Maybe.withDefault (Decode.fail "Could not parse float")
     in
-    string |> andThen parseFloat
+    Decode.string |> Decode.andThen parseFloat
 
 
-decodeUnit : Decoder Unit
+decodeUnit : Decode.Decoder Unit
 decodeUnit =
-    map2 Unit
-        (field "unit_id" int)
-        (field "name" string)
+    Decode.map2 Unit
+        (Decode.field "unit_id" Decode.int)
+        (Decode.field "name" Decode.string)
 
+encodeUnit : Unit -> Encode.Value
+encodeUnit unit =
+    Encode.object
+        [ ( "unit_id", Encode.int unit.unit_id )
+        , ( "name", Encode.string unit.name )
+        ]
+
+maybe : (a -> Encode.Value) -> Maybe a -> Encode.Value
+maybe f m =
+    case m of
+        Just value ->
+            f value
+
+        Nothing ->
+            Encode.null

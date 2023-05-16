@@ -38,8 +38,8 @@ pub fn create(foodbase: Arc<FoodBase>) -> MethodRouter {
         };
         let result = db.insert_recipe(&recipe).await;
         match result {
-            Ok(_) => StatusCode::CREATED,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+            Ok(r) => (StatusCode::CREATED, Json(Some(r.recipe_id))),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, Json(None)),
         }
     })
 }
@@ -55,8 +55,8 @@ pub fn update(foodbase: Arc<FoodBase>) -> MethodRouter {
             };
             let result = db.update_recipe(&recipe).await;
             match result {
-                Ok(_) => StatusCode::OK,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
+                Ok(r) => (StatusCode::CREATED, Json(Some(r.recipe_id))),
+                _ => (StatusCode::INTERNAL_SERVER_ERROR, Json(None)),
             }
         },
     )
