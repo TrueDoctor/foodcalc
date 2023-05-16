@@ -16,7 +16,7 @@ pub fn foodbase(db: FoodBase) -> Router {
         .nest("/ingredients", ingredients_router(db.clone()))
         .nest("/recipes", recipes_router(db.clone()))
         .nest("/events", events_router(db.clone()))
-        .nest("/stores", stores_router(db.clone()))
+        .nest("/stores/ingredients", stores_router(db.clone()))
         .nest("/utils", utils_router(db.clone()))
         
 }
@@ -57,12 +57,12 @@ pub fn events_router(db: Arc<FoodBase>) -> Router {
 
 pub fn stores_router(db: Arc<FoodBase>) -> Router {
     Router::new()
-        .route("/ingredient/add", stores::add_ingredient_source(db.clone()))
-        .route("/ingredient/:id/fetch", stores::fetch_metro_prices(db.clone()))
-        .route("/ingredient/fetch", stores::fetch_all_metro_prices(db.clone()))
-        .route("/ingredient/:id/get", stores::get_metro_ingredient_sources(db.clone()))
-        .route("/ingredient/list", stores::get_all_metro_ingredient_sources(db.clone()))
-        .route("/ingredient/update", stores::update_ingredient_source_price(db.clone()))
+        .route("/add", stores::add_ingredient_source(db.clone()))
+        .route("/:id/fetch", stores::fetch_metro_prices(db.clone()))
+        .route("/fetch", stores::fetch_all_metro_prices(db.clone()))
+        .route("/:id/get", stores::get_metro_ingredient_sources(db.clone()))
+        .route("/list", stores::get_all_metro_ingredient_sources(db.clone()))
+        .route("/update", stores::update_ingredient_source_price(db.clone()))
 
 }
 

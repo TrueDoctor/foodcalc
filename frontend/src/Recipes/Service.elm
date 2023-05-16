@@ -23,9 +23,10 @@ decodeNestedWeightedMetaIngredients =
 decodeNestedWeightedMetaIngredient : Decoder WeightedMetaIngredient
 decodeNestedWeightedMetaIngredient =
     map3 WeightedMetaIngredient
-        (field "meta_ingredient" decodeMetaIngredient)
-        (field "weight" string)
+        (field "ingredient" decodeMetaIngredient)
+        (field "amount" string)
         (field "unit" decodeUnit)
+
 
 
 decodeMetaIngredient : Decoder MetaIngredient
@@ -66,6 +67,6 @@ fetchRecipeIngredients : Int -> Cmd RecipeMsg
 fetchRecipeIngredients recipeId =
     Http.get
         { url = "http://localhost:3000/recipes/" ++ String.fromInt recipeId ++ "/meta_ingredients/list"
-        , expect = Http.expectJson (GotWebData << RecipeIngredientData) (list <| field "ingredient" decodeNestedWeightedMetaIngredient)
+        , expect = Http.expectJson (GotWebData << RecipeIngredientData) decodeNestedWeightedMetaIngredients
         }
 

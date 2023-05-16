@@ -69,7 +69,7 @@ searchableDropdown data =
             List.map (\x -> li [] [ a [ onClick <| data.onSelect x ] [ text <| data.property x ] ]) filteredList
     in
     details [ role "list" ]
-        [ summary [ attribute "aria-haspopup" "listbox" ] [ text data.filter ]
+        [ summary [ attribute "aria-haspopup" "listbox" ] [ text <| data.property data.selected ]
         , ul [ role "listbox" ] <| search data.filterChange data.filter :: options
         ]
 

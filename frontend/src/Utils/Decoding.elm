@@ -20,6 +20,6 @@ decodeStringFloat =
 decodeUnit : Decoder Unit
 decodeUnit =
     map2 Unit
-        (field "id" int)
-        (field "unit" string)
+        (field "unit_id" int)
+        (field "name" string)
 

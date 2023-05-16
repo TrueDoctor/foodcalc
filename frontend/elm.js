@@ -6556,8 +6556,7 @@ var $author$project$Utils$Main$mapWebdata = function (r) {
 		return $author$project$Utils$Model$Success(a);
 	} else {
 		var e = r.a;
-		return $author$project$Utils$Model$Failure(
-			A2($elm$core$Debug$log, '', e));
+		return $author$project$Utils$Model$Failure(e);
 	}
 };
 var $author$project$Ingredients$Update$handleWebData = F2(
@@ -6741,22 +6740,22 @@ var $author$project$Utils$Model$Unit = F2(
 var $author$project$Utils$Decoding$decodeUnit = A3(
 	$elm$json$Json$Decode$map2,
 	$author$project$Utils$Model$Unit,
-	A2($elm$json$Json$Decode$field, 'id', $elm$json$Json$Decode$int),
-	A2($elm$json$Json$Decode$field, 'unit', $elm$json$Json$Decode$string));
+	A2($elm$json$Json$Decode$field, 'unit_id', $elm$json$Json$Decode$int),
+	A2($elm$json$Json$Decode$field, 'name', $elm$json$Json$Decode$string));
 var $author$project$Recipes$Service$decodeNestedWeightedMetaIngredient = A4(
 	$elm$json$Json$Decode$map3,
 	$author$project$Recipes$Model$WeightedMetaIngredient,
-	A2($elm$json$Json$Decode$field, 'meta_ingredient', $author$project$Recipes$Service$decodeMetaIngredient),
-	A2($elm$json$Json$Decode$field, 'weight', $elm$json$Json$Decode$string),
+	A2($elm$json$Json$Decode$field, 'ingredient', $author$project$Recipes$Service$decodeMetaIngredient),
+	A2($elm$json$Json$Decode$field, 'amount', $elm$json$Json$Decode$string),
 	A2($elm$json$Json$Decode$field, 'unit', $author$project$Utils$Decoding$decodeUnit));
+var $author$project$Recipes$Service$decodeNestedWeightedMetaIngredients = $elm$json$Json$Decode$list($author$project$Recipes$Service$decodeNestedWeightedMetaIngredient);
 var $author$project$Recipes$Service$fetchRecipeIngredients = function (recipeId) {
 	return $elm$http$Http$get(
 		{
 			expect: A2(
 				$elm$http$Http$expectJson,
 				A2($elm$core$Basics$composeL, $author$project$Recipes$Model$GotWebData, $author$project$Recipes$Model$RecipeIngredientData),
-				$elm$json$Json$Decode$list(
-					A2($elm$json$Json$Decode$field, 'ingredient', $author$project$Recipes$Service$decodeNestedWeightedMetaIngredient))),
+				$author$project$Recipes$Service$decodeNestedWeightedMetaIngredients),
 			url: 'http://localhost:3000/recipes/' + ($elm$core$String$fromInt(recipeId) + '/meta_ingredients/list')
 		});
 };
@@ -6876,6 +6875,63 @@ var $author$project$Recipes$Update$handleModalMsg = F2(
 							}),
 						model),
 					$elm$core$Platform$Cmd$none);
+			case 'EditIngredient':
+				var update = msg.a;
+				var replace = F3(
+					function (list, old, _new) {
+						return A2(
+							$elm$core$List$map,
+							function (i) {
+								return _Utils_eq(i, old) ? _new : i;
+							},
+							list);
+					});
+				var addOrReplace = F3(
+					function (list, old, _new) {
+						if (old.$ === 'Just') {
+							var o = old.a;
+							return A2(
+								$elm$core$Maybe$withDefault,
+								list,
+								A2(
+									$elm$core$Maybe$map,
+									A2(replace, list, o),
+									_new));
+						} else {
+							return A2(
+								$elm$core$Maybe$withDefault,
+								list,
+								A2(
+									$elm$core$Maybe$map,
+									function (n) {
+										return A2($elm$core$List$cons, n, list);
+									},
+									_new));
+						}
+					});
+				var updated = function (ingredients) {
+					if (ingredients.$ === 'Success') {
+						var i = ingredients.a;
+						return $author$project$Utils$Model$Success(
+							A3(addOrReplace, i, update.old, update._new));
+					} else {
+						return ingredients;
+					}
+				};
+				var save = $author$project$Recipes$Update$mapModalUpdate(
+					function (e) {
+						return _Utils_update(
+							e,
+							{
+								ingredients: updated(e.ingredients)
+							});
+					});
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Recipes$Update$updateModel,
+						save,
+						A2($elm$core$Debug$log, 'model', model)),
+					$elm$core$Platform$Cmd$none);
 			default:
 				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
@@ -6921,7 +6977,8 @@ var $author$project$Recipes$Update$handleWebData = F2(
 								return _Utils_update(
 									editor,
 									{
-										ingredients: $author$project$Utils$Main$mapWebdata(meta)
+										ingredients: $author$project$Utils$Main$mapWebdata(
+											A2($elm$core$Debug$log, '', meta))
 									});
 							}),
 						model),
@@ -8042,20 +8099,9 @@ var $author$project$Recipes$Model$EditIngredientAmount = function (a) {
 var $author$project$Recipes$Model$EditIngredientFilter = function (a) {
 	return {$: 'EditIngredientFilter', a: a};
 };
-var $elm$core$Maybe$map2 = F3(
-	function (func, ma, mb) {
-		if (ma.$ === 'Nothing') {
-			return $elm$core$Maybe$Nothing;
-		} else {
-			var a = ma.a;
-			if (mb.$ === 'Nothing') {
-				return $elm$core$Maybe$Nothing;
-			} else {
-				var b = mb.a;
-				return $elm$core$Maybe$Just(
-					A2(func, a, b));
-			}
-		}
+var $elm$core$Basics$always = F2(
+	function (a, _v0) {
+		return a;
 	});
 var $author$project$Recipes$ViewModal$metaIngredientName = function (ig) {
 	return A2(
@@ -8073,6 +8119,9 @@ var $author$project$Recipes$ViewModal$metaIngredientName = function (ig) {
 				}
 			},
 			ig));
+};
+var $elm$core$Basics$negate = function (n) {
+	return -n;
 };
 var $elm$html$Html$Events$onFocus = function (msg) {
 	return A2(
@@ -8150,7 +8199,8 @@ var $author$project$Utils$View$searchableDropdown = function (data) {
 					]),
 				_List_fromArray(
 					[
-						$elm$html$Html$text(data.filter)
+						$elm$html$Html$text(
+						data.property(data.selected))
 					])),
 				A2(
 				$elm$html$Html$ul,
@@ -8174,9 +8224,36 @@ var $author$project$Recipes$ViewModal$renderRecipeIngredient = F4(
 				case 'Loading':
 					return $elm$html$Html$text('Loading ingredients ...');
 				case 'Failure':
-					return $elm$html$Html$text('Error loading ingredients');
+					var e = _v0.a;
+					return $elm$html$Html$text(
+						A2(
+							$elm$core$Basics$always,
+							'Error loading ingredients',
+							A2($elm$core$Debug$log, 'Error loading ingredients', e)));
 				default:
 					var ingredients = _v0.a;
+					var old = A2(
+						$elm$core$Maybe$withDefault,
+						A3(
+							$author$project$Recipes$Model$WeightedMetaIngredient,
+							$author$project$Recipes$Model$IsDirect(
+								A4($author$project$Ingredients$Model$Ingredient, -1, '', 0, $elm$core$Maybe$Nothing)),
+							'',
+							A2($author$project$Utils$Model$Unit, -1, '')),
+						ingredient);
+					var ingredientUpdate = function (i) {
+						return {
+							_new: A2(
+								$elm$core$Maybe$map,
+								function (x) {
+									return _Utils_update(
+										old,
+										{metaIngredient: x});
+								},
+								i),
+							old: ingredient
+						};
+					};
 					return $author$project$Utils$View$searchableDropdown(
 						{
 							filter: editor.filter,
@@ -8185,24 +8262,13 @@ var $author$project$Recipes$ViewModal$renderRecipeIngredient = F4(
 								A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
 								$author$project$Recipes$Model$EditIngredientFilter),
 							list: A2($elm$core$List$map, $elm$core$Maybe$Just, ingredients),
-							onSelect: function (i) {
-								return $author$project$Model$RecipeMessage(
-									$author$project$Recipes$Model$ModalMsg(
-										$author$project$Recipes$Model$EditIngredient(
-											{
-												_new: A3(
-													$elm$core$Maybe$map2,
-													F2(
-														function (x, y) {
-															return _Utils_update(
-																x,
-																{metaIngredient: y});
-														}),
-													ingredient,
-													i),
-												old: ingredient
-											})));
-							},
+							onSelect: A2(
+								$elm$core$Basics$composeL,
+								A2(
+									$elm$core$Basics$composeL,
+									A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+									$author$project$Recipes$Model$EditIngredient),
+								ingredientUpdate),
 							property: $author$project$Recipes$ViewModal$metaIngredientName,
 							selected: A2(
 								$elm$core$Maybe$map,

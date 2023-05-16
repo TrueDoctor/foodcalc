@@ -3,7 +3,6 @@ module Recipes.Update exposing (..)
 import Model exposing (Model, Msg(..), Tab(..))
 import Recipes.Model exposing (..)
 import Recipes.Service exposing (fetchAllMetaIngredients, fetchRecipes)
-import Svg.Attributes exposing (from)
 import Utils.Cursor
 import Utils.Main exposing (mapWebdata)
 import Utils.Model exposing (RemoteData(..))
@@ -58,7 +57,7 @@ handleWebData result model =
             ( updateModel save model, Cmd.none )
 
         RecipeIngredientData meta ->
-            ( updateModel (mapModalUpdate <| \editor -> { editor | ingredients = mapWebdata meta }) model, Cmd.none )
+            ( updateModel (mapModalUpdate <| \editor -> { editor | ingredients = mapWebdata <| Debug.log "" meta }) model, Cmd.none )
 
 
 handleMsg : RecipeMsg -> Model -> ( Model, Cmd Msg )
@@ -106,6 +105,7 @@ handleMsg msg model =
                     mapTab <| \r -> Recipes <| { r | modal = Edit editor }
             in
             ( updateModel save model, Cmd.map RecipeMessage (fetchRecipeIngredients id)  )
+
 
         CloseModal ->
             let
@@ -155,6 +155,26 @@ handleModalMsg msg model =
 
         EditIngredientFilter filter ->
             ( updateModel (mapModalUpdate <| \e -> { e | filter = filter }) model, Cmd.none )
+
+        EditIngredient update ->
+            let
+                replace list old new = 
+                    List.map (\i -> if i == old then new else i) list
+                addOrReplace list old new =
+                    case old of
+                        Just o ->
+                            new |> Maybe.map (replace list o) |> Maybe.withDefault list
+
+                        Nothing ->
+                            new |> Maybe.map (\n -> n :: list) |> Maybe.withDefault list
+                updated ingredients = 
+                    case ingredients of 
+                        Success i -> Success <| addOrReplace i update.old update.new
+                        _ -> ingredients
+                save = 
+                    mapModalUpdate <| \e -> { e | ingredients = updated e.ingredients }
+            in
+            ( updateModel save <| Debug.log "model" model, Cmd.none )
 
         _ ->
             ( model, Cmd.none )

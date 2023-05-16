@@ -3,7 +3,6 @@ module Ingredients.Update exposing (handleMsg)
 import Ingredients.Model exposing (..)
 import Ingredients.Service exposing (addOrUpdateIngredient)
 import Model exposing (..)
-import Svg.Attributes exposing (in_, type_)
 import Utils.Cursor
 import Utils.Main exposing (..)
 import Utils.Model exposing (RemoteData(..))
