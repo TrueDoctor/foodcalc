@@ -4,7 +4,7 @@ import Model exposing (Model, Msg(..), Tab(..))
 import Recipes.Model exposing (..)
 import Recipes.Service exposing (addOrUpdateRecipe, fetchAllMetaIngredients, fetchRecipeIngredients, fetchRecipes, updateRecipeExtras)
 import Utils.Cursor
-import Utils.Main exposing (mapWebdata)
+import Utils.Main exposing ( toWebdata)
 import Utils.Model exposing (RemoteData(..))
 
 
@@ -44,29 +44,59 @@ handleWebData result model =
         RecipesData recipes ->
             let
                 save =
-                    mapTab <| \r -> Recipes <| { r | recipes = mapWebdata recipes }
+                    mapTab <| \r -> Recipes <| { r | recipes = toWebdata recipes }
             in
             ( updateModel save model, Cmd.none )
 
         MetaIngredientData meta ->
             let
                 save =
-                    mapTab <| \r -> Recipes <| { r | allIngredients = mapWebdata meta }
+                    mapTab <| \r -> Recipes <| { r | allIngredients = toWebdata meta }
             in
             ( updateModel save model, Cmd.none )
 
         RecipeIngredientData meta ->
-            ( updateModel (mapModalUpdate <| \editor -> { editor | ingredients = mapWebdata <| Debug.log "" meta }) model, Cmd.none )
+            let
+                wd =
+                    toWebdata meta
+
+                ( allIngredients, allUnits ) =
+                    case model.tabs.active of
+                        Recipes r ->
+                            ( r.allIngredients, r.allUnits )
+
+                        _ ->
+                            ( NotAsked, NotAsked )
+            in
+            case ( wd, allIngredients, allUnits ) of
+                ( Success ingredients, Success ingredientList, Success unitList ) ->
+                    let
+                        newRecipeIngredients =
+                            ingredients
+                                |> List.map
+                                    (\i ->
+                                        ( i, buildEditor ingredientList unitList i )
+                                    )
+
+                        save =
+                            mapModalUpdate <| \e -> { e | ingredients = Success newRecipeIngredients }
+                    in
+                    ( updateModel save model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
         RecipeId editor meta ->
             case meta of
                 Ok id ->
                     ( model, Cmd.map RecipeMessage <| updateRecipeExtras editor id )
+
                 _ ->
                     ( model, Cmd.none )
 
         PostResult _ ->
             ( model, Cmd.none )
+
 
 handleMsg : RecipeMsg -> Model -> ( Model, Cmd Msg )
 handleMsg msg model =
@@ -167,45 +197,22 @@ handleModalMsg msg model =
         EditName name ->
             ( updateModel (mapModalUpdate <| \e -> { e | name = name }) model, Cmd.none )
 
-        EditActiveIngredientIndex index ->
-            ( updateModel (mapModalUpdate <| \e -> { e | activeIngredientIndex = Just index }) model, Cmd.none )
+        EditMetaIngredient id recipeIngredientMsg  ->
+            handleMetaIngredientMsg recipeIngredientMsg id model
 
-        EditIngredientFilter filter ->
-            ( updateModel (mapModalUpdate <| \e -> { e | filter = filter }) model, Cmd.none )
+        EditStep stepMsg id ->
+            handleStepMsg stepMsg id model
 
-        EditIngredient update ->
-            let
-                replace list old new =
-                    List.map
-                        (\i ->
-                            if i == old then
-                                new
 
-                            else
-                                i
-                        )
-                        list
+handleMetaIngredientMsg : RecipeIngredientMsg -> MetaId -> Model -> ( Model, Cmd Msg )
+handleMetaIngredientMsg msg id model =
+    case msg of
+        _ ->
+            ( model, Cmd.none )
 
-                addOrReplace list old new =
-                    case old of
-                        Just o ->
-                            new |> Maybe.map (replace list o) |> Maybe.withDefault list
 
-                        Nothing ->
-                            new |> Maybe.map (\n -> n :: list) |> Maybe.withDefault list
-
-                updated ingredients =
-                    case ingredients of
-                        Success i ->
-                            Success <| addOrReplace i update.old update.new
-
-                        _ ->
-                            ingredients
-
-                save =
-                    mapModalUpdate <| \e -> { e | ingredients = updated e.ingredients, activeIngredientIndex = Nothing }
-            in
-            ( updateModel save <| Debug.log "model" model, Cmd.none )
-
+handleStepMsg : StepMsg -> Int -> Model -> ( Model, Cmd Msg )
+handleStepMsg msg id model =
+    case msg of
         _ ->
             ( model, Cmd.none )

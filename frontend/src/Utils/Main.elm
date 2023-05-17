@@ -1,13 +1,14 @@
 module Utils.Main exposing (..)
 
-import Http 
-import Utils.Model exposing (..)
+import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
-import Html exposing (..)
+import Http
+import Utils.Model exposing (..)
 
-mapWebdata : Result Http.Error a -> WebData a
-mapWebdata r =
+
+toWebdata : Result Http.Error a -> WebData a
+toWebdata r =
     case r of
         Ok a ->
             Success a
@@ -15,9 +16,28 @@ mapWebdata r =
         Err e ->
             Failure e
 
-role : String -> Attribute msg
-role = attribute "role"
 
-nameFilter: String -> String -> Bool
+mapWebdata : (a -> b) -> WebData a -> WebData b
+mapWebdata f wd =
+    case wd of
+        Success a ->
+            Success (f a)
+
+        Failure e ->
+            Failure e
+
+        NotAsked ->
+            NotAsked
+
+        Loading ->
+            Loading
+
+
+role : String -> Attribute msg
+role =
+    attribute "role"
+
+
+nameFilter : String -> String -> Bool
 nameFilter filter name =
     String.contains (String.toLower filter) (String.toLower name)

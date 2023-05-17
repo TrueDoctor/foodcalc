@@ -4,12 +4,12 @@ import FeatherIcons as FI
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
+import Ingredients.Model exposing (Ingredient)
 import Model exposing (Msg(..))
 import Recipes.Model exposing (..)
 import Utils.Main exposing (..)
 import Utils.Model exposing (..)
-import Utils.View exposing (listView, searchableDropdown)
-import Ingredients.Model exposing (Ingredient)
+import Utils.View exposing (listView, searchableDropdown, showWebData)
 
 
 modal : RecipeTabData -> Html Msg
@@ -65,7 +65,7 @@ recipeIngredientsList data editor =
             text "Error loading ingredients"
 
         Success ingredients ->
-            listView (renderRecipeIngredient data editor 0) ((ingredients |> List.map Just) ++ [ Nothing ])
+            listView renderRecipeIngredient ((ingredients |> List.map Just) ++ [ Nothing ])
 
 
 
@@ -75,49 +75,71 @@ recipeIngredientsList data editor =
 -}
 
 
-renderRecipeIngredient : RecipeTabData -> RecipeEditor -> Int -> Maybe WeightedMetaIngredient -> List (Html Msg)
-renderRecipeIngredient data editor index ingredient =
+renderRecipeIngredient : Maybe ( WeightedMetaIngredient, RecipeIngredientEditor ) -> List (Html Msg)
+renderRecipeIngredient ingredientEditor =
     let
-        dropdown =
-            case data.allIngredients of
-                NotAsked ->
-                    text "Loading ingredients not initiated"
+        ingredient =
+            Maybe.map Tuple.first ingredientEditor
 
-                Loading ->
-                    text "Loading ingredients ..."
+        ingredientDropdownData =
+            ingredientEditor
+                |> Maybe.map Tuple.second
+                |> Maybe.map (\e -> e.ingredientDropdown)
+                |> Maybe.withDefault (newDropdownData [] <| IsDirect <| Ingredient -1 "" 0 Nothing)
 
-                Failure e ->
-                    text <| always "Error loading ingredients" <| Debug.log "Error loading ingredients" e
+        unitDropdownData =
+            ingredientEditor
+                |> Maybe.map Tuple.second
+                |> Maybe.map (\e -> e.unitDropdown)
+                |> Maybe.withDefault (newDropdownData [] <| Unit -1 "")
 
-                Success ingredients ->
-                    let
-                        old = ingredient
-                            |> Maybe.withDefault (WeightedMetaIngredient (IsDirect <| Ingredient -1 "" 0 Nothing) "" (Unit -1 "")) 
-                        ingredientUpdate i =
-                            { old = ingredient
-                            , new = i |> Maybe.map (\x -> { old | metaIngredient = x })
-                            }
-                    in
-                    searchableDropdown
-                        { filterChange = RecipeMessage << ModalMsg << EditIngredientFilter
-                        , onSelect = RecipeMessage << ModalMsg << EditIngredient << ingredientUpdate 
-                        , property = metaIngredientName
-                        , filter = editor.filter
-                        , list = List.map Just ingredients
-                        , selected = Maybe.map (\i -> i.metaIngredient) ingredient
-                        }
+        id =
+            case ingredient of
+                Just ig ->
+                    case ig.metaIngredient of
+                        IsDirect i ->
+                            IngredientId i.id
+
+                        IsSubRecipe r ->
+                            SubRecipeId r.id
+
+                _ ->
+                    NewId
+
+        ingredientDropdown =
+            searchableDropdown
+                ingredientDropdownData
+                { onFilter = RecipeMessage << ModalMsg << EditMetaIngredient id << SetIngredientFilter
+                , onSelect = RecipeMessage << ModalMsg << EditMetaIngredient id << SetIngredient
+                , property = metaIngredientName << Just
+                }
+
+        unitDropdown =
+            searchableDropdown
+                unitDropdownData
+                { onFilter = RecipeMessage << ModalMsg << EditMetaIngredient id << SetUnitFilter
+                , onSelect = RecipeMessage << ModalMsg << EditMetaIngredient id << SetUnit
+                , property = \u -> u.name
+                }
+        deleteButton =
+            button
+                [ class "delete"
+                , onClick <| RecipeMessage <| ModalMsg <| EditMetaIngredient id <| Delete
+                ]
+                [ FI.toHtml [] FI.delete ]
 
         -- ingredientsDropdown2 ingredients editor.filter (Maybe.map ((==) index) editor.activeIngredientIndex |> Maybe.withDefault False) ingredient
     in
-    [ dropdown
+    [ ingredientDropdown
     , input
         [ class "amount"
         , type_ "text"
         , placeholder "Amount"
-        , onInput <| RecipeMessage << ModalMsg << EditIngredientAmount
-        , onFocus <| RecipeMessage <| ModalMsg <| EditActiveIngredientIndex index
+        , onInput <| RecipeMessage << ModalMsg << EditMetaIngredient id << SetAmount
         ]
         []
+        , unitDropdown
+
     ]
 
 

@@ -13,6 +13,7 @@ import Recipes.Model as RModel exposing (RecipeTabData)
 import Settings exposing (..)
 import Utils.Cursor
 import Utils.Model exposing (RemoteData(..))
+import Recipes.Model exposing (emptyRecipeTabData)
 
 
 view : Model -> Html.Html Msg
@@ -79,7 +80,7 @@ init _ =
     let
         tabs =
             Utils.Cursor.create (Ingredients <| IngredientTabData Loading "" IModel.NoModal)
-                [ Recipes <| RecipeTabData NotAsked "" RModel.NoModal NotAsked
+                [ Recipes <| emptyRecipeTabData
                 , Events
                 ]
     in

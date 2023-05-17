@@ -84,7 +84,7 @@ handleWebData data model =
         IngredientsList ingredients ->
             let
                 save =
-                    mapTab <| \i -> Ingredients { i | ingredients = mapWebdata ingredients }
+                    mapTab <| \i -> Ingredients { i | ingredients = toWebdata ingredients }
             in
             ( updateModel save model, Cmd.none )
 

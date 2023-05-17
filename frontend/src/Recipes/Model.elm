@@ -2,8 +2,7 @@ module Recipes.Model exposing (..)
 
 import Http
 import Ingredients.Model exposing (Ingredient, IngredientMsg(..))
-import Utils.Model exposing (Unit, WebData)
-import Utils.Model exposing (RemoteData(..))
+import Utils.Model exposing (DropdownData, RemoteData(..), Unit, WebData, newDropdownData)
 
 
 type alias Recipe =
@@ -17,32 +16,15 @@ type alias RecipeEditor =
     { id : Maybe Int
     , name : String
     , comment : Maybe String
-    , ingredients : WebData (List WeightedMetaIngredient)
-    , activeIngredientIndex : Maybe Int
+    , ingredients : WebData (List ( WeightedMetaIngredient, RecipeIngredientEditor ))
     , steps : WebData (List Step)
-    , filter : String
     }
 
-emptyRecipeEditor : RecipeEditor
-emptyRecipeEditor =
-    { id = Nothing
-    , name = ""
-    , comment = Nothing
-    , ingredients = Success []
-    , activeIngredientIndex = Nothing
-    , steps = Success []
-    , filter = ""
-    }
 
-editorFromReipe : Recipe -> RecipeEditor
-editorFromReipe recipe =
-    { id = Just recipe.id
-    , name = recipe.name
-    , comment = recipe.comment
-    , ingredients = NotAsked
-    , activeIngredientIndex = Nothing
-    , steps = NotAsked
-    , filter = ""
+type alias RecipeIngredientEditor =
+    { ingredientDropdown : DropdownData MetaIngredient
+    , unitDropdown : DropdownData Unit
+    , amountInput : String
     }
 
 
@@ -85,17 +67,29 @@ type RecipeMsg
     | EditFilter String
     | InitTab
 
+type MetaId = IngredientId Int | SubRecipeId Int | NewId
 
 type ModalMsg
-    = AddIngredient
-    | EditIngredient {old: Maybe WeightedMetaIngredient, new: Maybe WeightedMetaIngredient}
-    | DeleteIngredient Int
-    | EditName String
+    = EditName String
     | EditComment String
-    | EditIngredientFilter String
-    | EditActiveIngredientIndex Int
-    | EditIngredientAmount String
-    | EditIngredientUnit Unit
+    | EditMetaIngredient MetaId RecipeIngredientMsg 
+    | EditStep StepMsg Int
+
+
+type StepMsg
+    = SetTitle String
+    | SetOrder String
+    | SetDescription String
+    | DeleteStep
+
+
+type RecipeIngredientMsg 
+    = SetIngredient MetaIngredient
+    | SetAmount String
+    | SetUnit Unit
+    | SetIngredientFilter String
+    | SetUnitFilter String
+    | Delete
 
 
 type Modal
@@ -109,4 +103,42 @@ type alias RecipeTabData =
     , filter : String
     , modal : Modal
     , allIngredients : WebData (List MetaIngredient)
+    , allUnits : WebData (List Unit)
+    }
+
+
+buildEditor : List MetaIngredient -> List Unit -> WeightedMetaIngredient -> RecipeIngredientEditor
+buildEditor ingredientList unitList ingredient =
+    { amountInput = ""
+    , unitDropdown = newDropdownData unitList ingredient.unit
+    , ingredientDropdown = newDropdownData ingredientList ingredient.metaIngredient
+    }
+
+
+emptyRecipeEditor : RecipeEditor
+emptyRecipeEditor =
+    { id = Nothing
+    , name = ""
+    , comment = Nothing
+    , ingredients = Success []
+    , steps = Success []
+    }
+
+
+editorFromReipe : Recipe -> RecipeEditor
+editorFromReipe recipe =
+    { id = Just recipe.id
+    , name = recipe.name
+    , comment = recipe.comment
+    , ingredients = NotAsked
+    , steps = NotAsked
+    }
+
+emptyRecipeTabData : RecipeTabData
+emptyRecipeTabData =
+    { recipes = NotAsked
+    , filter = ""
+    , modal = NoModal
+    , allIngredients = NotAsked
+    , allUnits = NotAsked
     }

@@ -66,11 +66,11 @@ encodeRecipeEditor editor =
         ]
 
 
-encodeMetaIngredients : WebData (List WeightedMetaIngredient) -> Encode.Value
+encodeMetaIngredients : WebData (List (WeightedMetaIngredient,a)) -> Encode.Value
 encodeMetaIngredients ingredients =
     case ingredients of
         Success i ->
-            Encode.list encodeWeightedMetaIngredient i
+            Encode.list encodeWeightedMetaIngredient <| List.map Tuple.first i
 
         _ ->
             Encode.null
