@@ -6,6 +6,7 @@ import Model exposing (..)
 import Utils.Cursor
 import Utils.Main exposing (..)
 import Utils.Model exposing (RemoteData(..))
+import Ingredients.Service exposing (fetchIngredients)
 
 
 editor : Ingredients.Model.IngredientTabData -> Int -> Modal
@@ -88,8 +89,9 @@ handleWebData data model =
             in
             ( updateModel save model, Cmd.none )
 
-        _ ->
-            ( model, Cmd.none )
+        SuccessfulPost id ->
+            ( model, Cmd.map IngredientMessage fetchIngredients )
+
 
 
 handleModalMsg : ModalMsg -> Model -> ( Model, Cmd Msg )

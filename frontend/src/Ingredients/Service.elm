@@ -47,14 +47,13 @@ addOrUpdateIngredient ingredient =
         url =
             case ingredient.id of
                 Just id ->
-                    backend ("/ingredients/update/" ++ String.fromInt id)
+                    "/ingredients/update/" ++ String.fromInt id
 
                 Nothing ->
-                    backend "/ingredients/create"
+                    "/ingredients/create"
     in
     post
         { url = backend url
-        , body = Debug.log "" <| Http.jsonBody (encodeIngredient ingredient)
-        , expect = Http.expectJson (GotWebData << SuccessfulPost) (Decode.succeed ())
+        , body = Http.jsonBody (encodeIngredient ingredient)
+        , expect = Http.expectJson (GotWebData << SuccessfulPost) Decode.int
         }
-

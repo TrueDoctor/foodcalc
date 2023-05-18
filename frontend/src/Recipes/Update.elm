@@ -69,8 +69,6 @@ handleWebData result model =
             let
                 wd =
                     toWebdata meta
-
-                
             in
             case Debug.log "" wd of
                 Success ingredients ->
@@ -197,7 +195,7 @@ handleModalMsg : ModalMsg -> Model -> ( Model, Cmd Msg )
 handleModalMsg msg model =
     let
         defaultIngredient =
-            WeightedMetaIngredient (IsDirect <| Ingredient 0 "" 0 Nothing) "" (Unit 0 "")
+            WeightedMetaIngredient (IsDirect <| Ingredient -1 "" 0 Nothing) "" (Unit 0 "")
 
         addEntry entry =
             updateModel (mapModalUpdate (\e -> { e | ingredients = mapWebdata (\d -> d ++ [ entry ]) e.ingredients })) model
@@ -212,11 +210,11 @@ handleModalMsg msg model =
         EditMetaIngredient id recipeIngredientMsg ->
             handleMetaIngredientMsg recipeIngredientMsg id model
 
-        EditStep stepMsg id ->
-            handleStepMsg stepMsg id model
-
         AddMetaIngredient recipeIngredientMsg ->
             Debug.log "" <| handleMetaIngredientMsg recipeIngredientMsg (IngredientId -1) (addEntry ( defaultIngredient, buildEditor defaultIngredient ))
+
+        EditStep stepMsg id ->
+            handleStepMsg stepMsg id model
 
 
 isId : MetaId -> { a | metaIngredient : MetaIngredient } -> Bool

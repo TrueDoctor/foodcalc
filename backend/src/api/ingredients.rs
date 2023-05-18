@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use axum::{
     extract::Path,
-    routing::{post, MethodRouter, get},
+    http::StatusCode,
+    routing::{get, post, MethodRouter},
     Json,
 };
 use serde::Deserialize;
@@ -17,15 +18,20 @@ struct Ingredient {
     comment: Option<String>,
 }
 
-
 pub fn create(foodbase: Arc<FoodBase>) -> MethodRouter {
     let db = foodbase.clone();
     post(|ingredient: Json<Ingredient>| async move {
-        db.add_ingredient(
-            ingredient.name.to_owned(),
-            ingredient.energy.to_owned(),
-            ingredient.comment.to_owned(),
-        ).await.unwrap_or_default();
+        let id = db
+            .add_ingredient(
+                ingredient.name.to_owned(),
+                ingredient.energy.to_owned(),
+                ingredient.comment.to_owned(),
+            )
+            .await;
+        match id {
+            Ok(id) => (StatusCode::OK, Json(id)),
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(-1)),
+        }
     })
 }
 
@@ -38,7 +44,9 @@ pub fn update(foodbase: Arc<FoodBase>) -> MethodRouter {
                 ingredient.name.to_owned(),
                 ingredient.energy.to_owned(),
                 ingredient.comment.to_owned(),
-            )).await.unwrap_or_default();
+            ))
+            .await
+            .unwrap_or_default();
         },
     )
 }
@@ -46,8 +54,8 @@ pub fn update(foodbase: Arc<FoodBase>) -> MethodRouter {
 pub fn list(foodbase: Arc<FoodBase>) -> MethodRouter {
     let db = foodbase.clone();
     let list = || async move {
-        let ingredients = db.get_ingredients().await.unwrap_or_default()   ;
-        Json(ingredients) 
+        let ingredients = db.get_ingredients().await.unwrap_or_default();
+        Json(ingredients)
     };
     get(list)
 }

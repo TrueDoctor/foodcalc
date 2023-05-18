@@ -6466,7 +6466,6 @@ var $elm$http$Http$jsonBody = function (value) {
 		'application/json',
 		A2($elm$json$Json$Encode$encode, 0, value));
 };
-var $elm$core$Debug$log = _Debug_log;
 var $elm$http$Http$post = function (r) {
 	return $elm$http$Http$request(
 		{body: r.body, expect: r.expect, headers: _List_Nil, method: 'POST', timeout: $elm$core$Maybe$Nothing, tracker: $elm$core$Maybe$Nothing, url: r.url});
@@ -6476,23 +6475,19 @@ var $author$project$Ingredients$Service$addOrUpdateIngredient = function (ingred
 		var _v0 = ingredient.id;
 		if (_v0.$ === 'Just') {
 			var id = _v0.a;
-			return $author$project$Settings$backend(
-				'/ingredients/update/' + $elm$core$String$fromInt(id));
+			return '/ingredients/update/' + $elm$core$String$fromInt(id);
 		} else {
-			return $author$project$Settings$backend('/ingredients/create');
+			return '/ingredients/create';
 		}
 	}();
 	return $elm$http$Http$post(
 		{
-			body: A2(
-				$elm$core$Debug$log,
-				'',
-				$elm$http$Http$jsonBody(
-					$author$project$Ingredients$Service$encodeIngredient(ingredient))),
+			body: $elm$http$Http$jsonBody(
+				$author$project$Ingredients$Service$encodeIngredient(ingredient)),
 			expect: A2(
 				$elm$http$Http$expectJson,
 				A2($elm$core$Basics$composeL, $author$project$Ingredients$Model$GotWebData, $author$project$Ingredients$Model$SuccessfulPost),
-				$elm$json$Json$Decode$succeed(_Utils_Tuple0)),
+				$elm$json$Json$Decode$int),
 			url: $author$project$Settings$backend(url)
 		});
 };
@@ -6673,7 +6668,10 @@ var $author$project$Ingredients$Update$handleWebData = F2(
 				A2($author$project$Ingredients$Update$updateModel, save, model),
 				$elm$core$Platform$Cmd$none);
 		} else {
-			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+			var id = data.a;
+			return _Utils_Tuple2(
+				model,
+				A2($elm$core$Platform$Cmd$map, $author$project$Model$IngredientMessage, $author$project$Ingredients$Service$fetchIngredients));
 		}
 	});
 var $author$project$Ingredients$Update$handleMsg = F2(
@@ -7197,10 +7195,11 @@ var $author$project$Recipes$Update$handleStepMsg = F3(
 		return _Debug_todo(
 			'Recipes.Update',
 			{
-				start: {line: 297, column: 5},
-				end: {line: 297, column: 15}
+				start: {line: 295, column: 5},
+				end: {line: 295, column: 15}
 			})('handleStepMsg');
 	});
+var $elm$core$Debug$log = _Debug_log;
 var $elm$core$Basics$negate = function (n) {
 	return -n;
 };
@@ -7209,7 +7208,7 @@ var $author$project$Recipes$Update$handleModalMsg = F2(
 		var defaultIngredient = A3(
 			$author$project$Recipes$Model$WeightedMetaIngredient,
 			$author$project$Recipes$Model$IsDirect(
-				A4($author$project$Ingredients$Model$Ingredient, 0, '', 0, $elm$core$Maybe$Nothing)),
+				A4($author$project$Ingredients$Model$Ingredient, -1, '', 0, $elm$core$Maybe$Nothing)),
 			'',
 			A2($author$project$Utils$Model$Unit, 0, ''));
 		var addEntry = function (entry) {
@@ -7266,11 +7265,7 @@ var $author$project$Recipes$Update$handleModalMsg = F2(
 				var id = msg.a;
 				var recipeIngredientMsg = msg.b;
 				return A3($author$project$Recipes$Update$handleMetaIngredientMsg, recipeIngredientMsg, id, model);
-			case 'EditStep':
-				var stepMsg = msg.a;
-				var id = msg.b;
-				return A3($author$project$Recipes$Update$handleStepMsg, stepMsg, id, model);
-			default:
+			case 'AddMetaIngredient':
 				var recipeIngredientMsg = msg.a;
 				return A2(
 					$elm$core$Debug$log,
@@ -7283,6 +7278,10 @@ var $author$project$Recipes$Update$handleModalMsg = F2(
 							_Utils_Tuple2(
 								defaultIngredient,
 								$author$project$Recipes$Model$buildEditor(defaultIngredient)))));
+			default:
+				var stepMsg = msg.a;
+				var id = msg.b;
+				return A3($author$project$Recipes$Update$handleStepMsg, stepMsg, id, model);
 		}
 	});
 var $author$project$Recipes$Model$PostResult = function (a) {

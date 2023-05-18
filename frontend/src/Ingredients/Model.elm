@@ -22,7 +22,7 @@ type alias IngredientEditor =
 
 type IngredientWebData
     = IngredientsList (Result Http.Error (List Ingredient))
-    | SuccessfulPost (Result Http.Error ())
+    | SuccessfulPost (Result Http.Error Int)
 
 
 type IngredientMsg
