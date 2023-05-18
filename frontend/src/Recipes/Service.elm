@@ -1,8 +1,7 @@
 module Recipes.Service exposing (..)
 
 import Http
-import Ingredients.Model exposing (IngredientEditor)
-import Ingredients.Service exposing (decodeIngredient, encodeIngredient)
+import Ingredients.Service exposing (decodeIngredient)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Recipes.Model exposing (..)
@@ -66,7 +65,7 @@ encodeRecipeEditor editor =
         ]
 
 
-encodeMetaIngredients : WebData (List (WeightedMetaIngredient,a)) -> Encode.Value
+encodeMetaIngredients : WebData (List ( WeightedMetaIngredient, a )) -> Encode.Value
 encodeMetaIngredients ingredients =
     case ingredients of
         Success i ->
@@ -80,7 +79,15 @@ encodeWeightedMetaIngredient : WeightedMetaIngredient -> Encode.Value
 encodeWeightedMetaIngredient ingredient =
     Encode.object
         [ ( "ingredient", encodeMetaIngredient ingredient.metaIngredient )
-        , ( "amount", Encode.string (if ingredient.amount=="" then "0" else ingredient.amount) )
+        , ( "amount"
+          , Encode.string
+                (if ingredient.amount == "" then
+                    "0"
+
+                 else
+                    ingredient.amount
+                )
+          )
         , ( "unit", encodeUnit ingredient.unit )
         ]
 
@@ -160,6 +167,14 @@ fetchRecipeIngredients recipeId =
     Http.get
         { url = "http://localhost:3000/recipes/" ++ String.fromInt recipeId ++ "/meta_ingredients/list"
         , expect = Http.expectJson (GotWebData << RecipeIngredientData) decodeNestedWeightedMetaIngredients
+        }
+
+
+fetchUnits : Cmd RecipeMsg
+fetchUnits =
+    Http.get
+        { url = "http://localhost:3000/utils/units"
+        , expect = Http.expectJson (GotWebData << UnitData) (Decode.list decodeUnit)
         }
 
 

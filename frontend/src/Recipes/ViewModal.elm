@@ -4,12 +4,11 @@ import FeatherIcons as FI
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
-import Ingredients.Model exposing (Ingredient)
 import Model exposing (Msg(..))
 import Recipes.Model exposing (..)
 import Utils.Main exposing (..)
 import Utils.Model exposing (..)
-import Utils.View exposing (listView, searchableDropdown, showWebData)
+import Utils.View exposing (listView, searchableDropdown)
 
 
 modal : RecipeTabData -> Html Msg
@@ -39,14 +38,43 @@ recipeDetails data submit title editor =
     Html.node "dialog"
         [ attribute "open" "" ]
         [ article []
-            [ a [ onClick <| RecipeMessage CloseModal ] [ FI.toHtml [] FI.x ]
-            , h3 [] [ Html.text (title ++ id_text) ]
-            , input [ class "name", type_ "text", placeholder "Name", onInput <| RecipeMessage << ModalMsg << EditName ] []
-            , input [ class "comment", type_ "text", placeholder "Comment", onInput <| RecipeMessage << ModalMsg << EditComment ] []
-            , recipeIngredientsList data editor
-            , footer [ class "grid" ]
-                [ button [ onClick <| RecipeMessage CloseModal ] [ Html.text "Cancel" ]
-                , button [ onClick <| RecipeMessage <| RecipeChanged editor ] [ Html.text submit ]
+            [ header []
+                [ a [ onClick <| RecipeMessage CloseModal, href "#" ] [ FI.toHtml [] FI.x ]
+                , h3 [] [ Html.text (title ++ id_text) ]
+                ]
+            , p [ class "container" ]
+                [ input
+                    [ class "name"
+                    , type_ "text"
+                    , placeholder "Name"
+                    , onInput <| RecipeMessage << ModalMsg << EditName
+                    , value editor.name
+                    ]
+                    []
+                , input
+                    [ class "comment"
+                    , type_ "text"
+                    , placeholder "Comment"
+                    , onInput <| RecipeMessage << ModalMsg << EditComment
+                    , value (Maybe.withDefault "" editor.comment)
+                    ]
+                    []
+                , recipeIngredientsList data editor
+                ]
+            , footer []
+                [ a
+                    [ role "button"
+                    , class "secondary"
+                    , onClick <| RecipeMessage CloseModal
+                    , href "#"
+                    ]
+                    [ Html.text "Cancel" ]
+                , a
+                    [ role "button"
+                    , onClick <| RecipeMessage <| RecipeChanged editor
+                    , href "#"
+                    ]
+                    [ Html.text submit ]
                 ]
             ]
         ]
@@ -65,7 +93,7 @@ recipeIngredientsList data editor =
             text "Error loading ingredients"
 
         Success ingredients ->
-            listView renderRecipeIngredient ((ingredients |> List.map Just) ++ [ Nothing ])
+            listView (renderRecipeIngredient data) <| (ingredients |> List.map Just) ++ [ Nothing ]
 
 
 
@@ -75,72 +103,91 @@ recipeIngredientsList data editor =
 -}
 
 
-renderRecipeIngredient : Maybe ( WeightedMetaIngredient, RecipeIngredientEditor ) -> List (Html Msg)
-renderRecipeIngredient ingredientEditor =
+webDataList : WebData (List a) -> List a
+webDataList data =
+    case data of
+        Success items ->
+            items
+
+        _ ->
+            []
+
+
+renderRecipeIngredient : RecipeTabData -> Maybe ( WeightedMetaIngredient, RecipeIngredientEditor ) -> List (Html Msg)
+renderRecipeIngredient data ingredientEditor =
     let
         ingredient =
             Maybe.map Tuple.first ingredientEditor
 
-        ingredientDropdownData =
+        editor =
             ingredientEditor
                 |> Maybe.map Tuple.second
+
+        iDropdownData =
+            editor
                 |> Maybe.map (\e -> e.ingredientDropdown)
-                |> Maybe.withDefault (newDropdownData [] <| IsDirect <| Ingredient -1 "" 0 Nothing)
+                |> Maybe.withDefault (newDropdownData <| Nothing)
 
-        unitDropdownData =
-            ingredientEditor
-                |> Maybe.map Tuple.second
+        uDropdownData =
+            editor
                 |> Maybe.map (\e -> e.unitDropdown)
-                |> Maybe.withDefault (newDropdownData [] <| Unit -1 "")
+                |> Maybe.withDefault (newDropdownData <| Nothing)
 
-        id =
+        msg =
             case ingredient of
-                Just ig ->
-                    case ig.metaIngredient of
-                        IsDirect i ->
-                            IngredientId i.id
+                Just _ ->
+                    RecipeMessage << ModalMsg << EditMetaIngredient (getId ingredient)
 
-                        IsSubRecipe r ->
-                            SubRecipeId r.id
-
-                _ ->
-                    NewId
+                Nothing ->
+                    RecipeMessage << ModalMsg << AddMetaIngredient
 
         ingredientDropdown =
             searchableDropdown
-                ingredientDropdownData
-                { onFilter = RecipeMessage << ModalMsg << EditMetaIngredient id << SetIngredientFilter
-                , onSelect = RecipeMessage << ModalMsg << EditMetaIngredient id << SetIngredient
+                iDropdownData
+                { onFilter = msg << SetIngredientFilter
+                , onSelect = msg << SetIngredient
                 , property = metaIngredientName << Just
                 }
+                (webDataList data.allIngredients)
 
         unitDropdown =
             searchableDropdown
-                unitDropdownData
-                { onFilter = RecipeMessage << ModalMsg << EditMetaIngredient id << SetUnitFilter
-                , onSelect = RecipeMessage << ModalMsg << EditMetaIngredient id << SetUnit
+                uDropdownData
+                { onFilter = msg << SetUnitFilter
+                , onSelect = msg << SetUnit
                 , property = \u -> u.name
                 }
+                (webDataList data.allUnits)
+
+        editAmount =
+            input
+                [ class "amount"
+                , type_ "text"
+                , placeholder "Amount"
+                , onInput <| msg << SetAmount
+                ]
+                []
+
         deleteButton =
             button
                 [ class "delete"
-                , onClick <| RecipeMessage <| ModalMsg <| EditMetaIngredient id <| Delete
+                , onClick <| msg Delete
                 ]
-                [ FI.toHtml [] FI.delete ]
+                [ FI.toHtml [] FI.trash2 ]
 
         -- ingredientsDropdown2 ingredients editor.filter (Maybe.map ((==) index) editor.activeIngredientIndex |> Maybe.withDefault False) ingredient
     in
-    [ ingredientDropdown
-    , input
-        [ class "amount"
-        , type_ "text"
-        , placeholder "Amount"
-        , onInput <| RecipeMessage << ModalMsg << EditMetaIngredient id << SetAmount
-        ]
-        []
-        , unitDropdown
+    case ingredient of
+        Just _ ->
+            [ ingredientDropdown
+            , editAmount
+            , unitDropdown
+            , deleteButton
+            ]
 
-    ]
+        Nothing ->
+            [ ingredientDropdown
+            ]
 
 
 metaIngredientName : Maybe MetaIngredient -> String

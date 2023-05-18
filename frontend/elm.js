@@ -4545,7 +4545,108 @@ function _Http_track(router, xhr, tracker)
 			size: event.lengthComputable ? $elm$core$Maybe$Just(event.total) : $elm$core$Maybe$Nothing
 		}))));
 	});
-}var $elm$core$Basics$EQ = {$: 'EQ'};
+}
+
+// CREATE
+
+var _Regex_never = /.^/;
+
+var _Regex_fromStringWith = F2(function(options, string)
+{
+	var flags = 'g';
+	if (options.multiline) { flags += 'm'; }
+	if (options.caseInsensitive) { flags += 'i'; }
+
+	try
+	{
+		return $elm$core$Maybe$Just(new RegExp(string, flags));
+	}
+	catch(error)
+	{
+		return $elm$core$Maybe$Nothing;
+	}
+});
+
+
+// USE
+
+var _Regex_contains = F2(function(re, string)
+{
+	return string.match(re) !== null;
+});
+
+
+var _Regex_findAtMost = F3(function(n, re, str)
+{
+	var out = [];
+	var number = 0;
+	var string = str;
+	var lastIndex = re.lastIndex;
+	var prevLastIndex = -1;
+	var result;
+	while (number++ < n && (result = re.exec(string)))
+	{
+		if (prevLastIndex == re.lastIndex) break;
+		var i = result.length - 1;
+		var subs = new Array(i);
+		while (i > 0)
+		{
+			var submatch = result[i];
+			subs[--i] = submatch
+				? $elm$core$Maybe$Just(submatch)
+				: $elm$core$Maybe$Nothing;
+		}
+		out.push(A4($elm$regex$Regex$Match, result[0], result.index, number, _List_fromArray(subs)));
+		prevLastIndex = re.lastIndex;
+	}
+	re.lastIndex = lastIndex;
+	return _List_fromArray(out);
+});
+
+
+var _Regex_replaceAtMost = F4(function(n, re, replacer, string)
+{
+	var count = 0;
+	function jsReplacer(match)
+	{
+		if (count++ >= n)
+		{
+			return match;
+		}
+		var i = arguments.length - 3;
+		var submatches = new Array(i);
+		while (i > 0)
+		{
+			var submatch = arguments[i];
+			submatches[--i] = submatch
+				? $elm$core$Maybe$Just(submatch)
+				: $elm$core$Maybe$Nothing;
+		}
+		return replacer(A4($elm$regex$Regex$Match, match, arguments[arguments.length - 2], count, _List_fromArray(submatches)));
+	}
+	return string.replace(re, jsReplacer);
+});
+
+var _Regex_splitAtMost = F3(function(n, re, str)
+{
+	var string = str;
+	var out = [];
+	var start = re.lastIndex;
+	var restoreLastIndex = re.lastIndex;
+	while (n--)
+	{
+		var result = re.exec(string);
+		if (!result) break;
+		out.push(string.slice(start, result.index));
+		start = re.lastIndex;
+	}
+	out.push(string.slice(start));
+	re.lastIndex = restoreLastIndex;
+	return _List_fromArray(out);
+});
+
+var _Regex_infinity = Infinity;
+var $elm$core$Basics$EQ = {$: 'EQ'};
 var $elm$core$Basics$GT = {$: 'GT'};
 var $elm$core$Basics$LT = {$: 'LT'};
 var $elm$core$List$cons = _List_cons;
@@ -6828,13 +6929,73 @@ var $author$project$Recipes$Service$fetchRecipes = $elm$http$Http$get(
 			$author$project$Recipes$Service$decodeRecipes),
 		url: 'http://localhost:3000/recipes/list'
 	});
-var $author$project$Recipes$Update$handleMetaIngredientMsg = F3(
-	function (msg, id, model) {
-		return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+var $author$project$Recipes$Model$UnitData = function (a) {
+	return {$: 'UnitData', a: a};
+};
+var $author$project$Recipes$Service$fetchUnits = $elm$http$Http$get(
+	{
+		expect: A2(
+			$elm$http$Http$expectJson,
+			A2($elm$core$Basics$composeL, $author$project$Recipes$Model$GotWebData, $author$project$Recipes$Model$UnitData),
+			$elm$json$Json$Decode$list($author$project$Utils$Decoding$decodeUnit)),
+		url: 'http://localhost:3000/utils/units'
 	});
-var $author$project$Recipes$Update$handleStepMsg = F3(
-	function (msg, id, model) {
-		return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+var $author$project$Recipes$Model$IngredientId = function (a) {
+	return {$: 'IngredientId', a: a};
+};
+var $author$project$Utils$Model$newDropdownData = function (selected) {
+	return {filter: '', open: false, selected: selected};
+};
+var $author$project$Recipes$Model$buildEditor = function (ingredient) {
+	return {
+		amountInput: '',
+		ingredientDropdown: $author$project$Utils$Model$newDropdownData(
+			$elm$core$Maybe$Just(ingredient.metaIngredient)),
+		unitDropdown: $author$project$Utils$Model$newDropdownData(
+			$elm$core$Maybe$Just(ingredient.unit))
+	};
+};
+var $elm$regex$Regex$Match = F4(
+	function (match, index, number, submatches) {
+		return {index: index, match: match, number: number, submatches: submatches};
+	});
+var $elm$regex$Regex$contains = _Regex_contains;
+var $elm$regex$Regex$fromStringWith = _Regex_fromStringWith;
+var $elm$regex$Regex$fromString = function (string) {
+	return A2(
+		$elm$regex$Regex$fromStringWith,
+		{caseInsensitive: false, multiline: false},
+		string);
+};
+var $elm$regex$Regex$never = _Regex_never;
+var $author$project$Utils$Decoding$floatRegex = A2(
+	$elm$core$Maybe$withDefault,
+	$elm$regex$Regex$never,
+	$elm$regex$Regex$fromString('^[0-9]+(\\.[0-9]+)?$'));
+var $author$project$Recipes$Update$isId = F2(
+	function (id, meta) {
+		var _v0 = _Utils_Tuple2(meta.metaIngredient, id);
+		_v0$2:
+		while (true) {
+			if (_v0.a.$ === 'IsDirect') {
+				if (_v0.b.$ === 'IngredientId') {
+					var ig = _v0.a.a;
+					var i = _v0.b.a;
+					return _Utils_eq(ig.id, i);
+				} else {
+					break _v0$2;
+				}
+			} else {
+				if (_v0.b.$ === 'SubRecipeId') {
+					var sr = _v0.a.a;
+					var i = _v0.b.a;
+					return _Utils_eq(sr.id, i);
+				} else {
+					break _v0$2;
+				}
+			}
+		}
+		return false;
 	});
 var $author$project$Recipes$Update$mapTab = F2(
 	function (f, tab) {
@@ -6873,6 +7034,23 @@ var $author$project$Recipes$Update$mapModalUpdate = function (f) {
 					}));
 		});
 };
+var $author$project$Utils$Main$mapWebdata = F2(
+	function (f, wd) {
+		switch (wd.$) {
+			case 'Success':
+				var a = wd.a;
+				return $author$project$Utils$Model$Success(
+					f(a));
+			case 'Failure':
+				var e = wd.a;
+				return $author$project$Utils$Model$Failure(e);
+			case 'NotAsked':
+				return $author$project$Utils$Model$NotAsked;
+			default:
+				return $author$project$Utils$Model$Loading;
+		}
+	});
+var $elm$core$Basics$not = _Basics_not;
 var $author$project$Recipes$Update$updateModel = F2(
 	function (f, model) {
 		return _Utils_update(
@@ -6881,8 +7059,180 @@ var $author$project$Recipes$Update$updateModel = F2(
 				tabs: A3($author$project$Utils$Cursor$modifyAt, 1, f, model.tabs)
 			});
 	});
+var $author$project$Recipes$Update$handleMetaIngredientMsg = F3(
+	function (msg, id, model) {
+		var _new = function (_v2) {
+			var i = _v2.a;
+			var e = _v2.b;
+			var unitDropdown = e.unitDropdown;
+			var ingredientDropdown = e.ingredientDropdown;
+			switch (msg.$) {
+				case 'SetIngredientFilter':
+					var filter = msg.a;
+					return _Utils_Tuple2(
+						i,
+						_Utils_update(
+							e,
+							{
+								ingredientDropdown: _Utils_update(
+									ingredientDropdown,
+									{filter: filter})
+							}));
+				case 'SetUnitFilter':
+					var filter = msg.a;
+					return _Utils_Tuple2(
+						i,
+						_Utils_update(
+							e,
+							{
+								unitDropdown: _Utils_update(
+									unitDropdown,
+									{filter: filter})
+							}));
+				case 'SetIngredient':
+					var ingredient = msg.a;
+					return _Utils_Tuple2(
+						_Utils_update(
+							i,
+							{metaIngredient: ingredient}),
+						_Utils_update(
+							e,
+							{
+								ingredientDropdown: _Utils_update(
+									ingredientDropdown,
+									{
+										open: false,
+										selected: $elm$core$Maybe$Just(ingredient)
+									})
+							}));
+				case 'SetUnit':
+					var unit = msg.a;
+					return _Utils_Tuple2(
+						_Utils_update(
+							i,
+							{unit: unit}),
+						_Utils_update(
+							e,
+							{
+								unitDropdown: _Utils_update(
+									unitDropdown,
+									{
+										open: false,
+										selected: $elm$core$Maybe$Just(unit)
+									})
+							}));
+				case 'SetAmount':
+					var amount = msg.a;
+					return A2($elm$regex$Regex$contains, $author$project$Utils$Decoding$floatRegex, amount) ? _Utils_Tuple2(
+						_Utils_update(
+							i,
+							{amount: amount}),
+						e) : _Utils_Tuple2(i, e);
+				default:
+					return _Utils_Tuple2(i, e);
+			}
+		};
+		var mapIf = F2(
+			function (check, f) {
+				return $elm$core$List$map(
+					function (i) {
+						return check(i) ? f(i) : i;
+					});
+			});
+		var save = function (f) {
+			return $author$project$Recipes$Update$mapModalUpdate(
+				function (e) {
+					return _Utils_update(
+						e,
+						{
+							ingredients: A2(
+								$author$project$Utils$Main$mapWebdata,
+								A2(
+									mapIf,
+									A2(
+										$elm$core$Basics$composeL,
+										$author$project$Recipes$Update$isId(id),
+										$elm$core$Tuple$first),
+									f),
+								e.ingredients)
+						});
+				});
+		};
+		if (msg.$ === 'Delete') {
+			return _Utils_Tuple2(
+				A2(
+					$author$project$Recipes$Update$updateModel,
+					$author$project$Recipes$Update$mapModalUpdate(
+						function (e) {
+							return _Utils_update(
+								e,
+								{
+									ingredients: A2(
+										$author$project$Utils$Main$mapWebdata,
+										$elm$core$List$filter(
+											A2(
+												$elm$core$Basics$composeL,
+												A2(
+													$elm$core$Basics$composeL,
+													$elm$core$Basics$not,
+													$author$project$Recipes$Update$isId(id)),
+												$elm$core$Tuple$first)),
+										e.ingredients)
+								});
+						}),
+					model),
+				$elm$core$Platform$Cmd$none);
+		} else {
+			return _Utils_Tuple2(
+				A2(
+					$author$project$Recipes$Update$updateModel,
+					save(_new),
+					model),
+				$elm$core$Platform$Cmd$none);
+		}
+	});
+var $elm$core$Debug$todo = _Debug_todo;
+var $author$project$Recipes$Update$handleStepMsg = F3(
+	function (msg, id, model) {
+		return _Debug_todo(
+			'Recipes.Update',
+			{
+				start: {line: 297, column: 5},
+				end: {line: 297, column: 15}
+			})('handleStepMsg');
+	});
+var $elm$core$Basics$negate = function (n) {
+	return -n;
+};
 var $author$project$Recipes$Update$handleModalMsg = F2(
 	function (msg, model) {
+		var defaultIngredient = A3(
+			$author$project$Recipes$Model$WeightedMetaIngredient,
+			$author$project$Recipes$Model$IsDirect(
+				A4($author$project$Ingredients$Model$Ingredient, 0, '', 0, $elm$core$Maybe$Nothing)),
+			'',
+			A2($author$project$Utils$Model$Unit, 0, ''));
+		var addEntry = function (entry) {
+			return A2(
+				$author$project$Recipes$Update$updateModel,
+				$author$project$Recipes$Update$mapModalUpdate(
+					function (e) {
+						return _Utils_update(
+							e,
+							{
+								ingredients: A2(
+									$author$project$Utils$Main$mapWebdata,
+									function (d) {
+										return _Utils_ap(
+											d,
+											_List_fromArray(
+												[entry]));
+									},
+									e.ingredients)
+							});
+					}),
+				model);
+		};
 		switch (msg.$) {
 			case 'EditComment':
 				var comment = msg.a;
@@ -6916,23 +7266,24 @@ var $author$project$Recipes$Update$handleModalMsg = F2(
 				var id = msg.a;
 				var recipeIngredientMsg = msg.b;
 				return A3($author$project$Recipes$Update$handleMetaIngredientMsg, recipeIngredientMsg, id, model);
-			default:
+			case 'EditStep':
 				var stepMsg = msg.a;
 				var id = msg.b;
 				return A3($author$project$Recipes$Update$handleStepMsg, stepMsg, id, model);
+			default:
+				var recipeIngredientMsg = msg.a;
+				return A2(
+					$elm$core$Debug$log,
+					'',
+					A3(
+						$author$project$Recipes$Update$handleMetaIngredientMsg,
+						recipeIngredientMsg,
+						$author$project$Recipes$Model$IngredientId(-1),
+						addEntry(
+							_Utils_Tuple2(
+								defaultIngredient,
+								$author$project$Recipes$Model$buildEditor(defaultIngredient)))));
 		}
-	});
-var $author$project$Utils$Model$newDropdownData = F2(
-	function (list, selected) {
-		return {filter: '', list: list, open: false, selected: selected};
-	});
-var $author$project$Recipes$Model$buildEditor = F3(
-	function (ingredientList, unitList, ingredient) {
-		return {
-			amountInput: '',
-			ingredientDropdown: A2($author$project$Utils$Model$newDropdownData, ingredientList, ingredient.metaIngredient),
-			unitDropdown: A2($author$project$Utils$Model$newDropdownData, unitList, ingredient.unit)
-		};
 	});
 var $author$project$Recipes$Model$PostResult = function (a) {
 	return {$: 'PostResult', a: a};
@@ -7129,31 +7480,32 @@ var $author$project$Recipes$Update$handleWebData = F2(
 				return _Utils_Tuple2(
 					A2($author$project$Recipes$Update$updateModel, save, model),
 					$elm$core$Platform$Cmd$none);
+			case 'UnitData':
+				var units = result.a;
+				var save = $author$project$Recipes$Update$mapTab(
+					function (r) {
+						return $author$project$Model$Recipes(
+							_Utils_update(
+								r,
+								{
+									allUnits: $author$project$Utils$Main$toWebdata(units)
+								}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Recipes$Update$updateModel, save, model),
+					$elm$core$Platform$Cmd$none);
 			case 'RecipeIngredientData':
 				var meta = result.a;
 				var wd = $author$project$Utils$Main$toWebdata(meta);
-				var _v1 = function () {
-					var _v2 = model.tabs.active;
-					if (_v2.$ === 'Recipes') {
-						var r = _v2.a;
-						return _Utils_Tuple2(r.allIngredients, r.allUnits);
-					} else {
-						return _Utils_Tuple2($author$project$Utils$Model$NotAsked, $author$project$Utils$Model$NotAsked);
-					}
-				}();
-				var allIngredients = _v1.a;
-				var allUnits = _v1.b;
-				var _v3 = _Utils_Tuple3(wd, allIngredients, allUnits);
-				if (((_v3.a.$ === 'Success') && (_v3.b.$ === 'Success')) && (_v3.c.$ === 'Success')) {
-					var ingredients = _v3.a.a;
-					var ingredientList = _v3.b.a;
-					var unitList = _v3.c.a;
+				var _v1 = A2($elm$core$Debug$log, '', wd);
+				if (_v1.$ === 'Success') {
+					var ingredients = _v1.a;
 					var newRecipeIngredients = A2(
 						$elm$core$List$map,
 						function (i) {
 							return _Utils_Tuple2(
 								i,
-								A3($author$project$Recipes$Model$buildEditor, ingredientList, unitList, i));
+								$author$project$Recipes$Model$buildEditor(i));
 						},
 						ingredients);
 					var save = $author$project$Recipes$Update$mapModalUpdate(
@@ -7223,6 +7575,7 @@ var $author$project$Recipes$Update$handleMsg = F2(
 						_List_fromArray(
 							[
 								A2($elm$core$Platform$Cmd$map, $author$project$Model$RecipeMessage, $author$project$Recipes$Service$fetchAllMetaIngredients),
+								A2($elm$core$Platform$Cmd$map, $author$project$Model$RecipeMessage, $author$project$Recipes$Service$fetchUnits),
 								A2($elm$core$Platform$Cmd$map, $author$project$Model$RecipeMessage, $author$project$Recipes$Service$fetchRecipes)
 							])));
 			case 'AddRecipe':
@@ -8306,15 +8659,22 @@ var $author$project$Recipes$Model$ModalMsg = function (a) {
 var $author$project$Recipes$Model$RecipeChanged = function (a) {
 	return {$: 'RecipeChanged', a: a};
 };
+var $elm$html$Html$header = _VirtualDom_node('header');
+var $elm$html$Html$Attributes$href = function (url) {
+	return A2(
+		$elm$html$Html$Attributes$stringProperty,
+		'href',
+		_VirtualDom_noJavaScriptUri(url));
+};
+var $elm$html$Html$p = _VirtualDom_node('p');
+var $author$project$Recipes$Model$AddMetaIngredient = function (a) {
+	return {$: 'AddMetaIngredient', a: a};
+};
 var $author$project$Recipes$Model$Delete = {$: 'Delete'};
 var $author$project$Recipes$Model$EditMetaIngredient = F2(
 	function (a, b) {
 		return {$: 'EditMetaIngredient', a: a, b: b};
 	});
-var $author$project$Recipes$Model$IngredientId = function (a) {
-	return {$: 'IngredientId', a: a};
-};
-var $author$project$Recipes$Model$NewId = {$: 'NewId'};
 var $author$project$Recipes$Model$SetAmount = function (a) {
 	return {$: 'SetAmount', a: a};
 };
@@ -8330,42 +8690,25 @@ var $author$project$Recipes$Model$SetUnit = function (a) {
 var $author$project$Recipes$Model$SetUnitFilter = function (a) {
 	return {$: 'SetUnitFilter', a: a};
 };
+var $author$project$Recipes$Model$NewId = {$: 'NewId'};
 var $author$project$Recipes$Model$SubRecipeId = function (a) {
 	return {$: 'SubRecipeId', a: a};
 };
-var $feathericons$elm_feather$FeatherIcons$delete = A2(
-	$feathericons$elm_feather$FeatherIcons$makeBuilder,
-	'delete',
-	_List_fromArray(
-		[
-			A2(
-			$elm$svg$Svg$path,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$d('M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('18'),
-					$elm$svg$Svg$Attributes$y1('9'),
-					$elm$svg$Svg$Attributes$x2('12'),
-					$elm$svg$Svg$Attributes$y2('15')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('12'),
-					$elm$svg$Svg$Attributes$y1('9'),
-					$elm$svg$Svg$Attributes$x2('18'),
-					$elm$svg$Svg$Attributes$y2('15')
-				]),
-			_List_Nil)
-		]));
+var $author$project$Recipes$Model$getId = function (ing) {
+	if (ing.$ === 'Just') {
+		var ig = ing.a;
+		var _v1 = ig.metaIngredient;
+		if (_v1.$ === 'IsDirect') {
+			var i = _v1.a;
+			return $author$project$Recipes$Model$IngredientId(i.id);
+		} else {
+			var r = _v1.a;
+			return $author$project$Recipes$Model$SubRecipeId(r.id);
+		}
+	} else {
+		return $author$project$Recipes$Model$NewId;
+	}
+};
 var $author$project$Recipes$ViewModal$metaIngredientName = function (ig) {
 	return A2(
 		$elm$core$Maybe$withDefault,
@@ -8382,9 +8725,6 @@ var $author$project$Recipes$ViewModal$metaIngredientName = function (ig) {
 				}
 			},
 			ig));
-};
-var $elm$core$Basics$negate = function (n) {
-	return -n;
 };
 var $elm$html$Html$details = _VirtualDom_node('details');
 var $author$project$Utils$Main$nameFilter = F2(
@@ -8409,15 +8749,19 @@ var $author$project$Utils$View$search = F2(
 			_List_Nil);
 	});
 var $elm$html$Html$summary = _VirtualDom_node('summary');
-var $author$project$Utils$View$searchableDropdown = F2(
-	function (data, ev) {
+var $author$project$Utils$View$searchableDropdown = F3(
+	function (data, ev, list) {
+		var selectedProperty = A2(
+			$elm$core$Maybe$withDefault,
+			'',
+			A2($elm$core$Maybe$map, ev.property, data.selected));
 		var filteredList = A2(
 			$elm$core$List$filter,
 			A2(
 				$elm$core$Basics$composeL,
 				$author$project$Utils$Main$nameFilter(data.filter),
 				ev.property),
-			data.list);
+			list);
 		var options = A2(
 			$elm$core$List$map,
 			function (x) {
@@ -8457,8 +8801,7 @@ var $author$project$Utils$View$searchableDropdown = F2(
 						]),
 					_List_fromArray(
 						[
-							$elm$html$Html$text(
-							ev.property(data.selected))
+							$elm$html$Html$text(selectedProperty)
 						])),
 					A2(
 					$elm$html$Html$ul,
@@ -8472,108 +8815,71 @@ var $author$project$Utils$View$searchableDropdown = F2(
 						options))
 				]));
 	});
-var $author$project$Recipes$ViewModal$renderRecipeIngredient = function (ingredientEditor) {
-	var unitDropdownData = A2(
-		$elm$core$Maybe$withDefault,
-		A2(
-			$author$project$Utils$Model$newDropdownData,
-			_List_Nil,
-			A2($author$project$Utils$Model$Unit, -1, '')),
-		A2(
-			$elm$core$Maybe$map,
-			function (e) {
-				return e.unitDropdown;
-			},
-			A2($elm$core$Maybe$map, $elm$core$Tuple$second, ingredientEditor)));
-	var ingredientDropdownData = A2(
-		$elm$core$Maybe$withDefault,
-		A2(
-			$author$project$Utils$Model$newDropdownData,
-			_List_Nil,
-			$author$project$Recipes$Model$IsDirect(
-				A4($author$project$Ingredients$Model$Ingredient, -1, '', 0, $elm$core$Maybe$Nothing))),
-		A2(
-			$elm$core$Maybe$map,
-			function (e) {
-				return e.ingredientDropdown;
-			},
-			A2($elm$core$Maybe$map, $elm$core$Tuple$second, ingredientEditor)));
-	var ingredient = A2($elm$core$Maybe$map, $elm$core$Tuple$first, ingredientEditor);
-	var id = function () {
-		if (ingredient.$ === 'Just') {
-			var ig = ingredient.a;
-			var _v1 = ig.metaIngredient;
-			if (_v1.$ === 'IsDirect') {
-				var i = _v1.a;
-				return $author$project$Recipes$Model$IngredientId(i.id);
+var $author$project$Recipes$ViewModal$webDataList = function (data) {
+	if (data.$ === 'Success') {
+		var items = data.a;
+		return items;
+	} else {
+		return _List_Nil;
+	}
+};
+var $author$project$Recipes$ViewModal$renderRecipeIngredient = F2(
+	function (data, ingredientEditor) {
+		var ingredient = A2($elm$core$Maybe$map, $elm$core$Tuple$first, ingredientEditor);
+		var msg = function () {
+			if (ingredient.$ === 'Just') {
+				return A2(
+					$elm$core$Basics$composeL,
+					A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+					$author$project$Recipes$Model$EditMetaIngredient(
+						$author$project$Recipes$Model$getId(ingredient)));
 			} else {
-				var r = _v1.a;
-				return $author$project$Recipes$Model$SubRecipeId(r.id);
+				return A2(
+					$elm$core$Basics$composeL,
+					A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+					$author$project$Recipes$Model$AddMetaIngredient);
 			}
-		} else {
-			return $author$project$Recipes$Model$NewId;
-		}
-	}();
-	var ingredientDropdown = A2(
-		$author$project$Utils$View$searchableDropdown,
-		ingredientDropdownData,
-		{
-			onFilter: A2(
-				$elm$core$Basics$composeL,
-				A2(
-					$elm$core$Basics$composeL,
-					A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
-					$author$project$Recipes$Model$EditMetaIngredient(id)),
-				$author$project$Recipes$Model$SetIngredientFilter),
-			onSelect: A2(
-				$elm$core$Basics$composeL,
-				A2(
-					$elm$core$Basics$composeL,
-					A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
-					$author$project$Recipes$Model$EditMetaIngredient(id)),
-				$author$project$Recipes$Model$SetIngredient),
-			property: A2($elm$core$Basics$composeL, $author$project$Recipes$ViewModal$metaIngredientName, $elm$core$Maybe$Just)
-		});
-	var unitDropdown = A2(
-		$author$project$Utils$View$searchableDropdown,
-		unitDropdownData,
-		{
-			onFilter: A2(
-				$elm$core$Basics$composeL,
-				A2(
-					$elm$core$Basics$composeL,
-					A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
-					$author$project$Recipes$Model$EditMetaIngredient(id)),
-				$author$project$Recipes$Model$SetUnitFilter),
-			onSelect: A2(
-				$elm$core$Basics$composeL,
-				A2(
-					$elm$core$Basics$composeL,
-					A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
-					$author$project$Recipes$Model$EditMetaIngredient(id)),
-				$author$project$Recipes$Model$SetUnit),
-			property: function (u) {
-				return u.name;
-			}
-		});
-	var deleteButton = A2(
-		$elm$html$Html$button,
-		_List_fromArray(
-			[
-				$elm$html$Html$Attributes$class('delete'),
-				$elm$html$Html$Events$onClick(
-				$author$project$Model$RecipeMessage(
-					$author$project$Recipes$Model$ModalMsg(
-						A2($author$project$Recipes$Model$EditMetaIngredient, id, $author$project$Recipes$Model$Delete))))
-			]),
-		_List_fromArray(
-			[
-				A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$delete)
-			]));
-	return _List_fromArray(
-		[
-			ingredientDropdown,
+		}();
+		var editor = A2($elm$core$Maybe$map, $elm$core$Tuple$second, ingredientEditor);
+		var iDropdownData = A2(
+			$elm$core$Maybe$withDefault,
+			$author$project$Utils$Model$newDropdownData($elm$core$Maybe$Nothing),
 			A2(
+				$elm$core$Maybe$map,
+				function (e) {
+					return e.ingredientDropdown;
+				},
+				editor));
+		var ingredientDropdown = A3(
+			$author$project$Utils$View$searchableDropdown,
+			iDropdownData,
+			{
+				onFilter: A2($elm$core$Basics$composeL, msg, $author$project$Recipes$Model$SetIngredientFilter),
+				onSelect: A2($elm$core$Basics$composeL, msg, $author$project$Recipes$Model$SetIngredient),
+				property: A2($elm$core$Basics$composeL, $author$project$Recipes$ViewModal$metaIngredientName, $elm$core$Maybe$Just)
+			},
+			$author$project$Recipes$ViewModal$webDataList(data.allIngredients));
+		var uDropdownData = A2(
+			$elm$core$Maybe$withDefault,
+			$author$project$Utils$Model$newDropdownData($elm$core$Maybe$Nothing),
+			A2(
+				$elm$core$Maybe$map,
+				function (e) {
+					return e.unitDropdown;
+				},
+				editor));
+		var unitDropdown = A3(
+			$author$project$Utils$View$searchableDropdown,
+			uDropdownData,
+			{
+				onFilter: A2($elm$core$Basics$composeL, msg, $author$project$Recipes$Model$SetUnitFilter),
+				onSelect: A2($elm$core$Basics$composeL, msg, $author$project$Recipes$Model$SetUnit),
+				property: function (u) {
+					return u.name;
+				}
+			},
+			$author$project$Recipes$ViewModal$webDataList(data.allUnits));
+		var editAmount = A2(
 			$elm$html$Html$input,
 			_List_fromArray(
 				[
@@ -8581,18 +8887,29 @@ var $author$project$Recipes$ViewModal$renderRecipeIngredient = function (ingredi
 					$elm$html$Html$Attributes$type_('text'),
 					$elm$html$Html$Attributes$placeholder('Amount'),
 					$elm$html$Html$Events$onInput(
-					A2(
-						$elm$core$Basics$composeL,
-						A2(
-							$elm$core$Basics$composeL,
-							A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
-							$author$project$Recipes$Model$EditMetaIngredient(id)),
-						$author$project$Recipes$Model$SetAmount))
+					A2($elm$core$Basics$composeL, msg, $author$project$Recipes$Model$SetAmount))
 				]),
-			_List_Nil),
-			unitDropdown
-		]);
-};
+			_List_Nil);
+		var deleteButton = A2(
+			$elm$html$Html$button,
+			_List_fromArray(
+				[
+					$elm$html$Html$Attributes$class('delete'),
+					$elm$html$Html$Events$onClick(
+					msg($author$project$Recipes$Model$Delete))
+				]),
+			_List_fromArray(
+				[
+					A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$trash2)
+				]));
+		if (ingredient.$ === 'Just') {
+			return _List_fromArray(
+				[ingredientDropdown, editAmount, unitDropdown, deleteButton]);
+		} else {
+			return _List_fromArray(
+				[ingredientDropdown]);
+		}
+	});
 var $author$project$Recipes$ViewModal$recipeIngredientsList = F2(
 	function (data, editor) {
 		var _v0 = editor.ingredients;
@@ -8607,7 +8924,7 @@ var $author$project$Recipes$ViewModal$recipeIngredientsList = F2(
 				var ingredients = _v0.a;
 				return A2(
 					$author$project$Utils$View$listView,
-					$author$project$Recipes$ViewModal$renderRecipeIngredient,
+					$author$project$Recipes$ViewModal$renderRecipeIngredient(data),
 					_Utils_ap(
 						A2($elm$core$List$map, $elm$core$Maybe$Just, ingredients),
 						_List_fromArray(
@@ -8640,79 +8957,100 @@ var $author$project$Recipes$ViewModal$recipeDetails = F4(
 					_List_fromArray(
 						[
 							A2(
-							$elm$html$Html$a,
-							_List_fromArray(
-								[
-									$elm$html$Html$Events$onClick(
-									$author$project$Model$RecipeMessage($author$project$Recipes$Model$CloseModal))
-								]),
-							_List_fromArray(
-								[
-									A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$x)
-								])),
-							A2(
-							$elm$html$Html$h3,
+							$elm$html$Html$header,
 							_List_Nil,
 							_List_fromArray(
 								[
-									$elm$html$Html$text(
-									_Utils_ap(title, id_text))
-								])),
-							A2(
-							$elm$html$Html$input,
-							_List_fromArray(
-								[
-									$elm$html$Html$Attributes$class('name'),
-									$elm$html$Html$Attributes$type_('text'),
-									$elm$html$Html$Attributes$placeholder('Name'),
-									$elm$html$Html$Events$onInput(
 									A2(
-										$elm$core$Basics$composeL,
-										A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
-										$author$project$Recipes$Model$EditName))
-								]),
-							_List_Nil),
-							A2(
-							$elm$html$Html$input,
-							_List_fromArray(
-								[
-									$elm$html$Html$Attributes$class('comment'),
-									$elm$html$Html$Attributes$type_('text'),
-									$elm$html$Html$Attributes$placeholder('Comment'),
-									$elm$html$Html$Events$onInput(
-									A2(
-										$elm$core$Basics$composeL,
-										A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
-										$author$project$Recipes$Model$EditComment))
-								]),
-							_List_Nil),
-							A2($author$project$Recipes$ViewModal$recipeIngredientsList, data, editor),
-							A2(
-							$elm$html$Html$footer,
-							_List_fromArray(
-								[
-									$elm$html$Html$Attributes$class('grid')
-								]),
-							_List_fromArray(
-								[
-									A2(
-									$elm$html$Html$button,
+									$elm$html$Html$a,
 									_List_fromArray(
 										[
 											$elm$html$Html$Events$onClick(
-											$author$project$Model$RecipeMessage($author$project$Recipes$Model$CloseModal))
+											$author$project$Model$RecipeMessage($author$project$Recipes$Model$CloseModal)),
+											$elm$html$Html$Attributes$href('#')
+										]),
+									_List_fromArray(
+										[
+											A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$x)
+										])),
+									A2(
+									$elm$html$Html$h3,
+									_List_Nil,
+									_List_fromArray(
+										[
+											$elm$html$Html$text(
+											_Utils_ap(title, id_text))
+										]))
+								])),
+							A2(
+							$elm$html$Html$p,
+							_List_fromArray(
+								[
+									$elm$html$Html$Attributes$class('container')
+								]),
+							_List_fromArray(
+								[
+									A2(
+									$elm$html$Html$input,
+									_List_fromArray(
+										[
+											$elm$html$Html$Attributes$class('name'),
+											$elm$html$Html$Attributes$type_('text'),
+											$elm$html$Html$Attributes$placeholder('Name'),
+											$elm$html$Html$Events$onInput(
+											A2(
+												$elm$core$Basics$composeL,
+												A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+												$author$project$Recipes$Model$EditName)),
+											$elm$html$Html$Attributes$value(editor.name)
+										]),
+									_List_Nil),
+									A2(
+									$elm$html$Html$input,
+									_List_fromArray(
+										[
+											$elm$html$Html$Attributes$class('comment'),
+											$elm$html$Html$Attributes$type_('text'),
+											$elm$html$Html$Attributes$placeholder('Comment'),
+											$elm$html$Html$Events$onInput(
+											A2(
+												$elm$core$Basics$composeL,
+												A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$ModalMsg),
+												$author$project$Recipes$Model$EditComment)),
+											$elm$html$Html$Attributes$value(
+											A2($elm$core$Maybe$withDefault, '', editor.comment))
+										]),
+									_List_Nil),
+									A2($author$project$Recipes$ViewModal$recipeIngredientsList, data, editor)
+								])),
+							A2(
+							$elm$html$Html$footer,
+							_List_Nil,
+							_List_fromArray(
+								[
+									A2(
+									$elm$html$Html$a,
+									_List_fromArray(
+										[
+											$author$project$Utils$Main$role('button'),
+											$elm$html$Html$Attributes$class('secondary'),
+											$elm$html$Html$Events$onClick(
+											$author$project$Model$RecipeMessage($author$project$Recipes$Model$CloseModal)),
+											$elm$html$Html$Attributes$href('#')
 										]),
 									_List_fromArray(
 										[
 											$elm$html$Html$text('Cancel')
 										])),
 									A2(
-									$elm$html$Html$button,
+									$elm$html$Html$a,
 									_List_fromArray(
 										[
+											$author$project$Utils$Main$role('button'),
 											$elm$html$Html$Events$onClick(
 											$author$project$Model$RecipeMessage(
-												$author$project$Recipes$Model$RecipeChanged(editor)))
+												$author$project$Recipes$Model$RecipeChanged(editor))),
+											$elm$html$Html$Attributes$href('#')
 										]),
 									_List_fromArray(
 										[

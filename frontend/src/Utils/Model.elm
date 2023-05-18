@@ -21,17 +21,15 @@ type alias Unit =
 
 
 type alias DropdownData a =
-    { list : List a
-    , selected : a
+    { selected : Maybe a
     , filter : String
     , open : Bool
     }
 
 
-newDropdownData : List a -> a -> DropdownData a
-newDropdownData list selected =
-    { list = list
-    , selected = selected
+newDropdownData : Maybe a -> DropdownData a
+newDropdownData selected =
+    { selected = selected
     , filter = ""
     , open = False
     }

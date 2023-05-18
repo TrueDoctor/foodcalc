@@ -1,11 +1,14 @@
 module Recipes.Update exposing (..)
 
+import Ingredients.Model exposing (Ingredient)
 import Model exposing (Model, Msg(..), Tab(..))
 import Recipes.Model exposing (..)
-import Recipes.Service exposing (addOrUpdateRecipe, fetchAllMetaIngredients, fetchRecipeIngredients, fetchRecipes, updateRecipeExtras)
+import Recipes.Service exposing (addOrUpdateRecipe, fetchAllMetaIngredients, fetchRecipeIngredients, fetchRecipes, fetchUnits, updateRecipeExtras)
+import Regex
 import Utils.Cursor
-import Utils.Main exposing ( toWebdata)
-import Utils.Model exposing (RemoteData(..))
+import Utils.Decoding
+import Utils.Main exposing (mapWebdata, toWebdata)
+import Utils.Model exposing (RemoteData(..), Unit)
 
 
 mapTab : (RecipeTabData -> Tab) -> Tab -> Tab
@@ -55,27 +58,28 @@ handleWebData result model =
             in
             ( updateModel save model, Cmd.none )
 
+        UnitData units ->
+            let
+                save =
+                    mapTab <| \r -> Recipes <| { r | allUnits = toWebdata units }
+            in
+            ( updateModel save model, Cmd.none )
+
         RecipeIngredientData meta ->
             let
                 wd =
                     toWebdata meta
 
-                ( allIngredients, allUnits ) =
-                    case model.tabs.active of
-                        Recipes r ->
-                            ( r.allIngredients, r.allUnits )
-
-                        _ ->
-                            ( NotAsked, NotAsked )
+                
             in
-            case ( wd, allIngredients, allUnits ) of
-                ( Success ingredients, Success ingredientList, Success unitList ) ->
+            case Debug.log "" wd of
+                Success ingredients ->
                     let
                         newRecipeIngredients =
                             ingredients
                                 |> List.map
                                     (\i ->
-                                        ( i, buildEditor ingredientList unitList i )
+                                        ( i, buildEditor i )
                                     )
 
                         save =
@@ -112,6 +116,7 @@ handleMsg msg model =
             ( updateModel save model
             , Cmd.batch
                 [ Cmd.map RecipeMessage fetchAllMetaIngredients
+                , Cmd.map RecipeMessage fetchUnits
                 , Cmd.map RecipeMessage fetchRecipes
                 ]
             )
@@ -190,6 +195,13 @@ mapModalUpdate f =
 
 handleModalMsg : ModalMsg -> Model -> ( Model, Cmd Msg )
 handleModalMsg msg model =
+    let
+        defaultIngredient =
+            WeightedMetaIngredient (IsDirect <| Ingredient 0 "" 0 Nothing) "" (Unit 0 "")
+
+        addEntry entry =
+            updateModel (mapModalUpdate (\e -> { e | ingredients = mapWebdata (\d -> d ++ [ entry ]) e.ingredients })) model
+    in
     case msg of
         EditComment comment ->
             ( updateModel (mapModalUpdate <| \e -> { e | comment = Just comment }) model, Cmd.none )
@@ -197,22 +209,89 @@ handleModalMsg msg model =
         EditName name ->
             ( updateModel (mapModalUpdate <| \e -> { e | name = name }) model, Cmd.none )
 
-        EditMetaIngredient id recipeIngredientMsg  ->
+        EditMetaIngredient id recipeIngredientMsg ->
             handleMetaIngredientMsg recipeIngredientMsg id model
 
         EditStep stepMsg id ->
             handleStepMsg stepMsg id model
 
+        AddMetaIngredient recipeIngredientMsg ->
+            Debug.log "" <| handleMetaIngredientMsg recipeIngredientMsg (IngredientId -1) (addEntry ( defaultIngredient, buildEditor defaultIngredient ))
+
+
+isId : MetaId -> { a | metaIngredient : MetaIngredient } -> Bool
+isId id meta =
+    case ( meta.metaIngredient, id ) of
+        ( IsDirect ig, IngredientId i ) ->
+            ig.id == i
+
+        ( IsSubRecipe sr, SubRecipeId i ) ->
+            sr.id == i
+
+        _ ->
+            False
+
 
 handleMetaIngredientMsg : RecipeIngredientMsg -> MetaId -> Model -> ( Model, Cmd Msg )
 handleMetaIngredientMsg msg id model =
+    let
+        mapIf check f =
+            List.map
+                (\i ->
+                    if check i then
+                        f i
+
+                    else
+                        i
+                )
+
+        save f =
+            mapModalUpdate <| \e -> { e | ingredients = mapWebdata (mapIf (isId id << Tuple.first) f) e.ingredients }
+
+        new : ( WeightedMetaIngredient, RecipeIngredientEditor ) -> ( WeightedMetaIngredient, RecipeIngredientEditor )
+        new ( i, e ) =
+            let
+                ingredientDropdown =
+                    e.ingredientDropdown
+
+                unitDropdown =
+                    e.unitDropdown
+            in
+            case msg of
+                SetIngredientFilter filter ->
+                    ( i, { e | ingredientDropdown = { ingredientDropdown | filter = filter } } )
+
+                SetUnitFilter filter ->
+                    ( i, { e | unitDropdown = { unitDropdown | filter = filter } } )
+
+                SetIngredient ingredient ->
+                    ( { i | metaIngredient = ingredient }
+                    , { e | ingredientDropdown = { ingredientDropdown | selected = Just ingredient, open = False } }
+                    )
+
+                SetUnit unit ->
+                    ( { i | unit = unit }
+                    , { e | unitDropdown = { unitDropdown | selected = Just unit, open = False } }
+                    )
+
+                SetAmount amount ->
+                    if Regex.contains Utils.Decoding.floatRegex amount then
+                        ( { i | amount = amount }, e )
+
+                    else
+                        ( i, e )
+
+                _ ->
+                    ( i, e )
+    in
     case msg of
+        Delete ->
+            ( updateModel (mapModalUpdate <| \e -> { e | ingredients = mapWebdata (List.filter (not << isId id << Tuple.first)) e.ingredients }) model, Cmd.none )
+
         _ ->
-            ( model, Cmd.none )
+            ( updateModel (save new) model, Cmd.none )
 
 
 handleStepMsg : StepMsg -> Int -> Model -> ( Model, Cmd Msg )
 handleStepMsg msg id model =
-    case msg of
-        _ ->
-            ( model, Cmd.none )
+    Debug.todo "handleStepMsg"

@@ -54,6 +54,7 @@ type RecipeWebData
     | RecipeIngredientData (Result Http.Error (List WeightedMetaIngredient))
     | RecipeId RecipeEditor (Result Http.Error Int)
     | PostResult (Result Http.Error ())
+    | UnitData (Result Http.Error (List Unit))
 
 
 type RecipeMsg
@@ -73,6 +74,7 @@ type ModalMsg
     = EditName String
     | EditComment String
     | EditMetaIngredient MetaId RecipeIngredientMsg 
+    | AddMetaIngredient  RecipeIngredientMsg
     | EditStep StepMsg Int
 
 
@@ -107,11 +109,11 @@ type alias RecipeTabData =
     }
 
 
-buildEditor : List MetaIngredient -> List Unit -> WeightedMetaIngredient -> RecipeIngredientEditor
-buildEditor ingredientList unitList ingredient =
+buildEditor : WeightedMetaIngredient -> RecipeIngredientEditor
+buildEditor ingredient =
     { amountInput = ""
-    , unitDropdown = newDropdownData unitList ingredient.unit
-    , ingredientDropdown = newDropdownData ingredientList ingredient.metaIngredient
+    , unitDropdown = newDropdownData (Just ingredient.unit)
+    , ingredientDropdown = newDropdownData (Just ingredient.metaIngredient)
     }
 
 
@@ -142,3 +144,17 @@ emptyRecipeTabData =
     , allIngredients = NotAsked
     , allUnits = NotAsked
     }
+
+getId : Maybe { a | metaIngredient : MetaIngredient } -> MetaId
+getId ing=
+            case ing of
+                Just ig ->
+                    case ig.metaIngredient of
+                        IsDirect i ->
+                            IngredientId i.id
+
+                        IsSubRecipe r ->
+                            SubRecipeId r.id
+
+                _ ->
+                    NewId

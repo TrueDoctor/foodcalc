@@ -5,6 +5,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Model exposing (..)
 import Utils.Model exposing (Unit)
+import Regex
 
 
 decodeStringFloat : Decode.Decoder Float
@@ -39,3 +40,7 @@ maybe f m =
 
         Nothing ->
             Encode.null
+
+floatRegex : Regex.Regex
+floatRegex =
+    Maybe.withDefault Regex.never <| Regex.fromString "^[0-9]+(\\.[0-9]+)?$"

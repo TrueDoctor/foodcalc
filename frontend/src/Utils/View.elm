@@ -1,4 +1,4 @@
-module Utils.View exposing (filterListView, listView, searchableDropdown, showWebData)
+module Utils.View exposing (filterListView, listView, searchableDropdown, showWebData, dropdown)
 
 import FeatherIcons as FI
 import Html exposing (..)
@@ -52,17 +52,21 @@ search action value =
     input [ class "search", type_ "text", placeholder "Filter...", onInput action, Html.Attributes.value value ] []
 
 
-searchableDropdown : DropdownData a -> DropdownEvents a msg -> Html msg
-searchableDropdown data ev =
+searchableDropdown : DropdownData a -> DropdownEvents a msg -> List a -> Html msg
+searchableDropdown data ev list =
     let
         filteredList =
-            List.filter (nameFilter data.filter << ev.property) data.list
+            List.filter (nameFilter data.filter << ev.property) list
 
+        selectedProperty =
+            data.selected 
+            |> Maybe.map ev.property
+            |> Maybe.withDefault ""
         options =
             List.map (\x -> li [] [ a [ onClick <| ev.onSelect x ] [ text <| ev.property x ] ]) filteredList
     in
     details [ role "list" ]
-        [ summary [ attribute "aria-haspopup" "listbox" ] [ text <| ev.property data.selected ]
+        [ summary [ attribute "aria-haspopup" "listbox" ] [ text selectedProperty ]
         , ul [ role "listbox" ] <| search ev.onFilter data.filter :: options
         ]
 
