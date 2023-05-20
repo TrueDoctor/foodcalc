@@ -5435,37 +5435,90 @@ var $elm$core$Task$perform = F2(
 				A2($elm$core$Task$map, toMessage, task)));
 	});
 var $elm$browser$Browser$element = _Browser_element;
-var $author$project$Model$Events = {$: 'Events'};
-var $author$project$Model$IngredientMessage = function (a) {
-	return {$: 'IngredientMessage', a: a};
+var $author$project$Model$ChangeTab = function (a) {
+	return {$: 'ChangeTab', a: a};
 };
-var $author$project$Ingredients$Model$IngredientTabData = F3(
-	function (ingredients, filter, modal) {
-		return {filter: filter, ingredients: ingredients, modal: modal};
-	});
+var $author$project$Model$Events = {$: 'Events'};
 var $author$project$Model$Ingredients = function (a) {
 	return {$: 'Ingredients', a: a};
 };
-var $author$project$Utils$Model$Loading = {$: 'Loading'};
-var $author$project$Model$Model = function (tabs) {
-	return {tabs: tabs};
-};
-var $author$project$Ingredients$Model$NoModal = {$: 'NoModal'};
+var $author$project$Model$Model = F4(
+	function (tabs, ingredients, recipes, events) {
+		return {events: events, ingredients: ingredients, recipes: recipes, tabs: tabs};
+	});
 var $author$project$Model$Recipes = function (a) {
 	return {$: 'Recipes', a: a};
 };
+var $elm$core$Basics$always = F2(
+	function (a, _v0) {
+		return a;
+	});
 var $author$project$Utils$Cursor$create = F2(
 	function (a, r) {
 		return {active: a, left: _List_Nil, right: r};
 	});
-var $author$project$Recipes$Model$NoModal = {$: 'NoModal'};
-var $author$project$Utils$Model$NotAsked = {$: 'NotAsked'};
-var $author$project$Recipes$Model$emptyRecipeTabData = {allIngredients: $author$project$Utils$Model$NotAsked, allUnits: $author$project$Utils$Model$NotAsked, filter: '', modal: $author$project$Recipes$Model$NoModal, recipes: $author$project$Utils$Model$NotAsked};
-var $author$project$Ingredients$Model$GotWebData = function (a) {
-	return {$: 'GotWebData', a: a};
+var $author$project$Events$Data = function (a) {
+	return {$: 'Data', a: a};
 };
-var $author$project$Ingredients$Model$IngredientsList = function (a) {
-	return {$: 'IngredientsList', a: a};
+var $author$project$Utils$Model$NotAsked = {$: 'NotAsked'};
+var $author$project$Events$emptyEventsData = $author$project$Events$Data(
+	{events: $author$project$Utils$Model$NotAsked, modal: $elm$core$Maybe$Nothing});
+var $author$project$Ingredients$Model$NoModal = {$: 'NoModal'};
+var $author$project$Ingredients$Model$emptyIngredientsTabData = {filter: '', ingredients: $author$project$Utils$Model$NotAsked, modal: $author$project$Ingredients$Model$NoModal};
+var $author$project$Recipes$Model$NoModal = {$: 'NoModal'};
+var $author$project$Recipes$Model$emptyRecipeTabData = {allIngredients: $author$project$Utils$Model$NotAsked, allUnits: $author$project$Utils$Model$NotAsked, filter: '', modal: $author$project$Recipes$Model$NoModal, recipes: $author$project$Utils$Model$NotAsked};
+var $elm$core$Platform$Cmd$map = _Platform_map;
+var $elm$core$Platform$Cmd$batch = _Platform_batch;
+var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
+var $author$project$Main$init = function (_v0) {
+	var _v1 = _Utils_Tuple3($author$project$Ingredients$Model$emptyIngredientsTabData, $author$project$Recipes$Model$emptyRecipeTabData, $author$project$Events$emptyEventsData);
+	var ingredientsTabData = _v1.a;
+	var recipeTabData = _v1.b;
+	var eventsData = _v1.c;
+	var tabs = A2(
+		$author$project$Utils$Cursor$create,
+		$author$project$Model$Ingredients(ingredientsTabData),
+		_List_fromArray(
+			[
+				$author$project$Model$Recipes(recipeTabData),
+				$author$project$Model$Events
+			]));
+	return _Utils_Tuple2(
+		A4($author$project$Model$Model, tabs, ingredientsTabData, recipeTabData, eventsData),
+		A2(
+			$elm$core$Platform$Cmd$map,
+			$elm$core$Basics$always(
+				$author$project$Model$ChangeTab(
+					$author$project$Model$Ingredients($author$project$Ingredients$Model$emptyIngredientsTabData))),
+			$elm$core$Platform$Cmd$none));
+};
+var $elm$core$Platform$Sub$batch = _Platform_batch;
+var $elm$core$Platform$Sub$none = $elm$core$Platform$Sub$batch(_List_Nil);
+var $author$project$Main$subscriptions = function (_v0) {
+	return $elm$core$Platform$Sub$none;
+};
+var $author$project$Model$EventsMessage = function (a) {
+	return {$: 'EventsMessage', a: a};
+};
+var $author$project$Model$IngredientMessage = function (a) {
+	return {$: 'IngredientMessage', a: a};
+};
+var $author$project$Ingredients$Model$InitTab = {$: 'InitTab'};
+var $author$project$Recipes$Model$InitTab = {$: 'InitTab'};
+var $author$project$Model$RecipeMessage = function (a) {
+	return {$: 'RecipeMessage', a: a};
+};
+var $author$project$Events$EventListMsg = function (a) {
+	return {$: 'EventListMsg', a: a};
+};
+var $author$project$Utils$Model$Success = function (a) {
+	return {$: 'Success', a: a};
+};
+var $author$project$Events$EventList = function (a) {
+	return {$: 'EventList', a: a};
+};
+var $author$project$Events$GotWebData = function (a) {
+	return {$: 'GotWebData', a: a};
 };
 var $author$project$Settings$backend = function (path) {
 	return 'http://localhost:3000' + path;
@@ -5475,70 +5528,41 @@ var $elm$core$Basics$composeL = F3(
 		return g(
 			f(x));
 	});
-var $author$project$Ingredients$Model$Ingredient = F4(
-	function (id, name, energy, comment) {
-		return {comment: comment, energy: energy, id: id, name: name};
-	});
-var $elm$json$Json$Decode$andThen = _Json_andThen;
-var $elm$json$Json$Decode$fail = _Json_fail;
-var $elm$core$Maybe$map = F2(
-	function (f, maybe) {
-		if (maybe.$ === 'Just') {
-			var value = maybe.a;
-			return $elm$core$Maybe$Just(
-				f(value));
-		} else {
-			return $elm$core$Maybe$Nothing;
-		}
-	});
-var $elm$json$Json$Decode$string = _Json_decodeString;
-var $elm$core$String$toFloat = _String_toFloat;
-var $elm$core$Maybe$withDefault = F2(
-	function (_default, maybe) {
-		if (maybe.$ === 'Just') {
-			var value = maybe.a;
-			return value;
-		} else {
-			return _default;
-		}
-	});
-var $author$project$Utils$Decoding$decodeStringFloat = function () {
-	var parseFloat = function (s) {
-		return A2(
-			$elm$core$Maybe$withDefault,
-			$elm$json$Json$Decode$fail('Could not parse float'),
-			A2(
-				$elm$core$Maybe$map,
-				$elm$json$Json$Decode$succeed,
-				$elm$core$String$toFloat(s)));
-	};
-	return A2($elm$json$Json$Decode$andThen, parseFloat, $elm$json$Json$Decode$string);
-}();
+var $author$project$Events$Exists = function (a) {
+	return {$: 'Exists', a: a};
+};
 var $elm$json$Json$Decode$field = _Json_decodeField;
 var $elm$json$Json$Decode$int = _Json_decodeInt;
 var $elm$json$Json$Decode$map4 = _Json_map4;
-var $elm$json$Json$Decode$null = _Json_decodeNull;
 var $elm$json$Json$Decode$oneOf = _Json_oneOf;
-var $elm$json$Json$Decode$nullable = function (decoder) {
+var $elm$json$Json$Decode$maybe = function (decoder) {
 	return $elm$json$Json$Decode$oneOf(
 		_List_fromArray(
 			[
-				$elm$json$Json$Decode$null($elm$core$Maybe$Nothing),
-				A2($elm$json$Json$Decode$map, $elm$core$Maybe$Just, decoder)
+				A2($elm$json$Json$Decode$map, $elm$core$Maybe$Just, decoder),
+				$elm$json$Json$Decode$succeed($elm$core$Maybe$Nothing)
 			]));
 };
-var $author$project$Ingredients$Service$decodeIngredient = A5(
-	$elm$json$Json$Decode$map4,
-	$author$project$Ingredients$Model$Ingredient,
-	A2($elm$json$Json$Decode$field, 'ingredient_id', $elm$json$Json$Decode$int),
-	A2($elm$json$Json$Decode$field, 'name', $elm$json$Json$Decode$string),
-	A2($elm$json$Json$Decode$field, 'energy', $author$project$Utils$Decoding$decodeStringFloat),
-	A2(
-		$elm$json$Json$Decode$field,
-		'comment',
-		$elm$json$Json$Decode$nullable($elm$json$Json$Decode$string)));
+var $elm$json$Json$Decode$string = _Json_decodeString;
+var $author$project$Events$eventDecoder = function () {
+	var _new = F4(
+		function (name, budget, id, comment) {
+			return $author$project$Events$Exists(
+				{budget: budget, comment: comment, id: id, name: name});
+		});
+	return A5(
+		$elm$json$Json$Decode$map4,
+		_new,
+		A2($elm$json$Json$Decode$field, 'name', $elm$json$Json$Decode$string),
+		A2($elm$json$Json$Decode$field, 'budget', $elm$json$Json$Decode$string),
+		A2($elm$json$Json$Decode$field, 'id', $elm$json$Json$Decode$int),
+		A2(
+			$elm$json$Json$Decode$field,
+			'comment',
+			$elm$json$Json$Decode$maybe($elm$json$Json$Decode$string)));
+}();
 var $elm$json$Json$Decode$list = _Json_decodeList;
-var $author$project$Ingredients$Service$decodeIngredientList = $elm$json$Json$Decode$list($author$project$Ingredients$Service$decodeIngredient);
+var $author$project$Events$eventListDecoder = $elm$json$Json$Decode$list($author$project$Events$eventDecoder);
 var $elm$json$Json$Decode$decodeString = _Json_runOnString;
 var $elm$http$Http$BadStatus_ = F2(
 	function (a, b) {
@@ -6326,38 +6350,659 @@ var $elm$http$Http$get = function (r) {
 	return $elm$http$Http$request(
 		{body: $elm$http$Http$emptyBody, expect: r.expect, headers: _List_Nil, method: 'GET', timeout: $elm$core$Maybe$Nothing, tracker: $elm$core$Maybe$Nothing, url: r.url});
 };
-var $author$project$Ingredients$Service$fetchIngredients = $elm$http$Http$get(
+var $author$project$Events$fetchEvents = $elm$http$Http$get(
 	{
 		expect: A2(
 			$elm$http$Http$expectJson,
-			A2($elm$core$Basics$composeL, $author$project$Ingredients$Model$GotWebData, $author$project$Ingredients$Model$IngredientsList),
-			$author$project$Ingredients$Service$decodeIngredientList),
-		url: $author$project$Settings$backend('/ingredients/list')
+			A2($elm$core$Basics$composeL, $author$project$Events$GotWebData, $author$project$Events$EventList),
+			$author$project$Events$eventListDecoder),
+		url: $author$project$Settings$backend('/events/list')
 	});
-var $elm$core$Platform$Cmd$map = _Platform_map;
-var $author$project$Main$init = function (_v0) {
-	var tabs = A2(
-		$author$project$Utils$Cursor$create,
-		$author$project$Model$Ingredients(
-			A3($author$project$Ingredients$Model$IngredientTabData, $author$project$Utils$Model$Loading, '', $author$project$Ingredients$Model$NoModal)),
-		_List_fromArray(
+var $author$project$Events$Details = function (a) {
+	return {$: 'Details', a: a};
+};
+var $elm$core$Debug$todo = _Debug_todo;
+var $author$project$Events$handleEventDetailsMsg = F2(
+	function (ev, msg) {
+		var event = ev.a.event;
+		var details = ev.a.details;
+		switch (msg.$) {
+			case 'Name':
+				var name = msg.a;
+				return _Utils_Tuple2(
+					$author$project$Events$Details(
+						{details: details, event: event}),
+					$elm$core$Platform$Cmd$none);
+			case 'Budget':
+				var budget = msg.a;
+				return _Utils_Tuple2(
+					$author$project$Events$Details(
+						{details: details, event: event}),
+					$elm$core$Platform$Cmd$none);
+			case 'Comment':
+				var comment = msg.a;
+				return _Utils_Tuple2(
+					$author$project$Events$Details(
+						{details: details, event: event}),
+					$elm$core$Platform$Cmd$none);
+			default:
+				return _Debug_todo(
+					'Events',
+					{
+						start: {line: 316, column: 21},
+						end: {line: 316, column: 31}
+					})('MealModification');
+		}
+	});
+var $author$project$Events$OpenModal = function (a) {
+	return {$: 'OpenModal', a: a};
+};
+var $author$project$Events$deleteEvent = function (id) {
+	return $elm$http$Http$request(
+		{
+			body: $elm$http$Http$emptyBody,
+			expect: A2(
+				$elm$http$Http$expectJson,
+				A2($elm$core$Basics$composeL, $author$project$Events$GotWebData, $author$project$Events$EventList),
+				$author$project$Events$eventListDecoder),
+			headers: _List_Nil,
+			method: 'DELETE',
+			timeout: $elm$core$Maybe$Nothing,
+			tracker: $elm$core$Maybe$Nothing,
+			url: $author$project$Settings$backend(
+				'/events/' + $elm$core$String$fromInt(id))
+		});
+};
+var $elm$core$Debug$log = _Debug_log;
+var $author$project$Events$handleEventMsg = F2(
+	function (msg, event) {
+		switch (msg.$) {
+			case 'EditEvent':
+				return _Utils_Tuple3(
+					A2(
+						$elm$core$Platform$Cmd$map,
+						A2(
+							$elm$core$Basics$always,
+							$author$project$Events$OpenModal,
+							$author$project$Events$Details(
+								{details: $author$project$Utils$Model$NotAsked, event: event})),
+						$elm$core$Platform$Cmd$none),
+					event,
+					$elm$core$Platform$Cmd$none);
+			case 'DeleteEvent':
+				var id = msg.a;
+				return _Utils_Tuple3(
+					$author$project$Events$deleteEvent(id),
+					event,
+					$elm$core$Platform$Cmd$none);
+			default:
+				return _Utils_Tuple3(
+					A2(
+						$elm$core$Platform$Cmd$map,
+						function (_v1) {
+							return $author$project$Events$OpenModal(
+								$author$project$Events$Details(
+									{
+										details: $author$project$Utils$Model$NotAsked,
+										event: A2($elm$core$Debug$log, 'event', event)
+									}));
+						},
+						$elm$core$Platform$Cmd$none),
+					event,
+					$elm$core$Platform$Cmd$none);
+		}
+	});
+var $author$project$SearchList$ItemMsg = F2(
+	function (a, b) {
+		return {$: 'ItemMsg', a: a, b: b};
+	});
+var $author$project$SearchList$SearchList = function (a) {
+	return {$: 'SearchList', a: a};
+};
+var $author$project$SearchList$handleMsg = F3(
+	function (handleItemMsg, searchList, msg) {
+		var s = searchList.a;
+		if (msg.$ === 'SetSearch') {
+			var newSearch = msg.a;
+			return _Utils_Tuple3(
+				$elm$core$Platform$Cmd$none,
+				$author$project$SearchList$SearchList(
+					_Utils_update(
+						s,
+						{search: newSearch})),
+				$elm$core$Platform$Cmd$none);
+		} else {
+			var item = msg.a;
+			var itemMsg = msg.b;
+			var _v2 = A2(handleItemMsg, itemMsg, item);
+			var _super = _v2.a;
+			var newItem = _v2.b;
+			var cmd = _v2.c;
+			var updateOne = function (listItem) {
+				return _Utils_eq(listItem, item) ? newItem : listItem;
+			};
+			return _Utils_Tuple3(
+				_super,
+				$author$project$SearchList$SearchList(
+					_Utils_update(
+						s,
+						{
+							list: A2($elm$core$List$map, updateOne, s.list)
+						})),
+				A2(
+					$elm$core$Platform$Cmd$map,
+					$author$project$SearchList$ItemMsg(item),
+					cmd));
+		}
+	});
+var $author$project$Utils$Model$Failure = function (a) {
+	return {$: 'Failure', a: a};
+};
+var $author$project$Events$NewEvent = function (a) {
+	return {$: 'NewEvent', a: a};
+};
+var $author$project$Events$eventName = function (event) {
+	if (event.$ === 'Exists') {
+		var name = event.a.name;
+		return name;
+	} else {
+		return '<Add Event>';
+	}
+};
+var $author$project$Utils$Model$Loading = {$: 'Loading'};
+var $author$project$Utils$Main$mapWebdata = F2(
+	function (f, wd) {
+		switch (wd.$) {
+			case 'Success':
+				var a = wd.a;
+				return $author$project$Utils$Model$Success(
+					f(a));
+			case 'Failure':
+				var e = wd.a;
+				return $author$project$Utils$Model$Failure(e);
+			case 'NotAsked':
+				return $author$project$Utils$Model$NotAsked;
+			default:
+				return $author$project$Utils$Model$Loading;
+		}
+	});
+var $author$project$SearchList$addAll = F2(
+	function (list, searchList) {
+		var s = searchList.a;
+		return $author$project$SearchList$SearchList(
+			_Utils_update(
+				s,
+				{
+					list: _Utils_ap(list, s.list)
+				}));
+	});
+var $author$project$SearchList$empty = F2(
+	function (filter, viewContent) {
+		return $author$project$SearchList$SearchList(
+			{filter: filter, list: _List_Nil, search: '', viewContent: viewContent});
+	});
+var $author$project$SearchList$new = F3(
+	function (filter, viewContent, list) {
+		return A2(
+			$author$project$SearchList$addAll,
+			list,
+			A2($author$project$SearchList$empty, filter, viewContent));
+	});
+var $elm$core$String$toLower = _String_toLower;
+var $author$project$Utils$Main$propertyFilter = F3(
+	function (property, filter, item) {
+		return A2(
+			$elm$core$String$contains,
+			$elm$core$String$toLower(filter),
+			$elm$core$String$toLower(
+				property(item)));
+	});
+var $author$project$Events$AddEvent = {$: 'AddEvent'};
+var $author$project$Events$DeleteEvent = function (a) {
+	return {$: 'DeleteEvent', a: a};
+};
+var $author$project$Events$EditEvent = function (a) {
+	return {$: 'EditEvent', a: a};
+};
+var $elm$html$Html$a = _VirtualDom_node('a');
+var $elm$svg$Svg$Attributes$d = _VirtualDom_attribute('d');
+var $feathericons$elm_feather$FeatherIcons$Icon = function (a) {
+	return {$: 'Icon', a: a};
+};
+var $feathericons$elm_feather$FeatherIcons$defaultAttributes = function (name) {
+	return {
+		_class: $elm$core$Maybe$Just('feather feather-' + name),
+		size: 24,
+		sizeUnit: '',
+		strokeWidth: 2,
+		viewBox: '0 0 24 24'
+	};
+};
+var $feathericons$elm_feather$FeatherIcons$makeBuilder = F2(
+	function (name, src) {
+		return $feathericons$elm_feather$FeatherIcons$Icon(
+			{
+				attrs: $feathericons$elm_feather$FeatherIcons$defaultAttributes(name),
+				src: src
+			});
+	});
+var $elm$svg$Svg$trustedNode = _VirtualDom_nodeNS('http://www.w3.org/2000/svg');
+var $elm$svg$Svg$path = $elm$svg$Svg$trustedNode('path');
+var $feathericons$elm_feather$FeatherIcons$edit = A2(
+	$feathericons$elm_feather$FeatherIcons$makeBuilder,
+	'edit',
+	_List_fromArray(
+		[
+			A2(
+			$elm$svg$Svg$path,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$d('M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$path,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$d('M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z')
+				]),
+			_List_Nil)
+		]));
+var $elm$json$Json$Encode$string = _Json_wrap;
+var $elm$html$Html$Attributes$stringProperty = F2(
+	function (key, string) {
+		return A2(
+			_VirtualDom_property,
+			key,
+			$elm$json$Json$Encode$string(string));
+	});
+var $elm$html$Html$Attributes$href = function (url) {
+	return A2(
+		$elm$html$Html$Attributes$stringProperty,
+		'href',
+		_VirtualDom_noJavaScriptUri(url));
+};
+var $elm$virtual_dom$VirtualDom$Normal = function (a) {
+	return {$: 'Normal', a: a};
+};
+var $elm$virtual_dom$VirtualDom$on = _VirtualDom_on;
+var $elm$html$Html$Events$on = F2(
+	function (event, decoder) {
+		return A2(
+			$elm$virtual_dom$VirtualDom$on,
+			event,
+			$elm$virtual_dom$VirtualDom$Normal(decoder));
+	});
+var $elm$html$Html$Events$onClick = function (msg) {
+	return A2(
+		$elm$html$Html$Events$on,
+		'click',
+		$elm$json$Json$Decode$succeed(msg));
+};
+var $elm$svg$Svg$line = $elm$svg$Svg$trustedNode('line');
+var $elm$svg$Svg$Attributes$x1 = _VirtualDom_attribute('x1');
+var $elm$svg$Svg$Attributes$x2 = _VirtualDom_attribute('x2');
+var $elm$svg$Svg$Attributes$y1 = _VirtualDom_attribute('y1');
+var $elm$svg$Svg$Attributes$y2 = _VirtualDom_attribute('y2');
+var $feathericons$elm_feather$FeatherIcons$plus = A2(
+	$feathericons$elm_feather$FeatherIcons$makeBuilder,
+	'plus',
+	_List_fromArray(
+		[
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('12'),
+					$elm$svg$Svg$Attributes$y1('5'),
+					$elm$svg$Svg$Attributes$x2('12'),
+					$elm$svg$Svg$Attributes$y2('19')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('5'),
+					$elm$svg$Svg$Attributes$y1('12'),
+					$elm$svg$Svg$Attributes$x2('19'),
+					$elm$svg$Svg$Attributes$y2('12')
+				]),
+			_List_Nil)
+		]));
+var $elm$html$Html$span = _VirtualDom_node('span');
+var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
+var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
+var $elm$svg$Svg$Attributes$class = _VirtualDom_attribute('class');
+var $elm$svg$Svg$Attributes$fill = _VirtualDom_attribute('fill');
+var $elm$core$String$fromFloat = _String_fromNumber;
+var $elm$svg$Svg$Attributes$height = _VirtualDom_attribute('height');
+var $elm$virtual_dom$VirtualDom$map = _VirtualDom_map;
+var $elm$svg$Svg$map = $elm$virtual_dom$VirtualDom$map;
+var $elm$svg$Svg$Attributes$stroke = _VirtualDom_attribute('stroke');
+var $elm$svg$Svg$Attributes$strokeLinecap = _VirtualDom_attribute('stroke-linecap');
+var $elm$svg$Svg$Attributes$strokeLinejoin = _VirtualDom_attribute('stroke-linejoin');
+var $elm$svg$Svg$Attributes$strokeWidth = _VirtualDom_attribute('stroke-width');
+var $elm$svg$Svg$svg = $elm$svg$Svg$trustedNode('svg');
+var $elm$svg$Svg$Attributes$viewBox = _VirtualDom_attribute('viewBox');
+var $elm$svg$Svg$Attributes$width = _VirtualDom_attribute('width');
+var $feathericons$elm_feather$FeatherIcons$toHtml = F2(
+	function (attributes, _v0) {
+		var src = _v0.a.src;
+		var attrs = _v0.a.attrs;
+		var strSize = $elm$core$String$fromFloat(attrs.size);
+		var baseAttributes = _List_fromArray(
 			[
-				$author$project$Model$Recipes($author$project$Recipes$Model$emptyRecipeTabData),
-				$author$project$Model$Events
-			]));
-	return _Utils_Tuple2(
-		$author$project$Model$Model(tabs),
-		A2($elm$core$Platform$Cmd$map, $author$project$Model$IngredientMessage, $author$project$Ingredients$Service$fetchIngredients));
+				$elm$svg$Svg$Attributes$fill('none'),
+				$elm$svg$Svg$Attributes$height(
+				_Utils_ap(strSize, attrs.sizeUnit)),
+				$elm$svg$Svg$Attributes$width(
+				_Utils_ap(strSize, attrs.sizeUnit)),
+				$elm$svg$Svg$Attributes$stroke('currentColor'),
+				$elm$svg$Svg$Attributes$strokeLinecap('round'),
+				$elm$svg$Svg$Attributes$strokeLinejoin('round'),
+				$elm$svg$Svg$Attributes$strokeWidth(
+				$elm$core$String$fromFloat(attrs.strokeWidth)),
+				$elm$svg$Svg$Attributes$viewBox(attrs.viewBox)
+			]);
+		var combinedAttributes = _Utils_ap(
+			function () {
+				var _v1 = attrs._class;
+				if (_v1.$ === 'Just') {
+					var c = _v1.a;
+					return A2(
+						$elm$core$List$cons,
+						$elm$svg$Svg$Attributes$class(c),
+						baseAttributes);
+				} else {
+					return baseAttributes;
+				}
+			}(),
+			attributes);
+		return A2(
+			$elm$svg$Svg$svg,
+			combinedAttributes,
+			A2(
+				$elm$core$List$map,
+				$elm$svg$Svg$map($elm$core$Basics$never),
+				src));
+	});
+var $elm$svg$Svg$Attributes$points = _VirtualDom_attribute('points');
+var $elm$svg$Svg$polyline = $elm$svg$Svg$trustedNode('polyline');
+var $feathericons$elm_feather$FeatherIcons$trash2 = A2(
+	$feathericons$elm_feather$FeatherIcons$makeBuilder,
+	'trash-2',
+	_List_fromArray(
+		[
+			A2(
+			$elm$svg$Svg$polyline,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$points('3 6 5 6 21 6')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$path,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$d('M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('10'),
+					$elm$svg$Svg$Attributes$y1('11'),
+					$elm$svg$Svg$Attributes$x2('10'),
+					$elm$svg$Svg$Attributes$y2('17')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('14'),
+					$elm$svg$Svg$Attributes$y1('11'),
+					$elm$svg$Svg$Attributes$x2('14'),
+					$elm$svg$Svg$Attributes$y2('17')
+				]),
+			_List_Nil)
+		]));
+var $elm$core$Maybe$withDefault = F2(
+	function (_default, maybe) {
+		if (maybe.$ === 'Just') {
+			var value = maybe.a;
+			return value;
+		} else {
+			return _default;
+		}
+	});
+var $author$project$Events$viewEvent = function (event) {
+	if (event.$ === 'Exists') {
+		var id = event.a.id;
+		var name = event.a.name;
+		var budget = event.a.budget;
+		var comment = event.a.comment;
+		return _List_fromArray(
+			[
+				A2(
+				$elm$html$Html$span,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text(
+						$elm$core$String$fromInt(id))
+					])),
+				A2(
+				$elm$html$Html$span,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text(name)
+					])),
+				A2(
+				$elm$html$Html$span,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text(budget)
+					])),
+				A2(
+				$elm$html$Html$span,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text(
+						A2($elm$core$Maybe$withDefault, '', comment))
+					])),
+				A2(
+				$elm$html$Html$a,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$href('#'),
+						$elm$html$Html$Events$onClick(
+						$author$project$Events$EditEvent(id))
+					]),
+				_List_fromArray(
+					[
+						A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$edit)
+					])),
+				A2(
+				$elm$html$Html$a,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$href('#'),
+						$elm$html$Html$Events$onClick(
+						$author$project$Events$DeleteEvent(id))
+					]),
+				_List_fromArray(
+					[
+						A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$trash2)
+					]))
+			]);
+	} else {
+		return _List_fromArray(
+			[
+				A2(
+				$elm$html$Html$span,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('')
+					])),
+				A2(
+				$elm$html$Html$span,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('')
+					])),
+				A2(
+				$elm$html$Html$span,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('')
+					])),
+				A2(
+				$elm$html$Html$span,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('')
+					])),
+				A2(
+				$elm$html$Html$a,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$href('#'),
+						$elm$html$Html$Events$onClick($author$project$Events$AddEvent)
+					]),
+				_List_fromArray(
+					[
+						A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$plus)
+					])),
+				A2($elm$html$Html$span, _List_Nil, _List_Nil)
+			]);
+	}
 };
-var $elm$core$Platform$Sub$batch = _Platform_batch;
-var $elm$core$Platform$Sub$none = $elm$core$Platform$Sub$batch(_List_Nil);
-var $author$project$Main$subscriptions = function (_v0) {
-	return $elm$core$Platform$Sub$none;
+var $author$project$Events$newEventsList = function (webData) {
+	return A2(
+		$author$project$Utils$Main$mapWebdata,
+		function (list) {
+			return A3(
+				$author$project$SearchList$new,
+				$author$project$Utils$Main$propertyFilter($author$project$Events$eventName),
+				$author$project$Events$viewEvent,
+				list);
+		},
+		webData);
 };
-var $author$project$Recipes$Model$InitTab = {$: 'InitTab'};
-var $author$project$Model$RecipeMessage = function (a) {
-	return {$: 'RecipeMessage', a: a};
-};
+var $author$project$Events$handleWebDataMsg = F2(
+	function (msg, data) {
+		var modal = data.a.modal;
+		if (msg.a.$ === 'Ok') {
+			var list = msg.a.a;
+			return _Utils_Tuple2(
+				$author$project$Events$Data(
+					{
+						events: $author$project$Events$newEventsList(
+							$author$project$Utils$Model$Success(
+								_Utils_ap(
+									A2($elm$core$Debug$log, '', list),
+									_List_fromArray(
+										[
+											$author$project$Events$NewEvent(
+											{budget: '', comment: $elm$core$Maybe$Nothing, name: ''})
+										])))),
+						modal: modal
+					}),
+				$elm$core$Platform$Cmd$none);
+		} else {
+			var e = msg.a.a;
+			return _Utils_Tuple2(
+				$author$project$Events$Data(
+					{
+						events: $author$project$Utils$Model$Failure(e),
+						modal: modal
+					}),
+				$elm$core$Platform$Cmd$none);
+		}
+	});
+var $author$project$Events$handleEventTabMsg = F2(
+	function (msg, data) {
+		var _v0 = A2($elm$core$Debug$log, 'data', data);
+		var events = _v0.a.events;
+		var modal = _v0.a.modal;
+		switch (msg.$) {
+			case 'EventListMsg':
+				var searchListMsg = msg.a;
+				if (events.$ === 'Success') {
+					var searchList = events.a;
+					var _v3 = A3($author$project$SearchList$handleMsg, $author$project$Events$handleEventMsg, searchList, searchListMsg);
+					var superCmd = _v3.a;
+					var newSearchList = _v3.b;
+					var cmd = _v3.c;
+					return _Utils_Tuple2(
+						$author$project$Events$Data(
+							{
+								events: $author$project$Utils$Model$Success(newSearchList),
+								modal: modal
+							}),
+						$elm$core$Platform$Cmd$batch(
+							_List_fromArray(
+								[
+									A2($elm$core$Platform$Cmd$map, $author$project$Events$EventListMsg, cmd),
+									superCmd
+								])));
+				} else {
+					return _Utils_Tuple2(data, $elm$core$Platform$Cmd$none);
+				}
+			case 'OpenModal':
+				var open = msg.a;
+				return _Utils_Tuple2(
+					A3(
+						$elm$core$Debug$log,
+						'open',
+						$author$project$Events$Data,
+						{
+							events: events,
+							modal: $elm$core$Maybe$Just(open)
+						}),
+					$elm$core$Platform$Cmd$none);
+			case 'CloseModal':
+				return _Utils_Tuple2(
+					$author$project$Events$Data(
+						{events: events, modal: $elm$core$Maybe$Nothing}),
+					$elm$core$Platform$Cmd$none);
+			case 'GotWebData':
+				var wdMsg = msg.a;
+				return A2($author$project$Events$handleWebDataMsg, wdMsg, data);
+			case 'InitTab':
+				return _Utils_Tuple2(data, $author$project$Events$fetchEvents);
+			case 'SaveModal':
+				return _Debug_todo(
+					'Events',
+					{
+						start: {line: 262, column: 21},
+						end: {line: 262, column: 31}
+					})('SaveModal');
+			default:
+				var ev = msg.a;
+				var evMsg = msg.b;
+				var _v4 = A2($author$project$Events$handleEventDetailsMsg, ev, evMsg);
+				var details = _v4.a;
+				var cmd = _v4.b;
+				return _Utils_Tuple2(
+					$author$project$Events$Data(
+						{
+							events: events,
+							modal: $elm$core$Maybe$Just(details)
+						}),
+					cmd);
+		}
+	});
 var $author$project$Ingredients$Model$Add = function (a) {
 	return {$: 'Add', a: a};
 };
@@ -6379,7 +7024,6 @@ var $elm$core$List$filter = F2(
 			_List_Nil,
 			list);
 	});
-var $elm$core$String$fromFloat = _String_fromNumber;
 var $elm$core$List$head = function (list) {
 	if (list.b) {
 		var x = list.a;
@@ -6389,6 +7033,16 @@ var $elm$core$List$head = function (list) {
 		return $elm$core$Maybe$Nothing;
 	}
 };
+var $elm$core$Maybe$map = F2(
+	function (f, maybe) {
+		if (maybe.$ === 'Just') {
+			var value = maybe.a;
+			return $elm$core$Maybe$Just(
+				f(value));
+		} else {
+			return $elm$core$Maybe$Nothing;
+		}
+	});
 var $author$project$Ingredients$Update$editor = F2(
 	function (itab, id) {
 		var _v0 = itab.ingredients;
@@ -6419,6 +7073,59 @@ var $author$project$Ingredients$Update$editor = F2(
 			return itab.modal;
 		}
 	});
+var $author$project$Ingredients$Model$GotWebData = function (a) {
+	return {$: 'GotWebData', a: a};
+};
+var $author$project$Ingredients$Model$IngredientsList = function (a) {
+	return {$: 'IngredientsList', a: a};
+};
+var $author$project$Ingredients$Model$Ingredient = F4(
+	function (id, name, energy, comment) {
+		return {comment: comment, energy: energy, id: id, name: name};
+	});
+var $elm$json$Json$Decode$andThen = _Json_andThen;
+var $elm$json$Json$Decode$fail = _Json_fail;
+var $elm$core$String$toFloat = _String_toFloat;
+var $author$project$Utils$Decoding$decodeStringFloat = function () {
+	var parseFloat = function (s) {
+		return A2(
+			$elm$core$Maybe$withDefault,
+			$elm$json$Json$Decode$fail('Could not parse float'),
+			A2(
+				$elm$core$Maybe$map,
+				$elm$json$Json$Decode$succeed,
+				$elm$core$String$toFloat(s)));
+	};
+	return A2($elm$json$Json$Decode$andThen, parseFloat, $elm$json$Json$Decode$string);
+}();
+var $elm$json$Json$Decode$null = _Json_decodeNull;
+var $elm$json$Json$Decode$nullable = function (decoder) {
+	return $elm$json$Json$Decode$oneOf(
+		_List_fromArray(
+			[
+				$elm$json$Json$Decode$null($elm$core$Maybe$Nothing),
+				A2($elm$json$Json$Decode$map, $elm$core$Maybe$Just, decoder)
+			]));
+};
+var $author$project$Ingredients$Service$decodeIngredient = A5(
+	$elm$json$Json$Decode$map4,
+	$author$project$Ingredients$Model$Ingredient,
+	A2($elm$json$Json$Decode$field, 'ingredient_id', $elm$json$Json$Decode$int),
+	A2($elm$json$Json$Decode$field, 'name', $elm$json$Json$Decode$string),
+	A2($elm$json$Json$Decode$field, 'energy', $author$project$Utils$Decoding$decodeStringFloat),
+	A2(
+		$elm$json$Json$Decode$field,
+		'comment',
+		$elm$json$Json$Decode$nullable($elm$json$Json$Decode$string)));
+var $author$project$Ingredients$Service$decodeIngredientList = $elm$json$Json$Decode$list($author$project$Ingredients$Service$decodeIngredient);
+var $author$project$Ingredients$Service$fetchIngredients = $elm$http$Http$get(
+	{
+		expect: A2(
+			$elm$http$Http$expectJson,
+			A2($elm$core$Basics$composeL, $author$project$Ingredients$Model$GotWebData, $author$project$Ingredients$Model$IngredientsList),
+			$author$project$Ingredients$Service$decodeIngredientList),
+		url: $author$project$Settings$backend('/ingredients/list')
+	});
 var $author$project$Ingredients$Model$CloseModal = {$: 'CloseModal'};
 var $author$project$Ingredients$Model$SuccessfulPost = function (a) {
 	return {$: 'SuccessfulPost', a: a};
@@ -6438,7 +7145,6 @@ var $elm$json$Json$Encode$object = function (pairs) {
 			_Json_emptyObject(_Utils_Tuple0),
 			pairs));
 };
-var $elm$json$Json$Encode$string = _Json_wrap;
 var $author$project$Ingredients$Service$encodeIngredient = function (ingredient) {
 	return $elm$json$Json$Encode$object(
 		_List_fromArray(
@@ -6491,7 +7197,6 @@ var $author$project$Ingredients$Service$addOrUpdateIngredient = function (ingred
 			url: $author$project$Settings$backend(url)
 		});
 };
-var $elm$core$Platform$Cmd$batch = _Platform_batch;
 var $author$project$Ingredients$Update$mapTab = F2(
 	function (f, tab) {
 		if (tab.$ === 'Ingredients') {
@@ -6502,7 +7207,6 @@ var $author$project$Ingredients$Update$mapTab = F2(
 			return any;
 		}
 	});
-var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
 var $author$project$Utils$Cursor$modifyAt = F3(
 	function (index, f, cursor) {
 		var mapper = F3(
@@ -6636,12 +7340,6 @@ var $author$project$Ingredients$Update$handleModalMsg = F2(
 							])));
 		}
 	});
-var $author$project$Utils$Model$Failure = function (a) {
-	return {$: 'Failure', a: a};
-};
-var $author$project$Utils$Model$Success = function (a) {
-	return {$: 'Success', a: a};
-};
 var $author$project$Utils$Main$toWebdata = function (r) {
 	if (r.$ === 'Ok') {
 		var a = r.a;
@@ -6734,8 +7432,25 @@ var $author$project$Ingredients$Update$handleMsg = F2(
 			case 'ModalMsg':
 				var m = msg.a;
 				return A2($author$project$Ingredients$Update$handleModalMsg, m, model);
+			case 'DeleteIngredient':
+				var id = msg.a;
+				return _Debug_todo(
+					'Ingredients.Update',
+					{
+						start: {line: 78, column: 13},
+						end: {line: 78, column: 23}
+					})('Delete ingredient');
 			default:
-				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+				var save = $author$project$Ingredients$Update$mapTab(
+					function (i) {
+						return $author$project$Model$Ingredients(
+							_Utils_update(
+								i,
+								{ingredients: $author$project$Utils$Model$Loading}));
+					});
+				return _Utils_Tuple2(
+					A2($author$project$Ingredients$Update$updateModel, save, model),
+					A2($elm$core$Platform$Cmd$map, $author$project$Model$IngredientMessage, $author$project$Ingredients$Service$fetchIngredients));
 		}
 	});
 var $author$project$Ingredients$Main$handleIngredientsMsg = $author$project$Ingredients$Update$handleMsg;
@@ -7032,22 +7747,6 @@ var $author$project$Recipes$Update$mapModalUpdate = function (f) {
 					}));
 		});
 };
-var $author$project$Utils$Main$mapWebdata = F2(
-	function (f, wd) {
-		switch (wd.$) {
-			case 'Success':
-				var a = wd.a;
-				return $author$project$Utils$Model$Success(
-					f(a));
-			case 'Failure':
-				var e = wd.a;
-				return $author$project$Utils$Model$Failure(e);
-			case 'NotAsked':
-				return $author$project$Utils$Model$NotAsked;
-			default:
-				return $author$project$Utils$Model$Loading;
-		}
-	});
 var $elm$core$Basics$not = _Basics_not;
 var $author$project$Recipes$Update$updateModel = F2(
 	function (f, model) {
@@ -7189,7 +7888,6 @@ var $author$project$Recipes$Update$handleMetaIngredientMsg = F3(
 				$elm$core$Platform$Cmd$none);
 		}
 	});
-var $elm$core$Debug$todo = _Debug_todo;
 var $author$project$Recipes$Update$handleStepMsg = F3(
 	function (msg, id, model) {
 		return _Debug_todo(
@@ -7199,7 +7897,6 @@ var $author$project$Recipes$Update$handleStepMsg = F3(
 				end: {line: 295, column: 15}
 			})('handleStepMsg');
 	});
-var $elm$core$Debug$log = _Debug_log;
 var $elm$core$Basics$negate = function (n) {
 	return -n;
 };
@@ -7670,6 +8367,8 @@ var $author$project$Recipes$Update$handleMsg = F2(
 		}
 	});
 var $author$project$Recipes$Main$handleRecipesMsg = $author$project$Recipes$Update$handleMsg;
+var $author$project$Events$InitTab = {$: 'InitTab'};
+var $author$project$Events$init = $author$project$Events$InitTab;
 var $author$project$Utils$Cursor$list = function (cursor) {
 	return _Utils_ap(
 		cursor.left,
@@ -7871,7 +8570,7 @@ var $author$project$Utils$Cursor$setActiveBy = F2(
 			return A2($author$project$Utils$Cursor$setActive, i, cursor);
 		}
 	});
-var $author$project$Settings$tabName = function (tab) {
+var $author$project$Main$tabName = function (tab) {
 	switch (tab.$) {
 		case 'Ingredients':
 			return 'Ingredients';
@@ -7887,25 +8586,33 @@ var $author$project$Main$changeTab = F2(
 			$author$project$Utils$Cursor$setActiveBy,
 			function (t) {
 				return _Utils_eq(
-					$author$project$Settings$tabName(t),
-					$author$project$Settings$tabName(tab));
+					$author$project$Main$tabName(t),
+					$author$project$Main$tabName(tab));
 			},
 			model.tabs);
 		return $author$project$Main$initTab(
-			$author$project$Model$Model(c));
+			_Utils_update(
+				model,
+				{tabs: c}));
 	});
 var $author$project$Main$initTab = function (model) {
-	var _v1 = model.tabs.active;
-	switch (_v1.$) {
+	var _v2 = model.tabs.active;
+	switch (_v2.$) {
 		case 'Ingredients':
-			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+			return A2(
+				$author$project$Main$update,
+				$author$project$Model$IngredientMessage($author$project$Ingredients$Model$InitTab),
+				model);
 		case 'Recipes':
 			return A2(
 				$author$project$Main$update,
 				$author$project$Model$RecipeMessage($author$project$Recipes$Model$InitTab),
 				model);
 		default:
-			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+			return A2(
+				$author$project$Main$update,
+				$author$project$Model$EventsMessage($author$project$Events$init),
+				model);
 	}
 };
 var $author$project$Main$update = F2(
@@ -7919,45 +8626,27 @@ var $author$project$Main$update = F2(
 			case 'IngredientMessage':
 				var m = msg.a;
 				return A2($author$project$Ingredients$Main$handleIngredientsMsg, m, model);
-			default:
+			case 'RecipeMessage':
 				var m = msg.a;
 				return A2($author$project$Recipes$Main$handleRecipesMsg, m, model);
+			default:
+				var e = msg.a;
+				var _v1 = A2($author$project$Events$handleEventTabMsg, e, model.events);
+				var events = _v1.a;
+				var cmd = _v1.b;
+				return _Utils_Tuple2(
+					_Utils_update(
+						model,
+						{events: events}),
+					A2($elm$core$Platform$Cmd$map, $author$project$Model$EventsMessage, cmd));
 		}
-	});
-var $elm$html$Html$Attributes$stringProperty = F2(
-	function (key, string) {
-		return A2(
-			_VirtualDom_property,
-			key,
-			$elm$json$Json$Encode$string(string));
 	});
 var $elm$html$Html$Attributes$class = $elm$html$Html$Attributes$stringProperty('className');
 var $elm$html$Html$div = _VirtualDom_node('div');
 var $author$project$Utils$Cursor$active = function (cursor) {
 	return cursor.active;
 };
-var $author$project$Model$ChangeTab = function (a) {
-	return {$: 'ChangeTab', a: a};
-};
-var $elm$html$Html$a = _VirtualDom_node('a');
 var $elm$html$Html$li = _VirtualDom_node('li');
-var $elm$virtual_dom$VirtualDom$Normal = function (a) {
-	return {$: 'Normal', a: a};
-};
-var $elm$virtual_dom$VirtualDom$on = _VirtualDom_on;
-var $elm$html$Html$Events$on = F2(
-	function (event, decoder) {
-		return A2(
-			$elm$virtual_dom$VirtualDom$on,
-			event,
-			$elm$virtual_dom$VirtualDom$Normal(decoder));
-	});
-var $elm$html$Html$Events$onClick = function (msg) {
-	return A2(
-		$elm$html$Html$Events$on,
-		'click',
-		$elm$json$Json$Decode$succeed(msg));
-};
 var $elm$virtual_dom$VirtualDom$attribute = F2(
 	function (key, value) {
 		return A2(
@@ -7967,8 +8656,6 @@ var $elm$virtual_dom$VirtualDom$attribute = F2(
 	});
 var $elm$html$Html$Attributes$attribute = $elm$virtual_dom$VirtualDom$attribute;
 var $author$project$Utils$Main$role = $elm$html$Html$Attributes$attribute('role');
-var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
-var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
 var $author$project$Navbar$generateNavbarItem = F3(
 	function (active, view, tab) {
 		return active ? A2(
@@ -8066,6 +8753,311 @@ var $author$project$Navbar$generateNavbar = F2(
 						A2($elm$core$List$cons, a, r)))
 				]));
 	});
+var $elm$html$Html$map = $elm$virtual_dom$VirtualDom$map;
+var $author$project$SearchList$SetSearch = function (a) {
+	return {$: 'SetSearch', a: a};
+};
+var $author$project$SearchList$filterList = function (searchList) {
+	var list = searchList.a.list;
+	var search = searchList.a.search;
+	var filter = searchList.a.filter;
+	return A2(
+		$elm$core$List$filter,
+		filter(search),
+		list);
+};
+var $elm$html$Html$input = _VirtualDom_node('input');
+var $elm$html$Html$Events$alwaysStop = function (x) {
+	return _Utils_Tuple2(x, true);
+};
+var $elm$virtual_dom$VirtualDom$MayStopPropagation = function (a) {
+	return {$: 'MayStopPropagation', a: a};
+};
+var $elm$html$Html$Events$stopPropagationOn = F2(
+	function (event, decoder) {
+		return A2(
+			$elm$virtual_dom$VirtualDom$on,
+			event,
+			$elm$virtual_dom$VirtualDom$MayStopPropagation(decoder));
+	});
+var $elm$json$Json$Decode$at = F2(
+	function (fields, decoder) {
+		return A3($elm$core$List$foldr, $elm$json$Json$Decode$field, decoder, fields);
+	});
+var $elm$html$Html$Events$targetValue = A2(
+	$elm$json$Json$Decode$at,
+	_List_fromArray(
+		['target', 'value']),
+	$elm$json$Json$Decode$string);
+var $elm$html$Html$Events$onInput = function (tagger) {
+	return A2(
+		$elm$html$Html$Events$stopPropagationOn,
+		'input',
+		A2(
+			$elm$json$Json$Decode$map,
+			$elm$html$Html$Events$alwaysStop,
+			A2($elm$json$Json$Decode$map, tagger, $elm$html$Html$Events$targetValue)));
+};
+var $author$project$SearchList$viewItem = F2(
+	function (searchList, item) {
+		var s = searchList.a;
+		return A2(
+			$elm$html$Html$li,
+			_List_Nil,
+			A2(
+				$elm$core$List$map,
+				$elm$html$Html$map(
+					$author$project$SearchList$ItemMsg(item)),
+				s.viewContent(item)));
+	});
+var $author$project$SearchList$view = function (searchList) {
+	return A2(
+		$elm$html$Html$div,
+		_List_Nil,
+		_List_fromArray(
+			[
+				A2(
+				$elm$html$Html$input,
+				_List_fromArray(
+					[
+						$elm$html$Html$Events$onInput($author$project$SearchList$SetSearch)
+					]),
+				_List_Nil),
+				A2(
+				$elm$html$Html$ul,
+				_List_Nil,
+				A2(
+					$elm$core$List$map,
+					$author$project$SearchList$viewItem(searchList),
+					$author$project$SearchList$filterList(searchList)))
+			]));
+};
+var $author$project$Events$CloseModal = {$: 'CloseModal'};
+var $author$project$Events$EventDetails = F2(
+	function (a, b) {
+		return {$: 'EventDetails', a: a, b: b};
+	});
+var $author$project$Events$Name = function (a) {
+	return {$: 'Name', a: a};
+};
+var $author$project$Events$SaveModal = function (a) {
+	return {$: 'SaveModal', a: a};
+};
+var $elm$html$Html$Attributes$placeholder = $elm$html$Html$Attributes$stringProperty('placeholder');
+var $elm$html$Html$Attributes$type_ = $elm$html$Html$Attributes$stringProperty('type');
+var $elm$html$Html$footer = _VirtualDom_node('footer');
+var $elm$html$Html$header = _VirtualDom_node('header');
+var $elm$virtual_dom$VirtualDom$node = function (tag) {
+	return _VirtualDom_node(
+		_VirtualDom_noScript(tag));
+};
+var $elm$html$Html$node = $elm$virtual_dom$VirtualDom$node;
+var $elm$html$Html$p = _VirtualDom_node('p');
+var $feathericons$elm_feather$FeatherIcons$x = A2(
+	$feathericons$elm_feather$FeatherIcons$makeBuilder,
+	'x',
+	_List_fromArray(
+		[
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('18'),
+					$elm$svg$Svg$Attributes$y1('6'),
+					$elm$svg$Svg$Attributes$x2('6'),
+					$elm$svg$Svg$Attributes$y2('18')
+				]),
+			_List_Nil),
+			A2(
+			$elm$svg$Svg$line,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x1('6'),
+					$elm$svg$Svg$Attributes$y1('6'),
+					$elm$svg$Svg$Attributes$x2('18'),
+					$elm$svg$Svg$Attributes$y2('18')
+				]),
+			_List_Nil)
+		]));
+var $author$project$Modal$viewModal = F4(
+	function (title, onClose, footer, content) {
+		return A3(
+			$elm$html$Html$node,
+			'dialog',
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$attribute, 'open', '')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$header,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$a,
+							_List_fromArray(
+								[
+									$elm$html$Html$Events$onClick(onClose),
+									$elm$html$Html$Attributes$href('#')
+								]),
+							_List_fromArray(
+								[
+									A2($feathericons$elm_feather$FeatherIcons$toHtml, _List_Nil, $feathericons$elm_feather$FeatherIcons$x)
+								])),
+							$elm$html$Html$text(title)
+						])),
+					A2(
+					$elm$html$Html$p,
+					_List_fromArray(
+						[
+							$elm$html$Html$Attributes$class('container')
+						]),
+					content),
+					A2($elm$html$Html$footer, _List_Nil, footer)
+				]));
+	});
+var $author$project$Events$viewEventDetails = function (evDetails) {
+	var event = evDetails.a.event;
+	var details = evDetails.a.details;
+	switch (details.$) {
+		case 'NotAsked':
+			return A2(
+				$elm$html$Html$div,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('NotAsked')
+					]));
+		case 'Loading':
+			return A2(
+				$elm$html$Html$div,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Loading')
+					]));
+		case 'Failure':
+			return A2(
+				$elm$html$Html$div,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Error loading Meals')
+					]));
+		default:
+			var searchList = details.a;
+			var meals = _List_Nil;
+			var fields = _List_fromArray(
+				[
+					A2(
+					$elm$html$Html$input,
+					_List_fromArray(
+						[
+							$elm$html$Html$Attributes$type_('text'),
+							$elm$html$Html$Attributes$placeholder('Name'),
+							$elm$html$Html$Events$onInput(
+							function (name) {
+								return A2(
+									$author$project$Events$EventDetails,
+									evDetails,
+									$author$project$Events$Name(name));
+							})
+						]),
+					_List_Nil)
+				]);
+			var buttons = _List_fromArray(
+				[
+					A2(
+					$elm$html$Html$a,
+					_List_fromArray(
+						[
+							$elm$html$Html$Attributes$href('#'),
+							$elm$html$Html$Events$onClick($author$project$Events$CloseModal)
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text('Close')
+						])),
+					A2(
+					$elm$html$Html$a,
+					_List_fromArray(
+						[
+							$elm$html$Html$Attributes$href('#'),
+							$elm$html$Html$Events$onClick(
+							$author$project$Events$SaveModal(evDetails))
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text('Save')
+						]))
+				]);
+			return A4(
+				$author$project$Modal$viewModal,
+				'Event Details',
+				$author$project$Events$CloseModal,
+				buttons,
+				_Utils_ap(fields, meals));
+	}
+};
+var $author$project$Events$viewEvents = function (data) {
+	var events = data.a.events;
+	var modal = data.a.modal;
+	switch (events.$) {
+		case 'NotAsked':
+			return A2(
+				$elm$html$Html$div,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('NotAsked')
+					]));
+		case 'Loading':
+			return A2(
+				$elm$html$Html$div,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Loading')
+					]));
+		case 'Failure':
+			return A2(
+				$elm$html$Html$div,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Error loading Events')
+					]));
+		default:
+			var searchList = events.a;
+			if (modal.$ === 'Just') {
+				var m = modal.a;
+				return A2(
+					$elm$html$Html$div,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$map,
+							$author$project$Events$EventListMsg,
+							$author$project$SearchList$view(searchList)),
+							$author$project$Events$viewEventDetails(m)
+						]));
+			} else {
+				return A2(
+					$elm$html$Html$div,
+					_List_Nil,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$map,
+							$author$project$Events$EventListMsg,
+							$author$project$SearchList$view(searchList))
+						]));
+			}
+	}
+};
 var $author$project$Ingredients$Model$AddIngredient = {$: 'AddIngredient'};
 var $author$project$Ingredients$Model$EditFilter = function (a) {
 	return {$: 'EditFilter', a: a};
@@ -8105,145 +9097,6 @@ var $author$project$Utils$View$listView = F2(
 				]));
 	});
 var $elm$html$Html$button = _VirtualDom_node('button');
-var $elm$html$Html$input = _VirtualDom_node('input');
-var $elm$html$Html$Events$alwaysStop = function (x) {
-	return _Utils_Tuple2(x, true);
-};
-var $elm$virtual_dom$VirtualDom$MayStopPropagation = function (a) {
-	return {$: 'MayStopPropagation', a: a};
-};
-var $elm$html$Html$Events$stopPropagationOn = F2(
-	function (event, decoder) {
-		return A2(
-			$elm$virtual_dom$VirtualDom$on,
-			event,
-			$elm$virtual_dom$VirtualDom$MayStopPropagation(decoder));
-	});
-var $elm$json$Json$Decode$at = F2(
-	function (fields, decoder) {
-		return A3($elm$core$List$foldr, $elm$json$Json$Decode$field, decoder, fields);
-	});
-var $elm$html$Html$Events$targetValue = A2(
-	$elm$json$Json$Decode$at,
-	_List_fromArray(
-		['target', 'value']),
-	$elm$json$Json$Decode$string);
-var $elm$html$Html$Events$onInput = function (tagger) {
-	return A2(
-		$elm$html$Html$Events$stopPropagationOn,
-		'input',
-		A2(
-			$elm$json$Json$Decode$map,
-			$elm$html$Html$Events$alwaysStop,
-			A2($elm$json$Json$Decode$map, tagger, $elm$html$Html$Events$targetValue)));
-};
-var $elm$html$Html$Attributes$placeholder = $elm$html$Html$Attributes$stringProperty('placeholder');
-var $elm$svg$Svg$trustedNode = _VirtualDom_nodeNS('http://www.w3.org/2000/svg');
-var $elm$svg$Svg$line = $elm$svg$Svg$trustedNode('line');
-var $feathericons$elm_feather$FeatherIcons$Icon = function (a) {
-	return {$: 'Icon', a: a};
-};
-var $feathericons$elm_feather$FeatherIcons$defaultAttributes = function (name) {
-	return {
-		_class: $elm$core$Maybe$Just('feather feather-' + name),
-		size: 24,
-		sizeUnit: '',
-		strokeWidth: 2,
-		viewBox: '0 0 24 24'
-	};
-};
-var $feathericons$elm_feather$FeatherIcons$makeBuilder = F2(
-	function (name, src) {
-		return $feathericons$elm_feather$FeatherIcons$Icon(
-			{
-				attrs: $feathericons$elm_feather$FeatherIcons$defaultAttributes(name),
-				src: src
-			});
-	});
-var $elm$svg$Svg$Attributes$x1 = _VirtualDom_attribute('x1');
-var $elm$svg$Svg$Attributes$x2 = _VirtualDom_attribute('x2');
-var $elm$svg$Svg$Attributes$y1 = _VirtualDom_attribute('y1');
-var $elm$svg$Svg$Attributes$y2 = _VirtualDom_attribute('y2');
-var $feathericons$elm_feather$FeatherIcons$plus = A2(
-	$feathericons$elm_feather$FeatherIcons$makeBuilder,
-	'plus',
-	_List_fromArray(
-		[
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('12'),
-					$elm$svg$Svg$Attributes$y1('5'),
-					$elm$svg$Svg$Attributes$x2('12'),
-					$elm$svg$Svg$Attributes$y2('19')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('5'),
-					$elm$svg$Svg$Attributes$y1('12'),
-					$elm$svg$Svg$Attributes$x2('19'),
-					$elm$svg$Svg$Attributes$y2('12')
-				]),
-			_List_Nil)
-		]));
-var $elm$svg$Svg$Attributes$class = _VirtualDom_attribute('class');
-var $elm$svg$Svg$Attributes$fill = _VirtualDom_attribute('fill');
-var $elm$svg$Svg$Attributes$height = _VirtualDom_attribute('height');
-var $elm$virtual_dom$VirtualDom$map = _VirtualDom_map;
-var $elm$svg$Svg$map = $elm$virtual_dom$VirtualDom$map;
-var $elm$svg$Svg$Attributes$stroke = _VirtualDom_attribute('stroke');
-var $elm$svg$Svg$Attributes$strokeLinecap = _VirtualDom_attribute('stroke-linecap');
-var $elm$svg$Svg$Attributes$strokeLinejoin = _VirtualDom_attribute('stroke-linejoin');
-var $elm$svg$Svg$Attributes$strokeWidth = _VirtualDom_attribute('stroke-width');
-var $elm$svg$Svg$svg = $elm$svg$Svg$trustedNode('svg');
-var $elm$svg$Svg$Attributes$viewBox = _VirtualDom_attribute('viewBox');
-var $elm$svg$Svg$Attributes$width = _VirtualDom_attribute('width');
-var $feathericons$elm_feather$FeatherIcons$toHtml = F2(
-	function (attributes, _v0) {
-		var src = _v0.a.src;
-		var attrs = _v0.a.attrs;
-		var strSize = $elm$core$String$fromFloat(attrs.size);
-		var baseAttributes = _List_fromArray(
-			[
-				$elm$svg$Svg$Attributes$fill('none'),
-				$elm$svg$Svg$Attributes$height(
-				_Utils_ap(strSize, attrs.sizeUnit)),
-				$elm$svg$Svg$Attributes$width(
-				_Utils_ap(strSize, attrs.sizeUnit)),
-				$elm$svg$Svg$Attributes$stroke('currentColor'),
-				$elm$svg$Svg$Attributes$strokeLinecap('round'),
-				$elm$svg$Svg$Attributes$strokeLinejoin('round'),
-				$elm$svg$Svg$Attributes$strokeWidth(
-				$elm$core$String$fromFloat(attrs.strokeWidth)),
-				$elm$svg$Svg$Attributes$viewBox(attrs.viewBox)
-			]);
-		var combinedAttributes = _Utils_ap(
-			function () {
-				var _v1 = attrs._class;
-				if (_v1.$ === 'Just') {
-					var c = _v1.a;
-					return A2(
-						$elm$core$List$cons,
-						$elm$svg$Svg$Attributes$class(c),
-						baseAttributes);
-				} else {
-					return baseAttributes;
-				}
-			}(),
-			attributes);
-		return A2(
-			$elm$svg$Svg$svg,
-			combinedAttributes,
-			A2(
-				$elm$core$List$map,
-				$elm$svg$Svg$map($elm$core$Basics$never),
-				src));
-	});
-var $elm$html$Html$Attributes$type_ = $elm$html$Html$Attributes$stringProperty('type');
 var $author$project$Utils$View$searchBar = F2(
 	function (filterChange, add) {
 		return A2(
@@ -8319,40 +9172,8 @@ var $author$project$Ingredients$Model$Save = function (a) {
 	return {$: 'Save', a: a};
 };
 var $elm$html$Html$article = _VirtualDom_node('article');
-var $elm$html$Html$footer = _VirtualDom_node('footer');
 var $elm$html$Html$h3 = _VirtualDom_node('h3');
-var $elm$virtual_dom$VirtualDom$node = function (tag) {
-	return _VirtualDom_node(
-		_VirtualDom_noScript(tag));
-};
-var $elm$html$Html$node = $elm$virtual_dom$VirtualDom$node;
 var $elm$html$Html$Attributes$value = $elm$html$Html$Attributes$stringProperty('value');
-var $feathericons$elm_feather$FeatherIcons$x = A2(
-	$feathericons$elm_feather$FeatherIcons$makeBuilder,
-	'x',
-	_List_fromArray(
-		[
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('18'),
-					$elm$svg$Svg$Attributes$y1('6'),
-					$elm$svg$Svg$Attributes$x2('6'),
-					$elm$svg$Svg$Attributes$y2('18')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('6'),
-					$elm$svg$Svg$Attributes$y1('6'),
-					$elm$svg$Svg$Attributes$x2('18'),
-					$elm$svg$Svg$Attributes$y2('18')
-				]),
-			_List_Nil)
-		]));
 var $author$project$Ingredients$View$ingredientDetails = F3(
 	function (submit, title, ingredient) {
 		var id_text = function () {
@@ -8502,70 +9323,6 @@ var $author$project$Ingredients$Model$DeleteIngredient = function (a) {
 var $author$project$Ingredients$Model$EditIngredient = function (a) {
 	return {$: 'EditIngredient', a: a};
 };
-var $elm$svg$Svg$Attributes$d = _VirtualDom_attribute('d');
-var $elm$svg$Svg$path = $elm$svg$Svg$trustedNode('path');
-var $feathericons$elm_feather$FeatherIcons$edit = A2(
-	$feathericons$elm_feather$FeatherIcons$makeBuilder,
-	'edit',
-	_List_fromArray(
-		[
-			A2(
-			$elm$svg$Svg$path,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$d('M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$path,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$d('M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z')
-				]),
-			_List_Nil)
-		]));
-var $elm$svg$Svg$Attributes$points = _VirtualDom_attribute('points');
-var $elm$svg$Svg$polyline = $elm$svg$Svg$trustedNode('polyline');
-var $feathericons$elm_feather$FeatherIcons$trash2 = A2(
-	$feathericons$elm_feather$FeatherIcons$makeBuilder,
-	'trash-2',
-	_List_fromArray(
-		[
-			A2(
-			$elm$svg$Svg$polyline,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$points('3 6 5 6 21 6')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$path,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$d('M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('10'),
-					$elm$svg$Svg$Attributes$y1('11'),
-					$elm$svg$Svg$Attributes$x2('10'),
-					$elm$svg$Svg$Attributes$y2('17')
-				]),
-			_List_Nil),
-			A2(
-			$elm$svg$Svg$line,
-			_List_fromArray(
-				[
-					$elm$svg$Svg$Attributes$x1('14'),
-					$elm$svg$Svg$Attributes$y1('11'),
-					$elm$svg$Svg$Attributes$x2('14'),
-					$elm$svg$Svg$Attributes$y2('17')
-				]),
-			_List_Nil)
-		]));
 var $author$project$Ingredients$View$renderSingleIngredient = function (ingredient) {
 	return _List_fromArray(
 		[
@@ -8602,7 +9359,6 @@ var $author$project$Ingredients$View$renderSingleIngredient = function (ingredie
 				]))
 		]);
 };
-var $elm$core$String$toLower = _String_toLower;
 var $author$project$Ingredients$View$view = function (ingredients) {
 	var list = function () {
 		var _v0 = ingredients.ingredients;
@@ -8658,14 +9414,6 @@ var $author$project$Recipes$Model$ModalMsg = function (a) {
 var $author$project$Recipes$Model$RecipeChanged = function (a) {
 	return {$: 'RecipeChanged', a: a};
 };
-var $elm$html$Html$header = _VirtualDom_node('header');
-var $elm$html$Html$Attributes$href = function (url) {
-	return A2(
-		$elm$html$Html$Attributes$stringProperty,
-		'href',
-		_VirtualDom_noJavaScriptUri(url));
-};
-var $elm$html$Html$p = _VirtualDom_node('p');
 var $author$project$Recipes$Model$AddMetaIngredient = function (a) {
 	return {$: 'AddMetaIngredient', a: a};
 };
@@ -9128,10 +9876,7 @@ var $author$project$Recipes$View$view = function (recipeData) {
 					$author$project$Utils$View$filterListView,
 					{
 						filter: function (r) {
-							return A2(
-								$elm$core$String$contains,
-								$elm$core$String$toLower(recipeData.filter),
-								$elm$core$String$toLower(r.name));
+							return A2($author$project$Utils$Main$nameFilter, recipeData.filter, r.name);
 						},
 						filterChange: A2($elm$core$Basics$composeL, $author$project$Model$RecipeMessage, $author$project$Recipes$Model$EditFilter),
 						onAdd: $author$project$Model$RecipeMessage($author$project$Recipes$Model$AddRecipe),
@@ -9160,7 +9905,10 @@ var $author$project$Main$renderSelectedView = function (model) {
 			var r = _v0.a;
 			return $author$project$Recipes$Main$viewRecipes(r);
 		default:
-			return $elm$html$Html$text('Events');
+			return A2(
+				$elm$html$Html$map,
+				$author$project$Model$EventsMessage,
+				$author$project$Events$viewEvents(model.events));
 	}
 };
 var $author$project$Main$view = function (model) {
@@ -9172,7 +9920,7 @@ var $author$project$Main$view = function (model) {
 			]),
 		_List_fromArray(
 			[
-				A2($author$project$Navbar$generateNavbar, $author$project$Settings$tabName, model.tabs),
+				A2($author$project$Navbar$generateNavbar, $author$project$Main$tabName, model.tabs),
 				$author$project$Main$renderSelectedView(model)
 			]));
 };

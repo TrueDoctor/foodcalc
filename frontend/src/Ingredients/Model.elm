@@ -2,6 +2,7 @@ module Ingredients.Model exposing (..)
 
 import Http
 import Utils.Model exposing (WebData)
+import Utils.Model exposing (RemoteData(..))
 
 
 type alias Ingredient =
@@ -33,6 +34,7 @@ type IngredientMsg
     | ModalMsg ModalMsg
     | GotWebData IngredientWebData
     | EditFilter String
+    | InitTab
 
 
 type ModalMsg
@@ -52,4 +54,13 @@ type alias IngredientTabData =
     { ingredients : WebData (List Ingredient)
     , filter : String
     , modal : Modal
+    }
+
+
+-- INIT
+emptyIngredientsTabData : IngredientTabData
+emptyIngredientsTabData =
+    { ingredients = NotAsked
+    , filter = ""
+    , modal = NoModal
     }

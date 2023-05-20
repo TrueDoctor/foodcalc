@@ -1,18 +1,7 @@
 module Settings exposing (..)
 
-import Model exposing (Tab(..))
 
-tabName : Tab -> String
-tabName tab =
-    case tab of
-        Ingredients _ ->
-            "Ingredients"
 
-        Recipes _ ->
-            "Recipes"
-
-        Events ->
-            "Events"
 
 
 backend : String -> String

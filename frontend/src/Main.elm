@@ -1,19 +1,32 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (div, text)
+import Events
+import Html exposing (div)
 import Html.Attributes exposing (class)
 import Ingredients.Main exposing (handleIngredientsMsg, viewIngredients)
-import Ingredients.Model as IModel exposing (IngredientMsg(..), IngredientTabData)
-import Ingredients.Service exposing (fetchIngredients)
+import Ingredients.Model as IModel exposing (IngredientMsg(..), emptyIngredientsTabData)
 import Model exposing (..)
 import Navbar exposing (generateNavbar)
 import Recipes.Main exposing (handleRecipesMsg, viewRecipes)
-import Recipes.Model as RModel exposing (RecipeTabData)
+import Recipes.Model as RModel exposing (emptyRecipeTabData)
 import Settings exposing (..)
 import Utils.Cursor
 import Utils.Model exposing (RemoteData(..))
-import Recipes.Model exposing (emptyRecipeTabData)
+import Recipes.Model exposing (RecipeTabData)
+
+
+tabName : Tab -> String
+tabName tab =
+    case tab of
+        Ingredients _ ->
+            "Ingredients"
+
+        Recipes _ ->
+            "Recipes"
+
+        Events ->
+            "Events"
 
 
 view : Model -> Html.Html Msg
@@ -34,7 +47,7 @@ renderSelectedView model =
             viewRecipes r
 
         Events ->
-            text "Events"
+            Html.map EventsMessage <| Events.viewEvents model.events
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -52,18 +65,27 @@ update msg model =
         RecipeMessage m ->
             handleRecipesMsg m model
 
+        EventsMessage e ->
+            let
+                ( events, cmd ) =
+                    Events.handleEventTabMsg e model.events
+            in
+            ( { model | events = events }
+            , Cmd.map EventsMessage cmd
+            )
+
 
 initTab : Model -> ( Model, Cmd Msg )
 initTab model =
     case model.tabs.active of
         Ingredients _ ->
-            ( model, Cmd.none )
+            update (IngredientMessage IModel.InitTab) model
 
         Recipes _ ->
             update (RecipeMessage RModel.InitTab) model
 
         Events ->
-            ( model, Cmd.none )
+            update (EventsMessage Events.init) model
 
 
 changeTab : Tab -> Model -> ( Model, Cmd Msg )
@@ -72,20 +94,24 @@ changeTab tab model =
         c =
             Utils.Cursor.setActiveBy (\t -> tabName t == tabName tab) model.tabs
     in
-    initTab (Model c)
+    initTab { model | tabs = c }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     let
+        (ingredientsTabData, recipeTabData, eventsData) =
+            (emptyIngredientsTabData, emptyRecipeTabData, Events.emptyEventsData)
+
+
         tabs =
-            Utils.Cursor.create (Ingredients <| IngredientTabData Loading "" IModel.NoModal)
-                [ Recipes <| emptyRecipeTabData
+            Utils.Cursor.create (Ingredients ingredientsTabData)
+                [ Recipes recipeTabData
                 , Events
                 ]
     in
-    ( Model tabs
-    , Cmd.map IngredientMessage fetchIngredients
+    ( Model tabs ingredientsTabData recipeTabData eventsData
+    , Cmd.map (always <| ChangeTab <| Ingredients emptyIngredientsTabData) Cmd.none
     )
 
 

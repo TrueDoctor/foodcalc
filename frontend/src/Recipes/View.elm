@@ -8,6 +8,7 @@ import Recipes.Model exposing (..)
 import Recipes.ViewModal exposing (modal)
 import Utils.Model exposing (RemoteData(..))
 import Utils.View exposing (filterListView)
+import Utils.Main exposing (nameFilter)
 
 
 view : RecipeTabData -> Html Msg
@@ -27,7 +28,7 @@ view recipeData =
                 Success recipes ->
                     filterListView
                         { row = renderRecipe
-                        , filter = \r -> String.contains (String.toLower recipeData.filter) (String.toLower r.name)
+                        , filter = \r -> nameFilter recipeData.filter r.name
                         , filterChange = RecipeMessage << EditFilter
                         , onAdd = RecipeMessage AddRecipe
                         }

@@ -41,3 +41,8 @@ role =
 nameFilter : String -> String -> Bool
 nameFilter filter name =
     String.contains (String.toLower filter) (String.toLower name)
+
+
+propertyFilter : (a -> String) -> String -> a -> Bool
+propertyFilter property filter item =
+    String.contains (String.toLower filter) (String.toLower (property item))

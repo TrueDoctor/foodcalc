@@ -1,12 +1,11 @@
 module Ingredients.Update exposing (handleMsg)
 
 import Ingredients.Model exposing (..)
-import Ingredients.Service exposing (addOrUpdateIngredient)
+import Ingredients.Service exposing (addOrUpdateIngredient, fetchIngredients)
 import Model exposing (..)
 import Utils.Cursor
 import Utils.Main exposing (..)
 import Utils.Model exposing (RemoteData(..))
-import Ingredients.Service exposing (fetchIngredients)
 
 
 editor : Ingredients.Model.IngredientTabData -> Int -> Modal
@@ -75,8 +74,15 @@ handleMsg msg model =
         ModalMsg m ->
             handleModalMsg m model
 
-        _ ->
-            ( model, Cmd.none )
+        DeleteIngredient id ->
+            Debug.todo "Delete ingredient"
+
+        InitTab ->
+            let
+                save =
+                    mapTab <| \i -> Ingredients { i | ingredients = Loading }
+            in
+            ( updateModel save model, Cmd.map IngredientMessage fetchIngredients )
 
 
 handleWebData : IngredientWebData -> Model -> ( Model, Cmd Msg )
@@ -91,7 +97,6 @@ handleWebData data model =
 
         SuccessfulPost id ->
             ( model, Cmd.map IngredientMessage fetchIngredients )
-
 
 
 handleModalMsg : ModalMsg -> Model -> ( Model, Cmd Msg )
@@ -125,7 +130,6 @@ handleModalMsg msg model =
             let
                 save =
                     mapTab <| \i -> Ingredients { i | modal = Ingredients.Model.NoModal }
-                
             in
             ( updateModel save model
             , Cmd.batch
