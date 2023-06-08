@@ -25,7 +25,7 @@ report() {
 
 buildCode() {
   echo "Compiling ⚔️"
-  elm make src/Main.elm --output=elm.js --report=json 2> tmp/build.log
+  elm make src/Main.elm --output=../backend/static/elm.js --report=json 2> tmp/build.log
   report
 }
 
