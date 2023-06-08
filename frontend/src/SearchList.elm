@@ -1,4 +1,4 @@
-module SearchList exposing (SearchList, SearchListMsg, addAll, empty,new, handleMsg, view)
+module SearchList exposing (SearchList, SearchListMsg, addAll, empty, handleMsg, new, view, filter)
 
 import Html exposing (Html, div, input, li, ul)
 import Html.Events exposing (onInput)
@@ -8,28 +8,38 @@ type SearchList a msg
     = SearchList
         { list : List a
         , search : String
-        , filter : String -> a -> Bool
+        , viewFilter : String -> a -> Bool
         , viewContent : a -> List (Html msg)
+        , mapMsg : SearchListMsg a -> msg
         }
 
 
-type SearchListMsg a itemMsg
+type SearchListMsg a
     = SetSearch String
-    | ItemMsg a itemMsg
 
 
-empty : (String -> a -> Bool) -> (a -> List (Html msg)) -> SearchList a msg
-empty filter viewContent =
+empty : (SearchListMsg a -> msg) -> (String -> a -> Bool) -> (a -> List (Html msg)) -> SearchList a msg
+empty mapMsg viewFilter viewContent =
     SearchList
         { list = []
         , search = ""
-        , filter = filter
+        , viewFilter = viewFilter
         , viewContent = viewContent
+        , mapMsg = mapMsg
         }
 
-new : (String -> a -> Bool) -> (a -> List (Html msg)) -> List a -> SearchList a msg
-new filter viewContent list =
-    addAll list (empty filter viewContent)
+
+new : (SearchListMsg a -> msg) -> (String -> a -> Bool) -> (a -> List (Html msg)) -> List a -> SearchList a msg
+new mapMsg viewFilter viewContent list =
+    addAll list (empty mapMsg viewFilter viewContent)
+
+
+filter : (a -> Bool) -> SearchList a msg -> SearchList a msg
+filter listFilter searchList =
+    case searchList of
+        SearchList s ->
+            SearchList { s | list = List.filter listFilter s.list }
+
 
 addAll : List a -> SearchList a msg -> SearchList a msg
 addAll list searchList =
@@ -38,46 +48,34 @@ addAll list searchList =
             SearchList { s | list = list ++ s.list }
 
 
-view : SearchList a msg -> Html (SearchListMsg a msg)
+view : SearchList a msg -> Html msg
 view searchList =
-    div []
-        [ input [ onInput SetSearch ] []
-        , ul [] (List.map (viewItem searchList) (filterList searchList))
-        ]
+    case searchList of
+        SearchList { mapMsg } ->
+            div []
+                [ input [ onInput <| \i -> mapMsg <| SetSearch i ] []
+                , ul [] (List.map (viewItem searchList) (filterList searchList))
+                ]
 
 
-viewItem : SearchList a msg -> a -> Html (SearchListMsg a msg)
+viewItem : SearchList a msg -> a -> Html msg
 viewItem searchList item =
     case searchList of
-        SearchList s ->
-            li [] (List.map (Html.map <| ItemMsg item) (s.viewContent item))
+        SearchList { viewContent } ->
+            li [] (viewContent item)
 
 
 filterList : SearchList a b -> List a
 filterList searchList =
     case searchList of
-        SearchList { list, search, filter } ->
-            List.filter (filter search) list
+        SearchList { list, search, viewFilter } ->
+            List.filter (viewFilter search) list
 
 
-handleMsg : (msg -> a -> ( Cmd superMsg,  a, Cmd msg )) -> SearchList a msg -> SearchListMsg a msg -> ( Cmd superMsg,  SearchList a msg, Cmd (SearchListMsg a msg) ) 
-handleMsg handleItemMsg searchList msg =
+handleMsg : SearchList a msg -> SearchListMsg a -> ( Cmd superMsg, SearchList a msg, Cmd (SearchListMsg a) )
+handleMsg searchList msg =
     case searchList of
         SearchList s ->
             case msg of
                 SetSearch newSearch ->
-                    ( Cmd.none, SearchList { s | search = newSearch }, Cmd.none  )
-
-                ItemMsg item itemMsg ->
-                    let
-                        ( super,  newItem, cmd  ) =
-                            handleItemMsg itemMsg item
-
-                        updateOne listItem =
-                            if listItem == item then
-                                newItem
-
-                            else
-                                listItem
-                    in
-                    ( super,  SearchList { s | list = List.map updateOne s.list }, Cmd.map (ItemMsg item) cmd ) 
+                    ( Cmd.none, SearchList { s | search = newSearch }, Cmd.none )

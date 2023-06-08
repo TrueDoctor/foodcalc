@@ -70,7 +70,7 @@ handleWebData result model =
                 wd =
                     toWebdata meta
             in
-            case Debug.log "" wd of
+            case wd of
                 Success ingredients ->
                     let
                         newRecipeIngredients =
@@ -211,7 +211,7 @@ handleModalMsg msg model =
             handleMetaIngredientMsg recipeIngredientMsg id model
 
         AddMetaIngredient recipeIngredientMsg ->
-            Debug.log "" <| handleMetaIngredientMsg recipeIngredientMsg (IngredientId -1) (addEntry ( defaultIngredient, buildEditor defaultIngredient ))
+            handleMetaIngredientMsg recipeIngredientMsg (IngredientId -1) (addEntry ( defaultIngredient, buildEditor defaultIngredient ))
 
         EditStep stepMsg id ->
             handleStepMsg stepMsg id model
