@@ -1,4 +1,4 @@
-module Test.ExpandableList exposing (ExpandableList, ExpandableListMsg, view, update)
+module Test.ExpandableList exposing (ExpandableList, ExpandableListMsg, view, update,mapElementMsg)
 
 import Bitwise exposing (and)
 import Element exposing (..)
@@ -15,7 +15,7 @@ type alias ExpandableList a msg elementMsg =
     , items : List ( Bool, a )
     , viewElement : Bool -> a -> Element msg
     , mapMsg : ExpandableListMsg a elementMsg -> msg
-    , update : elementMsg -> a -> ( Cmd msg, a )
+    , update : elementMsg -> a -> ( a,Cmd msg )
     , add : Maybe (() -> a)
     }
 
@@ -26,6 +26,8 @@ type ExpandableListMsg a elementMsg
     | ElementExpand a Bool
     | AddElement
 
+mapElementMsg: a -> elementMsg -> ExpandableListMsg a elementMsg
+mapElementMsg = ElementMsg
 
 viewFilter : String -> Element (ExpandableListMsg a elementMsg)
 viewFilter search =
@@ -72,10 +74,9 @@ view { search, filter, items, viewElement, mapMsg, add } =
         , centerX
         ]
         [ map mapMsg (viewFilter search)
-        , el [ Element.Background.color (rgb 0.7 0.7 0.7), height (px 1) ] none
         , column [ width fill ]
             (List.indexedMap
-                (\i ( expanded, item ) -> el [ width fill, Element.Background.color (bg i), paddingXY 50 20 ] (viewElement expanded item))
+                (\i ( expanded, item ) -> el [ width fill, Element.Background.color (bg i), padding 10] (viewElement expanded item))
                 (List.filter (filter search << Tuple.second) items)
             )
         , map mapMsg (viewAdd add)
@@ -89,7 +90,7 @@ update msg model =
 
         ElementMsg element eMsg ->
             let
-                ( cmd, new ) =
+                (new, cmd ) =
                     model.update eMsg element
             in
             ( { model
