@@ -1136,6 +1136,7 @@ impl FoodBase {
     pub async fn update_single_meal(&self, old_meal: Option<Meal>, new_meal: Option<Meal>) -> eyre::Result<()> {
         if let Some(old) = old_meal {
             if let Some(new) = new_meal {
+                log::info!("Updating meal: {:#?}", new);
                 let count = sqlx::query!(
                     r#"
                     UPDATE event_meals

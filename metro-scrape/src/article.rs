@@ -479,6 +479,7 @@ pub enum UnitOfMeasure {
     #[serde(rename = "µg")]
     Microgramm,
     #[serde(rename = "mg")]
+    #[serde(alias = "MGM")]
     Milligramm,
     #[serde(rename = "kg")]
     Kilogramm,
