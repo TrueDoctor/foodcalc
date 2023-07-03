@@ -14,6 +14,9 @@ import Settings exposing (..)
 import Utils.Cursor
 import Utils.Model exposing (RemoteData(..))
 import Recipes.Model exposing (RecipeTabData)
+import Browser.Dom exposing (Element)
+import Element
+import IngredientList
 
 
 tabName : Tab -> String
@@ -35,6 +38,10 @@ view model =
         [ generateNavbar tabName model.tabs
         , renderSelectedView model
         ]
+
+viewUI : Model -> Html.Html Msg
+viewUI m = 
+    Element.layout [] (Element.map Model.IngredientUIMsg (IngredientList.view m.ingredientList))
 
 
 renderSelectedView : Model -> Html.Html Msg
@@ -74,6 +81,13 @@ update msg model =
             , Cmd.map EventsMessage cmd
             )
 
+        IngredientUIMsg m -> 
+            let
+                
+              (list, cmd) = IngredientList.update m model.ingredientList
+            in
+                ({model | ingredientList = list}, Cmd.map IngredientUIMsg cmd)
+
 
 initTab : Model -> ( Model, Cmd Msg )
 initTab model =
@@ -102,6 +116,8 @@ init _ =
     let
         (ingredientsTabData, recipeTabData, eventsData) =
             (emptyIngredientsTabData, emptyRecipeTabData, Events.emptyEventsData)
+        
+        ingredientsList = IngredientList.init
 
 
         tabs =
@@ -110,7 +126,7 @@ init _ =
                 , Events
                 ]
     in
-    ( Model tabs ingredientsTabData recipeTabData eventsData
+    ( Model tabs ingredientsTabData recipeTabData eventsData ingredientsList
     , Cmd.map (always <| ChangeTab <| Ingredients emptyIngredientsTabData) Cmd.none
     )
 
@@ -124,7 +140,7 @@ main : Program () Model Msg
 main =
     Browser.element
         { init = init
-        , view = view
+        , view = viewUI
         , update = update
         , subscriptions = subscriptions
         }
