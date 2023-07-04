@@ -17,6 +17,7 @@ import Recipes.Model exposing (RecipeTabData)
 import Browser.Dom exposing (Element)
 import Element
 import IngredientList
+import WebData exposing (RemoteData(..))
 
 
 tabName : Tab -> String
@@ -117,7 +118,7 @@ init _ =
         (ingredientsTabData, recipeTabData, eventsData) =
             (emptyIngredientsTabData, emptyRecipeTabData, Events.emptyEventsData)
         
-        ingredientsList = IngredientList.init
+        ingredientsList = WebData.Loading
 
 
         tabs =
@@ -127,7 +128,8 @@ init _ =
                 ]
     in
     ( Model tabs ingredientsTabData recipeTabData eventsData ingredientsList
-    , Cmd.map (always <| ChangeTab <| Ingredients emptyIngredientsTabData) Cmd.none
+    , Cmd.batch [Cmd.map (always <| ChangeTab <| Ingredients emptyIngredientsTabData) Cmd.none
+    , Cmd.map IngredientUIMsg IngredientList.fetchIngredients]
     )
 
 

@@ -1,9 +1,9 @@
-module Test.ExpandableList exposing (ExpandableList, ExpandableListMsg, view, update,mapElementMsg)
+module Test.ExpandableList exposing (ExpandableList, ExpandableListMsg, mapElementMsg, update, view)
 
 import Bitwise exposing (and)
 import Element exposing (..)
 import Element.Background
-import Element.Border
+import Element.Events exposing (onClick)
 import Element.Input
 import FeatherIcons as FI
 import Ingredients.Model exposing (Modal(..))
@@ -13,9 +13,9 @@ type alias ExpandableList a msg elementMsg =
     { search : String
     , filter : String -> a -> Bool
     , items : List ( Bool, a )
-    , viewElement : Bool -> a -> Element msg
+    , viewElement : Attribute msg -> Bool -> a -> Element msg
     , mapMsg : ExpandableListMsg a elementMsg -> msg
-    , update : elementMsg -> a -> ( a,Cmd msg )
+    , update : elementMsg -> a -> ( a, Cmd msg )
     , add : Maybe (() -> a)
     }
 
@@ -26,8 +26,11 @@ type ExpandableListMsg a elementMsg
     | ElementExpand a Bool
     | AddElement
 
-mapElementMsg: a -> elementMsg -> ExpandableListMsg a elementMsg
-mapElementMsg = ElementMsg
+
+mapElementMsg : a -> elementMsg -> ExpandableListMsg a elementMsg
+mapElementMsg =
+    ElementMsg
+
 
 viewFilter : String -> Element (ExpandableListMsg a elementMsg)
 viewFilter search =
@@ -65,6 +68,9 @@ view { search, filter, items, viewElement, mapMsg, add } =
 
             else
                 rgb255 230 230 230
+
+        expand item expanded =
+            onClick <| mapMsg <| ElementExpand item (not expanded)
     in
     column
         [ width (maximum 1000 fill)
@@ -76,11 +82,16 @@ view { search, filter, items, viewElement, mapMsg, add } =
         [ map mapMsg (viewFilter search)
         , column [ width fill ]
             (List.indexedMap
-                (\i ( expanded, item ) -> el [ width fill, Element.Background.color (bg i), padding 10] (viewElement expanded item))
+                (\i ( expanded, item ) ->
+                    el
+                        [ width fill, Element.Background.color (bg i), padding 10 ]
+                        (viewElement (expand item expanded) expanded item)
+                )
                 (List.filter (filter search << Tuple.second) items)
             )
         , map mapMsg (viewAdd add)
         ]
+
 
 update : ExpandableListMsg a elementMsg -> ExpandableList a msg elementMsg -> ( ExpandableList a msg elementMsg, Cmd msg )
 update msg model =
@@ -90,7 +101,7 @@ update msg model =
 
         ElementMsg element eMsg ->
             let
-                (new, cmd ) =
+                ( new, cmd ) =
                     model.update eMsg element
             in
             ( { model
