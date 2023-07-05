@@ -13,6 +13,7 @@ import Json.Encode as Encode
 import Platform.Cmd as Cmd
 import Settings exposing (backend)
 import Test.ExpandableList as ExpandableList exposing (ExpandableList, ExpandableListMsg)
+import Test.Styles exposing (white)
 import WebData exposing (RemoteData(..), WebData)
 
 
@@ -67,6 +68,7 @@ stateOf search items =
                 (\() ->
                     newIngredient Nothing "" "" (Just "")
                 )
+        , expandItem = Nothing
         }
 
 
@@ -84,7 +86,7 @@ viewExpanded : Ingredient -> Element IngredientListMsg
 viewExpanded ingredient =
     case ingredient of
         Ingredient { edit } ->
-            column [ Element.Background.color (rgb 1 1 1), width fill, padding 10, spacing 10, Element.Border.rounded 5 ]
+            column [ Element.Background.color white, width fill, padding 10, spacing 10, Element.Border.rounded 5 ]
                 [ row
                     [ width fill
                     , spacing 25

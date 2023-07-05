@@ -6,6 +6,7 @@ import Utils.Cursor exposing (Cursor)
 import Events exposing (EventsData)
 import Events exposing (EventTabMsg)
 import IngredientList exposing (IngredientListMsg)
+import RecipesList
 
 
 type alias Model =
@@ -14,6 +15,7 @@ type alias Model =
     , recipes : RecipeTabData
     , events : EventsData
     , ingredientList: IngredientList.IngredientsList
+    , recipeList: RecipesList.RecipesList
     }
 
 
@@ -24,6 +26,7 @@ type Msg
     | RecipeMessage RecipeMsg
     | EventsMessage EventTabMsg
     | IngredientUIMsg IngredientListMsg
+    | RecipeUIMsg RecipesList.RecipeListMsg
 
 
 type Tab

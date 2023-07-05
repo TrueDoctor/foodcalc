@@ -17,6 +17,7 @@ type alias ExpandableList a msg elementMsg =
     , mapMsg : ExpandableListMsg a elementMsg -> msg
     , update : elementMsg -> a -> ( a, Cmd msg )
     , add : Maybe (() -> a)
+    , expandItem: Maybe (a -> Cmd msg)
     }
 
 
@@ -132,7 +133,9 @@ update msg model =
                         )
                         model.items
               }
-            , Cmd.none
+            ,  Maybe.withDefault Cmd.none (
+                Maybe.map (\f -> f element) model.expandItem
+            )
             )
 
         AddElement ->

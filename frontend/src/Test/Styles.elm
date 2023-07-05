@@ -1,11 +1,14 @@
 module Test.Styles exposing (..)
-import Browser.Dom exposing (Element)
 import Element.Border
 import Element
 import Element.Font
 
 red : Element.Color
 red = Element.rgb 1 0 0
+
+white : Element.Color
+white = Element.rgb 1 1 1
+
 
 invalidButton : List (Element.Attr decorative msg)
 invalidButton =
