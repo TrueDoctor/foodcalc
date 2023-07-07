@@ -4,13 +4,16 @@ import Element exposing (..)
 import Element.Background
 import Element.Border
 import Element.Input
+import Html exposing (a)
 import Http
 import Json.Decode as Decode
 import Platform.Cmd as Cmd
 import Recipes.Model exposing (RecipeMsg)
 import Test.ExpandableList as ExpandableList exposing (ExpandableList, ExpandableListMsg, mapElementMsg)
+import Test.SearchDropdown exposing (searchDropdown)
 import Test.Styles exposing (white)
 import WebData exposing (RemoteData(..), WebData)
+import Test.StringUtils as StringUtils
 
 
 type alias RecipesList =
@@ -33,18 +36,20 @@ type alias RecipeData =
 
 
 type alias RecipeIngredient =
-    { ingredientId : Int
-    , ingredient : String
-    , unitId : Int
-    , unit : String
+    { ingredient : MetaIngredient
+    , unit : Unit
     , amount : String
+    , allIngredients : { list : WebData (List MetaIngredient), search : String, hidden : Bool }
+    , allUnits : { list : WebData (List Unit), search : String, hidden : Bool }
     }
 
 
-type alias MetaIngredient =
-    { id : Int
-    , name : String
-    }
+type MetaIngredient
+    = Ingredient
+        { id : Int
+        , name : String
+        }
+    | Subrecipe { id : Int, name : String }
 
 
 type alias Unit =
@@ -65,15 +70,27 @@ type RecipeListMsg
 type WebDataMsg
     = GotRecipes (Result Http.Error (List Recipe))
     | GotRecipeIngredients Int (Result Http.Error (List RecipeIngredient))
+    | GotMetaingredients (Result Http.Error (List MetaIngredient))
+    | GotUnits (Result Http.Error (List Unit))
 
 
 type RecipeMsg
     = NameChange String
     | CommentChange String
-    | RecipeIngredientChange
+    | RecipeIngredientChange RecipeIngredient RecipeIngredientMsg
     | Save
     | Cancel
     | FetchIngredients
+
+
+type RecipeIngredientMsg
+    = AmountChanged String
+    | IngredientChanged MetaIngredient
+    | IngredientFilterChange String
+    | IngredientFocus
+    | UnitChanged Unit
+    | UnitFilterChange String
+    | UnitFocus
 
 
 stateOf : String -> List ( Bool, Recipe ) -> WebData (ExpandableList Recipe RecipeListMsg RecipeMsg)
@@ -95,7 +112,7 @@ stateOf search items =
         , add =
             Just
                 (\() ->
-                    newRecipe Nothing "" (Just "") []
+                    newRecipe Nothing "" (Just "")
                 )
         , expandItem =
             Just <|
@@ -114,13 +131,17 @@ emptyRecipesData =
     }
 
 
-newRecipe : Maybe Int -> String -> Maybe String -> List RecipeIngredient -> Recipe
-newRecipe id name comment ingredients =
+newRecipe : Maybe Int -> String -> Maybe String -> Recipe
+newRecipe id name comment =
     let
         data =
             { id = id, name = name, comment = comment, ingredients = NotAsked }
     in
     Recipe { data = data, edit = data }
+
+
+
+-- Views
 
 
 view : RecipesList -> Element RecipeListMsg
@@ -181,7 +202,7 @@ viewExpanded recipe =
                         , text = Maybe.withDefault "" edit.comment
                         }
                     )
-                , viewIngredients edit.ingredients
+                , Element.map (ListMsg << mapElementMsg recipe) <| viewIngredients edit.ingredients
                 , Element.map
                     (ListMsg << ExpandableList.mapElementMsg recipe)
                     (row [ width fill, spacing 25 ]
@@ -192,16 +213,46 @@ viewExpanded recipe =
                 ]
 
 
-viewRecipeIngredient : RecipeIngredient -> Element RecipeListMsg
+viewRecipeIngredient : RecipeIngredient -> Element RecipeIngredientMsg
 viewRecipeIngredient recipeIngredient =
-    row [ width fill, padding 20 ]
-        [ el [ width (fillPortion 3) ] (text recipeIngredient.ingredient)
-        , el [ width (fillPortion 3) ] (text recipeIngredient.amount)
-        , el [ width (fillPortion 1) ] (text recipeIngredient.unit)
-        ]
+    let
+        nameOf a =
+            case a of
+                Ingredient { name } ->
+                    name
+
+                Subrecipe { name } ->
+                    name
+    in
+    case ( recipeIngredient.allIngredients.list, recipeIngredient.allUnits.list ) of
+        ( Success i, Success u ) ->
+            row [ width fill, padding 20 ]
+                [ el [ width (fillPortion 3) ]
+                    (searchDropdown
+                        { search = recipeIngredient.allIngredients.search
+                        , filter = \s a -> StringUtils.fuzzyContains (nameOf a) s
+                        , items = i
+                        , select = IngredientChanged
+                        , selection = List.head (List.filter (\e -> e == recipeIngredient.ingredient) i)
+                        , viewItem = text << nameOf
+                        , hidden = recipeIngredient.allIngredients.hidden
+                        , filterChange = IngredientFilterChange
+                        , onFocus = IngredientFocus
+                        }
+                    )
+                , el [ width (fillPortion 3) ] (text recipeIngredient.amount)
+                , el [ width (fillPortion 1) ] (text recipeIngredient.unit.name)
+                ]
+
+        _ ->
+            row [ width fill, padding 20 ]
+                [ el [ width (fillPortion 3) ] (text <| nameOf recipeIngredient.ingredient)
+                , el [ width (fillPortion 3) ] (text recipeIngredient.amount)
+                , el [ width (fillPortion 1) ] (text recipeIngredient.unit.name)
+                ]
 
 
-viewIngredients : WebData (List RecipeIngredient) -> Element RecipeListMsg
+viewIngredients : WebData (List RecipeIngredient) -> Element RecipeMsg
 viewIngredients wd =
     case wd of
         Failure _ ->
@@ -209,10 +260,14 @@ viewIngredients wd =
 
         Success list ->
             column [ width fill ]
-                (List.map viewRecipeIngredient list)
+                (List.map (\e -> Element.map (RecipeIngredientChange e) (viewRecipeIngredient e)) list)
 
         _ ->
             text "Loading ingredients"
+
+
+
+-- Updates
 
 
 replaceId : (( Bool, Recipe ) -> ( Bool, Recipe )) -> Int -> List ( Bool, Recipe ) -> List ( Bool, Recipe )
@@ -228,6 +283,47 @@ replaceId f id list =
                         ( expanded, r )
         )
         list
+
+
+updateRecipeIngredient : RecipeIngredientMsg -> RecipeIngredient -> RecipeIngredient
+updateRecipeIngredient msg ri =
+    case msg of
+        AmountChanged s ->
+            Debug.todo "Parse number"
+
+        IngredientChanged ingredient ->
+            { ri | ingredient = ingredient }
+
+        IngredientFocus ->
+            let
+                all =
+                    ri.allIngredients
+            in
+            { ri | allIngredients = { all | hidden = not all.hidden } }
+
+        IngredientFilterChange search ->
+            let
+                all =
+                    ri.allIngredients
+            in
+            { ri | allIngredients = { all | search = search } }
+
+        UnitFocus ->
+            let
+                all =
+                    ri.allUnits
+            in
+            { ri | allUnits = { all | hidden = not all.hidden } }
+
+        UnitFilterChange search ->
+            let
+                all =
+                    ri.allUnits
+            in
+            { ri | allUnits = { all | search = search } }
+
+        UnitChanged unit ->
+            { ri | unit = unit }
 
 
 updateRecipe : RecipeMsg -> Recipe -> ( Recipe, Cmd RecipeListMsg )
@@ -257,8 +353,26 @@ updateRecipe msg rc =
                 Recipe { data } ->
                     ( Recipe { data = data, edit = data }, Cmd.none )
 
-        RecipeIngredientChange ->
-            ( rc, Cmd.none )
+        RecipeIngredientChange ri riMsg ->
+            let
+                updateIfSame =
+                    List.map
+                        (\r ->
+                            if r == ri then
+                                updateRecipeIngredient riMsg ri
+
+                            else
+                                r
+                        )
+            in
+            case rc of
+                Recipe { data, edit } ->
+                    ( Recipe
+                        { data = data
+                        , edit = { edit | ingredients = WebData.map updateIfSame edit.ingredients }
+                        }
+                    , Cmd.none
+                    )
 
         FetchIngredients ->
             case rc of
@@ -268,6 +382,29 @@ updateRecipe msg rc =
 
 handleWebData : WebDataMsg -> RecipesList -> ( RecipesList, Cmd RecipeListMsg )
 handleWebData msg model =
+    let
+        saveUnits : WebData (List Unit) -> RecipeIngredient -> RecipeIngredient
+        saveUnits wd ri =
+            { ri | allUnits = { list = wd, search = ri.allUnits.search, hidden = True } }
+
+        saveMetaIngredients : WebData (List MetaIngredient) -> RecipeIngredient -> RecipeIngredient
+        saveMetaIngredients wd ri =
+            { ri | allIngredients = { list = wd, search = ri.allUnits.search, hidden = True } }
+
+        saveInRecipe : (RecipeIngredient -> RecipeIngredient) -> Recipe -> Recipe
+        saveInRecipe f r =
+            case r of
+                Recipe { edit, data } ->
+                    case edit.ingredients of
+                        Success ig ->
+                            Recipe { data = data, edit = { edit | ingredients = Success <| List.map f ig } }
+
+                        _ ->
+                            Recipe { data = data, edit = edit }
+
+        noop =
+            ( model, Cmd.none )
+    in
     case ( msg, model.recipes ) of
         ( GotRecipes result, Success list ) ->
             case result of
@@ -298,32 +435,54 @@ handleWebData msg model =
 
                         Err e ->
                             Failure e
+
+                saveIngredients =
+                    \( e, r ) ->
+                        case r of
+                            Recipe { data, edit } ->
+                                ( e, Recipe { data = { data | ingredients = ingredients }, edit = { edit | ingredients = ingredients } } )
             in
-            ( { model
-                | recipes =
-                    Success
-                        { list
-                            | items =
-                                replaceId
-                                    (\( e, r ) ->
-                                        case r of
-                                            Recipe { data, edit } ->
-                                                ( e
-                                                , Recipe
-                                                    { data = { data | ingredients = ingredients }
-                                                    , edit = { edit | ingredients = ingredients }
-                                                    }
-                                                )
-                                    )
-                                    id
-                                    list.items
-                        }
-              }
-            , Cmd.none
+            ( { model | recipes = Success { list | items = replaceId saveIngredients id list.items } }
+            , Cmd.batch
+                [ fetchAllMetaIngredients
+                , fetchUnits
+                ]
             )
 
+        ( GotMetaingredients result, Success list ) ->
+            case result of
+                Ok meta ->
+                    ( { model
+                        | recipes = Success { list | items = List.map (Tuple.mapSecond <| saveInRecipe <| saveMetaIngredients <| Success meta) list.items }
+                        , ingredients = Success meta
+                      }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    noop
+
+        ( GotUnits result, Success list ) ->
+            case result of
+                Ok units ->
+                    ( { model
+                        | recipes = Success { list | items = List.map (Tuple.mapSecond <| saveInRecipe <| saveUnits <| Success units) list.items }
+                        , units = Success units
+                      }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    noop
+
         ( GotRecipeIngredients _ _, _ ) ->
-            ( model, Cmd.none )
+            noop
+
+        ( GotMetaingredients _, _ ) ->
+            noop
+
+        ( GotUnits _, _ ) ->
+            noop
 
 
 update : RecipeListMsg -> RecipesList -> ( RecipesList, Cmd RecipeListMsg )
@@ -354,11 +513,10 @@ decodeUnit =
 
 decodeRecipe : Decode.Decoder Recipe
 decodeRecipe =
-    Decode.map4 newRecipe
+    Decode.map3 newRecipe
         (Decode.field "recipe_id" (Decode.nullable Decode.int))
         (Decode.field "name" Decode.string)
         (Decode.field "comment" (Decode.nullable Decode.string))
-        (Decode.succeed [])
 
 
 decodeNestedWeightedMetaIngredients : Decode.Decoder (List RecipeIngredient)
@@ -368,7 +526,15 @@ decodeNestedWeightedMetaIngredients =
 
 decodeNestedWeightedMetaIngredient : Decode.Decoder RecipeIngredient
 decodeNestedWeightedMetaIngredient =
-    Decode.map3 (\i a u -> { ingredientId = i.id, ingredient = i.name, amount = a, unitId = u.id, unit = u.name })
+    Decode.map3
+        (\i a u ->
+            { ingredient = i
+            , amount = a
+            , unit = u
+            , allIngredients = { list = NotAsked, search = "", hidden = True }
+            , allUnits = { list = NotAsked, search = "", hidden = True }
+            }
+        )
         (Decode.field "ingredient" decodeMetaIngredient)
         (Decode.field "amount" Decode.string)
         (Decode.field "unit" decodeUnit)
@@ -376,13 +542,10 @@ decodeNestedWeightedMetaIngredient =
 
 decodeMetaIngredient : Decode.Decoder MetaIngredient
 decodeMetaIngredient =
-    let
-        decodeMeta d =
-            Decode.oneOf [ Decode.field "Ingredient" d, Decode.field "MetaRecipe" d ]
-    in
-    Decode.map2 MetaIngredient
-        (decodeMeta (Decode.oneOf [ Decode.field "ingredient_id" Decode.int, Decode.field "recipe_id" Decode.int ]))
-        (decodeMeta (Decode.field "name" Decode.string))
+    Decode.oneOf
+        [ Decode.field "Ingredient" <| Decode.map2 (\id name -> Ingredient { id = id, name = name }) (Decode.field "ingredient_id" Decode.int) (Decode.field "name" Decode.string)
+        , Decode.field "MetaRecipe" <| Decode.map2 (\id name -> Subrecipe { id = id, name = name }) (Decode.field "recipe_id" Decode.int) (Decode.field "name" Decode.string)
+        ]
 
 
 decodeMetaIngredients : Decode.Decoder (List MetaIngredient)
@@ -403,8 +566,25 @@ fetchRecipes =
         }
 
 
+fetchRecipeIngredients : Int -> Cmd RecipeListMsg
 fetchRecipeIngredients recipeId =
     Http.get
         { url = "http://localhost:3000/recipes/" ++ String.fromInt recipeId ++ "/meta_ingredients/list"
         , expect = Http.expectJson (GotWebData << GotRecipeIngredients recipeId) decodeNestedWeightedMetaIngredients
+        }
+
+
+fetchAllMetaIngredients : Cmd RecipeListMsg
+fetchAllMetaIngredients =
+    Http.get
+        { url = "http://localhost:3000/recipes/meta_ingredients/list"
+        , expect = Http.expectJson (GotWebData << GotMetaingredients) decodeMetaIngredients
+        }
+
+
+fetchUnits : Cmd RecipeListMsg
+fetchUnits =
+    Http.get
+        { url = "http://localhost:3000/utils/units"
+        , expect = Http.expectJson (GotWebData << GotUnits) (Decode.list decodeUnit)
         }
