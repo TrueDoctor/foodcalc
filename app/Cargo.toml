@@ -12,7 +12,7 @@ scraping = ["metro-scrape"]
 tectonic = ["dep:tectonic", "tectonic_bundles"]
 
 [dependencies]
-sqlx = { version = "0.5.13", features = ["postgres", "macros", "migrate", "uuid", "runtime-tokio-rustls", "offline", "bigdecimal", "time"]}
+sqlx = { version = "0.5", features = ["postgres", "macros", "migrate", "uuid", "runtime-tokio-rustls", "offline", "bigdecimal", "time"]}
 tokio = { version = "1", features = ["full"] }
 metro-scrape = {path = "../metro-scrape", optional = true}
 
@@ -38,5 +38,5 @@ regex = "*"
 eyre = "0.6"
 lazy_static = "1.4.0"
 parse_duration = "2.1.1"
-tectonic = {version = "0.12.0", optional = true}
-tectonic_bundles = { version = "0.3.0", optional = true }
+tectonic = {version = "0.14", optional = true}
+tectonic_bundles = { version = "*", optional = true }
