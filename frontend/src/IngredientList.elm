@@ -63,11 +63,7 @@ stateOf search items =
         , viewElement = viewIngredient
         , mapMsg = ListMsg
         , update = updateIngredient
-        , add =
-            Just
-                (\() ->
-                    newIngredient Nothing "" "" (Just "")
-                )
+        , add = Just <| always <| newIngredient Nothing "" "" (Just "")
         , expandItem = Nothing
         }
 

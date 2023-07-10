@@ -2,18 +2,20 @@ module RecipesList exposing (..)
 
 import Element exposing (..)
 import Element.Background
-import Element.Border
+import Element.Border as Border
 import Element.Input
+import FeatherIcons as FI
 import Html exposing (a)
 import Http
 import Json.Decode as Decode
+import Json.Encode as Encode
 import Platform.Cmd as Cmd
-import Recipes.Model exposing (RecipeMsg)
+import RecipeIngredients exposing (..)
+import RecipeSteps exposing (Step, StepMsg, fetchSteps, updateRecipeSteps, updateSteps, viewSteps)
+import String exposing (pad)
 import Test.ExpandableList as ExpandableList exposing (ExpandableList, ExpandableListMsg, mapElementMsg)
-import Test.SearchDropdown exposing (searchDropdown)
-import Test.Styles exposing (white)
+import Test.Styles exposing (grey, grey20, white)
 import WebData exposing (RemoteData(..), WebData)
-import Test.StringUtils as StringUtils
 
 
 type alias RecipesList =
@@ -32,29 +34,7 @@ type alias RecipeData =
     , id : Maybe Int
     , comment : Maybe String
     , ingredients : WebData (List RecipeIngredient)
-    }
-
-
-type alias RecipeIngredient =
-    { ingredient : MetaIngredient
-    , unit : Unit
-    , amount : String
-    , allIngredients : { list : WebData (List MetaIngredient), search : String, hidden : Bool }
-    , allUnits : { list : WebData (List Unit), search : String, hidden : Bool }
-    }
-
-
-type MetaIngredient
-    = Ingredient
-        { id : Int
-        , name : String
-        }
-    | Subrecipe { id : Int, name : String }
-
-
-type alias Unit =
-    { id : Int
-    , name : String
+    , steps : WebData (List Step)
     }
 
 
@@ -72,25 +52,18 @@ type WebDataMsg
     | GotRecipeIngredients Int (Result Http.Error (List RecipeIngredient))
     | GotMetaingredients (Result Http.Error (List MetaIngredient))
     | GotUnits (Result Http.Error (List Unit))
+    | GotRecipeUpdate RecipeData (Result Http.Error Int)
 
 
 type RecipeMsg
     = NameChange String
     | CommentChange String
     | RecipeIngredientChange RecipeIngredient RecipeIngredientMsg
+    | StepChange (Maybe Step) StepMsg
+    | AddIngredient
     | Save
     | Cancel
     | FetchIngredients
-
-
-type RecipeIngredientMsg
-    = AmountChanged String
-    | IngredientChanged MetaIngredient
-    | IngredientFilterChange String
-    | IngredientFocus
-    | UnitChanged Unit
-    | UnitFilterChange String
-    | UnitFocus
 
 
 stateOf : String -> List ( Bool, Recipe ) -> WebData (ExpandableList Recipe RecipeListMsg RecipeMsg)
@@ -109,17 +82,8 @@ stateOf search items =
         , viewElement = viewRecipe
         , mapMsg = ListMsg
         , update = updateRecipe
-        , add =
-            Just
-                (\() ->
-                    newRecipe Nothing "" (Just "")
-                )
-        , expandItem =
-            Just <|
-                \recipe ->
-                    case recipe of
-                        Recipe { data } ->
-                            Maybe.withDefault Cmd.none <| Maybe.map fetchRecipeIngredients data.id
+        , add = Just <| always <| newRecipe Nothing "" (Just "")
+        , expandItem = Just FetchIngredients
         }
 
 
@@ -135,7 +99,7 @@ newRecipe : Maybe Int -> String -> Maybe String -> Recipe
 newRecipe id name comment =
     let
         data =
-            { id = id, name = name, comment = comment, ingredients = NotAsked }
+            { id = id, name = name, comment = comment, ingredients = Success [], steps = Success [] }
     in
     Recipe { data = data, edit = data }
 
@@ -182,74 +146,64 @@ viewRow data =
 
 viewExpanded : Recipe -> Element RecipeListMsg
 viewExpanded recipe =
+    let
+        viewName edit =
+            Element.Input.text []
+                { onChange = NameChange
+                , label = Element.Input.labelLeft [] (text "Name:")
+                , placeholder = Just (Element.Input.placeholder [] (text "Name"))
+                , text = edit.name
+                }
+
+        viewComment text edit =
+            Element.Input.text []
+                { onChange = CommentChange
+                , label = Element.Input.labelLeft [] (text "Comment:")
+                , placeholder = Just (Element.Input.placeholder [] (text "Comment"))
+                , text = Maybe.withDefault "" edit.comment
+                }
+
+        viewIngredientsBlock edit =
+            column
+                [ width fill
+                , Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
+                , Border.color grey20
+                , paddingXY 0 10
+                ]
+                [ viewIngredients edit.ingredients
+                , Element.Input.button []
+                    { onPress = Just AddIngredient
+                    , label = el [ paddingXY 30 10 ] (html (FI.toHtml [] FI.plus))
+                    }
+                ]
+
+        viewStepsBlock edit =
+            el
+                [ width fill, Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }, Border.color grey20 ]
+                (viewSteps StepChange edit.steps)
+
+        viewButtons text =
+            row [ width fill, spacing 25 ]
+                [ Element.Input.button [ alignRight ]
+                    { onPress = Just Save
+                    , label = el [ padding 10 ] <| text "Save"
+                    }
+                , Element.Input.button [ alignRight ]
+                    { onPress = Just Cancel
+                    , label = el [ padding 10 ] <| text "Cancel"
+                    }
+                ]
+    in
     case recipe of
         Recipe { edit } ->
-            column [ Element.Background.color white, width fill, padding 10, spacing 10, Element.Border.rounded 5 ]
-                [ Element.map (ListMsg << ExpandableList.mapElementMsg recipe)
-                    (Element.Input.text []
-                        { onChange = NameChange
-                        , label = Element.Input.labelLeft [] (text "Name:")
-                        , placeholder = Just (Element.Input.placeholder [] (text "Name"))
-                        , text = edit.name
-                        }
-                    )
-                , Element.map
-                    (ListMsg << ExpandableList.mapElementMsg recipe)
-                    (Element.Input.text []
-                        { onChange = CommentChange
-                        , label = Element.Input.labelLeft [] (text "Comment:")
-                        , placeholder = Just (Element.Input.placeholder [] (text "Comment"))
-                        , text = Maybe.withDefault "" edit.comment
-                        }
-                    )
-                , Element.map (ListMsg << mapElementMsg recipe) <| viewIngredients edit.ingredients
-                , Element.map
-                    (ListMsg << ExpandableList.mapElementMsg recipe)
-                    (row [ width fill, spacing 25 ]
-                        [ Element.Input.button [ alignRight ] { onPress = Just Save, label = el [ padding 10 ] <| text "Save" }
-                        , Element.Input.button [ alignRight ] { onPress = Just Cancel, label = el [ padding 10 ] <| text "Cancel" }
-                        ]
-                    )
-                ]
-
-
-viewRecipeIngredient : RecipeIngredient -> Element RecipeIngredientMsg
-viewRecipeIngredient recipeIngredient =
-    let
-        nameOf a =
-            case a of
-                Ingredient { name } ->
-                    name
-
-                Subrecipe { name } ->
-                    name
-    in
-    case ( recipeIngredient.allIngredients.list, recipeIngredient.allUnits.list ) of
-        ( Success i, Success u ) ->
-            row [ width fill, padding 20 ]
-                [ el [ width (fillPortion 3) ]
-                    (searchDropdown
-                        { search = recipeIngredient.allIngredients.search
-                        , filter = \s a -> StringUtils.fuzzyContains (nameOf a) s
-                        , items = i
-                        , select = IngredientChanged
-                        , selection = List.head (List.filter (\e -> e == recipeIngredient.ingredient) i)
-                        , viewItem = text << nameOf
-                        , hidden = recipeIngredient.allIngredients.hidden
-                        , filterChange = IngredientFilterChange
-                        , onFocus = IngredientFocus
-                        }
-                    )
-                , el [ width (fillPortion 3) ] (text recipeIngredient.amount)
-                , el [ width (fillPortion 1) ] (text recipeIngredient.unit.name)
-                ]
-
-        _ ->
-            row [ width fill, padding 20 ]
-                [ el [ width (fillPortion 3) ] (text <| nameOf recipeIngredient.ingredient)
-                , el [ width (fillPortion 3) ] (text recipeIngredient.amount)
-                , el [ width (fillPortion 1) ] (text recipeIngredient.unit.name)
-                ]
+            Element.map (ListMsg << ExpandableList.mapElementMsg recipe) <|
+                column [ Element.Background.color white, width fill, padding 10, spacing 10, Border.rounded 5 ]
+                    [ viewName edit
+                    , viewComment text edit
+                    , viewIngredientsBlock edit
+                    , viewStepsBlock edit
+                    , viewButtons text
+                    ]
 
 
 viewIngredients : WebData (List RecipeIngredient) -> Element RecipeMsg
@@ -285,47 +239,6 @@ replaceId f id list =
         list
 
 
-updateRecipeIngredient : RecipeIngredientMsg -> RecipeIngredient -> RecipeIngredient
-updateRecipeIngredient msg ri =
-    case msg of
-        AmountChanged s ->
-            Debug.todo "Parse number"
-
-        IngredientChanged ingredient ->
-            { ri | ingredient = ingredient }
-
-        IngredientFocus ->
-            let
-                all =
-                    ri.allIngredients
-            in
-            { ri | allIngredients = { all | hidden = not all.hidden } }
-
-        IngredientFilterChange search ->
-            let
-                all =
-                    ri.allIngredients
-            in
-            { ri | allIngredients = { all | search = search } }
-
-        UnitFocus ->
-            let
-                all =
-                    ri.allUnits
-            in
-            { ri | allUnits = { all | hidden = not all.hidden } }
-
-        UnitFilterChange search ->
-            let
-                all =
-                    ri.allUnits
-            in
-            { ri | allUnits = { all | search = search } }
-
-        UnitChanged unit ->
-            { ri | unit = unit }
-
-
 updateRecipe : RecipeMsg -> Recipe -> ( Recipe, Cmd RecipeListMsg )
 updateRecipe msg rc =
     let
@@ -346,7 +259,7 @@ updateRecipe msg rc =
             ( updateEdit (\e -> { e | comment = Just comment }), Cmd.none )
 
         Save ->
-            ( rc, Cmd.none )
+            ( rc, sendRecipe rc )
 
         Cancel ->
             case rc of
@@ -374,10 +287,53 @@ updateRecipe msg rc =
                     , Cmd.none
                     )
 
+        AddIngredient ->
+            case rc of
+                Recipe { data, edit } ->
+                    let
+                        appendNew l =
+                            l
+                                ++ [ { ingredient = Nothing
+                                     , unit = Nothing
+                                     , amount = ""
+                                     , allIngredients = { list = NotAsked, search = "", hidden = True }
+                                     , allUnits = { list = NotAsked, search = "", hidden = True }
+                                     }
+                                   ]
+                    in
+                    ( Recipe
+                        { data = data
+                        , edit = { edit | ingredients = WebData.map appendNew edit.ingredients }
+                        }
+                    , Cmd.batch
+                        [ fetchAllMetaIngredients (GotWebData << GotMetaingredients)
+                        , fetchUnits (GotWebData << GotUnits)
+                        ]
+                    )
+
+        StepChange step stepMsg ->
+            case rc of
+                Recipe { edit, data } ->
+                    let
+                        ( steps, cmd ) =
+                            updateSteps stepMsg edit.steps step
+                    in
+                    ( Recipe { data = data, edit = { edit | steps = steps } }, cmd )
+
         FetchIngredients ->
             case rc of
                 Recipe { data } ->
-                    ( rc, Maybe.withDefault Cmd.none <| Maybe.map fetchRecipeIngredients data.id )
+                    ( rc
+                    , Maybe.withDefault Cmd.none <|
+                        Maybe.map
+                            (\id ->
+                                Cmd.batch
+                                    [ fetchRecipeIngredients (GotWebData << GotRecipeIngredients id) id
+                                    , Cmd.map (ListMsg << mapElementMsg rc << StepChange Nothing) <| fetchSteps id
+                                    ]
+                            )
+                            data.id
+                    )
 
 
 handleWebData : WebDataMsg -> RecipesList -> ( RecipesList, Cmd RecipeListMsg )
@@ -444,8 +400,8 @@ handleWebData msg model =
             in
             ( { model | recipes = Success { list | items = replaceId saveIngredients id list.items } }
             , Cmd.batch
-                [ fetchAllMetaIngredients
-                , fetchUnits
+                [ fetchAllMetaIngredients (GotWebData << GotMetaingredients)
+                , fetchUnits (GotWebData << GotUnits)
                 ]
             )
 
@@ -474,6 +430,55 @@ handleWebData msg model =
 
                 Err _ ->
                     noop
+
+        ( GotRecipeUpdate rc result, Success list ) ->
+            case result of
+                Ok id ->
+                    let
+                        successfulEdit r =
+                            case r of
+                                Recipe { edit } ->
+                                    if edit == rc then
+                                        let
+                                            new =
+                                                Debug.log "update" { edit | id = Just (Debug.log "id" id) }
+                                        in
+                                        Recipe { edit = new, data = new }
+
+                                    else
+                                        r
+
+                        recipe =
+                            list.items
+                                |> List.filter
+                                    (\( _, r ) ->
+                                        case r of
+                                            Recipe { edit } ->
+                                                edit == rc
+                                    )
+                                |> List.head
+                                |> Maybe.map Tuple.second
+                                |> Maybe.map successfulEdit
+
+                        mapStepCmd cmd =
+                            recipe
+                                |> Maybe.map (\r -> Cmd.map (ListMsg << mapElementMsg r << StepChange Nothing) cmd)
+                                |> Maybe.withDefault Cmd.none
+                    in
+                    ( { model
+                        | recipes = Success { list | items = List.map (Tuple.mapSecond successfulEdit) list.items }
+                      }
+                    , Cmd.batch
+                        [ sendIngredients rc
+                        , mapStepCmd (updateRecipeSteps rc.steps id)
+                        ]
+                    )
+
+                _ ->
+                    noop
+
+        ( GotRecipeUpdate _ _, _ ) ->
+            noop
 
         ( GotRecipeIngredients _ _, _ ) ->
             noop
@@ -504,58 +509,28 @@ update msg model =
 -- Decoding
 
 
-decodeUnit : Decode.Decoder Unit
-decodeUnit =
-    Decode.map2 Unit
-        (Decode.field "unit_id" Decode.int)
-        (Decode.field "name" Decode.string)
-
-
 decodeRecipe : Decode.Decoder Recipe
 decodeRecipe =
-    Decode.map3 newRecipe
+    Decode.map3
+        (\id name comment ->
+            let
+                data =
+                    { id = id, name = name, comment = comment, ingredients = NotAsked, steps = NotAsked }
+            in
+            Recipe { data = data, edit = data }
+        )
         (Decode.field "recipe_id" (Decode.nullable Decode.int))
         (Decode.field "name" Decode.string)
         (Decode.field "comment" (Decode.nullable Decode.string))
 
 
-decodeNestedWeightedMetaIngredients : Decode.Decoder (List RecipeIngredient)
-decodeNestedWeightedMetaIngredients =
-    Decode.list decodeNestedWeightedMetaIngredient
-
-
-decodeNestedWeightedMetaIngredient : Decode.Decoder RecipeIngredient
-decodeNestedWeightedMetaIngredient =
-    Decode.map3
-        (\i a u ->
-            { ingredient = i
-            , amount = a
-            , unit = u
-            , allIngredients = { list = NotAsked, search = "", hidden = True }
-            , allUnits = { list = NotAsked, search = "", hidden = True }
-            }
-        )
-        (Decode.field "ingredient" decodeMetaIngredient)
-        (Decode.field "amount" Decode.string)
-        (Decode.field "unit" decodeUnit)
-
-
-decodeMetaIngredient : Decode.Decoder MetaIngredient
-decodeMetaIngredient =
-    Decode.oneOf
-        [ Decode.field "Ingredient" <| Decode.map2 (\id name -> Ingredient { id = id, name = name }) (Decode.field "ingredient_id" Decode.int) (Decode.field "name" Decode.string)
-        , Decode.field "MetaRecipe" <| Decode.map2 (\id name -> Subrecipe { id = id, name = name }) (Decode.field "recipe_id" Decode.int) (Decode.field "name" Decode.string)
-        ]
-
-
-decodeMetaIngredients : Decode.Decoder (List MetaIngredient)
-decodeMetaIngredients =
-    Decode.list decodeMetaIngredient
-
-
 decodeRecipes : Decode.Decoder (List Recipe)
 decodeRecipes =
     Decode.list decodeRecipe
+
+
+
+-- Fetching
 
 
 fetchRecipes : Cmd RecipeListMsg
@@ -566,25 +541,61 @@ fetchRecipes =
         }
 
 
-fetchRecipeIngredients : Int -> Cmd RecipeListMsg
-fetchRecipeIngredients recipeId =
-    Http.get
-        { url = "http://localhost:3000/recipes/" ++ String.fromInt recipeId ++ "/meta_ingredients/list"
-        , expect = Http.expectJson (GotWebData << GotRecipeIngredients recipeId) decodeNestedWeightedMetaIngredients
-        }
+
+-- Encoding
 
 
-fetchAllMetaIngredients : Cmd RecipeListMsg
-fetchAllMetaIngredients =
-    Http.get
-        { url = "http://localhost:3000/recipes/meta_ingredients/list"
-        , expect = Http.expectJson (GotWebData << GotMetaingredients) decodeMetaIngredients
-        }
+encodeRecipeData : RecipeData -> Encode.Value
+encodeRecipeData rd =
+    Encode.object
+        [ ( "recipe_id", rd.id |> Maybe.map Encode.int |> Maybe.withDefault Encode.null )
+        , ( "name", Encode.string rd.name )
+        , ( "comment", rd.comment |> Maybe.map Encode.string |> Maybe.withDefault Encode.null )
+        ]
 
 
-fetchUnits : Cmd RecipeListMsg
-fetchUnits =
-    Http.get
-        { url = "http://localhost:3000/utils/units"
-        , expect = Http.expectJson (GotWebData << GotUnits) (Decode.list decodeUnit)
-        }
+encodeRecipe : Recipe -> Encode.Value
+encodeRecipe r =
+    case r of
+        Recipe { edit } ->
+            encodeRecipeData edit
+
+
+
+-- Sending
+
+
+sendRecipe : Recipe -> Cmd RecipeListMsg
+sendRecipe r =
+    let
+        url =
+            case r of
+                Recipe { data } ->
+                    case data.id of
+                        Just id ->
+                            "/" ++ String.fromInt id ++ "/update"
+
+                        Nothing ->
+                            "/create"
+    in
+    case r of
+        Recipe { edit } ->
+            Http.post
+                { url = "http://localhost:3000/recipes" ++ url
+                , body = Http.jsonBody <| encodeRecipe r
+                , expect = Http.expectJson (GotWebData << GotRecipeUpdate edit) Decode.int
+                }
+
+
+sendIngredients : RecipeData -> Cmd RecipeListMsg
+sendIngredients rd =
+    case Debug.log "enc" ( rd.id, encodeIngredients rd.ingredients ) of
+        ( Just id, Just body ) ->
+            Http.post
+                { url = "http://localhost:3000/recipes/" ++ String.fromInt id ++ "/meta_ingredients/update"
+                , body = Http.jsonBody body
+                , expect = Http.expectJson (GotWebData << GotRecipeUpdate rd) (Decode.succeed 0)
+                }
+
+        _ ->
+            Cmd.none
