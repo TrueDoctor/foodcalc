@@ -17,7 +17,7 @@ struct Recipe {
     comment: Option<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 struct SerializableRecipeStep {
     step_id: i32,
     step_order: f64,
@@ -147,6 +147,7 @@ pub fn update_steps(foodbase: Arc<FoodBase>) -> MethodRouter {
 }
 
 fn deserialize_step(step: SerializableRecipeStep) -> RecipeStep {
+    log::debug!("step: {:?}", step);
     RecipeStep {
         step_id: step.step_id,
         step_order: step.step_order,
