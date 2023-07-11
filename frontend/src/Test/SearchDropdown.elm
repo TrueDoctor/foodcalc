@@ -7,18 +7,20 @@ import Element.Events exposing (onClick)
 import Element.Input
 import Html.Attributes exposing (hidden)
 import Test.Styles exposing (grey, white)
+import Test.StringUtils exposing (fuzzyContains)
+import Test.StringUtils exposing (fuzzyContainedBy)
 
 
 type alias SearchDropdown a msg =
     { search : String
-    , filter : String -> a -> Bool
     , items : List a
     , selection : Maybe a
-    , viewItem : a -> Element msg
+    , itemName : a -> String
     , filterChange : String -> msg
     , select : a -> msg
     , onFocus : msg
     , hidden : Bool
+    , title : String
     }
 
 
@@ -32,8 +34,8 @@ viewOverlay dropdown =
         ]
     <|
         List.map 
-            (\i -> el [ onClick (dropdown.select i), width fill ] (dropdown.viewItem i)) 
-            (List.filter (dropdown.filter dropdown.search) dropdown.items)
+            (\i -> el [ onClick (dropdown.select i), width fill ] (text <| dropdown.itemName i)) 
+            (List.filter (fuzzyContainedBy dropdown.search << dropdown.itemName) dropdown.items)
 
 
 searchDropdown : SearchDropdown a msg -> Element msg
@@ -46,10 +48,10 @@ searchDropdown dropdown =
             ]
         <|
             Element.Input.text [ width fill ]
-                { label = Element.Input.labelHidden "Filter"
+                { label = Element.Input.labelAbove [] <| text dropdown.title
                 , onChange = dropdown.filterChange
-                , placeholder = Just <| Element.Input.placeholder [] (Maybe.withDefault (text "") (Maybe.map dropdown.viewItem dropdown.selection))
-                , text = ""
+                , placeholder = Just <| Element.Input.placeholder [] <| text (Maybe.withDefault "" (Maybe.map dropdown.itemName dropdown.selection))
+                , text = Maybe.withDefault "" <| Maybe.map dropdown.itemName dropdown.selection
                 }
 
     else
@@ -61,7 +63,7 @@ searchDropdown dropdown =
             ]
         <|
             Element.Input.text [ width fill ]
-                { label = Element.Input.labelHidden "Filter"
+                { label = Element.Input.labelAbove [] <| text dropdown.title
                 , onChange = dropdown.filterChange
                 , placeholder = Just <| Element.Input.placeholder [] (text "Filter")
                 , text = dropdown.search

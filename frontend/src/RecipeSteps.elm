@@ -37,7 +37,7 @@ viewSteps : (Maybe Step -> StepMsg -> msg) -> WebData (List Step) -> Element msg
 viewSteps mapMsg wd =
     case wd of
         Success steps ->
-            column [ width fill, spacing 40 ]
+            column [ width fill, spacing 20, paddingXY 0 20 ]
                 (List.map (viewStep mapMsg) steps
                     ++ [ Element.Input.button []
                             { onPress = Just <| mapMsg Nothing NewStep
@@ -60,14 +60,14 @@ viewStep mapMsg step =
             [ row [ width fill, paddingXY 20 0, spacing 30 ]
                 [ el [ width <| px 100 ] <|
                     Element.Input.text []
-                        { label = Element.Input.labelHidden "Order"
+                        { label = Element.Input.labelAbove [] <| text "Order"
                         , onChange = SetOrder
                         , placeholder = Just <| Element.Input.placeholder [] (text "Order")
                         , text = step.order
                         }
                 , el [ width fill ] <|
                     Element.Input.text []
-                        { label = Element.Input.labelHidden "Title"
+                        { label = Element.Input.labelAbove [] <| text "Title"
                         , onChange = SetTitle
                         , placeholder = Just <| Element.Input.placeholder [] <| text "Title"
                         , text = step.title
@@ -75,7 +75,7 @@ viewStep mapMsg step =
                 ]
             , el [ width fill, paddingXY 20 0 ] <|
                 Element.Input.text []
-                    { label = Element.Input.labelHidden "Description"
+                    { label = Element.Input.labelAbove [] <| text "Description"
                     , onChange = SetDescription
                     , placeholder = Just <| Element.Input.placeholder [] <| text "Description"
                     , text = step.description
@@ -85,7 +85,7 @@ viewStep mapMsg step =
                     Element.Input.text []
                         { label = Element.Input.labelAbove [] <| text "Fixed duration"
                         , onChange = SetFixedDuration
-                        , placeholder = Just <| Element.Input.placeholder [] (text "Fixed duration")
+                        , placeholder = Just <| Element.Input.placeholder [] (text "((h:)m:)s")
                         , text = step.duration
                         }
                 , el [ width <| fillPortion 1 ] <|
@@ -170,31 +170,65 @@ encodeSteps id steps =
         |> Maybe.map (Encode.list identity)
 
 
-duration : String -> Encode.Value
-duration s =
-    Encode.object [ ( "secs", Encode.int <| Maybe.withDefault 0 <| String.toInt s ), ( "nanos", Encode.int 0 ) ]
+encodeDuration : Int -> Encode.Value
+encodeDuration secs =
+    Encode.object [ ( "secs", Encode.int secs ), ( "nanos", Encode.int 0 ) ]
+
+
+parseDuration : String -> Maybe Encode.Value
+parseDuration s =
+    let
+        parts =
+            List.map (String.toInt << (++) "0") << String.split ":"
+
+        timeParts =
+            (List.map2 <| Maybe.map2 (*)) [ Just 3600, Just 60, Just 1 ] << parts
+
+        time list =
+            if List.any (Maybe.withDefault True << Maybe.map (always False)) list then
+                Nothing
+
+            else
+                Just <| List.sum <| List.filterMap identity list
+    in
+    Maybe.map encodeDuration <| time <| timeParts s
 
 
 decodeDuration : Decode.Decoder String
 decodeDuration =
-    Decode.map String.fromInt <| Decode.field "secs" Decode.int
+    let
+        hours s =
+            s // 3600
+
+        minutes s =
+            modBy 60 <| s // 60
+
+        seconds =
+            modBy 60
+
+        time secs =
+            String.join ":" (List.map (\t -> String.fromInt <| t secs) [ hours, minutes, seconds ])
+    in
+    Decode.map time <| Decode.field "secs" Decode.int
 
 
 encodeStep : Int -> Step -> Maybe Encode.Value
 encodeStep id step =
-    Maybe.map
-        (\order ->
+    Maybe.map3
+        (\order duration durationPerKg ->
             Encode.object
                 [ ( "step_id", Maybe.withDefault (Encode.int -1) <| Maybe.map Encode.int step.id )
                 , ( "step_name", Encode.string step.title )
                 , ( "step_description", Encode.string step.description )
                 , ( "step_order", Encode.float order )
                 , ( "recipe_id", Encode.int id )
-                , ( "fixed_duration", duration step.duration )
-                , ( "duration_per_kg", duration step.durationPerKg )
+                , ( "fixed_duration", duration )
+                , ( "duration_per_kg", durationPerKg )
                 ]
         )
         (String.toFloat step.order)
+        (parseDuration step.duration)
+        (parseDuration step.durationPerKg)
 
 
 

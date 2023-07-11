@@ -150,7 +150,7 @@ viewExpanded recipe =
         viewName edit =
             Element.Input.text []
                 { onChange = NameChange
-                , label = Element.Input.labelLeft [] (text "Name:")
+                , label = Element.Input.labelAbove [] (text "Name")
                 , placeholder = Just (Element.Input.placeholder [] (text "Name"))
                 , text = edit.name
                 }
@@ -158,7 +158,7 @@ viewExpanded recipe =
         viewComment text edit =
             Element.Input.text []
                 { onChange = CommentChange
-                , label = Element.Input.labelLeft [] (text "Comment:")
+                , label = Element.Input.labelAbove [] (text "Comment")
                 , placeholder = Just (Element.Input.placeholder [] (text "Comment"))
                 , text = Maybe.withDefault "" edit.comment
                 }

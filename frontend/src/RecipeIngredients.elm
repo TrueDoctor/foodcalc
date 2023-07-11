@@ -64,19 +64,19 @@ viewRecipeIngredient recipeIngredient =
                 [ el [ width (fillPortion 3) ]
                     (searchDropdown
                         { search = recipeIngredient.allIngredients.search
-                        , filter = \s a -> StringUtils.fuzzyContains (nameOf <| Just a) s
                         , items = i
                         , select = IngredientChanged
                         , selection = List.head (List.filter (\e -> Just e == recipeIngredient.ingredient) i)
-                        , viewItem = text << nameOf << Just
+                        , itemName = nameOf << Just
                         , hidden = recipeIngredient.allIngredients.hidden
                         , filterChange = IngredientFilterChange
                         , onFocus = IngredientFocus
+                        , title = "Ingredients"
                         }
                     )
                 , el [ width (fillPortion 3) ]
                     (Element.Input.text [ width fill ]
-                        { label = Element.Input.labelHidden "Amount"
+                        { label = Element.Input.labelAbove [] <| text "Amount"
                         , onChange = AmountChanged
                         , placeholder = Just <| Element.Input.placeholder [] (text "Amount")
                         , text = recipeIngredient.amount
@@ -85,14 +85,14 @@ viewRecipeIngredient recipeIngredient =
                 , el [ width (fillPortion 1) ]
                     (searchDropdown
                         { search = recipeIngredient.allUnits.search
-                        , filter = \s a -> StringUtils.fuzzyContains a.name s
                         , items = u
                         , select = UnitChanged
                         , selection = List.head (List.filter (\e -> Just e == recipeIngredient.unit) u)
-                        , viewItem = \a -> text a.name
+                        , itemName = (.name)
                         , hidden = recipeIngredient.allUnits.hidden
                         , filterChange = UnitFilterChange
                         , onFocus = UnitFocus
+                        , title = "Units"
                         }
                     )
                 ]

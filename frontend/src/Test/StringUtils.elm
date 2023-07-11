@@ -16,6 +16,9 @@ fuzzyContains a b =
             else
                 d
         )
-        b
-        a
+        (String.toLower b)
+        (String.toLower a)
         == ""
+
+fuzzyContainedBy : String -> String -> Bool
+fuzzyContainedBy a b = fuzzyContains b a
