@@ -7,6 +7,7 @@ import Events exposing (EventsData)
 import Events exposing (EventTabMsg)
 import IngredientList exposing (IngredientListMsg)
 import RecipesList
+import EventList
 
 
 type alias Model =
@@ -16,6 +17,7 @@ type alias Model =
     , events : EventsData
     , ingredientList: IngredientList.IngredientsList
     , recipeList: RecipesList.RecipesList
+    , eventList: EventList.Events
     }
 
 
@@ -27,6 +29,7 @@ type Msg
     | EventsMessage EventTabMsg
     | IngredientUIMsg IngredientListMsg
     | RecipeUIMsg RecipesList.RecipeListMsg
+    | EventUIMsg EventList.EventListMsg
 
 
 type Tab

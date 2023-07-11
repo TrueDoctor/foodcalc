@@ -3,6 +3,7 @@ module Main exposing (..)
 import Browser
 import Browser.Dom exposing (Element)
 import Element
+import EventList exposing (EventListMsg)
 import Events
 import Html exposing (div)
 import Html.Attributes exposing (class)
@@ -44,7 +45,8 @@ view model =
 viewUI : Model -> Html.Html Msg
 viewUI m =
     --Element.layout [] (Element.map Model.IngredientUIMsg (IngredientList.view m.ingredientList))
-    Element.layout [] (Element.map Model.RecipeUIMsg (RecipesList.view m.recipeList))
+    --Element.layout [] (Element.map Model.RecipeUIMsg (RecipesList.view m.recipeList))
+    Element.layout [] (Element.map Model.EventUIMsg (EventList.view m.eventList))
 
 
 renderSelectedView : Model -> Html.Html Msg
@@ -98,6 +100,13 @@ update msg model =
             in
             ( { model | recipeList = list }, Cmd.map RecipeUIMsg cmd )
 
+        EventUIMsg m ->
+            let
+                ( list, cmd ) =
+                    EventList.update m model.eventList
+            in
+            ( { model | eventList = list }, Cmd.map EventUIMsg cmd )
+
 
 initTab : Model -> ( Model, Cmd Msg )
 initTab model =
@@ -130,7 +139,10 @@ init _ =
         ingredientsList =
             WebData.Loading
 
-        recipesList = RecipesList.emptyRecipesData
+        recipesList =
+            RecipesList.emptyRecipesData
+        
+        eventsList = EventList.emptyEvents
 
         tabs =
             Utils.Cursor.create (Ingredients ingredientsTabData)
@@ -138,11 +150,12 @@ init _ =
                 , Events
                 ]
     in
-    ( Model tabs ingredientsTabData recipeTabData eventsData ingredientsList recipesList
+    ( Model tabs ingredientsTabData recipeTabData eventsData ingredientsList recipesList eventsList
     , Cmd.batch
         [ Cmd.map (always <| ChangeTab <| Ingredients emptyIngredientsTabData) Cmd.none
         , Cmd.map IngredientUIMsg IngredientList.fetchIngredients
         , Cmd.map RecipeUIMsg RecipesList.fetchRecipes
+        , Cmd.map EventUIMsg EventList.fetchEvents
         ]
     )
 

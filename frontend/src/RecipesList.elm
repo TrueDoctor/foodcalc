@@ -155,7 +155,7 @@ viewExpanded recipe =
                 , text = edit.name
                 }
 
-        viewComment text edit =
+        viewComment edit =
             Element.Input.text []
                 { onChange = CommentChange
                 , label = Element.Input.labelAbove [] (text "Comment")
@@ -182,7 +182,7 @@ viewExpanded recipe =
                 [ width fill, Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }, Border.color grey20 ]
                 (viewSteps StepChange edit.steps)
 
-        viewButtons text =
+        viewButtons =
             row [ width fill, spacing 25 ]
                 [ Element.Input.button [ alignRight ]
                     { onPress = Just Save
@@ -199,10 +199,10 @@ viewExpanded recipe =
             Element.map (ListMsg << ExpandableList.mapElementMsg recipe) <|
                 column [ Element.Background.color white, width fill, padding 10, spacing 10, Border.rounded 5 ]
                     [ viewName edit
-                    , viewComment text edit
+                    , viewComment edit
                     , viewIngredientsBlock edit
                     , viewStepsBlock edit
-                    , viewButtons text
+                    , viewButtons
                     ]
 
 
