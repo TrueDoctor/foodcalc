@@ -13,6 +13,15 @@ type RemoteData a e
 type alias WebData a =
     RemoteData a Http.Error
 
+errorString e = 
+    case e of 
+        Http.BadBody s -> 
+            "Bad Body: " ++ s
+        Http.BadStatus s -> 
+            "Bad Status: "  ++ String.fromInt s
+        Http.BadUrl s -> 
+            "Bad Url: " ++ s
+        _ -> "Http Error"
 
 
 fromResult : Result Http.Error a -> WebData a

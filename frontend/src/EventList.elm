@@ -1,4 +1,4 @@
-module EventList exposing (EventListMsg, Events, emptyEvents, update, view, fetchEvents)
+module EventList exposing (EventListMsg, Events, emptyEvents, fetchEvents, update, view)
 
 import Element exposing (..)
 import Element.Background
@@ -6,12 +6,13 @@ import Element.Border
 import Element.Input
 import Http
 import Json.Decode as Decode
+import Json.Encode as Encode
 import RecipesList exposing (Recipe, WebDataMsg, view, viewExpanded)
 import Settings exposing (backend)
 import Test.ExpandableList as ExpandableList exposing (ExpandableList, ExpandableListMsg, mapElementMsg)
 import Test.StringUtils exposing (fuzzyContains)
 import Test.Styles exposing (white)
-import WebData exposing (RemoteData(..), WebData)
+import WebData exposing (RemoteData(..), WebData, errorString)
 
 
 type alias EventList =
@@ -48,6 +49,7 @@ type EventListMsg
 
 type WebDataMsg
     = GotEvents (Result Http.Error (List Event))
+    | GotEventId Event (Result Http.Error Int)
 
 
 type EventMsg
@@ -76,7 +78,7 @@ stateOf search items =
         filter string event =
             case event of
                 Event { data } ->
-                    fuzzyContains string data.name
+                    fuzzyContains  data.name string
     in
     Success
         { search = search
@@ -115,8 +117,8 @@ view events =
         Success data ->
             ExpandableList.view data
 
-        Failure _ ->
-            el [] <| text "Failed to load events"
+        Failure e ->
+            el [] <| text <| "Failed to load events:" ++ errorString e
 
         _ ->
             el [] <| text "Loading"
@@ -138,7 +140,7 @@ viewEvent expand expanded ev =
 
 viewRow : EventData -> Element msg
 viewRow data =
-    row [ spaceEvenly, width fill, paddingXY 50 20]
+    row [ spaceEvenly, width fill, paddingXY 50 20 ]
         [ el [ width (fillPortion 1) ] <| text <| Maybe.withDefault "" <| Maybe.map String.fromInt data.id
         , el [ width (fillPortion 3) ] <| text data.name
         , el [ width (fillPortion 2) ] <| text <| Maybe.withDefault "" data.budget
@@ -150,7 +152,7 @@ viewExpanded : Event -> Element EventListMsg
 viewExpanded ev =
     let
         viewNameBudget edit =
-            row [ width fill, spacing 20]
+            row [ width fill, spacing 20 ]
                 [ Element.Input.text []
                     { onChange = NameChange
                     , label = Element.Input.labelAbove [] (text "Name")
@@ -232,13 +234,44 @@ update msg model =
 
 updateEvent : EventMsg -> Event -> ( Event, Cmd EventListMsg )
 updateEvent msg event =
+    let
+        ( evData, evEdit ) =
+            case event of
+                Event { data, edit } ->
+                    ( data, edit )
+    in
     case msg of
+        NameChange name ->
+            ( Event { data = evData, edit = { evEdit | name = name } }, Cmd.none )
+
+        BudgetChange budget ->
+            ( Event { data = evData, edit = { evEdit | budget = Just budget } }, Cmd.none )
+
+        CommentChange comment ->
+            ( Event { data = evData, edit = { evEdit | comment = Just comment } }, Cmd.none )
+
+        Save ->
+            ( event, sendEvent event )
+
         _ ->
             ( event, Cmd.none )
 
 
 handleWebData : WebDataMsg -> EventList -> ( EventList, Cmd EventListMsg )
 handleWebData msg model =
+    let
+        eventUpdate ev f listEvent =
+            if ev == listEvent then
+                case ev of
+                    Event { data, edit } ->
+                        Event { data = data, edit = f edit }
+
+            else
+                listEvent
+
+        listUpdate ev f =
+            List.map (Tuple.mapSecond <| eventUpdate ev f)
+    in
     case ( msg, model.events ) of
         ( GotEvents result, Success list ) ->
             case result of
@@ -251,16 +284,42 @@ handleWebData msg model =
         ( GotEvents result, _ ) ->
             case result of
                 Ok new ->
-                    ( { model | events = stateOf "" <| List.map (Tuple.pair False) new }, Cmd.none )
+                    ( { model | events = stateOf "" <| List.map (Tuple.pair False) <| Debug.log "" new }, Cmd.none )
 
                 Err e ->
-                    ( { model | recipes = Failure e }, Cmd.none )
+                    ( { model | events = Failure <| Debug.log "" e }, Cmd.none )
+
+        ( GotEventId ev result, Success list ) ->
+            case result of
+                Ok new ->
+                    let
+                        idUpdate edit =
+                            { edit | id = Just new }
+
+                        cmd =
+                            case Debug.log "" ev of
+                                Event { data, edit } ->
+                                    case edit.id of
+                                        Nothing ->
+                                            sendEvent (Event { data = data, edit = idUpdate edit })
+
+                                        _ ->
+                                            Cmd.none
+                    in
+                    ( { model | events = Success { list | items = listUpdate ev idUpdate list.items } }, cmd )
+
+                Err e ->
+                    ( model, Cmd.none )
+
+        ( GotEventId _ _, _ ) ->
+            ( model, Cmd.none )
 
 
 
 -- Decoding
 
 
+decodeEvent : Decode.Decoder Event
 decodeEvent =
     Decode.map4
         (\id name budget comment ->
@@ -271,13 +330,40 @@ decodeEvent =
             Event { data = data, edit = data }
         )
         (Decode.field "event_id" <| Decode.nullable Decode.int)
-        (Decode.field "name" Decode.string)
+        (Decode.field "event_name" Decode.string)
         (Decode.field "budget" <| Decode.nullable Decode.string)
         (Decode.field "comment" <| Decode.nullable Decode.string)
 
 
+decodeEvents : Decode.Decoder (List Event)
 decodeEvents =
     Decode.list decodeEvent
+
+
+
+-- Encoding
+
+
+encodeEvent : EventData -> Encode.Value
+encodeEvent ev =
+    let
+        isNumber s =
+            case String.toFloat s of
+                Just _ ->
+                    Just s
+
+                _ ->
+                    Nothing
+
+        budget =
+            ev.budget |> Maybe.andThen isNumber |> Maybe.map Encode.string |> Maybe.withDefault Encode.null
+    in
+    Encode.object
+        [ ( "event_id", ev.id |> Maybe.map Encode.int |> Maybe.withDefault Encode.null )
+        , ( "event_name", Encode.string ev.name )
+        , ( "comment", ev.comment |> Maybe.map Encode.string |> Maybe.withDefault Encode.null )
+        , ( "budget", budget )
+        ]
 
 
 
@@ -287,3 +373,30 @@ decodeEvents =
 fetchEvents : Cmd EventListMsg
 fetchEvents =
     Http.get { url = backend "/events/list", expect = Http.expectJson (GotWebData << GotEvents) decodeEvents }
+
+
+
+-- sending
+
+
+sendEvent : Event -> Cmd EventListMsg
+sendEvent ev =
+    let
+        data =
+            case ev of
+                Event { edit } ->
+                    edit
+
+        url =
+            case data.id of
+                Just id ->
+                    "/events/" ++ String.fromInt id ++ "/update"
+
+                Nothing ->
+                    "/events/create"
+    in
+    Http.post
+        { url = backend url
+        , body = Http.jsonBody (encodeEvent data)
+        , expect = Http.expectJson (GotWebData << GotEventId ev) Decode.int
+        }

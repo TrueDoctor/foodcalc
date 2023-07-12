@@ -145,8 +145,8 @@ pub fn create_empty(db: Arc<FoodBase>) -> MethodRouter {
     post(|| async move {
         let result = db.add_empty_event().await;
         match result {
-            Ok(_) => StatusCode::CREATED,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+            Ok(event) => (StatusCode::CREATED, Json(event.event_id)),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR,Json(0)),
         }
     })
 }
@@ -206,6 +206,7 @@ pub fn list(db: Arc<FoodBase>) -> MethodRouter {
     let db = db.clone();
     get(|| async move {
         let result = db.get_events().await;
+        println!("{:?}",result);
         match result {
             Ok(events) => (
                 StatusCode::OK,
