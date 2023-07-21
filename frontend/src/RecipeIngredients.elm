@@ -57,21 +57,30 @@ viewRecipeIngredient recipeIngredient =
                             Subrecipe { name } ->
                                 name
                     )
+
+        ingredientsSettings =
+            { select = IngredientChanged
+            , itemName = nameOf << Just
+            , filterChange = IngredientFilterChange
+            , onFocus = IngredientFocus
+            , title = "Ingredients"
+            }
+        unitSettings = { select = UnitChanged
+                        , itemName = .name
+                        , filterChange = UnitFilterChange
+                        , onFocus = UnitFocus
+                        , title = "Units"
+                        }
     in
     case ( recipeIngredient.allIngredients.list, recipeIngredient.allUnits.list ) of
         ( Success i, Success u ) ->
             row [ width fill, spacing 20 ]
                 [ el [ width (fillPortion 3) ]
-                    (searchDropdown
+                    (searchDropdown ingredientsSettings
                         { search = recipeIngredient.allIngredients.search
                         , items = i
-                        , select = IngredientChanged
                         , selection = List.head (List.filter (\e -> Just e == recipeIngredient.ingredient) i)
-                        , itemName = nameOf << Just
                         , hidden = recipeIngredient.allIngredients.hidden
-                        , filterChange = IngredientFilterChange
-                        , onFocus = IngredientFocus
-                        , title = "Ingredients"
                         }
                     )
                 , el [ width (fillPortion 3) ]
@@ -83,16 +92,11 @@ viewRecipeIngredient recipeIngredient =
                         }
                     )
                 , el [ width (fillPortion 1) ]
-                    (searchDropdown
+                    (searchDropdown unitSettings
                         { search = recipeIngredient.allUnits.search
                         , items = u
-                        , select = UnitChanged
                         , selection = List.head (List.filter (\e -> Just e == recipeIngredient.unit) u)
-                        , itemName = (.name)
                         , hidden = recipeIngredient.allUnits.hidden
-                        , filterChange = UnitFilterChange
-                        , onFocus = UnitFocus
-                        , title = "Units"
                         }
                     )
                 ]

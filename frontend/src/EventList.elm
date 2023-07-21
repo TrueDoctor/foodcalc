@@ -7,7 +7,7 @@ import Element.Input
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
-import RecipesList exposing (Recipe, WebDataMsg, view, viewExpanded)
+import Meals
 import Settings exposing (backend)
 import Test.ExpandableList as ExpandableList exposing (ExpandableList, ExpandableListMsg, mapElementMsg)
 import Test.StringUtils exposing (fuzzyContains)
@@ -17,8 +17,8 @@ import WebData exposing (RemoteData(..), WebData, errorString)
 
 type alias EventList =
     { events : WebData (ExpandableList Event EventListMsg EventMsg)
-    , recipes : WebData (List Recipe)
-    , places : WebData (List Place)
+    , recipes : WebData (List Meals.Recipe)
+    , places : WebData (List Meals.Place)
     }
 
 
@@ -26,15 +26,12 @@ type Events
     = Events EventList
 
 
-type alias Place =
-    { id : Int, name : String }
-
-
 type alias EventData =
     { id : Maybe Int
     , name : String
     , comment : Maybe String
     , budget : Maybe String
+    , meals : Meals.MealList
     }
 
 
@@ -56,10 +53,10 @@ type EventMsg
     = NameChange String
     | CommentChange String
     | BudgetChange String
-    | MealChange
+    | MealChange Meals.MealListMsg
     | Save
     | Cancel
-    | FetchData
+    | ExpandItem
 
 
 
@@ -78,7 +75,7 @@ stateOf search items =
         filter string event =
             case event of
                 Event { data } ->
-                    fuzzyContains  data.name string
+                    fuzzyContains data.name string
     in
     Success
         { search = search
@@ -88,7 +85,7 @@ stateOf search items =
         , mapMsg = ListMsg
         , update = updateEvent
         , add = Just <| always <| newEvent Nothing "" Nothing (Just "")
-        , expandItem = Just FetchData
+        , expandItem = Just ExpandItem
         }
 
 
@@ -96,7 +93,7 @@ newEvent : Maybe Int -> String -> Maybe String -> Maybe String -> Event
 newEvent id name budget comment =
     let
         data =
-            { id = id, name = name, budget = budget, comment = comment }
+            { id = id, name = name, budget = budget, comment = comment, meals = Meals.emptyList id }
     in
     Event { data = data, edit = data }
 
@@ -186,6 +183,9 @@ viewExpanded ev =
                     , label = el [ padding 10 ] <| text "Cancel"
                     }
                 ]
+
+        viewMeals edit =
+            Element.map MealChange <| Meals.view edit.meals
     in
     case ev of
         Event { edit } ->
@@ -199,6 +199,7 @@ viewExpanded ev =
                     ]
                     [ viewNameBudget edit
                     , viewComment edit
+                    , viewMeals edit
                     , viewButtons
                     ]
 
@@ -252,6 +253,16 @@ updateEvent msg event =
 
         Save ->
             ( event, sendEvent event )
+
+        ExpandItem ->
+            ( event, Cmd.map (ListMsg << mapElementMsg event << MealChange) (Meals.fetchMeals evData.id) )
+
+        MealChange m ->
+            let
+                ( meals, cmd ) =
+                    Meals.update m evEdit.meals
+            in
+            ( Event { data = evData, edit = { evEdit | meals = meals } }, Cmd.map (ListMsg << mapElementMsg event << MealChange) cmd )
 
         _ ->
             ( event, Cmd.none )
@@ -325,7 +336,7 @@ decodeEvent =
         (\id name budget comment ->
             let
                 data =
-                    { id = id, name = name, comment = comment, budget = budget }
+                    { id = id, name = name, comment = comment, budget = budget, meals = Meals.emptyList id }
             in
             Event { data = data, edit = data }
         )
