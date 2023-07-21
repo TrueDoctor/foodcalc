@@ -441,7 +441,7 @@ handleWebData msg model =
                                     if edit == rc then
                                         let
                                             new =
-                                                Debug.log "update" { edit | id = Just (Debug.log "id" id) }
+                                                { edit | id = Just id }
                                         in
                                         Recipe { edit = new, data = new }
 
@@ -589,7 +589,7 @@ sendRecipe r =
 
 sendIngredients : RecipeData -> Cmd RecipeListMsg
 sendIngredients rd =
-    case Debug.log "enc" ( rd.id, encodeIngredients rd.ingredients ) of
+    case ( rd.id, encodeIngredients rd.ingredients ) of
         ( Just id, Just body ) ->
             Http.post
                 { url = "http://localhost:3000/recipes/" ++ String.fromInt id ++ "/meta_ingredients/update"

@@ -132,7 +132,7 @@ updateSteps msg wd maybeStep =
             ( Success <| replace (\s -> { s | description = description }) step allSteps, Cmd.none )
 
         ( StepsRecieved result, _, _ ) ->
-            case Debug.log "" result of
+            case result of
                 Ok list ->
                     ( Success <| List.sortBy (Maybe.withDefault 0 << String.toFloat << .order) list, Cmd.none )
 

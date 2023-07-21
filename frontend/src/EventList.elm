@@ -295,10 +295,10 @@ handleWebData msg model =
         ( GotEvents result, _ ) ->
             case result of
                 Ok new ->
-                    ( { model | events = stateOf "" <| List.map (Tuple.pair False) <| Debug.log "" new }, Cmd.none )
+                    ( { model | events = stateOf "" <| List.map (Tuple.pair False)  new }, Cmd.none )
 
                 Err e ->
-                    ( { model | events = Failure <| Debug.log "" e }, Cmd.none )
+                    ( { model | events = Failure  e }, Cmd.none )
 
         ( GotEventId ev result, Success list ) ->
             case result of
@@ -308,7 +308,7 @@ handleWebData msg model =
                             { edit | id = Just new }
 
                         cmd =
-                            case Debug.log "" ev of
+                            case ev of
                                 Event { data, edit } ->
                                     case edit.id of
                                         Nothing ->

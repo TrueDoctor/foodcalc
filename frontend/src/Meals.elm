@@ -304,13 +304,13 @@ update msg model =
         list =
             case model of
                 MealList mealList ->
-                    Debug.log "" mealList
+                    mealList
     in
     case ( msg, list.meals ) of
         ( ListMsg listMsg, Success meals ) ->
             let
                 ( newMeals, cmd ) =
-                    ExpandableList.update (Debug.log "mealListMsg" listMsg) meals
+                    ExpandableList.update listMsg meals
             in
             ( MealList { list | meals = Success newMeals }, cmd )
 

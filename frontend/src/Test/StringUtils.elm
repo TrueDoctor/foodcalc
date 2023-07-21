@@ -20,5 +20,7 @@ fuzzyContains a b =
         (String.toLower a)
         == ""
 
+
 fuzzyContainedBy : String -> String -> Bool
-fuzzyContainedBy a b = fuzzyContains b a
+fuzzyContainedBy a b =
+    fuzzyContains b a

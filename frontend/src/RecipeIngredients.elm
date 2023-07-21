@@ -65,12 +65,14 @@ viewRecipeIngredient recipeIngredient =
             , onFocus = IngredientFocus
             , title = "Ingredients"
             }
-        unitSettings = { select = UnitChanged
-                        , itemName = .name
-                        , filterChange = UnitFilterChange
-                        , onFocus = UnitFocus
-                        , title = "Units"
-                        }
+
+        unitSettings =
+            { select = UnitChanged
+            , itemName = .name
+            , filterChange = UnitFilterChange
+            , onFocus = UnitFocus
+            , title = "Units"
+            }
     in
     case ( recipeIngredient.allIngredients.list, recipeIngredient.allUnits.list ) of
         ( Success i, Success u ) ->
