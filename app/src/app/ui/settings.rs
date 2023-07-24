@@ -35,7 +35,9 @@ impl From<AppTheme> for String {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum TabBarPosition {
+    #[default]
     Top,
     Bottom,
 }
@@ -53,11 +55,7 @@ impl From<TabBarPosition> for String {
     }
 }
 
-impl Default for TabBarPosition {
-    fn default() -> Self {
-        TabBarPosition::Top
-    }
-}
+
 
 //#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 

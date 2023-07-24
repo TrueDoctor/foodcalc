@@ -1185,7 +1185,7 @@ impl FoodBase {
         }
         let source_articles = articles.into_iter().map(|(id, article)| {
             (
-                urls.iter().find(|x| x.ingredient_id == id).clone().unwrap(),
+                urls.iter().find(|x| x.ingredient_id == id).unwrap(),
                 article,
             )
         });
@@ -1443,7 +1443,7 @@ impl FoodBase {
         )
         .fetch_one(&*self.pg_pool)
         .await?;
-        Ok(records.price.unwrap_or_else(|| PgMoney(0)))
+        Ok(records.price.unwrap_or(PgMoney(0)))
     }
 }
 

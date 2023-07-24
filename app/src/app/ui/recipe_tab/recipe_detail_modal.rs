@@ -69,8 +69,8 @@ impl RecipeDetail {
     ) -> Self {
         Self {
             recipe: Recipe::default(),
-            all_ingredients: all_ingredients.clone(),
-            all_units: all_units.clone(),
+            all_ingredients,
+            all_units,
             database,
             ingredients: Vec::new(),
             steps: Vec::new(),

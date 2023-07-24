@@ -117,7 +117,7 @@ pub async fn get_metro_ingredient_sources(
         Ok(sources) => {
             let sources = sources
                 .into_iter()
-                .map(|source| SerializableIngredientSource::from(source))
+                .map(SerializableIngredientSource::from)
                 .collect();
             (StatusCode::OK, Json(sources))
         }
@@ -133,7 +133,7 @@ pub async fn get_all_metro_ingredient_sources(
         Ok(sources) => {
             let sources = sources
                 .into_iter()
-                .map(|source| SerializableIngredientSource::from(source))
+                .map(SerializableIngredientSource::from)
                 .collect();
             (StatusCode::OK, Json(sources))
         }

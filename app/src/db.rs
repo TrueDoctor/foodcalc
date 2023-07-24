@@ -3,15 +3,15 @@ use std::fmt::Display;
 
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::SystemTime;
+
 
 use num::FromPrimitive;
 use num::ToPrimitive;
 use sqlx::postgres::types::{PgInterval, PgMoney};
 use sqlx::postgres::PgPool;
 use sqlx::types::chrono::NaiveDateTime;
-use sqlx::types::time::OffsetDateTime;
-use sqlx::types::time::Time;
+
+
 use sqlx::types::BigDecimal;
 
 pub const METRO: i32 = 0;
@@ -1044,7 +1044,7 @@ impl FoodBase {
         }
         let source_articles = articles
             .into_iter()
-            .map(|(id, article)| (urls.iter().find(|x| x.ingredient_id == id).clone().unwrap(), article));
+            .map(|(id, article)| (urls.iter().find(|x| x.ingredient_id == id).unwrap(), article));
 
         for (source, article) in source_articles {
             update_ingredient_price(self, article, source.clone())
@@ -1289,7 +1289,7 @@ impl FoodBase {
         )
         .fetch_one(&*self.pg_pool)
         .await?;
-        Ok(records.price.unwrap_or_else(|| PgMoney(0)))
+        Ok(records.price.unwrap_or(PgMoney(0)))
     }
 }
 

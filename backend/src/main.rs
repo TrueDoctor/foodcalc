@@ -2,7 +2,7 @@ use std::env;
 
 use db::FoodBase;
 use sqlx::postgres::PgPool;
-use tokio;
+
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
