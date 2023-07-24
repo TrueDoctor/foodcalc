@@ -64,7 +64,9 @@ impl RecipeDetail {
 
     pub fn create(
         all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
-        all_units: Arc<Vec<Unit>>,database: Arc<FoodBase>) -> Self {
+        all_units: Arc<Vec<Unit>>,
+        database: Arc<FoodBase>,
+    ) -> Self {
         Self {
             recipe: Recipe::default(),
             all_ingredients: all_ingredients.clone(),
@@ -75,7 +77,6 @@ impl RecipeDetail {
             is_new: true,
         }
     }
-    
 
     pub fn valid(&self) -> bool {
         self.ingredients.iter().all(|ingredient| ingredient.valid()) && self.steps.iter().all(|step| step.valid())

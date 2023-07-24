@@ -54,7 +54,7 @@ impl IngredientCreationDialog {
         match message {
             IngredientCreateMessage::SubmitValue(field, string) => {
                 let input = string.trim();
-                    match field {
+                match field {
                     InputField::Name => self.name.update(input),
                     InputField::Energy => self.energy.update(input),
                     InputField::Comment => self.comment.update(input),

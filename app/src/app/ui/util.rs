@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
 use sqlx::postgres::types::PgInterval;
-use sqlx::types::time::PrimitiveDateTime;
+use sqlx::types::chrono::NaiveDateTime;
+use time::PrimitiveDateTime;
 
 #[derive(Debug, Clone)]
 pub struct InputState<T> {
@@ -32,13 +33,13 @@ impl FromStr for OptionString {
 }
 
 #[derive(Debug, Clone)]
-pub struct DateInput(pub PrimitiveDateTime);
+pub struct DateInput(pub NaiveDateTime);
 
 impl FromStr for DateInput {
     type Err = eyre::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let date = PrimitiveDateTime::parse(s, "%Y-%m-%d %H:%M")?;
-        Ok(Self(date))
+        let date = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M")?;
+        Ok(Self(date.into()))
     }
 }
 

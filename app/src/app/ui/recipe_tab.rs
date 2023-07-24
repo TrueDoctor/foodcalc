@@ -184,7 +184,9 @@ impl super::Tab for RecipeTab {
         };
 
         let scroll: Element<'_, RecipeTabMessage> =
-            Scrollable::new(Container::new(recipes).width(Length::Fill).padding(40)).height(Length::Fill).into();
+            Scrollable::new(Container::new(recipes).width(Length::Fill).padding(40))
+                .height(Length::Fill)
+                .into();
 
         let add_recipe_button = button(Icon::Plus.text())
             .on_press(RecipeTabMessage::NewModal)

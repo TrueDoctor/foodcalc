@@ -9,7 +9,9 @@ use num::FromPrimitive;
 use num::ToPrimitive;
 use sqlx::postgres::types::{PgInterval, PgMoney};
 use sqlx::postgres::PgPool;
-use sqlx::types::time::{PrimitiveDateTime, Time};
+use sqlx::types::chrono::NaiveDateTime;
+use sqlx::types::time::OffsetDateTime;
+use sqlx::types::time::Time;
 use sqlx::types::BigDecimal;
 
 pub const METRO: i32 = 0;
@@ -100,8 +102,8 @@ pub struct Meal {
     pub comment: Option<String>,
     pub place_id: i32,
     pub place: String,
-    pub start_time: PrimitiveDateTime,
-    pub end_time: PrimitiveDateTime,
+    pub start_time: NaiveDateTime,
+    pub end_time: NaiveDateTime,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
     pub price: PgMoney,
@@ -110,11 +112,10 @@ pub struct Meal {
 
 impl Default for Meal {
     fn default() -> Self {
-        let time = SystemTime::now();
-        let time = PrimitiveDateTime::from(time);
-        let date = time.date();
-        let time = Time::try_from_hms(12, 0, 0).unwrap();
-        let start_time = PrimitiveDateTime::new(date, time);
+        let time = chrono::Local::now();
+        let date = time.date_naive();
+        let time = chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap();
+        let start_time = NaiveDateTime::new(date, time);
         Self {
             event_id: Default::default(),
             recipe_id: Default::default(),
@@ -916,7 +917,7 @@ impl FoodBase {
         event_id: i32,
         recipe_id: i32,
         place_id: i32,
-        start_time: PrimitiveDateTime,
+        start_time: NaiveDateTime,
     ) -> eyre::Result<Vec<EventRecipeIngredient>> {
         let records = sqlx::query_as!(
             EventRecipeIngredient,

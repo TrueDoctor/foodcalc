@@ -127,7 +127,7 @@ impl EventTab {
                     |event| TabMessage::EventTab(EventTabMessage::AddEvent(event).into()),
                 );
             },
-            EventTabMessage::AddEvent(Ok(event)) => self.event_list.push(EventWrapper::new(event,0.0)),
+            EventTabMessage::AddEvent(Ok(event)) => self.event_list.push(EventWrapper::new(event, 0.0)),
             EventTabMessage::PrintRecipes(event) => {
                 let move_database = self.database.clone();
                 return Command::perform(

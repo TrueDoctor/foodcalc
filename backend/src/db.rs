@@ -1,16 +1,16 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 
+use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::SystemTime;
-use serde::{Serialize, Deserialize};
 
 use num::FromPrimitive;
 use num::ToPrimitive;
 use sqlx::postgres::types::{PgInterval, PgMoney};
 use sqlx::postgres::PgPool;
-use sqlx::types::time::{PrimitiveDateTime, Time};
+
 use sqlx::types::BigDecimal;
 
 pub const METRO: i32 = 0;
@@ -23,7 +23,7 @@ pub struct Ingredient {
     pub comment: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IngredientCreate {
     pub id: Option<i32>,
     pub name: String,
@@ -32,7 +32,12 @@ pub struct IngredientCreate {
 }
 
 impl Ingredient {
-    pub fn new(ingredient_id: i32, name: String, energy: BigDecimal, comment: Option<String>) -> Self {
+    pub fn new(
+        ingredient_id: i32,
+        name: String,
+        energy: BigDecimal,
+        comment: Option<String>,
+    ) -> Self {
         Self {
             ingredient_id,
             name,
@@ -74,16 +79,20 @@ pub struct Recipe {
     pub comment: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventRecipeIngredient {
     pub ingredient_id: i32,
     pub name: String,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
+    #[serde(
+        serialize_with = "crate::db::serialize_money",
+        deserialize_with = "crate::db::deserialize_money"
+    )]
     pub price: PgMoney,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubRecipe {
     pub subrecipe_id: i32,
     pub recipe: String,
@@ -93,7 +102,7 @@ pub struct SubRecipe {
     pub is_subrecipe: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Meal {
     pub event_id: i32,
     pub recipe_id: i32,
@@ -101,21 +110,40 @@ pub struct Meal {
     pub comment: Option<String>,
     pub place_id: i32,
     pub place: String,
-    pub start_time: PrimitiveDateTime,
-    pub end_time: PrimitiveDateTime,
+    pub start_time: NaiveDateTime,
+    pub end_time: NaiveDateTime,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
+    #[serde(
+        serialize_with = "crate::db::serialize_money",
+        deserialize_with = "crate::db::deserialize_money"
+    )]
     pub price: PgMoney,
     pub servings: i32,
 }
 
+fn serialize_money<S>(money: &PgMoney, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&money.0.to_string())
+}
+
+fn deserialize_money<'de, D>(deserializer: D) -> Result<PgMoney, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    let money = PgMoney::from_bigdecimal(FromStr::from_str(&s).unwrap(), 2);
+    Ok(money.unwrap())
+}
+
 impl Default for Meal {
     fn default() -> Self {
-        let time = SystemTime::now();
-        let time = PrimitiveDateTime::from(time);
-        let date = time.date();
-        let time = Time::try_from_hms(12, 0, 0).unwrap();
-        let start_time = PrimitiveDateTime::new(date, time);
+        let time = chrono::Local::now();
+        let date = time.date_naive();
+        let time = chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap();
+        let start_time = NaiveDateTime::new(date, time);
         Self {
             event_id: Default::default(),
             recipe_id: Default::default(),
@@ -133,11 +161,39 @@ impl Default for Meal {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+fn serialize_optional_money<S>(money: &Option<PgMoney>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match money {
+        Some(money) => serializer.serialize_str(&money.0.to_string()),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn deserialize_optional_money<'de, D>(deserializer: D) -> Result<Option<PgMoney>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        Ok(None)
+    } else {
+        let money: i64 = i64::from_str(&s).map_err(serde::de::Error::custom)?;
+        let money = PgMoney(money);
+        Ok(Some(money))
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Event {
     pub event_id: i32,
     pub event_name: String,
     pub comment: Option<String>,
+    #[serde(
+        serialize_with = "crate::db::serialize_optional_money",
+        deserialize_with = "crate::db::deserialize_optional_money"
+    )]
     pub budget: Option<PgMoney>,
 }
 
@@ -154,7 +210,7 @@ impl Display for Place {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Store {
     pub store_id: i32,
     pub name: String,
@@ -204,13 +260,21 @@ pub struct RecipeIngrdient {
     pub unit: Unit,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RecipeStep {
     pub step_id: i32,
     pub step_order: f64,
     pub step_name: String,
     pub step_description: String,
+    #[serde(
+        serialize_with = "crate::db::serialize_interval",
+        deserialize_with = "crate::db::deserialize_interval"
+    )]
     pub fixed_duration: PgInterval,
+    #[serde(
+        serialize_with = "crate::db::serialize_interval",
+        deserialize_with = "crate::db::deserialize_interval"
+    )]
     pub duration_per_kg: PgInterval,
     pub recipe_id: i32,
 }
@@ -227,6 +291,30 @@ impl Default for RecipeStep {
             recipe_id: Default::default(),
         }
     }
+}
+
+fn serialize_interval<S>(interval: &PgInterval, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let duration = interval.microseconds;
+    serializer.serialize_str(&duration.to_string())
+}
+
+fn deserialize_interval<'de, D>(deserializer: D) -> Result<PgInterval, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    let microseconds = s
+        .parse()
+        .map_err(|e| serde::de::Error::custom(format!("Failed to parse interval: {}", e)))?;
+    let interval = PgInterval {
+        microseconds,
+        days: 0,
+        months: 0,
+    };
+    Ok(interval)
 }
 
 impl RecipeMetaIngredient {
@@ -296,17 +384,17 @@ pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
         Ok(amount) => {
             log::info!("parsed {description} as {amount} unit:{unit_id} {unit}");
             Some((amount, unit_id))
-        },
+        }
         Err(_) => {
             log::error!("Failed to parse {description} as package_size");
             None
-        },
+        }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FoodBase {
-    pg_pool: Arc<PgPool>,
+    pub(crate) pg_pool: Arc<PgPool>,
 }
 
 impl FoodBase {
@@ -340,7 +428,12 @@ impl FoodBase {
         Ok(steps)
     }
 
-    pub async fn add_ingredient(&self, name: String, energy: BigDecimal, comment: Option<String>) -> eyre::Result<i32> {
+    pub async fn add_ingredient(
+        &self,
+        name: String,
+        energy: BigDecimal,
+        comment: Option<String>,
+    ) -> eyre::Result<i32> {
         log::debug!("add_ingredient({:?}, {:?}, {:?})", name, energy, comment);
         let ingredient = sqlx::query!(
             r#"
@@ -406,9 +499,12 @@ impl FoodBase {
     }
 
     pub async fn get_ingredients(&self) -> eyre::Result<Vec<Ingredient>> {
-        let records = sqlx::query_as!(Ingredient, r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,)
-            .fetch_all(&*self.pg_pool)
-            .await?;
+        let records = sqlx::query_as!(
+            Ingredient,
+            r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
 
         Ok(records)
     }
@@ -440,11 +536,14 @@ impl FoodBase {
     }
 
     pub async fn get_all_meta_ingredients(&self) -> eyre::Result<Vec<RecipeMetaIngredient>> {
-        let ingredients = sqlx::query_as!(Ingredient, r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,)
-            .fetch_all(&*self.pg_pool)
-            .await?
-            .into_iter()
-            .map(RecipeMetaIngredient::Ingredient);
+        let ingredients = sqlx::query_as!(
+            Ingredient,
+            r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?
+        .into_iter()
+        .map(RecipeMetaIngredient::Ingredient);
 
         let recipes = sqlx::query_as!(Recipe, r#" SELECT * FROM recipes ORDER BY recipe_id "#,)
             .fetch_all(&*self.pg_pool)
@@ -463,7 +562,10 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_recipe_ingredients(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeIngrdient>> {
+    pub async fn get_recipe_ingredients(
+        &self,
+        recipe_id: i32,
+    ) -> eyre::Result<Vec<RecipeIngrdient>> {
         struct RecipeIngredientWeight {
             ingredient_id: i32,
             name: String,
@@ -516,7 +618,10 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_recipe_meta_ingredients(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeIngrdient>> {
+    pub async fn get_recipe_meta_ingredients(
+        &self,
+        recipe_id: i32,
+    ) -> eyre::Result<Vec<RecipeIngrdient>> {
         struct RecipeIngredientWeight {
             recipe_id: i32,
             name: String,
@@ -561,7 +666,11 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn fetch_subrecipes_export(&self, recipe_id: i32, weight: BigDecimal) -> Result<(), eyre::Error> {
+    pub async fn fetch_subrecipes_export(
+        &self,
+        recipe_id: i32,
+        weight: BigDecimal,
+    ) -> Result<(), eyre::Error> {
         let subrecipes = sqlx::query_as!(
             SubRecipe,
             r#"
@@ -582,7 +691,10 @@ impl FoodBase {
         )
         .fetch_all(&*self.pg_pool)
         .await?;
-        let mut keys = subrecipes.iter().map(|sr| sr.subrecipe_id).collect::<Vec<i32>>();
+        let mut keys = subrecipes
+            .iter()
+            .map(|sr| sr.subrecipe_id)
+            .collect::<Vec<i32>>();
         keys.dedup();
 
         let mut text = r#"
@@ -609,8 +721,14 @@ impl FoodBase {
         .to_owned();
 
         for subrecipe_id in keys {
-            let ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.subrecipe_id == subrecipe_id).collect();
-            let steps = self.get_recipe_steps(subrecipe_id).await.unwrap_or_default();
+            let ingredients: Vec<_> = subrecipes
+                .iter()
+                .filter(|sr| sr.subrecipe_id == subrecipe_id)
+                .collect();
+            let steps = self
+                .get_recipe_steps(subrecipe_id)
+                .await
+                .unwrap_or_default();
             self.format_subrecipe(&mut text, ingredients, steps)
                 .unwrap_or_else(|e| log::error!("{e}"));
         }
@@ -627,12 +745,17 @@ impl FoodBase {
             use tokio::task::spawn_blocking;
 
             let mut status = status::NoopStatusBackend::default();
-            let name = subrecipes.first().ok_or(eyre::eyre!("No recipe name found"))?.recipe.clone();
+            let name = subrecipes
+                .first()
+                .ok_or(eyre::eyre!("No recipe name found"))?
+                .recipe
+                .clone();
 
             let mut files = {
                 spawn_blocking(move || {
                     let auto_create_config_file = false;
-                    let config = tectonic::config::PersistentConfig::open(auto_create_config_file).unwrap();
+                    let config =
+                        tectonic::config::PersistentConfig::open(auto_create_config_file).unwrap();
 
                     let only_cached = false;
                     let bundle = config.default_bundle(only_cached, &mut status).unwrap();
@@ -678,8 +801,11 @@ impl FoodBase {
         }
         #[cfg(not(feature = "tectonic"))]
         {
-            let mut file =
-                std::fs::File::create(format!("recipes/{}.tex", subrecipes.first().unwrap().recipe)).unwrap();
+            let mut file = std::fs::File::create(format!(
+                "recipes/{}.tex",
+                subrecipes.first().unwrap().recipe
+            ))
+            .unwrap();
             use std::io::prelude::Write as WF;
             file.write_all(text.as_bytes()).unwrap();
         }
@@ -849,10 +975,18 @@ impl FoodBase {
         subrecipes: Vec<&SubRecipe>,
         steps: Vec<RecipeStep>,
     ) -> Result<(), eyre::Error> {
-        let title = escape_underscore(&subrecipes.first().ok_or(eyre::eyre!("No subrecipe provided"))?.subrecipe);
+        let title = escape_underscore(
+            &subrecipes
+                .first()
+                .ok_or(eyre::eyre!("No subrecipe provided"))?
+                .subrecipe,
+        );
         let ingredients: Vec<_> = subrecipes.iter().filter(|sr| !sr.is_subrecipe).collect();
         let meta_ingredients: Vec<_> = subrecipes.iter().filter(|sr| sr.is_subrecipe).collect();
-        let weight: BigDecimal = ingredients.iter().map(|ingredient| ingredient.weight.clone()).sum();
+        let weight: BigDecimal = ingredients
+            .iter()
+            .map(|ingredient| ingredient.weight.clone())
+            .sum();
 
         fn escape_underscore(s: &str) -> String {
             s.replace('_', " ")
@@ -917,7 +1051,7 @@ impl FoodBase {
         event_id: i32,
         recipe_id: i32,
         place_id: i32,
-        start_time: PrimitiveDateTime,
+        start_time: NaiveDateTime,
     ) -> eyre::Result<Vec<EventRecipeIngredient>> {
         let records = sqlx::query_as!(
             EventRecipeIngredient,
@@ -988,10 +1122,11 @@ impl FoodBase {
             .collect();
 
         // fetch article descriptions from the metro api
-        let articles = metro_scrape::request::fetch_articles_from_urls(
-            urls.iter()
-                .flat_map(|s| s.url.is_some().then(|| (s.ingredient_id, s.url.clone().unwrap()))),
-        )
+        let articles = metro_scrape::request::fetch_articles_from_urls(urls.iter().flat_map(|s| {
+            s.url
+                .is_some()
+                .then(|| (s.ingredient_id, s.url.clone().unwrap()))
+        }))
         .await?;
         print!("Fetched {} articles from metro api", articles.len());
 
@@ -1028,12 +1163,18 @@ impl FoodBase {
             );
             println!("{}: {}", bundle.details.header.misc_name_webshop, price);
             let price = sqlx::postgres::types::PgMoney::from_bigdecimal(
-                BigDecimal::from_f64(price).ok_or(eyre::eyre!("Failed to represent as BigDecimal"))?,
+                BigDecimal::from_f64(price)
+                    .ok_or(eyre::eyre!("Failed to represent as BigDecimal"))?,
                 2,
             )
             .map_err(|e| eyre::eyre!(e))?;
             foodbase
-                .update_ingredient_source_price(s.ingredient_id, s.url, price, BigDecimal::from_str(weight)?)
+                .update_ingredient_source_price(
+                    s.ingredient_id,
+                    s.url,
+                    price,
+                    BigDecimal::from_str(weight)?,
+                )
                 .await?;
             Ok(())
         }
@@ -1042,9 +1183,12 @@ impl FoodBase {
                 log::error!("No article found for {}", source.ingredient_id);
             }
         }
-        let source_articles = articles
-            .into_iter()
-            .map(|(id, article)| (urls.iter().find(|x| x.ingredient_id == id).clone().unwrap(), article));
+        let source_articles = articles.into_iter().map(|(id, article)| {
+            (
+                urls.iter().find(|x| x.ingredient_id == id).clone().unwrap(),
+                article,
+            )
+        });
 
         for (source, article) in source_articles {
             update_ingredient_price(self, article, source.clone())
@@ -1054,7 +1198,10 @@ impl FoodBase {
         Ok(())
     }
 
-    pub async fn get_metro_ingredient_sources(&self, ingredient_id: Option<i32>) -> eyre::Result<Vec<IngredientSorce>> {
+    pub async fn get_metro_ingredient_sources(
+        &self,
+        ingredient_id: Option<i32>,
+    ) -> eyre::Result<Vec<IngredientSorce>> {
         let records = match ingredient_id {
             Some(id) => sqlx::query_as!(
                 IngredientSorce,
@@ -1134,7 +1281,11 @@ impl FoodBase {
         Ok(event)
     }
 
-    pub async fn update_single_meal(&self, old_meal: Option<Meal>, new_meal: Option<Meal>) -> eyre::Result<()> {
+    pub async fn update_single_meal(
+        &self,
+        old_meal: Option<Meal>,
+        new_meal: Option<Meal>,
+    ) -> eyre::Result<()> {
         if let Some(old) = old_meal {
             if let Some(new) = new_meal {
                 let count = sqlx::query!(
@@ -1217,7 +1368,11 @@ impl FoodBase {
         Ok(())
     }
 
-    pub async fn update_event_meals(&self, event_id: i32, meals: impl Iterator<Item = Meal>) -> eyre::Result<()> {
+    pub async fn update_event_meals(
+        &self,
+        event_id: i32,
+        meals: impl Iterator<Item = Meal>,
+    ) -> eyre::Result<()> {
         let mut transaction = self.pg_pool.begin().await?;
         pub async fn insert_meal<'a>(
             executor: impl sqlx::Executor<'a, Database = sqlx::Postgres>,
@@ -1296,9 +1451,18 @@ mod tests {
     #[test]
     fn test_unit_parsing() {
         use super::*;
-        assert_eq!(Some((BigDecimal::new(1u32.into(), 0), 0)), parse_package_size("1kg"));
-        assert_eq!(Some((BigDecimal::new(15u32.into(), 1), 0)), parse_package_size("1.5kg"));
-        assert_eq!(Some((BigDecimal::new(1u32.into(), 0), 10)), parse_package_size("1Pkg"));
+        assert_eq!(
+            Some((BigDecimal::new(1u32.into(), 0), 0)),
+            parse_package_size("1kg")
+        );
+        assert_eq!(
+            Some((BigDecimal::new(15u32.into(), 1), 0)),
+            parse_package_size("1.5kg")
+        );
+        assert_eq!(
+            Some((BigDecimal::new(1u32.into(), 0), 10)),
+            parse_package_size("1Pkg")
+        );
         assert_eq!(None, parse_package_size("1"));
     }
 }
