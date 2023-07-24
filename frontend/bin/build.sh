@@ -32,6 +32,7 @@ buildCode() {
 }
 
 
+buildCode
 while inotifywait -qqre modify "src"; do
   buildCode
 done

@@ -1,11 +1,11 @@
 -- Add migration script here
 CREATE TABLE IF NOT EXISTS users (
-  id SERIAL PRIMARY KEY,
+  id BIGSERIAL PRIMARY KEY,
   username VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  is_admin BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  is_admin BOOLEAN DEFAULT FALSE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 -- Add unique constraint to username and email
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS groups (
 );
 
 -- Add unique constraint to group name
-ALTER TABLE groups ADD CONSTRAINT unique_group_name UNIQUE (name)
+ALTER TABLE groups ADD CONSTRAINT unique_group_name UNIQUE (name);
 
 CREATE TABLE IF NOT EXISTS user_groups (
   user_id INTEGER REFERENCES users(id),

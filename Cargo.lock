@@ -364,6 +364,7 @@ dependencies = [
  "chrono",
  "dotenv",
  "eyre",
+ "fern",
  "log",
  "metro-scrape",
  "mime_guess",
