@@ -1,5 +1,4 @@
 [workspace]
 resolver = "2"
-members = ["app", "metro-scrape", "backend"]
-default-members = ["app", "backend"]
-
+members = ["app", "metro-scrape", "backend", "foodlib"]
+default-members = ["app", "backend", "foodlib"]

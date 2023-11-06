@@ -37,7 +37,7 @@ pub async fn update(
     Json(ingredient): Json<Ingredient>,
 ) -> impl IntoResponse {
     let db = state.db_connection.clone();
-    let ingredient = crate::db::Ingredient {
+    let ingredient = foodlib::Ingredient {
         ingredient_id,
         name: ingredient.name,
         energy: ingredient.energy,
@@ -57,14 +57,16 @@ pub async fn list(State(state): State<MyAppState>) -> impl IntoResponse {
     Json(ingredients)
 }
 
-pub fn search(State(state): State<MyAppState>, Json(query): Json<String>) -> Markup {
-    let filtered_ingredients = state
+pub async fn search(State(state): State<MyAppState>, Json(query): Json<String>) -> Markup {
+    let query = query.to_lowercase();
+    let ingredients = state
         .db_connection
         .get_ingredients()
         .await
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let filtered_ingredients = ingredients
         .iter()
-        .filter(|x| x.name.contains(query));
+        .filter(|x| x.name.to_lowercase().contains(&query));
 
     html! {
         @for ingredient in filtered_ingredients {
@@ -95,12 +97,12 @@ pub async fn list_html(State(state): State<MyAppState>) -> Markup {
     }
 }
 
-fn format_ingredient(ingredient: &crate::db::Ingredient) -> Markup {
+fn format_ingredient(ingredient: &foodlib::Ingredient) -> Markup {
     html! {
         tr id=(format!("ingredient-{}", ingredient.name)) {
             td { (ingredient.name) }
             td { (ingredient.energy) }
-            td { (ingredient.comment.unwrap_or_default()) }
+            td { (ingredient.comment.clone().unwrap_or_default()) }
         }
     }
 }

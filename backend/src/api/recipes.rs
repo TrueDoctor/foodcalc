@@ -8,10 +8,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 
-use crate::{
-    db::{RecipeIngrdient, RecipeStep},
-    MyAppState,
-};
+use crate::MyAppState;
+use foodlib::{RecipeIngrdient, RecipeStep};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Recipe {
@@ -34,7 +32,7 @@ pub async fn create(
     State(state): State<MyAppState>,
     Json(recipe): Json<Recipe>,
 ) -> impl axum::response::IntoResponse {
-    let recipe = crate::db::Recipe {
+    let recipe = foodlib::Recipe {
         recipe_id: 0,
         name: recipe.name.to_owned(),
         comment: recipe.comment.to_owned(),
@@ -51,7 +49,7 @@ pub async fn update(
     Path(recipe_id): Path<i32>,
     Json(recipe): Json<Recipe>,
 ) -> impl axum::response::IntoResponse {
-    let recipe = crate::db::Recipe {
+    let recipe = foodlib::Recipe {
         recipe_id,
         name: recipe.name.to_owned(),
         comment: recipe.comment.to_owned(),

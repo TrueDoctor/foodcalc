@@ -1,7 +1,6 @@
 use std::env;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use db::FoodBase;
 use fern::colors::{Color, ColoredLevelConfig};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
@@ -9,8 +8,9 @@ use sqlx::postgres::PgPool;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
+use foodlib::FoodBase;
+
 mod api;
-mod db;
 
 use axum::{
     extract::State, http::StatusCode, response::IntoResponse, routing::get, routing::post,
@@ -109,7 +109,7 @@ async fn main() {
     ) -> Result<(), StatusCode> {
         log::info!("Logging in user: {}", &credentials.username);
         let pool = &state.db_connection;
-        let mut conn = pool.pg_pool.acquire().await.unwrap();
+        let mut conn = pool.acquire().await;
         let user = sqlx::query_as!(
             User,
             "select * from users where username = $1",

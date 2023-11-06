@@ -6,7 +6,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::{error::BoxDynError, postgres::types::PgMoney};
 
-use crate::{db::IngredientSorce, MyAppState};
+use crate::MyAppState;
+use foodlib::IngredientSorce;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SerializableIngredientSource {

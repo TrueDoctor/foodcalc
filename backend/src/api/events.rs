@@ -8,10 +8,8 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::{error::BoxDynError, postgres::types::PgMoney};
 
-use crate::{
-    db::{Event, EventRecipeIngredient, Meal},
-    MyAppState,
-};
+use crate::MyAppState;
+use foodlib::{Event, EventRecipeIngredient, Meal};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MealIngredient {
