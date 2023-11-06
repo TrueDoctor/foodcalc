@@ -14,5 +14,7 @@ export const theme = {
 			},
 		},
 	},
-	plugins: [],
+	plugins: [
+		require('@tailwindcss/forms'),
+	],
 }

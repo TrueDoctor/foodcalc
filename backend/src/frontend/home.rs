@@ -17,11 +17,11 @@ pub async fn home_view(State(state): State<MyAppState>) -> Markup {
             link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x))) {};
             script src="https://unpkg.com/htmx.org@1.9.6" {}
         }
-        body {
-        h1 { "Home" }
-        p { "Welcome to Foodbase!" }
-            (navbar())
-            (content(State(state)).await)
+        body class="dark" {
+            div class="bg-white dark:bg-gray-900 dark:text-white" {
+                (navbar())
+                (content(State(state)).await)
+            }
         }
     }
 }
@@ -36,14 +36,12 @@ pub async fn content(State(state): State<MyAppState>) -> Markup {
 
 pub fn navbar() -> Markup {
     html! {
-        div id="navbar" {
-            ul {
-                li { a href="/" { "Home" } }
-                li { a href="/ingredients" { "Ingredients" } }
-                li { a href="/recipes" { "Recipes" } }
-                li { a href="/events" { "Events" } }
-                li { a href="/stores" { "Stores" } }
-            }
+        div class="flex items-center justify-center flex-wrap p-6 mx-16 my-4 gap-24" {
+             a href="/" { "Home" }
+             a href="/ingredients" { "Ingredients" }
+             a href="/recipes" { "Recipes" }
+             a href="/events" { "Events" }
+             a href="/stores" { "Stores" }
         }
     }
 }

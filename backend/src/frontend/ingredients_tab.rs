@@ -1,5 +1,4 @@
-use axum::extract::{BodyStream, Json, State};
-use futures_util::StreamExt;
+use axum::extract::{BodyStream, State};
 use maud::{html, Markup};
 
 use crate::MyAppState;
@@ -37,20 +36,24 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
         .unwrap_or_default();
 
     html! {
-        h1 { "Ingredients" }
-        input type="search" placeholder="Search" id="search" name="search" autocomplete="off"
-            autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
-            hx-target="#search-results" hx-indicator=".htmx-indicator";
-        span class="htmx-indicator" { "Searching..." }
-        table {
-            thead { tr { th { "Name" } th { "Energy" } th { "Comment" } } }
-            tbody id="search-results" {
-                @for ingredient in ingredients.iter() {
-                    (format_ingredient(ingredient))
+        div class="flex flex-col items-center justify-center" {
+            div {
+                h1 { "Ingredients" }
+                input type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off"
+                    autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
+                    hx-target="#search-results" hx-indicator=".htmx-indicator";
+                span class="htmx-indicator" { "Searching..." }
+                table class="text-inherit table-auto object-center" {
+                    thead { tr { th { "Name" } th { "Energy" } th { "Comment" } } }
+                    tbody id="search-results" {
+                        @for ingredient in ingredients.iter() {
+                            (format_ingredient(ingredient))
+                        }
+                    }
                 }
+                // Add Ingredient button
             }
         }
-        // Add Ingredient button
     }
 }
 
@@ -59,7 +62,7 @@ fn format_ingredient(ingredient: &foodlib::Ingredient) -> Markup {
         tr id=(format!("ingredient-{}", ingredient.ingredient_id)) {
             td { (ingredient.name) }
             td { (ingredient.energy) }
-            td { (ingredient.comment.clone().unwrap_or_default()) }
+            td class="text-center" { (ingredient.comment.clone().unwrap_or_default()) }
         }
     }
 }
