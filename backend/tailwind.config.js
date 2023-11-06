@@ -1,4 +1,4 @@
-export const content = ["./templates/**/*.html"]
+export const content = ["./src/frontend/*.rs"]
 export const theme = {
 	extend: {
 		colors: {

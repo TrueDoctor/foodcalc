@@ -433,6 +433,7 @@ dependencies = [
  "eyre",
  "fern",
  "foodlib",
+ "futures-util",
  "log",
  "maud",
  "metro-scrape",

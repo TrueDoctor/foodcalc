@@ -50,3 +50,4 @@ axum-htmx = "0.4.0"
 askama = { version = "0.12.1", features = ["with-axum"] }
 askama_axum = "0.3.0"
 maud = { version = "0.25.0", features = ["axum"] }
+futures-util = "0.3.29"

@@ -1,27 +1,39 @@
 use std::process::Command;
 
 fn main() {
-    println!("cargo:rerun-if-changed=templates");
     println!("cargo:rerun-if-changed=assets");
+    println!("cargo:rerun-if-changed=tailwind.config.js");
+    println!("cargo:rerun-if-changed=src/frontend");
 
-    std::fs::remove_dir_all("build").unwrap_or_default();
-
-    if Command::new("npx")
+    let command = Command::new("npx")
         .args([
             "tailwindcss",
             "-c",
             "tailwind.config.js",
             "-i",
             "assets/styles/index.css",
-            "content",
-            "src/frontend/",
             "-o",
             "src/index.css",
             "--minify",
         ])
-        .status()
-        .is_err()
-    {
-        eprintln!("Failed to run tailwindcss, styles will not be updated");
+        .output();
+
+    match command {
+        Ok(output) if output.status.success() => (),
+        Ok(output) => {
+            println!(
+                "cargo:warning=Failed to run tailwindcss, styles will not be updated. stderr:"
+            );
+            let error = String::from_utf8_lossy(&output.stderr);
+            for line in error.lines() {
+                println!("cargo:warning={}", line);
+            }
+        }
+        Err(error) => {
+            println!(
+                "cargo:warning=Failed to run tailwindcss, styles will not be updated. Reason: {}",
+                error.to_string().replace('\n', " ")
+            );
+        }
     }
 }
