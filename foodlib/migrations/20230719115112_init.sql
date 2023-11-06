@@ -10,8 +10,6 @@ CREATE TABLE public.base_conversions (
 );
 
 
-ALTER TABLE public.base_conversions OWNER TO kuechenteam;
-
 --
 -- Name: conversions; Type: MATERIALIZED VIEW; Schema: public; Owner: kuechenteam
 --
@@ -39,8 +37,6 @@ CREATE MATERIALIZED VIEW public.conversions AS
   WITH NO DATA;
 
 
-ALTER TABLE public.conversions OWNER TO kuechenteam;
-
 --
 -- Name: event_meals; Type: TABLE; Schema: public; Owner: kuechenteam
 --
@@ -57,8 +53,6 @@ CREATE TABLE public.event_meals (
 );
 
 
-ALTER TABLE public.event_meals OWNER TO kuechenteam;
-
 --
 -- Name: events; Type: TABLE; Schema: public; Owner: kuechenteam
 --
@@ -70,8 +64,6 @@ CREATE TABLE public.events (
     budget money
 );
 
-
-ALTER TABLE public.events OWNER TO kuechenteam;
 
 --
 -- Name: ingredient_sources; Type: TABLE; Schema: public; Owner: kuechenteam
@@ -89,8 +81,6 @@ CREATE TABLE public.ingredient_sources (
 );
 
 
-ALTER TABLE public.ingredient_sources OWNER TO kuechenteam;
-
 --
 -- Name: ingredients; Type: TABLE; Schema: public; Owner: kuechenteam
 --
@@ -102,8 +92,6 @@ CREATE TABLE public.ingredients (
     comment text
 );
 
-
-ALTER TABLE public.ingredients OWNER TO kuechenteam;
 
 --
 -- Name: COLUMN ingredients.energy; Type: COMMENT; Schema: public; Owner: kuechenteam
@@ -123,7 +111,7 @@ CREATE TABLE public.weights (
 );
 
 
-ALTER TABLE public.weights OWNER TO kuechenteam;
+
 
 --
 -- Name: COLUMN weights.weight; Type: COMMENT; Schema: public; Owner: kuechenteam
@@ -150,7 +138,6 @@ UNION
   WHERE (conversions.to_unit = 0);
 
 
-ALTER TABLE public.ingredient_weight OWNER TO kuechenteam;
 
 --
 -- Name: meta_recipes; Type: TABLE; Schema: public; Owner: kuechenteam
@@ -164,7 +151,7 @@ CREATE TABLE public.meta_recipes (
 );
 
 
-ALTER TABLE public.meta_recipes OWNER TO kuechenteam;
+
 
 --
 -- Name: COLUMN meta_recipes.weight; Type: COMMENT; Schema: public; Owner: kuechenteam
@@ -184,8 +171,6 @@ CREATE TABLE public.places (
 );
 
 
-ALTER TABLE public.places OWNER TO kuechenteam;
-
 --
 -- Name: recipe_ingredients; Type: TABLE; Schema: public; Owner: kuechenteam
 --
@@ -198,8 +183,6 @@ CREATE TABLE public.recipe_ingredients (
 );
 
 
-ALTER TABLE public.recipe_ingredients OWNER TO kuechenteam;
-
 --
 -- Name: recipes; Type: TABLE; Schema: public; Owner: kuechenteam
 --
@@ -210,8 +193,6 @@ CREATE TABLE public.recipes (
     comment text
 );
 
-
-ALTER TABLE public.recipes OWNER TO kuechenteam;
 
 --
 -- Name: recipe_weight; Type: VIEW; Schema: public; Owner: kuechenteam
@@ -233,8 +214,6 @@ CREATE VIEW public.recipe_weight AS
              JOIN public.ingredient_weight weights_1 USING (unit_id, ingredient_id))) weights USING (recipe_id))
   GROUP BY recipes.recipe_id, recipes.name, recipes.comment;
 
-
-ALTER TABLE public.recipe_weight OWNER TO kuechenteam;
 
 --
 -- Name: resolved_meta; Type: VIEW; Schema: public; Owner: kuechenteam
@@ -273,8 +252,6 @@ CREATE VIEW public.resolved_meta AS
      JOIN public.recipes mr ON ((mr.recipe_id = meta.child_id)));
 
 
-ALTER TABLE public.resolved_meta OWNER TO kuechenteam;
-
 --
 -- Name: resolved_recipes; Type: VIEW; Schema: public; Owner: kuechenteam
 --
@@ -309,8 +286,6 @@ CREATE VIEW public.resolved_recipes AS
   ORDER BY recipes.recipe_id;
 
 
-ALTER TABLE public.resolved_recipes OWNER TO kuechenteam;
-
 --
 -- Name: recipe_stats; Type: VIEW; Schema: public; Owner: kuechenteam
 --
@@ -326,7 +301,7 @@ CREATE VIEW public.recipe_stats AS
   ORDER BY rr.recipe_id;
 
 
-ALTER TABLE public.recipe_stats OWNER TO kuechenteam;
+
 
 --
 -- Name: resolved_recipe_ingredients; Type: VIEW; Schema: public; Owner: kuechenteam
@@ -342,7 +317,7 @@ CREATE VIEW public.resolved_recipe_ingredients AS
   GROUP BY resolved_recipes.recipe_id, resolved_recipes.recipe, resolved_recipes.ingredient_id, resolved_recipes.ingredient;
 
 
-ALTER TABLE public.resolved_recipe_ingredients OWNER TO kuechenteam;
+
 
 --
 -- Name: event_ingredients; Type: VIEW; Schema: public; Owner: kuechenteam
@@ -380,7 +355,7 @@ CREATE VIEW public.event_ingredients AS
   GROUP BY events.event_id, events.event_name, event_meals.recipe_id, resolved_recipes.recipe, event_meals.place_id, places.name, event_meals.start_time, event_meals.end_time, resolved_recipes.ingredient_id, resolved_recipes.ingredient, resolved_recipes.weight, ingredients.energy, recipe_multipliers.recipe_multiplier, event_meals.servings;
 
 
-ALTER TABLE public.event_ingredients OWNER TO kuechenteam;
+
 
 --
 -- Name: event_recipes; Type: VIEW; Schema: public; Owner: kuechenteam
@@ -398,7 +373,7 @@ CREATE VIEW public.event_recipes AS
   GROUP BY event_ingredients.event_id, event_ingredients.event, event_ingredients.recipe_id, event_ingredients.recipe;
 
 
-ALTER TABLE public.event_recipes OWNER TO kuechenteam;
+
 
 --
 -- Name: events_event_id_seq; Type: SEQUENCE; Schema: public; Owner: kuechenteam
@@ -424,7 +399,7 @@ CREATE TABLE public.food_properties (
 );
 
 
-ALTER TABLE public.food_properties OWNER TO kuechenteam;
+
 
 --
 -- Name: food_properties_property_id_seq; Type: SEQUENCE; Schema: public; Owner: kuechenteam
@@ -450,7 +425,7 @@ CREATE TABLE public.ingredient_properties (
 );
 
 
-ALTER TABLE public.ingredient_properties OWNER TO kuechenteam;
+
 
 --
 -- Name: ingredient_properties_view; Type: VIEW; Schema: public; Owner: kuechenteam
@@ -465,7 +440,7 @@ CREATE VIEW public.ingredient_properties_view AS
   WHERE ((ingredients.ingredient_id = ingredient_properties.ingredient_id) AND (food_properties.property_id = ingredient_properties.property_id));
 
 
-ALTER TABLE public.ingredient_properties_view OWNER TO kuechenteam;
+
 
 --
 -- Name: ingredients_ingredient_id_seq; Type: SEQUENCE; Schema: public; Owner: kuechenteam
@@ -496,7 +471,7 @@ CREATE VIEW public.ingredients_without_sources AS
   WHERE (ingredient_sources.store_id IS NULL);
 
 
-ALTER TABLE public.ingredients_without_sources OWNER TO kuechenteam;
+
 
 --
 -- Name: units; Type: TABLE; Schema: public; Owner: kuechenteam
@@ -508,7 +483,7 @@ CREATE TABLE public.units (
 );
 
 
-ALTER TABLE public.units OWNER TO kuechenteam;
+
 
 --
 -- Name: ingredients_without_weight; Type: VIEW; Schema: public; Owner: kuechenteam
@@ -528,7 +503,7 @@ CREATE VIEW public.ingredients_without_weight AS
   WHERE (ingredient_weight.weight IS NULL);
 
 
-ALTER TABLE public.ingredients_without_weight OWNER TO kuechenteam;
+
 
 --
 -- Name: meta_with_names; Type: VIEW; Schema: public; Owner: kuechenteam
@@ -545,7 +520,7 @@ CREATE VIEW public.meta_with_names AS
      JOIN public.recipes r2 ON ((r2.recipe_id = meta_recipes.child_id)));
 
 
-ALTER TABLE public.meta_with_names OWNER TO kuechenteam;
+
 
 --
 -- Name: places_place_id_seq; Type: SEQUENCE; Schema: public; Owner: kuechenteam
@@ -577,7 +552,7 @@ CREATE VIEW public.recipe_ingredients_view AS
   WHERE ((recipes.recipe_id = recipe_ingredients.recipe_id) AND (ingredients.ingredient_id = recipe_ingredients.ingredient_id) AND (units.unit_id = recipe_ingredients.unit_id));
 
 
-ALTER TABLE public.recipe_ingredients_view OWNER TO kuechenteam;
+
 
 --
 -- Name: recipes_recipe_id_seq; Type: SEQUENCE; Schema: public; Owner: kuechenteam
@@ -609,7 +584,7 @@ CREATE VIEW public.shopping_list AS
   GROUP BY event_ingredients.event_id, event_ingredients.event, event_ingredients.ingredient_id, event_ingredients.ingredient;
 
 
-ALTER TABLE public.shopping_list OWNER TO kuechenteam;
+
 
 --
 -- Name: shopping_list_per_day; Type: VIEW; Schema: public; Owner: postgres
@@ -645,7 +620,7 @@ CREATE TABLE public.steps (
 );
 
 
-ALTER TABLE public.steps OWNER TO kuechenteam;
+
 
 --
 -- Name: steps_step_id_seq; Type: SEQUENCE; Schema: public; Owner: kuechenteam
@@ -671,7 +646,7 @@ CREATE TABLE public.stores (
 );
 
 
-ALTER TABLE public.stores OWNER TO kuechenteam;
+
 
 --
 -- Name: stores_store_id_seq; Type: SEQUENCE; Schema: public; Owner: kuechenteam
@@ -725,7 +700,7 @@ CREATE VIEW public.subrecipes AS
   ORDER BY bar.recipe, bar.subrecipe_id, bar.is_subrecipe DESC;
 
 
-ALTER TABLE public.subrecipes OWNER TO kuechenteam;
+
 
 --
 -- Name: units_unit_id_seq; Type: SEQUENCE; Schema: public; Owner: kuechenteam
@@ -1035,10 +1010,3 @@ ALTER TABLE ONLY public.weights
 ALTER TABLE ONLY public.recipe_ingredients
     ADD CONSTRAINT unit_fk FOREIGN KEY (unit_id) REFERENCES public.units(unit_id) MATCH FULL ON UPDATE CASCADE ON DELETE RESTRICT;
 
-
---
--- Name: SCHEMA public; Type: ACL; Schema: -; Owner: postgres
---
-
-REVOKE USAGE ON SCHEMA public FROM PUBLIC;
-GRANT ALL ON SCHEMA public TO PUBLIC;

@@ -10,7 +10,6 @@ mod util;
 pub use events::*;
 pub use ingredients::*;
 pub use recipes::*;
-pub use util::*;
 
 #[derive(Debug, Clone)]
 pub struct FoodBase {

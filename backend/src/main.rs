@@ -1,6 +1,6 @@
 use std::env;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::NaiveDateTime;
 use fern::colors::{Color, ColoredLevelConfig};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
@@ -11,6 +11,7 @@ use tower_http::trace::TraceLayer;
 use foodlib::FoodBase;
 
 mod api;
+mod frontend;
 
 use axum::{
     extract::State, http::StatusCode, response::IntoResponse, routing::get, routing::post,
@@ -133,9 +134,10 @@ async fn main() {
 
     // build our application with a route
     let app = axum::Router::new()
-        .nest("/api", api::foodbase())
         .route("/protected", get(protected_handler))
         .route_layer(RequireAuthorizationLayer::<i64, User>::login())
+        .nest("/api", api::foodbase())
+        .nest("/", frontend::frontend_router())
         .route("/login", post(login_handler))
         .route("/logout", get(logout_handler))
         .with_state(state)

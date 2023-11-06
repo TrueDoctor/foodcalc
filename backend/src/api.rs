@@ -15,7 +15,6 @@ mod stores;
 mod utils;
 
 pub type Router = axum::Router<MyAppState>;
-type MethodRouter = axum::routing::MethodRouter<MyAppState>;
 
 pub fn foodbase() -> Router {
     Router::new()
@@ -30,9 +29,7 @@ pub fn foodbase() -> Router {
 
 pub fn ingredients_router() -> Router {
     Router::new()
-        .route("/html", get(ingredients::list_html))
         .route("/create", post(ingredients::create))
-        .route("/search", post(ingredients::search))
         .route("/update/:ingredient_id", post(ingredients::update))
         .route("/list", get(ingredients::list))
 }
