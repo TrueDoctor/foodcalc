@@ -1,9 +1,9 @@
 use std::env;
 
-use chrono::{DateTime, Utc, NaiveDateTime};
-use fern::colors::{Color, ColoredLevelConfig};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use db::FoodBase;
-use serde::{Serialize, Deserialize};
+use fern::colors::{Color, ColoredLevelConfig};
+use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 
 use tower_http::cors::CorsLayer;
@@ -12,7 +12,10 @@ use tower_http::trace::TraceLayer;
 mod api;
 mod db;
 
-use axum::{extract::State, response::IntoResponse, routing::get, routing::post, Extension, http::StatusCode, Json};
+use axum::{
+    extract::State, http::StatusCode, response::IntoResponse, routing::get, routing::post,
+    Extension, Json,
+};
 use axum_login::{
     axum_sessions::{async_session::MemoryStore, SessionLayer},
     secrecy::SecretVec,
@@ -61,31 +64,31 @@ async fn main() {
             .await
             .unwrap();
 
-        let colors = ColoredLevelConfig::new()
-            .debug(Color::Magenta)
-            .info(Color::Green)
-            .error(Color::Red);
+    let colors = ColoredLevelConfig::new()
+        .debug(Color::Magenta)
+        .info(Color::Green)
+        .error(Color::Red);
 
-        fern::Dispatch::new()
-            .chain(std::io::stdout())
-            .level_for("axum", log::LevelFilter::Info)
-            .level_for("mio", log::LevelFilter::Info)
-            .level_for("hyper", log::LevelFilter::Info)
-            .level_for("backend", log::LevelFilter::Trace)
-            .level_for("sqlx", log::LevelFilter::Trace)
-            .level(log::LevelFilter::Debug)
-            .format(move |out, message, record| {
-                out.finish(format_args!(
-                    "[{}]{}{} {}",
-                    // This will color the log level only, not the whole line. Just a touch.
-                    colors.color(record.level()),
-                    chrono::Utc::now().format("[%Y-%m-%d %H:%M:%S]"),
-                    record.module_path().unwrap_or("<unnamed>"),
-                    message
-                ))
-            })
-            .apply()
-            .unwrap();
+    fern::Dispatch::new()
+        .chain(std::io::stdout())
+        .level_for("axum", log::LevelFilter::Info)
+        .level_for("mio", log::LevelFilter::Info)
+        .level_for("hyper", log::LevelFilter::Info)
+        .level_for("backend", log::LevelFilter::Trace)
+        .level_for("sqlx", log::LevelFilter::Trace)
+        .level(log::LevelFilter::Debug)
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "[{}]{}{} {}",
+                // This will color the log level only, not the whole line. Just a touch.
+                colors.color(record.level()),
+                chrono::Utc::now().format("[%Y-%m-%d %H:%M:%S]"),
+                record.module_path().unwrap_or("<unnamed>"),
+                message
+            ))
+        })
+        .apply()
+        .unwrap();
 
     let secret = rand::thread_rng().gen::<[u8; 64]>();
 
@@ -99,14 +102,22 @@ async fn main() {
         db_connection: FoodBase::new(pool),
     };
 
-    async fn login_handler(mut auth: AuthContext, State(state): State<MyAppState>, Json(credentials): Json<Credenitals>) -> Result<(), StatusCode> {
+    async fn login_handler(
+        mut auth: AuthContext,
+        State(state): State<MyAppState>,
+        Json(credentials): Json<Credenitals>,
+    ) -> Result<(), StatusCode> {
         log::info!("Logging in user: {}", &credentials.username);
         let pool = &state.db_connection;
         let mut conn = pool.pg_pool.acquire().await.unwrap();
-        let user = sqlx::query_as!(User, "select * from users where username = $1", credentials.username)
-            .fetch_one(&mut conn)
-            .await
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let user = sqlx::query_as!(
+            User,
+            "select * from users where username = $1",
+            credentials.username
+        )
+        .fetch_one(&mut conn)
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
         auth.login(&user).await.unwrap();
         Ok(())
     }
@@ -121,7 +132,8 @@ async fn main() {
     }
 
     // build our application with a route
-    let app = api::foodbase()
+    let app = axum::Router::new()
+        .nest("/api", api::foodbase())
         .route("/protected", get(protected_handler))
         .route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .route("/login", post(login_handler))

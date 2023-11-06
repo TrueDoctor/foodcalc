@@ -4,6 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::types::BigDecimal;
 
@@ -54,4 +55,52 @@ pub async fn list(State(state): State<MyAppState>) -> impl IntoResponse {
         .await
         .unwrap_or_default();
     Json(ingredients)
+}
+
+pub fn search(State(state): State<MyAppState>, Json(query): Json<String>) -> Markup {
+    let filtered_ingredients = state
+        .db_connection
+        .get_ingredients()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .filter(|x| x.name.contains(query));
+
+    html! {
+        @for ingredient in filtered_ingredients {
+            (format_ingredient(ingredient))
+        }
+    }
+}
+
+pub async fn list_html(State(state): State<MyAppState>) -> Markup {
+    let ingredients = state
+        .db_connection
+        .get_ingredients()
+        .await
+        .unwrap_or_default();
+
+    html! {
+        h1 { "Ingredients" }
+        input type="search" placeholder="Search" id="search" name="search" autocomplete="off" autofocus="autofocus" hx-post="/search" hx-trigger="keýup changed delay:500ms, search" hx-target="#search-resutls" hx-indicator=".htmx-indicator";
+        table {
+            thead { tr { th { "Name" } th { "Energy" } th { "Comment" } } }
+            tbody id="search-results" {
+                @for ingredient in ingredients.iter() {
+                    (format_ingredient(ingredient))
+                }
+            }
+        }
+        // Add Ingredient button
+    }
+}
+
+fn format_ingredient(ingredient: &crate::db::Ingredient) -> Markup {
+    html! {
+        tr id=(format!("ingredient-{}", ingredient.name)) {
+            td { (ingredient.name) }
+            td { (ingredient.energy) }
+            td { (ingredient.comment.unwrap_or_default()) }
+        }
+    }
 }
