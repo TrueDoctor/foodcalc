@@ -108,6 +108,24 @@ async fn main() {
                 },
             }
         }
+        Commands::User(user_data) => {
+            match &user_data.user_type {
+                UserCommands::Add(params) => {
+                    let user_ref = params.user.as_str();
+                    //TODO Add User
+                    println!("Adding User {:?}", user_ref);
+                },
+                UserCommands::Remove(params) => {
+                    let user_ref = params.user.as_str();
+                    //TODO Delete User
+                    println!("Deleting User {:?}", user_ref);
+                },
+                UserCommands::List => {
+                    //TODO List Users
+                    println!("Listing Users");
+                },
+            }
+        }
         #[allow(unreachable_patterns)]
         _default => {
             println!("Unknown Command");

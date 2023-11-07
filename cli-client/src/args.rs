@@ -13,6 +13,7 @@ pub enum Commands {
     List(ListCommand),
     Show(ShowCommand),
     Print(PrintCommand),
+    User(UserCommand),
 }
 
 // ---- List Commands ----
@@ -23,8 +24,7 @@ pub struct ListCommand {
     #[clap(short = 'p', long = "place")]
     /// Place to reference (use ID or name)
     pub place: Option<String>,
-
-    #[clap(short = 'e', long = "event")]
+#[clap(short = 'e', long = "event")]
     /// Event to reference (use ID or name)
     pub event: Option<String>,
 
@@ -142,4 +142,28 @@ pub struct PrintEvent {
 pub struct PrintMeal {
     /// Meal to print (use ID or name)
     pub meal: String,
+}
+
+// ---- Admin Commands ----
+#[derive(Debug, Args)]
+pub struct UserCommand {
+    #[clap(subcommand)]
+    pub user_type: UserCommands,
+}
+ 
+#[derive(Debug, Subcommand)]
+pub enum UserCommands {
+    /// Print the mealplan for a given event
+    Add(UserArg),
+    #[clap(alias = "rm")]
+    /// Print the recipe for a given meal
+    Remove(UserArg),
+    /// Gives a List of all known Users and their Permissions
+    List,
+}
+
+#[derive(Debug, Args)]
+pub struct UserArg {
+    /// Event to print (use ID or name)
+    pub user: String,
 }
