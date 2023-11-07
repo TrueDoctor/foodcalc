@@ -12,10 +12,6 @@ tectonic = ["foodlib/tectonic"]
 
 [dependencies]
 axum = { version = "0.6" }
-axum-login = { git = "https://github.com/maxcountryman/axum-login", rev = "5239b38b2698a3db3f92075b6ad430aea79c215a", features = [
-	"sqlx",
-	"postgres",
-] }
 foodlib = { path = "../foodlib" }
 tower-http = { version = "*", features = ["cors", "fs", "trace"] }
 rust-embed = { version = "*", features = ["axum"] }
@@ -25,6 +21,7 @@ fern = { version = "0.6", features = ["colored"] }
 maud = { version = "0.25", features = ["axum"] }
 futures-util = "0.3"
 
+axum-login = { workspace = true }
 eyre = { workspace = true }
 num = { workspace = true }
 dotenv = { workspace = true }

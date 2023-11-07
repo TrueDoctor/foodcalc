@@ -23,6 +23,11 @@ eyre = "0.6"
 serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
+axum-login = { git = "https://github.com/maxcountryman/axum-login", rev = "5239b38b2698a3db3f92075b6ad430aea79c215a", features = [
+	"sqlx",
+	"postgres",
+] }
+
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3

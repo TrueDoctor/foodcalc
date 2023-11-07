@@ -1,14 +1,12 @@
 use std::env;
 
-use chrono::NaiveDateTime;
 use fern::colors::{Color, ColoredLevelConfig};
-use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
-use foodlib::FoodBase;
+use foodlib::{AuthContext, Credenitals, FoodBase, User};
 
 mod api;
 mod frontend;
@@ -19,42 +17,13 @@ use axum::{
 };
 use axum_login::{
     axum_sessions::{async_session::MemoryStore, SessionLayer},
-    secrecy::SecretVec,
-    AuthLayer, AuthUser, PostgresStore, RequireAuthorizationLayer,
+    AuthLayer, PostgresStore, RequireAuthorizationLayer,
 };
 use rand::Rng;
-
-impl AuthUser<i64> for User {
-    fn get_id(&self) -> i64 {
-        self.id
-    }
-
-    fn get_password_hash(&self) -> SecretVec<u8> {
-        SecretVec::new(self.password_hash.clone().into())
-    }
-}
-
-type AuthContext = axum_login::extractors::AuthContext<i64, User, PostgresStore<User>>;
 
 #[derive(Debug, Clone)]
 pub struct MyAppState {
     db_connection: FoodBase,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Credenitals {
-    username: String,
-    password: String,
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize, sqlx::FromRow)]
-struct User {
-    id: i64,
-    username: String,
-    email: String,
-    password_hash: String,
-    is_admin: bool,
-    created_at: NaiveDateTime,
 }
 
 #[tokio::main]
@@ -108,17 +77,11 @@ async fn main() {
         State(state): State<MyAppState>,
         Json(credentials): Json<Credenitals>,
     ) -> Result<(), StatusCode> {
-        log::info!("Logging in user: {}", &credentials.username);
-        let pool = &state.db_connection;
-        let mut conn = pool.acquire().await;
-        let user = sqlx::query_as!(
-            User,
-            "select * from users where username = $1",
-            credentials.username
-        )
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let user = state
+            .db_connection
+            .authenticate_user(credentials)
+            .await
+            .map_err(|_| StatusCode::UNAUTHORIZED)?;
         auth.login(&user).await.unwrap();
         Ok(())
     }

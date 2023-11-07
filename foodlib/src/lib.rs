@@ -5,11 +5,13 @@ use sqlx::PgPool;
 mod events;
 mod ingredients;
 mod recipes;
+mod users;
 mod util;
 
 pub use events::*;
 pub use ingredients::*;
 pub use recipes::*;
+pub use users::*;
 
 #[derive(Debug, Clone)]
 pub struct FoodBase {
