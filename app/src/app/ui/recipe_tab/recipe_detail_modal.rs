@@ -141,9 +141,11 @@ impl RecipeDetail {
                             }
                             move_database.update_recipe(&recipe).await?;
                             move_database
-                                .update_recipe_entries(&recipe, ingredients.into_iter())
+                                .update_recipe_entries(recipe.recipe_id, ingredients.into_iter())
                                 .await?;
-                            move_database.update_recipe_steps(&recipe, steps.into_iter()).await?;
+                            move_database
+                                .update_recipe_steps(recipe.recipe_id, steps.into_iter())
+                                .await?;
                             Ok(())
                         },
                         RecipeTabMessage::SaveRecipe,

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+
 
 use iced::widget::*;
 use iced::{Alignment, Element, Length};
@@ -12,12 +12,6 @@ use super::EventTabMessage;
 pub struct EventWrapper {
     pub(crate) event: Event,
     pub price: f64,
-}
-
-impl Display for Event {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.event_name.as_str())
-    }
 }
 
 impl EventWrapper {

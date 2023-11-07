@@ -1,6 +1,7 @@
 use num::FromPrimitive;
 use num::Num;
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,12 @@ pub struct Ingredient {
     pub name: String,
     pub energy: BigDecimal,
     pub comment: Option<String>,
+}
+
+impl Display for Ingredient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name.as_str())
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

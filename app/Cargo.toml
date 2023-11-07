@@ -58,3 +58,4 @@ time-macros = { version = "0.2.10", features = [
 	"serde",
 ] }
 time = { version = "0.3.23", features = ["macros", "serde", "parsing"] }
+foodlib = { version = "0.1.0", path = "../foodlib" }

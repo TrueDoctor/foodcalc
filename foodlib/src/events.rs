@@ -60,6 +60,11 @@ pub struct Event {
     )]
     pub budget: Option<PgMoney>,
 }
+impl Display for Event {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.event_name.as_str())
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Place {

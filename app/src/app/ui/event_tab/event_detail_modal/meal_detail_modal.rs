@@ -141,7 +141,7 @@ impl MealDetail {
                 let move_database = self.database.clone();
 
                 let old_meal = self.old_meal.clone();
-                if vec![
+                if [
                     self.start_time.valid(),
                     self.end_time.valid(),
                     self.comment.valid(),

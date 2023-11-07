@@ -110,7 +110,7 @@ impl TabBarExample {
         };
         (
             tab_bar,
-            Command::batch([ingredient_command, recipe_command, event_command].into_iter()),
+            Command::batch([ingredient_command, recipe_command, event_command]),
         )
     }
 

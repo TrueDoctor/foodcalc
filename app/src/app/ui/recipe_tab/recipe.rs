@@ -1,4 +1,4 @@
-use std::fmt::Display;
+
 
 use iced::widget::*;
 use iced::{Alignment, Element, Length};
@@ -10,12 +10,6 @@ use crate::db::Recipe;
 #[derive(Debug, Clone, Default)]
 pub struct RecipeWrapper {
     pub(crate) recipe: Recipe,
-}
-
-impl Display for Recipe {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.name.as_str())
-    }
 }
 
 impl RecipeWrapper {

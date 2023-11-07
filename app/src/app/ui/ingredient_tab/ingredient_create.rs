@@ -65,7 +65,7 @@ impl IngredientCreationDialog {
                 return Some(IngredientTabMessage::CloseCreateIngredient);
             },
             IngredientCreateMessage::Save => {
-                if vec![&self.comment.valid(), &self.energy.valid(), &self.name.valid()]
+                if [&self.comment.valid(), &self.energy.valid(), &self.name.valid()]
                     .iter()
                     .all(|input| **input)
                 {

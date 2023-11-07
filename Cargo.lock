@@ -1398,6 +1398,7 @@ dependencies = [
  "dotenv",
  "eyre",
  "fern",
+ "foodlib",
  "futures",
  "iced",
  "iced_aw",

@@ -2,14 +2,13 @@ use std::cell::RefCell;
 use std::env;
 use std::sync::Arc;
 
-use db::FoodBase;
 use fern::colors::{Color, ColoredLevelConfig};
+use foodlib::FoodBase;
 use iced::widget::{button, column, container, scrollable, text};
 use iced::{Application, Command, Element, Length};
 use sqlx::PgPool;
 
 use self::ui::TabMessage;
-pub use crate::db;
 
 //#[cfg(feature = "scraping")]
 //pub mod scraping;

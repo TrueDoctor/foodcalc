@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Display};
 
 use bigdecimal::ToPrimitive;
 use serde::{Deserialize, Serialize};
@@ -17,6 +17,12 @@ pub struct Recipe {
     pub recipe_id: i32,
     pub name: String,
     pub comment: Option<String>,
+}
+
+impl Display for Recipe {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name.as_str())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

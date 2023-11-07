@@ -1,4 +1,4 @@
-use std::fmt::Display;
+
 
 use iced::alignment::Horizontal;
 use iced::widget::*;
@@ -8,17 +8,11 @@ use num::Zero;
 use super::IngredientTabMessage;
 use crate::app::ui::Icon;
 
-use crate::db::Ingredient;
+use foodlib::Ingredient;
 
 #[derive(Debug, Clone, Default)]
 pub struct IngredientWrapper {
     pub(crate) ingredient: Ingredient,
-}
-
-impl Display for Ingredient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.name.as_str())
-    }
 }
 
 #[derive(Debug, Clone)]
