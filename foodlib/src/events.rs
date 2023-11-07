@@ -329,13 +329,13 @@ impl FoodBase {
             "#,
             event_id,
         )
-        .execute(&mut transaction)
+        .execute(&mut *transaction)
         .await?
         .rows_affected();
         log::debug!("Deleted {} event_meals", count);
 
         for meal in meals {
-            insert_meal(&mut transaction, event_id, meal).await?;
+            insert_meal(&mut *transaction, event_id, meal).await?;
         }
         transaction.commit().await?;
         Ok(())

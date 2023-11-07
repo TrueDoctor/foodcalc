@@ -100,7 +100,7 @@ async fn main() {
     let auth_layer = AuthLayer::new(user_store, &secret);
 
     let state = MyAppState {
-        db_connection: FoodBase::new(pool),
+        db_connection: FoodBase::new_with_pool(pool),
     };
 
     async fn login_handler(
@@ -116,7 +116,7 @@ async fn main() {
             "select * from users where username = $1",
             credentials.username
         )
-        .fetch_one(&mut conn)
+        .fetch_one(&mut *conn)
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
         auth.login(&user).await.unwrap();

@@ -9,49 +9,26 @@ authors = ["Dennis Kobert <dennis@kobert.dev>"]
 [features]
 default = ["scraping"]
 scraping = ["metro-scrape"]
-tectonic = ["dep:tectonic", "tectonic_bundles"]
+tectonic = ["foodlib/tectonic"]
 
 [dependencies]
-sqlx = { version = "0.6", features = [
-	"postgres",
-	"macros",
-	"migrate",
-	"uuid",
-	"runtime-tokio-rustls",
-	"offline",
-	"bigdecimal",
-	"time",
-	"chrono",
-] }
-tokio = { version = "1", features = ["full"] }
 metro-scrape = { path = "../metro-scrape", optional = true }
 
 futures = "0.3"
-dotenv = "0.15.0"
-serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 iced = { version = "0.5.0", features = ["tokio"] }
 iced_searchable_picklist = { version = "0.2" }
-chrono = "*"
 
-log = "0.4"
 fern = { version = "0.6", features = ["colored"] }
 iced_aw = { git = "https://github.com/iced-rs/iced_aw", rev = "5e1c1d0b6b907dc990490034bb3519cf836bd095", default-features = false, features = [
 	"tabs",
 ] }
 
-#reqwest = { version = "0.11" }
 
-inline-python = { version = "*", optional = true }
-num = "*"
-regex = "*"
+regex = { workspace = true }
 
-
-tectonic = { version = "0.14", optional = true }
-eyre = "0.6"
 lazy_static = "1.4.0"
 parse_duration = "2.1.1"
-tectonic_bundles = { version = "0.3.0", optional = true }
 time-macros = { version = "0.2.10", features = [
 	"formatting",
 	"parsing",
@@ -59,3 +36,13 @@ time-macros = { version = "0.2.10", features = [
 ] }
 time = { version = "0.3.23", features = ["macros", "serde", "parsing"] }
 foodlib = { version = "0.1.0", path = "../foodlib" }
+
+eyre = { workspace = true }
+bigdecimal = { workspace = true }
+serde = { workspace = true }
+dotenv = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+tokio = { workspace = true }
+sqlx = { workspace = true }
+num = { workspace = true }

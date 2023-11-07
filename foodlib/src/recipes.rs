@@ -458,7 +458,7 @@ impl FoodBase {
             "#,
             recipe_id,
         )
-        .execute(&mut transaction)
+        .execute(&mut *transaction)
         .await?;
         log::debug!("Deleted {} recipe_ingredients", count.rows_affected());
 
@@ -469,12 +469,12 @@ impl FoodBase {
             "#,
             recipe_id,
         )
-        .execute(&mut transaction)
+        .execute(&mut *transaction)
         .await?;
         log::debug!("Deleted {} meta_recipes", count.rows_affected());
 
         for entry in entries {
-            insert_recipe_entry(&mut transaction, recipe_id, entry).await?;
+            insert_recipe_entry(&mut *transaction, recipe_id, entry).await?;
         }
         transaction.commit().await?;
         Ok(())
@@ -519,12 +519,12 @@ impl FoodBase {
             "#,
             recipe_id,
         )
-        .execute(&mut transaction)
+        .execute(&mut *transaction)
         .await?;
         log::debug!("Deleted {} steps", count.rows_affected());
 
         for entry in entries {
-            insert_recipe_step(&mut transaction, recipe_id, entry).await?;
+            insert_recipe_step(&mut *transaction, recipe_id, entry).await?;
         }
         transaction.commit().await?;
         Ok(())
@@ -609,7 +609,7 @@ impl FoodBase {
             "#,
             recipe_id
         )
-        .fetch_all(&mut conn)
+        .fetch_all(&mut *conn)
         .await?;
         Ok(steps)
     }

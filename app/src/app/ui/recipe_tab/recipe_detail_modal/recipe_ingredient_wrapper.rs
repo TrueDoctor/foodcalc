@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use bigdecimal::BigDecimal;
 use iced::widget::text_input::Id;
 use iced::{widget::*, Command};
 use iced::{Alignment, Element, Length};
 use num::Num;
-use sqlx::types::BigDecimal;
 
 use crate::app::ui::Icon;
 use crate::db::{RecipeIngrdient, RecipeMetaIngredient, Unit};

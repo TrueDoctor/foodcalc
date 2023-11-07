@@ -11,35 +11,27 @@ default = []
 tectonic = ["foodlib/tectonic"]
 
 [dependencies]
-axum = { version = "0.6.16" }
-foodlib = { path = "../foodlib" }
-eyre = "0.6.8"
-num = "0.4.0"
-dotenv = "0.15.0"
-sqlx = { version = "0.6", features = [
+axum = { version = "0.6" }
+axum-login = { git = "https://github.com/maxcountryman/axum-login", rev = "5239b38b2698a3db3f92075b6ad430aea79c215a", features = [
+	"sqlx",
 	"postgres",
-	"macros",
-	"migrate",
-	"uuid",
-	"runtime-tokio-rustls",
-	"offline",
-	"bigdecimal",
-	"time",
-	"chrono",
 ] }
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-chrono = { version = "*", features = ["serde"] }
-log = "0.4"
-regex = "*"
-bigdecimal = { version = "0.3", features = ["serde"] }
+foodlib = { path = "../foodlib" }
 tower-http = { version = "*", features = ["cors", "fs", "trace"] }
 rust-embed = { version = "*", features = ["axum"] }
 mime_guess = "2"
-axum-login = { version = "0.5.0", features = ["sqlx", "postgres"] }
-time-macros = { version = "0.2.10", features = ["parsing"] }
-time = { version = "0.3.23", features = ["serde"] }
-rand = { version = "0.8.5", features = ["min_const_gen"] }
-fern = { version = "0.6.2", features = ["colored"] }
-maud = { version = "0.25.0", features = ["axum"] }
-futures-util = "0.3.29"
+rand = { version = "0.8", features = ["min_const_gen"] }
+fern = { version = "0.6", features = ["colored"] }
+maud = { version = "0.25", features = ["axum"] }
+futures-util = "0.3"
+
+eyre = { workspace = true }
+num = { workspace = true }
+dotenv = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+regex = { workspace = true }
+bigdecimal = { workspace = true }

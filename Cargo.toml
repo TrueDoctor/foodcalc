@@ -2,3 +2,27 @@
 resolver = "2"
 members = ["app", "metro-scrape", "backend", "foodlib"]
 default-members = ["app", "backend", "foodlib"]
+
+[workspace.dependencies]
+sqlx = { version = "0.7", features = [
+	"postgres",
+	"macros",
+	"migrate",
+	"uuid",
+	"runtime-tokio-rustls",
+	"bigdecimal",
+	"chrono",
+] }
+
+num = "0.4"
+bigdecimal = { version = "0.3", features = ["serde"] }
+dotenv = "0.15.0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+log = "0.4"
+eyre = "0.6"
+serde = { version = "1", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3

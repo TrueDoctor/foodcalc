@@ -1,7 +1,7 @@
+use bigdecimal::BigDecimal;
 use iced::alignment::Horizontal;
 use iced::widget::*;
 use iced::{Alignment, Element, Length};
-use sqlx::types::BigDecimal;
 
 use super::IngredientTabMessage;
 use crate::app::ui::util::{InputState, OptionString};

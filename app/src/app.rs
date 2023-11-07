@@ -6,7 +6,6 @@ use fern::colors::{Color, ColoredLevelConfig};
 use foodlib::FoodBase;
 use iced::widget::{button, column, container, scrollable, text};
 use iced::{Application, Command, Element, Length};
-use sqlx::PgPool;
 
 use self::ui::TabMessage;
 
@@ -86,9 +85,8 @@ impl Application for FoodCalc {
         let command = Command::perform(
             async move {
                 dotenv::dotenv().ok();
-                let pool =
-                    PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set")).await?;
-                Ok(Arc::new(FoodBase::new(pool)))
+                let database_url = &env::var("DATABASE_URL").expect("DATABASE_URL env var was not set");
+                Ok(Arc::new(FoodBase::new(database_url).await?))
             },
             Message::DatebaseConnected,
         );

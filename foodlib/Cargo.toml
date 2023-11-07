@@ -8,25 +8,16 @@ tectonic = ["dep:tectonic", "tectonic_bundles"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bigdecimal = { version = "*", features = ["serde"] }
-chrono = { version = "0.4.31", features = ["serde"] }
-eyre = "0.6.8"
-log = "0.4.20"
 metro-scrape = { version = "0.1.0", path = "../metro-scrape" }
-num = { version = "*", features = ["serde"] }
-regex = "1.10.2"
-serde = { version = "1.0.190", features = ["derive"] }
+
 tectonic = { version = "0.13.1", optional = true }
 tectonic_bundles = { version = "0.3.0", optional = true }
 
-sqlx = { version = "0.6", features = [
-	"postgres",
-	"macros",
-	"migrate",
-	"uuid",
-	"runtime-tokio-rustls",
-	"offline",
-	"bigdecimal",
-	"time",
-	"chrono",
-] }
+regex = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+num = { workspace = true }
+eyre = { workspace = true }
+bigdecimal = { workspace = true }
+serde = { workspace = true }
+sqlx = { workspace = true }
