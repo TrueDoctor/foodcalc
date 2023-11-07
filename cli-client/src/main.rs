@@ -1,37 +1,72 @@
 mod args;
 
+use foodlib::*;
+use sqlx::postgres::PgPool;
+use std::env;
+
 use args::*;
 use clap::Parser;
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    dotenv::dotenv().ok();
+    
+    let pool =
+        PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
+            .await
+            .unwrap();
+
+    let food_base = FoodBase::new(pool);
+
     let cli = CLI::parse();
-
     //println!("{:?}", cli);
-
     match &cli.command {
         Commands::List(list) => {
-            let _place_filter = list.place.as_ref();
-            let _event_filter = list.event.as_ref();
-            let _ingredient_filter = list.ingredient.as_ref();
-            let _recipe_filter = list.recipe.as_ref();
-            let _meal_filter = list.meal.as_ref();
+            let _place_flag = list.place.as_ref();
+            let _event_flag = list.event.as_ref();
+            let _ingredient_flag = list.ingredient.as_ref();
+            let _recipe_flag = list.recipe.as_ref();
+            let _meal_flag = list.meal.as_ref();
 
             match &list.list_type {
                 ListTypes::Places => {
-                    //TODO List Places
-                    println!("Listing Places");
+                    let places = food_base.get_places().await;
+                    places.unwrap().iter().for_each(|place| {
+                        print!("{}\t{}", place.place_id, place.name);
+                        if let Some(comment) = &place.comment {
+                            print!("\t{}", comment);
+                        }
+                        println!();
+                    });
                 },
                 ListTypes::Events => {
-                    //TODO List Events
-                    println!("Listing Events");
+                    let events = food_base.get_events().await;
+                    println!("{:?}", events);
+
+                    // TODO: Check why there are no events
                 },
                 ListTypes::Ingredients => {
-                    //TODO List Ingredients
                     println!("Listing Ingredients");
+                    let ingredients = food_base.get_ingredients().await;
+
+                    println!("{:?}", ingredients);
+                    ingredients.unwrap().iter().for_each(|i| {
+                        print!("{}\t{}\t{}", i.ingredient_id, i.name, i.energy);
+                        if let Some(comment) = &i.comment {
+                            print!("\t{}", comment);
+                        }
+                        println!();
+                    });
                 },
                 ListTypes::Recipes => {
-                    //TODO List Reciepes
-                    println!("Listing Reciepes");
+                    let recipes = food_base.get_recipes().await;
+                    recipes.unwrap().iter().for_each(|r| {
+                        print!("{}\t{}", r.recipe_id, r.name);
+                        if let Some(comment) = &r.comment {
+                            print!("\t{}", comment);
+                        }
+                        println!();
+                    });
                 },
                 ListTypes::Meals => {
                     //TODO List Meals

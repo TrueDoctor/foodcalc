@@ -41,7 +41,7 @@ pub struct ListCommand {
     pub meal: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ListTypes {
     /// List all places
     Places,
@@ -110,6 +110,14 @@ pub struct ShowMeal {
 pub struct PrintCommand {
     #[clap(subcommand)]
     pub print_type: PrintCommands,
+
+    #[arg(short, long, default_value = "md")]
+    // The Output Format
+    pub format: String,
+
+    #[arg(short, long)]
+    // The Output File
+    pub output_file: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
