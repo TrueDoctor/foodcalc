@@ -10,7 +10,7 @@ use clap::Parser;
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();
-    
+
     let pool =
         PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
             .await
@@ -19,7 +19,6 @@ async fn main() {
     let food_base = FoodBase::new(pool);
 
     let cli = CLI::parse();
-    //println!("{:?}", cli);
     match &cli.command {
         Commands::List(list) => {
             let _place_flag = list.place.as_ref();
@@ -38,13 +37,13 @@ async fn main() {
                         }
                         println!();
                     });
-                },
+                }
                 ListTypes::Events => {
                     let events = food_base.get_events().await;
                     println!("{:?}", events);
 
                     // TODO: Check why there are no events
-                },
+                }
                 ListTypes::Ingredients => {
                     println!("Listing Ingredients");
                     let ingredients = food_base.get_ingredients().await;
@@ -57,7 +56,7 @@ async fn main() {
                         }
                         println!();
                     });
-                },
+                }
                 ListTypes::Recipes => {
                     let recipes = food_base.get_recipes().await;
                     recipes.unwrap().iter().for_each(|r| {
@@ -67,45 +66,44 @@ async fn main() {
                         }
                         println!();
                     });
-                },
+                }
                 ListTypes::Meals => {
                     //TODO List Meals
                     println!("Listing Meals");
-                },
-                
+                }
             }
-        },
+        }
         Commands::Show(show_statement) => {
             match &show_statement.show_type {
                 ShowCommands::Event(event) => {
                     let event_ref = event.event.as_str();
                     //TODO Show Event
                     println!("Showing Event {:?}", event_ref);
-                },
+                }
                 ShowCommands::Recipe(recipe) => {
                     let recipe_ref = recipe.recipe.as_str();
                     //TODO Show Recipe
                     println!("Showing Recipe {:?}", recipe_ref);
-                },
+                }
                 ShowCommands::Meal(meal) => {
                     let meal_ref = meal.meal.as_str();
                     //TODO Show Meal
                     println!("Showing Meal {:?}", meal_ref);
-                },
+                }
             }
-        },
+        }
         Commands::Print(print_data) => {
             match &print_data.print_type {
                 PrintCommands::Mealplan(event) => {
                     let event_ref = event.event.as_ref();
                     //TODO Print Event
                     println!("Printing Event {:?}", event_ref);
-                },
+                }
                 PrintCommands::Meal(meal) => {
                     let meal_ref = meal.meal.as_str();
                     //TODO Print Meal
                     println!("Printing Meal {:?}", meal_ref);
-                },
+                }
             }
         }
         Commands::User(user_data) => {
@@ -114,21 +112,21 @@ async fn main() {
                     let user_ref = params.user.as_str();
                     //TODO Add User
                     println!("Adding User {:?}", user_ref);
-                },
+                }
                 UserCommands::Remove(params) => {
                     let user_ref = params.user.as_str();
                     //TODO Delete User
                     println!("Deleting User {:?}", user_ref);
-                },
+                }
                 UserCommands::List => {
                     //TODO List Users
                     println!("Listing Users");
-                },
+                }
             }
         }
         #[allow(unreachable_patterns)]
         _default => {
             println!("Unknown Command");
-        },
+        }
     }
 }
