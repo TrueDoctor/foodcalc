@@ -11,12 +11,9 @@ use clap::Parser;
 async fn main() {
     dotenv::dotenv().ok();
 
-    let pool =
-        PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
-            .await
-            .unwrap();
+    let database_url = &env::var("DATABASE_URL").expect("DATABASE_URL env var was not set");
 
-    let food_base = FoodBase::new(pool);
+    let food_base = FoodBase::new(database_url).await.expect("Failed to connect to database");
 
     let cli = CLI::parse();
     match &cli.command {
