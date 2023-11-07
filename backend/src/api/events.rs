@@ -58,10 +58,6 @@ pub async fn update_event(
     State(state): State<MyAppState>,
     Json(event): Json<Event>,
 ) -> impl axum::response::IntoResponse {
-    let event = match event.try_into() {
-        Ok(event) => event,
-        _ => return StatusCode::BAD_REQUEST,
-    };
     let result = state.db_connection.update_event(&event).await;
     match result {
         Ok(_) => StatusCode::CREATED,
@@ -74,22 +70,13 @@ pub async fn update_meals(
     Path(event_id): Path<i32>,
     Json(meals): Json<Vec<Meal>>,
 ) -> impl axum::response::IntoResponse {
-    let meals = meals
-        .into_iter()
-        .map(|meal| meal.try_into())
-        .collect::<Result<Vec<Meal>, _>>();
-    match meals {
-        Ok(meals) => {
-            let result = state
-                .db_connection
-                .update_event_meals(event_id, meals.into_iter())
-                .await;
-            match result {
-                Ok(_) => StatusCode::CREATED,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            }
-        }
-        _ => StatusCode::BAD_REQUEST,
+    let result = state
+        .db_connection
+        .update_event_meals(event_id, meals.into_iter())
+        .await;
+    match result {
+        Ok(_) => StatusCode::CREATED,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
 
@@ -178,23 +165,9 @@ pub async fn update_single_meal(
     State(state): State<MyAppState>,
     Json(meal_update): Json<MealUpdate>,
 ) -> impl axum::response::IntoResponse {
-    let old_meal = match meal_update.old_meal {
-        Some(old_meal) => match old_meal.try_into() {
-            Ok(old_meal) => Some(old_meal),
-            _ => return StatusCode::BAD_REQUEST,
-        },
-        None => None,
-    };
-    let new_meal = match meal_update.new_meal {
-        Some(new_meal) => match new_meal.try_into() {
-            Ok(new_meal) => Some(new_meal),
-            _ => return StatusCode::BAD_REQUEST,
-        },
-        None => None,
-    };
     let result = state
         .db_connection
-        .update_single_meal(old_meal, new_meal)
+        .update_single_meal(meal_update.old_meal, meal_update.new_meal)
         .await;
     match result {
         Ok(_) => StatusCode::CREATED,

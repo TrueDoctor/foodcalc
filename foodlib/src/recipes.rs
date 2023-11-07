@@ -250,7 +250,7 @@ impl FoodBase {
             .collect::<Vec<i32>>();
         keys.dedup();
 
-        let mut text = r#"
+        let mut text = r"
             \documentclass[11pt,a4paper]{article}
 
 
@@ -270,7 +270,7 @@ impl FoodBase {
             \usepackage{recipe}
 
             \begin{document}
-            "#
+            "
         .to_owned();
 
         for subrecipe_id in keys {

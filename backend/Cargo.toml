@@ -7,9 +7,8 @@ edition = "2021"
 
 
 [features]
-default = ["scraping"]
-scraping = ["metro-scrape"]
-tectonic = ["dep:tectonic", "tectonic_bundles"]
+default = []
+tectonic = ["foodlib/tectonic"]
 
 [dependencies]
 axum = { version = "0.6.16" }
@@ -30,13 +29,9 @@ sqlx = { version = "0.6", features = [
 ] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-metro-scrape = { path = "../metro-scrape", optional = true }
 chrono = { version = "*", features = ["serde"] }
 log = "0.4"
 regex = "*"
-tectonic = { version = "0.13.1", optional = true }
-tectonic_bundles = { version = "0.3.0", optional = true }
 bigdecimal = { version = "0.3", features = ["serde"] }
 tower-http = { version = "*", features = ["cors", "fs", "trace"] }
 rust-embed = { version = "*", features = ["axum"] }
@@ -46,8 +41,5 @@ time-macros = { version = "0.2.10", features = ["parsing"] }
 time = { version = "0.3.23", features = ["serde"] }
 rand = { version = "0.8.5", features = ["min_const_gen"] }
 fern = { version = "0.6.2", features = ["colored"] }
-axum-htmx = "0.4.0"
-askama = { version = "0.12.1", features = ["with-axum"] }
-askama_axum = "0.3.0"
 maud = { version = "0.25.0", features = ["axum"] }
 futures-util = "0.3.29"

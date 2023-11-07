@@ -5,7 +5,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 fn extract_betty_identifier_from_url(url: &str) -> Option<ArticleIdentifier> {
-    let re = Regex::new(r#"(BTY-[^/]+)/(\d+)"#).expect("regex compilation failed");
+    let re = Regex::new(r"(BTY-[^/]+)/(\d+)").expect("regex compilation failed");
     let caps = re.captures(url)?;
     Some(ArticleIdentifier {
         betty_id: caps.get(1)?.as_str().to_string(),

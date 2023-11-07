@@ -1,4 +1,4 @@
-use axum::extract::{BodyStream, State};
+use axum::extract::State;
 use maud::{html, Markup};
 
 use crate::MyAppState;
