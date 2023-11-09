@@ -621,4 +621,27 @@ impl FoodBase {
 
         Ok(records)
     }
+
+    pub async fn get_recipe_from_string_reference(&self, reference: String) -> Option<Recipe> {
+        let recipe_id = reference.parse::<i32>().unwrap_or_else(|_| -1);
+
+        let records = sqlx::query_as!(
+            Recipe, 
+            r#" 
+                SELECT * FROM recipes 
+                WHERE recipe_id = $1 OR name = $2
+                ORDER BY recipe_id
+            "#,
+            recipe_id,
+            reference
+            )
+        .fetch_one(&*self.pg_pool)
+        .await;
+
+        if records.is_ok() {
+            Some(records.unwrap())
+        } else {
+            None
+        }
+    }
 }

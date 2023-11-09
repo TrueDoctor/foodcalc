@@ -33,6 +33,8 @@ let
     # wasm-pack needs this
     extensions = [ "rust-src" ];
   };
+  
+  lib = pkgs.lib;
 in
   # Make a shell with the dependencies we need
   pkgs.mkShell {
@@ -43,7 +45,7 @@ in
       pkgs.cargo-watch
       pkgs.wasm-pack
 
-      #pkgs.openssl
+      pkgs.openssl
       pkgs.openssl.dev
       pkgs.glib
       pkgs.gtk3
@@ -61,5 +63,6 @@ in
     shellHook = ''
     alias cargo='mold --run cargo'
     '';
+    LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.openssl ];
   }
 

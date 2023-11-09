@@ -1,7 +1,6 @@
 mod args;
 
 use foodlib::*;
-use sqlx::postgres::PgPool;
 use std::env;
 
 use args::*;
@@ -13,9 +12,16 @@ async fn main() {
 
     let database_url = &env::var("DATABASE_URL").expect("DATABASE_URL env var was not set");
 
-    let food_base = FoodBase::new(database_url).await.expect("Failed to connect to database");
+    let food_base = FoodBase::new(database_url)
+        .await
+        .expect("Failed to connect to database");
 
     let cli = CLI::parse();
+
+    if cli.debug {
+        println!("{:?}", cli);
+    }
+
     match &cli.command {
         Commands::List(list) => {
             let _place_flag = list.place.as_ref();
@@ -23,6 +29,61 @@ async fn main() {
             let _ingredient_flag = list.ingredient.as_ref();
             let _recipe_flag = list.recipe.as_ref();
             let _meal_flag = list.meal.as_ref();
+
+            let _place_filter = {
+                if let Some(place) = &list.place {
+                    let results = food_base
+                        .get_place_from_string_reference(place.to_string())
+                        .await;
+                    if results.is_ok() {
+                        Some(results.unwrap())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            let _event_filter = {
+                if let Some(event) = &list.event {
+                    food_base
+                        .get_event_from_string_reference(event.to_string())
+                        .await
+                } else {
+                    None
+                }
+            };
+
+            let _ingredient_filter = {
+                if let Some(ingredient) = &list.ingredient {
+                    food_base
+                        .get_ingredient_from_string_reference(ingredient.to_string())
+                        .await
+                } else {
+                    None
+                }
+            };
+
+            let _recipe_filter = {
+                if let Some(recipe) = &list.recipe {
+                    food_base
+                        .get_recipe_from_string_reference(recipe.to_string())
+                        .await
+                } else {
+                    None
+                }
+            };
+
+            let _meal_filter: Option<Meal> = None;
+
+            if cli.debug {
+                println!("Place Filter: {:?}", _place_filter);
+                println!("Event Filter: {:?}", _event_filter);
+                println!("Ingredient Filter: {:?}", _ingredient_filter);
+                println!("Recipe Filter: {:?}", _recipe_filter);
+                println!("Meal Filter: {:?}", _meal_filter);
+            }
 
             match &list.list_type {
                 ListTypes::Places => {
@@ -37,9 +98,17 @@ async fn main() {
                 }
                 ListTypes::Events => {
                     let events = food_base.get_events().await;
-                    println!("{:?}", events);
+                    events.unwrap().iter().for_each(|e| {
+                        print!("{}\t{}", e.event_id, e.event_name);
+                        if let Some(comment) = &e.comment {
+                            print!("\t{}", comment);
+                        }
 
-                    // TODO: Check why there are no events
+                        if let Some(budget) = &e.budget {
+                            print!("\t{}", budget.to_bigdecimal(2));
+                        }
+                        println!();
+                    });
                 }
                 ListTypes::Ingredients => {
                     println!("Listing Ingredients");

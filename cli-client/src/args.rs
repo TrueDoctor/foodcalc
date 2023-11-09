@@ -1,11 +1,15 @@
-use std::str::FromStr;
 use clap::{Args, Parser, Subcommand};
+use std::str::FromStr;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
 pub struct CLI {
     #[clap(subcommand)]
     pub command: Commands,
+
+    #[arg(short, long)]
+    /// Enable Debug Output
+    pub debug: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -24,7 +28,7 @@ pub struct ListCommand {
     #[clap(short = 'p', long = "place")]
     /// Place to reference (use ID or name)
     pub place: Option<String>,
-#[clap(short = 'e', long = "event")]
+    #[clap(short = 'e', long = "event")]
     /// Event to reference (use ID or name)
     pub event: Option<String>,
 
@@ -55,7 +59,7 @@ pub enum ListTypes {
     Meals,
 }
 
-impl FromStr for ListTypes{
+impl FromStr for ListTypes {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -111,7 +115,7 @@ pub struct PrintCommand {
     #[clap(subcommand)]
     pub print_type: PrintCommands,
 
-    #[arg(short, long, default_value = "md")]
+    #[arg(short, long, default_value = "tsv")]
     // The Output Format
     pub format: String,
 
@@ -150,7 +154,7 @@ pub struct UserCommand {
     #[clap(subcommand)]
     pub user_type: UserCommands,
 }
- 
+
 #[derive(Debug, Subcommand)]
 pub enum UserCommands {
     /// Print the mealplan for a given event

@@ -238,6 +238,29 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn get_ingredient_from_string_reference(&self, reference: String) -> Option<Ingredient> {
+        let ingredient_id = reference.parse::<i32>().unwrap_or_else(|_| -1);
+        let records = sqlx::query_as!(
+            Ingredient,
+            r#" 
+                SELECT * FROM ingredients 
+                WHERE name = $1 OR ingredient_id = $2
+                ORDER BY ingredient_id
+            "#,
+            reference,
+            ingredient_id
+
+        )
+        .fetch_one(&*self.pg_pool)
+        .await;
+
+        if let Ok(record) = records {
+            Some(record)
+        } else {
+            None
+        }
+    }
+
     pub async fn get_units(&self) -> eyre::Result<Vec<Unit>> {
         struct FetchUnit {
             pub unit_id: i32,

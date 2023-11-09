@@ -103,6 +103,32 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn get_event_from_string_reference(&self, reference: String) -> Option<Event> {
+        let event_id = reference.parse::<i32>().unwrap_or(-1);
+        let records = sqlx::query_as!(
+            Event,
+            r#" SELECT event_id as "event_id!",
+                    event_name as "event_name!",
+                    events.comment as "comment",
+                    budget as "budget"
+                FROM events INNER JOIN event_meals USING (event_id)
+                WHERE event_id = $1 OR event_name = $2
+                GROUP BY event_id, event_name, events.comment, budget
+                ORDER BY MIN(start_time) DESC
+            "#,
+            event_id,
+            reference
+        )
+        .fetch_one(&*self.pg_pool)
+        .await;
+
+        if records.is_ok() {
+            Some(records.unwrap())
+        } else {
+            None
+        }
+    }
+
     pub async fn get_event_recipe_ingredients(
         &self,
         event_id: i32,
@@ -349,6 +375,23 @@ impl FoodBase {
             "#
         )
         .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
+    pub async fn get_place_from_string_reference(&self, reference: String) -> eyre::Result<Place> {
+        let place_id = reference.parse::<i32>()?;
+        let records = sqlx::query_as!(
+            Place,
+            r#" SELECT *
+                FROM places
+                WHERE place_id = $1
+                    OR name = $2
+            "#,
+            place_id,
+            reference
+        )
+        .fetch_one(&*self.pg_pool)
         .await?;
         Ok(records)
     }
