@@ -143,8 +143,44 @@ async fn main() {
             match &show_statement.show_type {
                 ShowCommands::Event(event) => {
                     let event_ref = event.event.as_str();
-                    //TODO Show Event
-                    println!("Showing Event {:?}", event_ref);
+
+                    let event = food_base
+                        .get_event_from_string_reference(event_ref.to_string())
+                        .await;
+
+                    if let Some(event) = event {
+                        print!("{} ({})", event.event_name, event.event_id);
+                        if let Some(comment) = &event.comment {
+                            print!(", {}", comment);
+                        }
+                        println!();
+                        if let Some(budget) = &event.budget {
+                            println!("Budget: {}€", budget.to_bigdecimal(2));
+                        }
+
+                        let _ = food_base.get_event_cost(event.event_id).await.map(|cost| {
+                            println!("Cost: {}€", cost.to_bigdecimal(2));
+                        });
+
+                        let meals = food_base
+                            .get_event_meals(event.event_id)
+                            .await
+                            .unwrap_or_else(|_| Vec::new());
+
+                        if meals.len() > 0 {
+                            println!("Meals:");
+                            meals.iter().for_each(|meal| {
+                                println!(
+                                    "\t{}  -  {}\t{} ({} Servings)",
+                                    meal.start_time, meal.end_time, meal.name, meal.servings
+                                );
+                            });
+                        } else {
+                            println!("No Meals");
+                        }
+                    } else {
+                        println!("Event not found");
+                    }
                 }
                 ShowCommands::Recipe(recipe) => {
                     let recipe_ref = recipe.recipe.as_str();
@@ -174,19 +210,48 @@ async fn main() {
         }
         Commands::User(user_data) => {
             match &user_data.user_type {
-                UserCommands::Add(params) => {
-                    let user_ref = params.user.as_str();
-                    //TODO Add User
-                    println!("Adding User {:?}", user_ref);
+                UserCommands::Create(params) => {
+                    let user_name = params.user.as_str();
+                    let user_password = params.password.as_str();
+                    let user_email = params.email.as_str();
+                    let is_admin = params.admin;
+
+                    let credentials = Credenitals {
+                        username: user_name.to_string(),
+                        password: user_password.to_string(),
+                    };
+                    println!("Adding User {:?}", user_name);
+
+                    if let Ok(user) = food_base.create_user(user_email.to_string(), credentials, is_admin).await {
+                        println!("User {} created", user.username);
+                    } else {
+                        println!("There was an Error");
+                    }
                 }
                 UserCommands::Remove(params) => {
                     let user_ref = params.user.as_str();
-                    //TODO Delete User
-                    println!("Deleting User {:?}", user_ref);
+                    let user = food_base.get_user_by_string_reference(user_ref.to_string()).await;
+
+                    if let Some(user) = user {
+                        println!("Removing User {}", user.username);
+
+                        if let Ok(_) = food_base.delete_user(user.id).await {
+                            println!("User {} removed", user.username);
+                        } else {
+                            println!("User {} could not be found", user.username);
+                        }
+                    } else {
+                        println!("User not found");
+                    }
                 }
                 UserCommands::List => {
-                    //TODO List Users
-                    println!("Listing Users");
+                    food_base.get_users().await.unwrap().iter().for_each(|user| {
+                        print!("{}\t{}", user.id, user.username);
+                        if user.is_admin {
+                            print!("\tAdmin");
+                        }
+                        println!();
+                    });
                 }
             }
         }

@@ -157,13 +157,33 @@ pub struct UserCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum UserCommands {
+
+    #[clap(alias = "add")]
     /// Print the mealplan for a given event
-    Add(UserArg),
+    Create(CreateArgs),
+
     #[clap(alias = "rm")]
     /// Print the recipe for a given meal
     Remove(UserArg),
+
     /// Gives a List of all known Users and their Permissions
     List,
+}
+
+#[derive(Debug, Args)]
+pub struct CreateArgs {
+    /// Username of the new user
+    pub user: String,
+    
+    /// Password of the new user
+    pub password: String,
+
+    /// Email of the new user
+    pub email: String,
+
+    #[arg(short, long)]
+    /// Give the user admin permissions
+    pub admin: bool,
 }
 
 #[derive(Debug, Args)]

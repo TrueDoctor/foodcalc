@@ -9,8 +9,8 @@ use crate::FoodBase;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credenitals {
-    username: String,
-    password: String,
+    pub username: String,
+    pub password: String,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -101,6 +101,26 @@ impl FoodBase {
         .await?;
 
         Ok(user)
+    }
+
+    pub async fn get_user_by_string_reference(&self, reference: String) -> Option<User> {
+        let id = reference.parse::<i64>().unwrap_or(-1);
+        let user = sqlx::query_as!(
+            User,
+            r#"
+                SELECT * FROM users 
+                WHERE id = $1 OR username = $2 OR email = $2
+            "#,
+            id,
+            reference
+        )
+        .fetch_one(&*self.pg_pool)
+        .await;
+
+        match user {
+            Ok(user) => Some(user),
+            Err(_) => None,
+        }
     }
 
     pub async fn get_users(&self) -> Result<Vec<User>, sqlx::Error> {
