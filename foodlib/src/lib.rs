@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use sqlx::PgPool;
 
+mod meals;
 mod events;
 mod ingredients;
 mod recipes;
