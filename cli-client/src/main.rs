@@ -220,25 +220,28 @@ async fn main() {
                         username: user_name.to_string(),
                         password: user_password.to_string(),
                     };
-                    println!("Adding User {:?}", user_name);
 
-                    if let Ok(user) = food_base.create_user(user_email.to_string(), credentials, is_admin).await {
-                        println!("User {} created", user.username);
-                    } else {
-                        println!("There was an Error");
+                    match food_base.create_user(user_email.to_string(), credentials, is_admin).await {
+                        Ok(_) => {
+                            println!("Created user '{}' (Admin: {})", user_name, is_admin);
+                        }
+                        Err(error) => {
+                            println!("Error: {}", error)
+                        }
                     }
-                }
+                 }
                 UserCommands::Remove(params) => {
                     let user_ref = params.user.as_str();
                     let user = food_base.get_user_by_string_reference(user_ref.to_string()).await;
 
                     if let Some(user) = user {
-                        println!("Removing User {}", user.username);
-
-                        if let Ok(_) = food_base.delete_user(user.id).await {
-                            println!("User {} removed", user.username);
-                        } else {
-                            println!("User {} could not be found", user.username);
+                        match food_base.delete_user(user.id).await {
+                            Ok(_) => {
+                                println!("User {} removed", user.username);
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
                         }
                     } else {
                         println!("User not found");
