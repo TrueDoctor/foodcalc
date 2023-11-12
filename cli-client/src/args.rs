@@ -126,6 +126,7 @@ pub struct PrintCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PrintCommands {
+    #[clap(alias = "event")]
     /// Print the mealplan for a given event
     Mealplan(PrintEvent),
     /// Print the recipe for a given meal

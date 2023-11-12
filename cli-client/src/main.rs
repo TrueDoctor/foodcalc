@@ -134,8 +134,15 @@ async fn main() {
                     });
                 }
                 ListTypes::Meals => {
-                    //TODO List Meals
-                    println!("Listing Meals");
+                    let meals = if _event_filter.is_some() {
+                        food_base.get_event_meals(_event_filter.unwrap().event_id).await
+                    } else {
+                        food_base.get_meals().await
+                    };
+                    meals.unwrap().iter().for_each(|m| {
+                        //TODO Add better Meal Formatting
+                        println!("{:?}", m);
+                    })
                 }
             }
         }
@@ -197,9 +204,26 @@ async fn main() {
         Commands::Print(print_data) => {
             match &print_data.print_type {
                 PrintCommands::Mealplan(event) => {
-                    let event_ref = event.event.as_ref();
-                    //TODO Print Event
-                    println!("Printing Event {:?}", event_ref);
+                    let event_ref = event.event.as_ref().unwrap();
+
+                    let event = food_base
+                        .get_event_from_string_reference(event_ref.to_string())
+                        .await;
+
+                    match event {
+                        Some(event) => {
+                            let meals = food_base.get_event_meals(event.event_id).await.unwrap();
+
+                            meals.iter().for_each(|m| {
+                                //TODO Add better Meal Formatting
+                                println!("{:?}", m);
+
+                            });
+                        }
+                        None => {
+                            println!("Could not find Event")
+                        }
+                    }
                 }
                 PrintCommands::Meal(meal) => {
                     let meal_ref = meal.meal.as_str();

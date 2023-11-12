@@ -2,15 +2,16 @@ use std::sync::Arc;
 
 use sqlx::PgPool;
 
-mod meals;
 mod events;
 mod ingredients;
+mod meals;
 mod recipes;
 mod users;
 mod util;
 
 pub use events::*;
 pub use ingredients::*;
+pub use meals::*;
 pub use recipes::*;
 pub use users::*;
 
