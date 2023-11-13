@@ -9,10 +9,10 @@ use crate::FoodBase;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Meal {
     pub event_id: i32,
+    #[tabled(skip)]
     pub recipe_id: i32,
     pub name: String,
-    #[tabled(display_with = "crate::util::display_optional")]
-    pub comment: Option<String>,
+    #[tabled(skip)]
     pub place_id: i32,
     pub place: String,
     pub start_time: NaiveDateTime,
@@ -26,6 +26,8 @@ pub struct Meal {
     #[tabled(display_with = "crate::util::format_pg_money")]
     pub price: PgMoney,
     pub servings: i32,
+    #[tabled(display_with = "crate::util::display_optional")]
+    pub comment: Option<String>,
 }
 
 impl Default for Meal {
