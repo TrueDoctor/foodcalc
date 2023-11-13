@@ -6,16 +6,18 @@ use sqlx::{
     postgres::types::{PgInterval, PgMoney},
     types::BigDecimal,
 };
+use tabled::Tabled;
 
 use crate::{
     ingredients::{Ingredient, Unit},
     FoodBase,
 };
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Recipe {
     pub recipe_id: i32,
     pub name: String,
+    #[tabled(display_with = "crate::util::display_optional")]
     pub comment: Option<String>,
 }
 

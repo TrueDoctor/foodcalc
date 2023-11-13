@@ -1,5 +1,6 @@
 use num::FromPrimitive;
 use num::Num;
+use tabled::Tabled;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -14,11 +15,12 @@ use crate::{
 
 pub const METRO: i32 = 0;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Ingredient {
     pub ingredient_id: i32,
     pub name: String,
     pub energy: BigDecimal,
+    #[tabled(display_with = "crate::util::display_optional")]
     pub comment: Option<String>,
 }
 

@@ -1,6 +1,8 @@
 use core::fmt::Display;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::types::PgMoney, types::chrono::NaiveDateTime};
+use std::borrow::Cow;
+use tabled::Tabled;
 
 use crate::{recipes::EventRecipeIngredient, FoodBase};
 
@@ -21,10 +23,36 @@ impl Display for Event {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+impl Tabled for Event {
+    const LENGTH: usize = 4;
+    fn headers() -> Vec<Cow<'static, str>> {
+        vec![
+            "ID".into(),
+            "Name".into(),
+            "Comment".into(),
+            "Budget".into(),
+        ]
+    }
+
+    fn fields(&self) -> Vec<Cow<'_, str>> {
+        vec![
+            self.event_id.to_string().into(),
+            self.event_name.clone().into(),
+            self.comment.clone().unwrap_or_default().into(),
+            self.budget
+                .clone()
+                .map(crate::util::format_pg_money)
+                .unwrap_or_default()
+                .into(),
+        ]
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Place {
     pub place_id: i32,
     pub name: String,
+    #[tabled(display_with = "crate::util::display_optional")]
     pub comment: Option<String>,
 }
 

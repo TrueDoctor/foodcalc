@@ -2,14 +2,16 @@ use bigdecimal::BigDecimal;
 
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::types::PgMoney, types::chrono::NaiveDateTime};
+use tabled::Tabled;
 
 use crate::FoodBase;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Meal {
     pub event_id: i32,
     pub recipe_id: i32,
     pub name: String,
+    #[tabled(display_with = "crate::util::display_optional")]
     pub comment: Option<String>,
     pub place_id: i32,
     pub place: String,
@@ -21,6 +23,7 @@ pub struct Meal {
         serialize_with = "crate::util::serialize_money",
         deserialize_with = "crate::util::deserialize_money"
     )]
+    #[tabled(display_with = "crate::util::format_pg_money")]
     pub price: PgMoney,
     pub servings: i32,
 }
@@ -77,6 +80,41 @@ impl FoodBase {
             GROUP BY event_meals.event_id, event_meals.recipe_id, recipe, event_meals.place_id, place, event_meals.start_time, event_meals.servings
             ORDER BY event_meals.start_time "#,
             event_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
+    pub async fn get_event_meal(&self, event_id: i32, recipe_id: i32) -> eyre::Result<Vec<Meal>> {
+        let records = sqlx::query_as!(
+            Meal,
+            r#" SELECT
+            event_meals.event_id as "event_id!",
+            event_meals.recipe_id as "recipe_id!",
+             recipe as "name!",
+             comment,
+             event_meals.place_id as "place_id!",
+             place as "place!",
+             event_meals.start_time as "start_time!",
+             event_meals.end_time as "end_time!",
+             round(sum(weight),2) as "weight!",
+             round(sum(energy) / event_meals.servings,0) as "energy!",
+             sum(price) as "price!",
+             event_meals.servings as "servings!"
+
+            FROM event_ingredients
+            INNER JOIN event_meals
+            ON event_ingredients.event_id=event_meals.event_id
+            AND event_ingredients.recipe_id = event_meals.recipe_id
+            AND event_ingredients.place_id = event_meals.place_id
+            AND event_ingredients.start_time = event_meals.start_time
+
+            WHERE event_meals.event_id = $1 AND event_meals.recipe_id = $2
+            GROUP BY event_meals.event_id, event_meals.recipe_id, recipe, event_meals.place_id, place, event_meals.start_time, event_meals.servings
+            ORDER BY event_meals.start_time "#,
+            event_id,
+            recipe_id
         )
         .fetch_all(&*self.pg_pool)
         .await?;

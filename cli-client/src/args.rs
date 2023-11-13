@@ -105,8 +105,10 @@ pub struct ShowRecipe {
 
 #[derive(Debug, Args)]
 pub struct ShowMeal {
-    /// Meal to show (use ID or name)
-    pub meal: String,
+    /// Event to show (use ID or name)
+    pub event: String,
+    /// Recipe to show (use ID or name)
+    pub recipe: String,
 }
 
 // ---- Print Commands ----

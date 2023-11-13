@@ -5,6 +5,10 @@ use std::env;
 
 use args::*;
 use clap::Parser;
+use tabled::{
+    settings::{Settings, Style},
+    Table,
+};
 
 #[tokio::main]
 async fn main() {
@@ -15,6 +19,8 @@ async fn main() {
     let food_base = FoodBase::new(database_url)
         .await
         .expect("Failed to connect to database");
+
+    let table_config = Settings::default().with(Style::rounded());
 
     let cli = CLI::parse();
 
@@ -87,62 +93,37 @@ async fn main() {
 
             match &list.list_type {
                 ListTypes::Places => {
-                    let places = food_base.get_places().await;
-                    places.unwrap().iter().for_each(|place| {
-                        print!("{}\t{}", place.place_id, place.name);
-                        if let Some(comment) = &place.comment {
-                            print!("\t{}", comment);
-                        }
-                        println!();
-                    });
+                    let places = food_base.get_places().await.unwrap();
+                    let table = Table::new(places).with(table_config).to_string();
+                    print!("{}", table);
                 }
                 ListTypes::Events => {
-                    let events = food_base.get_events().await;
-                    events.unwrap().iter().for_each(|e| {
-                        print!("{}\t{}", e.event_id, e.event_name);
-                        if let Some(comment) = &e.comment {
-                            print!("\t{}", comment);
-                        }
-
-                        if let Some(budget) = &e.budget {
-                            print!("\t{}", budget.to_bigdecimal(2));
-                        }
-                        println!();
-                    });
+                    let events = food_base.get_events().await.unwrap();
+                    let table = Table::new(events).with(table_config).to_string();
+                    print!("{}", table);
                 }
                 ListTypes::Ingredients => {
-                    println!("Listing Ingredients");
-                    let ingredients = food_base.get_ingredients().await;
-
-                    println!("{:?}", ingredients);
-                    ingredients.unwrap().iter().for_each(|i| {
-                        print!("{}\t{}\t{}", i.ingredient_id, i.name, i.energy);
-                        if let Some(comment) = &i.comment {
-                            print!("\t{}", comment);
-                        }
-                        println!();
-                    });
+                    let ingredients = food_base.get_ingredients().await.unwrap();
+                    let table = Table::new(ingredients).with(table_config).to_string();
+                    print!("{}", table);
                 }
                 ListTypes::Recipes => {
-                    let recipes = food_base.get_recipes().await;
-                    recipes.unwrap().iter().for_each(|r| {
-                        print!("{}\t{}", r.recipe_id, r.name);
-                        if let Some(comment) = &r.comment {
-                            print!("\t{}", comment);
-                        }
-                        println!();
-                    });
+                    let recipes = food_base.get_recipes().await.unwrap();
+                    let table = Table::new(recipes).with(table_config).to_string();
+                    print!("{}", table);
                 }
                 ListTypes::Meals => {
                     let meals = if _event_filter.is_some() {
-                        food_base.get_event_meals(_event_filter.unwrap().event_id).await
+                        food_base
+                            .get_event_meals(_event_filter.unwrap().event_id)
+                            .await
                     } else {
                         food_base.get_meals().await
                     };
-                    meals.unwrap().iter().for_each(|m| {
-                        //TODO Add better Meal Formatting
-                        println!("{:?}", m);
-                    })
+                    let meals = meals.unwrap();
+
+                    let table = Table::new(meals).with(table_config).to_string();
+                    print!("{}", table);
                 }
             }
         }
@@ -191,13 +172,72 @@ async fn main() {
                 }
                 ShowCommands::Recipe(recipe) => {
                     let recipe_ref = recipe.recipe.as_str();
-                    //TODO Show Recipe
                     println!("Showing Recipe {:?}", recipe_ref);
+
+                    let recipe = food_base
+                        .get_recipe_from_string_reference(recipe_ref.to_string())
+                        .await;
+
+                    if let Some(recipe) = recipe {
+                        println!("Showing Recipe {:?}", recipe);
+                        //TODO Add Recipe Formatting
+                    } else {
+                        println!("Recipe not found");
+                    }
                 }
                 ShowCommands::Meal(meal) => {
-                    let meal_ref = meal.meal.as_str();
-                    //TODO Show Meal
-                    println!("Showing Meal {:?}", meal_ref);
+                    let _recipe_ref = meal.recipe.as_str();
+                    let recipe = food_base
+                        .get_recipe_from_string_reference(_recipe_ref.to_string())
+                        .await;
+
+                    if recipe == None {
+                        println!("Recipe not found");
+                        return;
+                    }
+                    let recipe = recipe.unwrap();
+
+                    let _event_ref = meal.event.as_str();
+                    let event = food_base
+                        .get_event_from_string_reference(_event_ref.to_string())
+                        .await;
+
+                    if event == None {
+                        println!("Event not found");
+                        return;
+                    }
+                    let event = event.unwrap();
+
+                    let meals = food_base
+                        .get_event_meal(event.event_id, recipe.recipe_id)
+                        .await;
+
+                    match meals {
+                        Ok(meals) => {
+                            match meals.len() {
+                                0 => {
+                                    println!("No Meals found");
+                                }
+                                1 => {
+                                    let meal = meals.first().unwrap();
+                                    // TODO Add better Meal Formatting
+                                    println!("Showing Meal {:?}", meal);
+                                }
+                                _ => {
+                                    println!("Multiple Meals found: ");
+                                    meals.iter().for_each(|meal| {
+                                        println!(
+                                            "{} - {}, {} Servings",
+                                            meal.start_time, meal.end_time, meal.servings
+                                        );
+                                    });
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            println!("Error: {}", error);
+                        }
+                    }
                 }
             }
         }
@@ -217,7 +257,6 @@ async fn main() {
                             meals.iter().for_each(|m| {
                                 //TODO Add better Meal Formatting
                                 println!("{:?}", m);
-
                             });
                         }
                         None => {
@@ -232,56 +271,64 @@ async fn main() {
                 }
             }
         }
-        Commands::User(user_data) => {
-            match &user_data.user_type {
-                UserCommands::Create(params) => {
-                    let user_name = params.user.as_str();
-                    let user_password = params.password.as_str();
-                    let user_email = params.email.as_str();
-                    let is_admin = params.admin;
+        Commands::User(user_data) => match &user_data.user_type {
+            UserCommands::Create(params) => {
+                let user_name = params.user.as_str();
+                let user_password = params.password.as_str();
+                let user_email = params.email.as_str();
+                let is_admin = params.admin;
 
-                    let credentials = Credenitals {
-                        username: user_name.to_string(),
-                        password: user_password.to_string(),
-                    };
+                let credentials = Credenitals {
+                    username: user_name.to_string(),
+                    password: user_password.to_string(),
+                };
 
-                    match food_base.create_user(user_email.to_string(), credentials, is_admin).await {
+                match food_base
+                    .create_user(user_email.to_string(), credentials, is_admin)
+                    .await
+                {
+                    Ok(_) => {
+                        println!("Created user '{}' (Admin: {})", user_name, is_admin);
+                    }
+                    Err(error) => {
+                        println!("Error: {}", error)
+                    }
+                }
+            }
+            UserCommands::Remove(params) => {
+                let user_ref = params.user.as_str();
+                let user = food_base
+                    .get_user_by_string_reference(user_ref.to_string())
+                    .await;
+
+                if let Some(user) = user {
+                    match food_base.delete_user(user.id).await {
                         Ok(_) => {
-                            println!("Created user '{}' (Admin: {})", user_name, is_admin);
+                            println!("User {} removed", user.username);
                         }
                         Err(error) => {
                             println!("Error: {}", error)
                         }
                     }
-                 }
-                UserCommands::Remove(params) => {
-                    let user_ref = params.user.as_str();
-                    let user = food_base.get_user_by_string_reference(user_ref.to_string()).await;
-
-                    if let Some(user) = user {
-                        match food_base.delete_user(user.id).await {
-                            Ok(_) => {
-                                println!("User {} removed", user.username);
-                            }
-                            Err(error) => {
-                                println!("Error: {}", error)
-                            }
-                        }
-                    } else {
-                        println!("User not found");
-                    }
+                } else {
+                    println!("User not found");
                 }
-                UserCommands::List => {
-                    food_base.get_users().await.unwrap().iter().for_each(|user| {
+            }
+            UserCommands::List => {
+                food_base
+                    .get_users()
+                    .await
+                    .unwrap()
+                    .iter()
+                    .for_each(|user| {
                         print!("{}\t{}", user.id, user.username);
                         if user.is_admin {
                             print!("\tAdmin");
                         }
                         println!();
                     });
-                }
             }
-        }
+        },
         #[allow(unreachable_patterns)]
         _default => {
             println!("Unknown Command");

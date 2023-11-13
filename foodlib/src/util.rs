@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, fmt::Display, borrow::Borrow};
 
 use serde::Deserialize;
 use sqlx::postgres::types::{PgInterval, PgMoney};
@@ -70,4 +70,15 @@ where
         months: 0,
     };
     Ok(interval)
+}
+
+pub(crate) fn display_optional<T: Display>(value: &Option<T>) -> String {
+    match value {
+        Some(value) => value.to_string(),
+        None => "".to_string(),
+    }
+}
+
+pub (crate) fn format_pg_money(money: impl Borrow <PgMoney>) -> String {
+    format!("{} €", money.borrow().to_bigdecimal(2))
 }
