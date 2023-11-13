@@ -6,7 +6,7 @@ use std::env;
 use args::*;
 use clap::Parser;
 use tabled::{
-    settings::{Settings, Style},
+    settings::{locator::ByColumnName, Disable, Settings, Style},
     Table,
 };
 
@@ -254,10 +254,15 @@ async fn main() {
                         Some(event) => {
                             let meals = food_base.get_event_meals(event.event_id).await.unwrap();
 
-                            meals.iter().for_each(|m| {
-                                //TODO Add better Meal Formatting
-                                println!("{:?}", m);
-                            });
+                            // TODO Filter Columns
+                            let table = Table::new(meals)
+                                .with(Disable::column(ByColumnName::new("event_id")))
+                                .with(Disable::column(ByColumnName::new("weight")))
+                                .with(Disable::column(ByColumnName::new("energy")))
+                                .with(Disable::column(ByColumnName::new("price")))
+                                .with(table_config)
+                                .to_string();
+                            print!("{}", table);
                         }
                         None => {
                             println!("Could not find Event")
