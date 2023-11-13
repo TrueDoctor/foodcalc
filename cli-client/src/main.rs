@@ -157,12 +157,11 @@ async fn main() {
 
                         if meals.len() > 0 {
                             println!("Meals:");
-                            meals.iter().for_each(|meal| {
-                                println!(
-                                    "\t{}  -  {}\t{} ({} Servings)",
-                                    meal.start_time, meal.end_time, meal.name, meal.servings
-                                );
-                            });
+                            let table = Table::new(meals)
+                                .with(Disable::column(ByColumnName::new("event_id")))
+                                .with(table_config)
+                                .to_string();
+                            print!("{}", table);
                         } else {
                             println!("No Meals");
                         }
