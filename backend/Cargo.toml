@@ -1,0 +1,34 @@
+[package]
+name = "backend"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+[features]
+default = []
+tectonic = ["foodlib/tectonic"]
+
+[dependencies]
+axum = { version = "0.6" }
+foodlib = { path = "../foodlib" }
+tower-http = { version = "*", features = ["cors", "fs", "trace"] }
+rust-embed = { version = "*", features = ["axum"] }
+mime_guess = "2"
+rand = { version = "0.8", features = ["min_const_gen"] }
+fern = { version = "0.6", features = ["colored"] }
+maud = { version = "0.25", features = ["axum"] }
+futures-util = "0.3"
+
+axum-login = { workspace = true }
+eyre = { workspace = true }
+num = { workspace = true }
+dotenv = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+regex = { workspace = true }
+bigdecimal = { workspace = true }

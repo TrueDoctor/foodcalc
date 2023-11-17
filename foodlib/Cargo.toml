@@ -1,0 +1,26 @@
+[package]
+name = "foodlib"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+tectonic = ["dep:tectonic", "tectonic_bundles"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+metro-scrape = { version = "0.1.0", path = "../metro-scrape" }
+
+tectonic = { version = "0.13.1", optional = true }
+tectonic_bundles = { version = "0.3.0", optional = true }
+
+axum-login = { workspace = true }
+regex = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+num = { workspace = true }
+eyre = { workspace = true }
+bigdecimal = { workspace = true }
+serde = { workspace = true }
+sqlx = { workspace = true }
+bcrypt = "0.15.0"
+tabled = "0.14.0"

@@ -1,0 +1,48 @@
+[package]
+name = "foodcalc"
+version = "0.1.0"
+edition = "2021"
+authors = ["Dennis Kobert <dennis@kobert.dev>"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["scraping"]
+scraping = ["metro-scrape"]
+tectonic = ["foodlib/tectonic"]
+
+[dependencies]
+metro-scrape = { path = "../metro-scrape", optional = true }
+
+futures = "0.3"
+serde_json = "1.0"
+iced = { version = "0.5.0", features = ["tokio"] }
+iced_searchable_picklist = { version = "0.2" }
+
+fern = { version = "0.6", features = ["colored"] }
+iced_aw = { git = "https://github.com/iced-rs/iced_aw", rev = "5e1c1d0b6b907dc990490034bb3519cf836bd095", default-features = false, features = [
+	"tabs",
+] }
+
+
+regex = { workspace = true }
+
+lazy_static = "1.4.0"
+parse_duration = "2.1.1"
+time-macros = { version = "0.2.10", features = [
+	"formatting",
+	"parsing",
+	"serde",
+] }
+time = { version = "0.3.23", features = ["macros", "serde", "parsing"] }
+foodlib = { version = "0.1.0", path = "../foodlib" }
+
+eyre = { workspace = true }
+bigdecimal = { workspace = true }
+serde = { workspace = true }
+dotenv = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+tokio = { workspace = true }
+sqlx = { workspace = true }
+num = { workspace = true }

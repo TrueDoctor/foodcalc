@@ -1,36 +1,33 @@
-[package]
-name = "foodcalc"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+resolver = "2"
+members = ["app", "metro-scrape", "backend", "foodlib", "cli-client"]
+default-members = ["app", "backend", "foodlib"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace.dependencies]
+sqlx = { version = "0.7", features = [
+	"postgres",
+	"macros",
+	"migrate",
+	"uuid",
+	"runtime-tokio-rustls",
+	"bigdecimal",
+	"chrono",
+] }
 
-[features]
-default = []
-scraping = ["inline-python"]
-
-[dependencies]
-sqlx = { version = "0.5.13", features = ["postgres", "macros", "migrate", "uuid", "runtime-tokio-rustls", "offline", "bigdecimal", "time"]}
-tokio = { version = "1", features = ["full"] }
-
-futures = "0.3"
+num = "0.4"
+bigdecimal = { version = "0.3", features = ["serde"] }
 dotenv = "0.15.0"
-crossterm = { version = "0.23", features = [ "serde" ] }
-serde = {version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tui = { version = "0.17", default-features = false, features = ['crossterm', 'serde'] }
-
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 log = "0.4"
-
-tui-logger = "0.7"
-#reqwest = { version = "0.11", features = ["blocking", "cookies"] }
-#scraper = "0.12.0"
-
-inline-python = {version = "*", optional = true}
-lazy_static = {version = "1.4"}
-num = "*"
-regex = "*"
-once_cell = "*"
-
-
 eyre = "0.6"
+serde = { version = "1", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+axum-login = { git = "https://github.com/maxcountryman/axum-login", rev = "5239b38b2698a3db3f92075b6ad430aea79c215a", features = [
+	"sqlx",
+	"postgres",
+] }
+
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3
