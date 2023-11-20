@@ -6,7 +6,12 @@ use std::env;
 use args::*;
 use clap::Parser;
 use tabled::{
-    settings::{locator::ByColumnName, Disable, Settings, Style},
+    builder::Builder,
+    settings::{
+        locator::ByColumnName,
+        style::BorderSpanCorrection,
+        Disable, Panel, Settings, Style,
+    },
     Table,
 };
 
@@ -20,7 +25,10 @@ async fn main() {
         .await
         .expect("Failed to connect to database");
 
-    let table_config = Settings::default().with(Style::rounded());
+    let table_config = Settings::default()
+        //.with(ColumnNames::default())
+        //.with(BorderSpanCorrection)
+        .with(Style::rounded());
 
     let cli = CLI::parse();
 
@@ -221,6 +229,43 @@ async fn main() {
                                     let meal = meals.first().unwrap();
                                     // TODO Add better Meal Formatting
                                     println!("Showing Meal {:?}", meal);
+                                    let ingredients = food_base
+                                        .get_event_recipe_ingredients(
+                                            meal.event_id,
+                                            meal.recipe_id,
+                                            meal.place_id,
+                                            meal.start_time,
+                                        )
+                                        .await;
+                                    if let Ok(ingredients) = ingredients {
+                                        let headers = vec!["Ingredient", "Amount", "Price"];
+
+                                        let mut builder = Builder::default();
+
+                                        builder.set_header(headers);
+
+                                        ingredients.iter().for_each(|ingredient| {
+                                            builder.push_record(vec![
+                                                ingredient.name.clone(),
+                                                format!("{} kg", ingredient.weight),
+                                                format!("{} €", ingredient.price.to_bigdecimal(2)),
+                                            ]);
+                                        });
+
+                                        println!(
+                                            "{}",
+                                            builder
+                                                .build()
+                                                .with(Panel::footer(format!(
+                                                    "{} €",
+                                                    meal.price.to_bigdecimal(2)
+                                                )))
+                                                .with(table_config)
+                                                .to_string()
+                                        );
+                                    } else {
+                                        println!("No Ingredients found");
+                                    }
                                 }
                                 _ => {
                                     println!("Multiple Meals found: ");
@@ -243,7 +288,7 @@ async fn main() {
         Commands::Print(print_data) => {
             match &print_data.print_type {
                 PrintCommands::Mealplan(event) => {
-                    let event_ref = event.event.as_ref().unwrap();
+                    let event_ref = &event.event;
 
                     let event = food_base
                         .get_event_from_string_reference(event_ref.to_string())
@@ -251,17 +296,100 @@ async fn main() {
 
                     match event {
                         Some(event) => {
-                            let meals = food_base.get_event_meals(event.event_id).await.unwrap();
+                            let mut meals =
+                                food_base.get_event_meals(event.event_id).await.unwrap();
+                            meals.sort_by(|a, b| a.start_time.cmp(&b.start_time));
 
-                            // TODO Filter Columns
-                            let table = Table::new(meals)
-                                .with(Disable::column(ByColumnName::new("event_id")))
-                                .with(Disable::column(ByColumnName::new("weight")))
-                                .with(Disable::column(ByColumnName::new("energy")))
-                                .with(Disable::column(ByColumnName::new("price")))
-                                .with(table_config)
-                                .to_string();
-                            print!("{}", table);
+                            let mut days: Vec<_> =
+                                meals.iter().map(|meal| meal.start_time.date()).collect();
+                            days.dedup();
+
+                            let mut tables: Vec<(String, Table)> = Vec::new();
+
+                            for day in days.iter() {
+                                let mut builder = Builder::default();
+                                let date_str = day.format("%A, %d.%m.%Y").to_string();
+                                //builder.push_record(vec![date_str]);
+
+                                builder.push_record(vec![
+                                    "Name".to_string(),
+                                    "Place".to_string(),
+                                    "Start".to_string(),
+                                    "End".to_string(),
+                                    "Servings".to_string(),
+                                    "Comment".to_string(),
+                                ]);
+                                let meals = meals
+                                    .iter()
+                                    .filter(|meal| meal.start_time.date() == *day)
+                                    .collect::<Vec<_>>();
+
+                                for meal in meals.iter() {
+                                    builder.push_record(vec![
+                                        meal.name.clone(),
+                                        meal.place.clone(),
+                                        meal.start_time.format("%H:%M").to_string(),
+                                        meal.end_time.format("%H:%M").to_string(),
+                                        meal.servings.to_string(),
+                                        meal.comment.clone().unwrap_or_default(),
+                                    ]);
+                                }
+
+                                let table = builder
+                                    .build()
+                                    //.with(Panel::header(date_str.clone()))
+                                    .clone();
+                                tables.push((date_str, table));
+                                //println!("{}", table);
+                            }
+
+                            if tables.len() > 0 {
+                                //TODO Merge Tables like this:
+                                // ╭────────────────────────────────────────────────────────────────────╮
+                                // │ Saturday, 18.06.2022                                               │
+                                // ├───────────────────┬───────────┬───────┬───────┬──────────┬─────────┤
+                                // │ Name              │ Place     │ Start │ End   │ Servings │ Comment │
+                                // ├───────────────────┼───────────┼───────┼───────┼──────────┼─────────┤
+                                // │ Frühstück         │ Akk Halle │ 08:00 │ 10:00 │ 60       │         │
+                                // │ Snacks            │ Akk Halle │ 10:00 │ 00:00 │ 200      │         │
+                                // │ Reis-Nudel-Buffet │ Akk Halle │ 14:30 │ 18:00 │ 80       │         │
+                                // │ Lasagne           │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
+                                // │ Linsensuppe       │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
+                                // │ Flammkuchen mix   │ Akk Halle │ 18:00 │ 00:00 │ 200      │         │
+                                // ├───────────────────┴───────────┴───────┴───────┴──────────┴─────────┤
+                                // │ Saturday, 18.06.2022                                               │
+                                // ├───────────────────┬───────────┬───────┬───────┬──────────┬─────────┤
+                                // │ Frühstück         │ Akk Halle │ 08:00 │ 09:30 │ 20       │         │
+                                // │ Curry mit Reis    │ Akk Halle │ 12:30 │ 14:30 │ 100      │         │
+                                // │ Reis-Nudel-Buffet │ Akk Halle │ 14:00 │ 18:00 │ 80       │         │
+                                // │ Käsespätzle       │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
+                                // │ Chili con Reis    │ Akk Halle │ 18:00 │ 00:00 │ 160      │         │
+                                // │ Pizza mix         │ Akk Halle │ 18:00 │ 00:00 │ 200      │         │
+                                // │ Salat Mix         │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
+                                // ├───────────────────┴───────────┴───────┴───────┴──────────┴─────────┤
+                                // │ Saturday, 18.06.2022                                               │
+                                // ├───────────────────┬───────────┬───────┬───────┬──────────┬─────────┤
+                                // │ Frühstück         │ Akk Halle │ 08:00 │ 09:30 │ 20       │         │
+                                // │ Curry mit Reis    │ Akk Halle │ 12:30 │ 14:30 │ 100      │         │
+                                // │ Reis-Nudel-Buffet │ Akk Halle │ 14:00 │ 18:00 │ 80       │         │
+                                // │ Käsespätzle       │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
+                                // │ Chili con Reis    │ Akk Halle │ 18:00 │ 00:00 │ 160      │         │
+                                // │ Pizza mix         │ Akk Halle │ 18:00 │ 00:00 │ 200      │         │
+                                // │ Salat Mix         │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
+                                // ╰───────────────────┴───────────┴───────┴───────┴──────────┴─────────╯
+
+                                if tables.len() > 1 {
+                                    tables.into_iter().for_each(|(date, mut table)| {
+                                        table
+                                            .with(Panel::header(date.clone()))
+                                            .with(table_config.clone())
+                                            .with(BorderSpanCorrection);
+                                        println!("{}", table);
+                                    });
+                                }
+                            } else {
+                                println!("No Meals");
+                            }
                         }
                         None => {
                             println!("Could not find Event")
