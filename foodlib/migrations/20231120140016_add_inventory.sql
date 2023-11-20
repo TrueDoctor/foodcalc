@@ -53,7 +53,7 @@ CREATE OR REPLACE VIEW public.shopping_list AS
             ingredient_sources.price
            FROM ingredient_sources
              LEFT JOIN ingredient_weight USING (unit_id, ingredient_id)) price_per_ingredient_weight USING (ingredient_id)
-     LEFT JOIN ingredients USING (ingredient_id)
+     LEFT JOIN ingredients USING (ingredient_id);
 
 -- Add view for inventory checklist
 CREATE OR REPLACE VIEW public.shopping_list_assumptions AS
