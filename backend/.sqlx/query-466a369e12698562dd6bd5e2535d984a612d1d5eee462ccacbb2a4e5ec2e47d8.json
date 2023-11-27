@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT recipe_id, name,  comment, weight as \"weight!\"\n                FROM meta_recipes\n                JOIN recipes ON(recipe_id = child_id)\n                WHERE parent_id = $1\n                ORDER BY recipe_id  ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recipe_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "weight!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "466a369e12698562dd6bd5e2535d984a612d1d5eee462ccacbb2a4e5ec2e47d8"
+}

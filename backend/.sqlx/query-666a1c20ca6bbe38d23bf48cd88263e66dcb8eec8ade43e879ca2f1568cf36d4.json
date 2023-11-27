@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                    SUM(price) as price\n                FROM shopping_list\n                WHERE event_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "price",
+        "type_info": "Money"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "666a1c20ca6bbe38d23bf48cd88263e66dcb8eec8ade43e879ca2f1568cf36d4"
+}

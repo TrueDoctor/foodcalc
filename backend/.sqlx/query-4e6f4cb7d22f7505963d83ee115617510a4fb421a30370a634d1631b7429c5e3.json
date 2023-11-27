@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT ingredient_id, ingredients.name, energy, comment, amount, unit_id, units.name as \"unit_name!\"\n                FROM recipe_ingredients\n                JOIN ingredients USING(ingredient_id)\n                JOIN units USING(unit_id)\n                WHERE recipe_ingredients.recipe_id = $1\n                ORDER BY ingredient_id  ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "energy",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "unit_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "unit_name!",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4e6f4cb7d22f7505963d83ee115617510a4fb421a30370a634d1631b7429c5e3"
+}
