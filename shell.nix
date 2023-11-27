@@ -38,6 +38,9 @@ let
 in
   # Make a shell with the dependencies we need
   pkgs.mkShell {
+    packages = [
+      pkgs.bacon
+    ];
     buildInputs = [
       rustc-wasm
       pkgs.nodejs
