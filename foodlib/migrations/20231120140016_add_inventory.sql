@@ -1,7 +1,7 @@
 -- Add inventory table
 CREATE TABLE public.inventories (
     inventory_id integer NOT NULL,
-    name character varying
+    name character varying NOT NULL
 );
 
 -- Add table to associate ingredients with inventories
