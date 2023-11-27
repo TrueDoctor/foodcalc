@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{postgres::types::PgMoney, types::BigDecimal};
 
 use crate::{
-    recipes::{Recipe, RecipeIngrdient, RecipeMetaIngredient},
+    recipes::{Recipe, RecipeIngredient, RecipeMetaIngredient},
     FoodBase,
 };
 
@@ -301,7 +301,7 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_meta_ingredients(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeIngrdient>> {
+    pub async fn get_meta_ingredients(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeIngredient>> {
         let ingredients = self.get_recipe_ingredients(recipe_id).await?;
         let mut records = self.get_recipe_meta_ingredients(recipe_id).await?;
         records.extend(ingredients);

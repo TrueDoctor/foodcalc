@@ -4,6 +4,7 @@ use sqlx::PgPool;
 
 mod events;
 mod ingredients;
+mod inventories;
 mod meals;
 mod recipes;
 mod users;
@@ -11,6 +12,7 @@ mod util;
 
 pub use events::*;
 pub use ingredients::*;
+pub use inventories::*;
 pub use meals::*;
 pub use recipes::*;
 pub use users::*;

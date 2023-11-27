@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 
 use crate::MyAppState;
-use foodlib::{RecipeIngrdient, RecipeStep};
+use foodlib::{RecipeIngredient, RecipeStep};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Recipe {
@@ -118,7 +118,7 @@ pub async fn list_ingredients(
 pub async fn update_entry(
     State(state): State<MyAppState>,
     Path(recipe_id): Path<i32>,
-    Json(entries): Json<Vec<RecipeIngrdient>>,
+    Json(entries): Json<Vec<RecipeIngredient>>,
 ) -> impl axum::response::IntoResponse {
     let result = state
         .db_connection

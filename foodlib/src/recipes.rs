@@ -63,7 +63,7 @@ impl Default for RecipeMetaIngredient {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default, Serialize, Deserialize)]
-pub struct RecipeIngrdient {
+pub struct RecipeIngredient {
     pub ingredient: RecipeMetaIngredient,
     pub amount: BigDecimal,
     pub unit: Unit,
@@ -116,7 +116,7 @@ impl std::string::ToString for RecipeMetaIngredient {
         self.name().to_string()
     }
 }
-impl std::string::ToString for RecipeIngrdient {
+impl std::string::ToString for RecipeIngredient {
     fn to_string(&self) -> String {
         self.ingredient.name().to_string()
     }
@@ -126,7 +126,7 @@ impl FoodBase {
     pub async fn get_recipe_ingredients(
         &self,
         recipe_id: i32,
-    ) -> eyre::Result<Vec<RecipeIngrdient>> {
+    ) -> eyre::Result<Vec<RecipeIngredient>> {
         struct RecipeIngredientWeight {
             ingredient_id: i32,
             name: String,
@@ -160,7 +160,7 @@ impl FoodBase {
                      unit_name,
                      unit_id,
                      amount,
-                 }| RecipeIngrdient {
+                 }| RecipeIngredient {
                     ingredient: RecipeMetaIngredient::Ingredient(Ingredient {
                         ingredient_id,
                         name,
@@ -182,7 +182,7 @@ impl FoodBase {
     pub async fn get_recipe_meta_ingredients(
         &self,
         recipe_id: i32,
-    ) -> eyre::Result<Vec<RecipeIngrdient>> {
+    ) -> eyre::Result<Vec<RecipeIngredient>> {
         struct RecipeIngredientWeight {
             recipe_id: i32,
             name: String,
@@ -209,7 +209,7 @@ impl FoodBase {
                      name,
                      comment,
                      weight,
-                 }| RecipeIngrdient {
+                 }| RecipeIngredient {
                     ingredient: RecipeMetaIngredient::MetaRecipe(Recipe {
                         recipe_id,
                         name,
@@ -413,13 +413,13 @@ impl FoodBase {
     pub async fn update_recipe_entries(
         &self,
         recipe_id: i32,
-        entries: impl Iterator<Item = RecipeIngrdient>,
+        entries: impl Iterator<Item = RecipeIngredient>,
     ) -> eyre::Result<()> {
         let mut transaction = self.pg_pool.begin().await?;
         pub async fn insert_recipe_entry<'a>(
             executor: impl sqlx::Executor<'a, Database = sqlx::Postgres>,
             recipe_id: i32,
-            entry: RecipeIngrdient,
+            entry: RecipeIngredient,
         ) -> sqlx::Result<()> {
             let count = match entry.ingredient {
                 RecipeMetaIngredient::Ingredient(ingredient) => sqlx::query!(

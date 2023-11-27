@@ -2,7 +2,7 @@ use axum::extract::State;
 use maud::{html, Markup};
 
 use crate::{
-    frontend::{ingredients_tab::ingredients_view, CSS_HASH},
+    frontend::{ingredients_tab::ingredients_view, inventories_tab::inventories_view, CSS_HASH},
     MyAppState,
 };
 
@@ -30,8 +30,8 @@ pub async fn home_view(State(state): State<MyAppState>) -> Markup {
 
 pub async fn content(State(state): State<MyAppState>) -> Markup {
     html! {
-        div id="content" class="w-full" {
-            (ingredients_view(State(state)).await)
+        div id="content" {
+            (inventories_view(State(state)).await)
         }
     }
 }
@@ -46,27 +46,10 @@ pub fn navbar() -> Markup {
             " {
              a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/" { "Home" }
              a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/ingredients" { "Ingredients" }
+             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/inventories" { "Inventories" }
              a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/recipes" { "Recipes" }
              a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/events" { "Events" }
              a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/stores" { "Stores" }
         }
     }
 }
-
-//pub fn navbar() -> Markup {
-//    html! {
-//        div class="
-//            rounded-xl 
-//            flex items-center justify-around flex-wrap 
-//            mx-16 my-4 
-//            gap-24
-//            bg-blue-700 text-white 
-//            " {
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/" { "Home" }
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/ingredients" { "Ingredients" }
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/recipes" { "Recipes" }
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/events" { "Events" }
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/stores" { "Stores" }
-//        }
-//    }
-//}
