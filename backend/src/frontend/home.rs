@@ -39,17 +39,16 @@ pub async fn content(State(state): State<MyAppState>) -> Markup {
 pub fn navbar() -> Markup {
     html! {
         div class="
-            rounded-xl 
             flex items-center justify-between flex-wrap 
             bg-blue-700 text-white 
-            overflow-hidden
             mx-16 my-4 
+            rounded-xl shadow-xl overflow-hidden
             " {
-             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/" { "Home" }
-             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/ingredients" { "Ingredients" }
-             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/recipes" { "Recipes" }
-             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/events" { "Events" }
-             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/stores" { "Stores" }
+             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/" { "Home" }
+             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/ingredients" { "Ingredients" }
+             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/recipes" { "Recipes" }
+             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/events" { "Events" }
+             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/stores" { "Stores" }
         }
     }
 }
