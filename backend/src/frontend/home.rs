@@ -40,14 +40,34 @@ pub fn navbar() -> Markup {
     html! {
         div class="
             rounded-xl 
-            flex items-center justify-center flex-wrap p-6 mx-16 my-4 gap-24
+            flex items-center justify-between flex-wrap 
             bg-blue-700 text-white 
+            overflow-hidden
+            mx-16 my-4 
             " {
-             a href="/" { "Home" }
-             a href="/ingredients" { "Ingredients" }
-             a href="/recipes" { "Recipes" }
-             a href="/events" { "Events" }
-             a href="/stores" { "Stores" }
+             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/" { "Home" }
+             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/ingredients" { "Ingredients" }
+             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/recipes" { "Recipes" }
+             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/events" { "Events" }
+             a class="transition duration-100 ease-in-out hover:bg-blue-900 p-6 grow text-center" href="/stores" { "Stores" }
         }
     }
 }
+
+//pub fn navbar() -> Markup {
+//    html! {
+//        div class="
+//            rounded-xl 
+//            flex items-center justify-around flex-wrap 
+//            mx-16 my-4 
+//            gap-24
+//            bg-blue-700 text-white 
+//            " {
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/" { "Home" }
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/ingredients" { "Ingredients" }
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/recipes" { "Recipes" }
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/events" { "Events" }
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/stores" { "Stores" }
+//        }
+//    }
+//}
