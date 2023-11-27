@@ -30,7 +30,7 @@ pub async fn home_view(State(state): State<MyAppState>) -> Markup {
 
 pub async fn content(State(state): State<MyAppState>) -> Markup {
     html! {
-        div id="content" {
+        div id="content" class="w-full" {
             (ingredients_view(State(state)).await)
         }
     }
