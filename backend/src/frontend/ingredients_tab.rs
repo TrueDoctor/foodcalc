@@ -64,14 +64,21 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
     html! {
         div id="ingredients" class="flex flex-col items-center justify-center" {
             div {
-                h1 { "Ingredients" }
-                input type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off"
-                    autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
-                    hx-target="#search-results" hx-indicator=".htmx-indicator";
-                span class="htmx-indicator" { "Searching..." }
-                div hx-target="this"  hx-swap="outerHTML" {
-                    button hx-get="/ingredients/add" class="btn btn-primary"  { "+" }
+                div class="
+                    flex flex-row items-center justify-stretch
+                    mb-2 gap-5
+                    h-10
+                    " {
+                    input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off"
+                        autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
+                        hx-target="#search-results" hx-indicator=".htmx-indicator";
+
+                    div class = "grow-0 h-full"
+                        hx-target="this"  hx-swap="outerHTML" {
+                        button class="btn btn-primary" hx-get="/ingredients/add" { "Add Ingredient (+)" }
+                    }
                 }
+                //span class="htmx-indicator" { "Searching..." }
                 table class="text-inherit table-auto object-center" {
                     thead { tr { th { "Name" } th { "Energy" } th { "Comment" } } }
                     tbody id="search-results" {
