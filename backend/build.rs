@@ -16,6 +16,8 @@ fn main() {
             "src/index.css",
             "--minify",
         ])
+        .env_clear()
+        .env("PATH", "/bin")
         .output();
 
     match command {

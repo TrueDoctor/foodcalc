@@ -38,12 +38,16 @@ let
 in
   # Make a shell with the dependencies we need
   pkgs.mkShell {
+    packages = [
+      pkgs.bacon
+    ];
     buildInputs = [
       rustc-wasm
       pkgs.nodejs
       pkgs.cargo
       pkgs.cargo-watch
       pkgs.wasm-pack
+      pkgs.clang
 
       pkgs.openssl
       pkgs.openssl.dev
@@ -51,18 +55,34 @@ in
       pkgs.gtk3
       pkgs.libsoup
       pkgs.webkitgtk
-      pkgs.clang
+      pkgs.freetype
+      pkgs.freetype.dev
 
       pkgs.pkg-config
 
       # Use Mold as a Linke
       pkgs.mold
+
+      # Vulkan
+      #pkgs.glslang
+      pkgs.shaderc
+      pkgs.vulkan-headers
+      pkgs.vulkan-loader
+      #pkgs.vulkan-validation-layers
     ];
 
     # Hacky way to run cago through Mold
     shellHook = ''
     alias cargo='mold --run cargo'
     '';
-    LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.openssl ];
+    LD_LIBRARY_PATH = lib.makeLibraryPath [ 
+      pkgs.openssl
+      pkgs.freetype
+      pkgs.fontconfig
+      pkgs.expat
+      pkgs.libGL
+    ];
+
+    #VULKAN_SDK = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d";
   }
 

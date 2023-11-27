@@ -117,7 +117,7 @@ pub struct PrintCommand {
     #[clap(subcommand)]
     pub print_type: PrintCommands,
 
-    #[arg(short, long, default_value = "tsv")]
+    #[arg(short, long, default_value = "h")]
     // The Output Format
     pub format: String,
 
@@ -138,7 +138,7 @@ pub enum PrintCommands {
 #[derive(Debug, Args)]
 pub struct PrintEvent {
     /// Event to print (use ID or name)
-    pub event: Option<String>,
+    pub event: String,
 
     #[clap(short = 'd', long = "day")]
     /// Show only meals cooked on the given day (date of number of the day)
