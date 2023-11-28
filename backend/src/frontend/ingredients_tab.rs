@@ -62,8 +62,8 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
         .unwrap_or_default();
 
     html! {
-        div class="flex flex-col items-center justify-center" {
-            div id="ingredients" class="w-3/4 flex flex-col items-center justify-center" {
+        div id="ingredients" class="flex flex-col items-center justify-center" {
+            div  class="w-3/4 flex flex-col items-center justify-center" {
                 div class="
                     flex flex-row items-center justify-stretch
                     mb-2 gap-5 h-10
@@ -73,10 +73,10 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
                         autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
                         hx-target="#search-results" hx-indicator=".htmx-indicator";
 
-                    div class = "grow-0 h-full"
-                        hx-target="this"  hx-swap="outerHTML" {
-                        button class="btn btn-primary" hx-get="/ingredients/add" { "Add Ingredient (+)" }
-                    }
+                }
+                div class = "grow-0 h-full m-2"
+                    hx-target="this"  hx-swap="outerHTML" {
+                    button class="btn btn-primary" hx-get="/ingredients/add" { "Add Ingredient (+)" }
                 }
                 table class="w-full text-inherit table-auto object-center" {
                     thead { tr { th { "Name" } th { "Energy" } th { "Comment" } } }
@@ -96,13 +96,14 @@ pub async fn edit_ingredient_form() -> Markup {
     html! {
         form hx-put="/ingredients/edit" hx-target="#ingredients" hx-swap="outerHTML" {
             div class="flex flex-col items-center justify-center" {
-                div {
-                    h1 { "Edit Ingredient" }
-                    input type="text" name="name" placeholder="Name" value="" required="required";
-                    input type="number" name="energy" placeholder="Energy" value="0" required="required";
-                    input type="text" name="comment" placeholder="Comment" value="";
-                    input type="hidden" name="ingredient_id" value="-1";
+                h1 class="text-xl m-2" { "Edit Ingredient" }
+                div class="flex gap-2" {
+                    input class="text" type="text" name="name" placeholder="Name" value="" required="required";
+                    input class="text shrink" type="number" name="energy" placeholder="Energy" value="0" required="required";
+                    input class="text" type="text" name="comment" placeholder="Comment" value="";
+                    input class="text" type="hidden" name="ingredient_id" value="-1";
                     button class="btn btn-primary" type="submit" { "Submit" }
+                    button class="btn btn-secondary" hx-get="/ingredients" { "Cancel" }
                 }
             }
         }
