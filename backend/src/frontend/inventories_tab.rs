@@ -35,11 +35,7 @@ pub async fn add_inventory(
     form: axum::extract::Form<foodlib::Inventory>,
 ) -> Markup {
     let inventory = form.0;
-    let Ok(inventory_id) = state
-        .db_connection
-        .add_inventory(inventory.name)
-        .await
-    else {
+    let Ok(inventory_id) = state.db_connection.add_inventory(inventory.name).await else {
         return html! {
             div id="error" class="flex flex-col items-center justify-center text-red-500" {
                 div {
@@ -62,25 +58,30 @@ pub async fn inventories_view(State(state): State<MyAppState>) -> Markup {
         .unwrap_or_default();
 
     html! {
-        div id="inventories" class="flex flex-col items-center justify-center" {
-            div {
-                h1 { "inventories" }
-                input type="search" placeholder="Search for inventory" id="search" name="search" autocomplete="off"
-                    autofocus="autofocus" hx-post="/inventories/search" hx-trigger="keyup changed delay:20ms, search"
-                    hx-target="#search-results" hx-indicator=".htmx-indicator";
-                span class="htmx-indicator" { "Searching..." }
-                div hx-target="this"  hx-swap="outerHTML" {
-                    button hx-get="/inventories/add" class="btn btn-primary"  { "+" }
-                }
-                table class="text-inherit table-auto object-center" {
-                    thead { tr { th { "Name" } } }
-                    tbody id="search-results" {
+        div id="inventories" class="flex flex-col items-center justify-center gap-10" {
+                div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full" hx-target="this"  hx-swap="outerHTML" {
+                    button hx-get="/inventories/add" class="btn btn-primary"  { "+" };
+                    select class="fc-select" {
+                        option value="-1" { "Select inventory" };
                         @for inventory in inventories.iter() {
                             (format_inventory(inventory))
                         }
                     }
+                    input type="search" placeholder="Search for ingredient" id="search" name="search" autocomplete="off"
+                        autofocus="autofocus" hx-post="/inventories/search" hx-trigger="keyup changed delay:20ms, search"
+                        hx-target="#search-results" hx-indicator=".htmx-indicator" class="text";
+                    @for inventory in inventories.iter() {
+                        (format_inventory(inventory))
+                    }
+            }
+            span class="htmx-indicator" { "Searching..." }
+            table class="text-inherit table-auto object-center" display="block" max-height="60vh" overflow-y="scroll" {
+                thead { tr { th { "Name" } } }
+                tbody id="search-results" {
                 }
-                // Add inventory button
+            }
+            div hx-target="this"  hx-swap="outerHTML" {
+                button hx-get="/inventories/add_ingredient" class="btn btn-primary"  { "+" }
             }
         }
     }
@@ -89,8 +90,8 @@ pub async fn inventories_view(State(state): State<MyAppState>) -> Markup {
 pub async fn edit_inventory_form(State(state): State<MyAppState>) -> Markup {
     html! {
         form hx-put="/inventories/edit" hx-target="#inventories" hx-swap="outerHTML" {
-            div class="flex flex-col items-center justify-center" {
-                div {
+            div class="flex flex-col items-center justify-center gap-5" {
+                div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
                     h1 { "Edit inventory" }
                     input type="text" name="name" placeholder="Name" value="" required="required" class="text";
                     input type="hidden" name="inventory_id" value="-1";
@@ -103,8 +104,6 @@ pub async fn edit_inventory_form(State(state): State<MyAppState>) -> Markup {
 
 fn format_inventory(inventory: &foodlib::Inventory) -> Markup {
     html! {
-        tr id=(format!("inventory-{}", inventory.inventory_id)) {
-            td { (inventory.name) }
-        }
+        option value=(format!("{}", inventory.inventory_id)) { (inventory.name) };
     }
 }

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                            INSERT INTO meta_recipes (parent_id, child_id, weight)\n                            VALUES ($1, $2, $3)\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e627c07bb6d09e9da03624da10c56f99ca4f93765871d98a2ffe22f860e5eb40"
+}

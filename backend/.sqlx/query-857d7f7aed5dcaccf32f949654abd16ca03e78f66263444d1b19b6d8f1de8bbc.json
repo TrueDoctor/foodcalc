@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                    recipe as \"recipe!\",\n                    ingredient as \"ingredient!\",\n                    round(weight * $2, 10)  as \"weight!\",\n                    subrecipe as \"subrecipe!\",\n                    is_subrecipe as \"is_subrecipe!\",\n                    subrecipe_id as \"subrecipe_id!\"\n                FROM subrecipes\n                WHERE recipe_id = $1\n                ORDER BY recipe, subrecipe_id, ingredient\n\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recipe!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "weight!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "subrecipe!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_subrecipe!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "subrecipe_id!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "857d7f7aed5dcaccf32f949654abd16ca03e78f66263444d1b19b6d8f1de8bbc"
+}

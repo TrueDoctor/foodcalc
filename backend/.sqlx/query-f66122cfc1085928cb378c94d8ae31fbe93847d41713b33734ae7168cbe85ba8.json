@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE inventories\n                SET name = $1\n                WHERE inventory_id = $2\n                RETURNING inventory_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inventory_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f66122cfc1085928cb378c94d8ae31fbe93847d41713b33734ae7168cbe85ba8"
+}

@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " \n                SELECT * FROM ingredients \n                WHERE name = $1 OR ingredient_id = $2\n                ORDER BY ingredient_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "energy",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "comment",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "1ff85c7e6c12265f7ccc583a8e12bbb3e6be2eb85a30d1d3352c70df254b616d"
+}

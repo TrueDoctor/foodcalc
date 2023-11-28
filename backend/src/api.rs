@@ -10,7 +10,6 @@ use crate::MyAppState;
 
 mod events;
 mod ingredients;
-mod inventories;
 mod recipes;
 mod stores;
 mod utils;
@@ -22,7 +21,6 @@ pub fn foodbase() -> Router {
         .fallback_service(get(static_handler))
         .route("/", get(index_handler))
         .nest("/ingredients", ingredients_router())
-        .nest("/inventories", inventories_router())
         .nest("/recipes", recipes_router())
         .nest("/events", events_router())
         .nest("/stores/ingredients", stores_router())
@@ -34,13 +32,6 @@ pub fn ingredients_router() -> Router {
         .route("/create", post(ingredients::create))
         .route("/update/:ingredient_id", post(ingredients::update))
         .route("/list", get(ingredients::list))
-}
-
-pub fn inventories_router() -> Router {
-    Router::new()
-        .route("/create", post(inventories::create))
-        .route("/update/:inventory_id", post(inventories::update))
-        .route("/list", get(inventories::list))
 }
 
 pub fn recipes_router() -> Router {

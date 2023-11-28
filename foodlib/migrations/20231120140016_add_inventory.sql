@@ -1,6 +1,6 @@
 -- Add inventory table
 CREATE TABLE public.inventories (
-    inventory_id integer NOT NULL,
+    inventory_id SERIAL NOT NULL,
     name character varying NOT NULL
 );
 

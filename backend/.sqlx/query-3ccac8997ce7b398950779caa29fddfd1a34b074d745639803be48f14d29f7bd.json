@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO inventory_ingredients ( inventory_id, ingredient_id, amount ) VALUES\n                    ( $1, $2, $3 )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3ccac8997ce7b398950779caa29fddfd1a34b074d745639803be48f14d29f7bd"
+}
