@@ -48,6 +48,7 @@ in
       pkgs.cargo-watch
       pkgs.wasm-pack
       pkgs.clang
+      pkgs.tailwindcss
 
       pkgs.openssl
       pkgs.openssl.dev
