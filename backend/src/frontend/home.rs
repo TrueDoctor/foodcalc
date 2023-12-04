@@ -2,7 +2,7 @@ use axum::extract::State;
 use maud::{html, Markup};
 
 use crate::{
-    frontend::{ingredients_tab::ingredients_view, inventories_tab::inventories_view, CSS_HASH},
+    frontend::{inventories_tab::select_inventory_form, CSS_HASH},
     MyAppState,
 };
 
@@ -31,7 +31,7 @@ pub async fn home_view(State(state): State<MyAppState>) -> Markup {
 pub async fn content(State(state): State<MyAppState>) -> Markup {
     html! {
         div id="content" {
-            (inventories_view(State(state)).await)
+            (select_inventory_form(State(state)).await)
         }
     }
 }

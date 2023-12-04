@@ -1,15 +1,10 @@
-use num::FromPrimitive;
-use num::Num;
 use tabled::Tabled;
-use std::borrow::Cow;
 use std::fmt::Display;
-use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use sqlx::{types::BigDecimal};
 
 use crate::{
-    recipes::RecipeIngredient,
     FoodBase,
 };
 
@@ -113,6 +108,43 @@ impl FoodBase {
         Ok(inventory.inventory_id)
     }
 
+    pub async fn delete_inventory(&self, inventory_id: i32) -> eyre::Result<()> {
+        let mut transaction = self.pg_pool.begin().await?;
+
+        sqlx::query!(
+            r#"
+                DELETE FROM event_inventories
+                WHERE inventory_id = $1
+            "#,
+            inventory_id
+        )
+        .execute(&mut *transaction)
+        .await?;
+
+        sqlx::query!(
+            r#"
+                DELETE FROM inventory_ingredients
+                WHERE inventory_id = $1
+            "#,
+            inventory_id
+        )
+        .execute(&mut *transaction)
+        .await?;
+
+        sqlx::query!(
+            r#"
+                DELETE FROM inventories
+                WHERE inventory_id = $1
+            "#,
+            inventory_id
+        )
+        .execute(&mut *transaction)
+        .await?;
+
+        transaction.commit();
+        Ok(())
+    }
+
     pub async fn get_inventories(&self) -> eyre::Result<Vec<Inventory>> {
         let records = sqlx::query_as!(
             Inventory,
@@ -135,6 +167,28 @@ impl FoodBase {
             "#,
             reference,
             inventory_id
+
+        )
+        .fetch_one(&*self.pg_pool)
+        .await;
+
+        if let Ok(record) = records {
+            Some(record)
+        } else {
+            None
+        }
+    }
+
+    pub async fn get_inventory_from_id(&self, id: i32) -> Option<Inventory>
+    {
+        let records = sqlx::query_as!(
+            Inventory,
+            r#" 
+                SELECT * FROM inventories 
+                WHERE inventory_id = $1
+                ORDER BY inventory_id
+            "#,
+            id
 
         )
         .fetch_one(&*self.pg_pool)
@@ -170,7 +224,7 @@ impl FoodBase {
         // TODO: Maybe change so it will only update once, when the inventory is quit
         let mut transaction = self.pg_pool.begin().await?;
 
-        let deletions = sqlx::query!(
+        sqlx::query!(
             r#"
                 DELETE FROM inventory_ingredients WHERE 
                 inventory_id = $1 AND
@@ -182,7 +236,7 @@ impl FoodBase {
         .execute(&mut *transaction)
         .await?;
 
-        let insertions = sqlx::query!(
+        sqlx::query!(
             r#"
                 INSERT INTO inventory_ingredients ( inventory_id, ingredient_id, amount ) VALUES
                     ( $1, $2, $3 )
