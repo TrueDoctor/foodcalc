@@ -8,7 +8,7 @@ CREATE TABLE public.inventories (
 CREATE TABLE public.inventory_ingredients (
     inventory_id integer NOT NULL,
     ingredient_id integer NOT NULL,
-    amount numeric
+    amount numeric NOT NULL
 );
 
 -- Add table to associate inventories with events

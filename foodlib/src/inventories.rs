@@ -19,6 +19,12 @@ pub struct Inventory {
     pub name: String,
 }
 
+pub struct IngredientWithWeight {
+    pub ingredient_id: i32,
+    pub name: String,
+    pub amount: BigDecimal,
+}
+
 impl Display for Inventory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.name.as_str())
@@ -139,6 +145,25 @@ impl FoodBase {
         } else {
             None
         }
+    }
+
+    pub async fn get_filtered_inventory_contents(&self, inventory_id: i32, filter: String) -> eyre::Result<Vec<IngredientWithWeight>> {
+        let filter = format!("%{}%",filter);
+        let records = sqlx::query_as!(
+            IngredientWithWeight,
+            r#" 
+                SELECT ingredient_id, name, amount FROM ingredients
+                INNER JOIN inventory_ingredients USING (ingredient_id) 
+                WHERE inventory_id = $1 AND LOWER(name) LIKE LOWER($2)
+                ORDER BY name
+            "#,
+            inventory_id,
+            filter
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        Ok(records)
     }
 
     pub async fn update_inventory_item(&self, values: InventoryIngredient) -> eyre::Result<()> {
