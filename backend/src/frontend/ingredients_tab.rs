@@ -78,8 +78,12 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
                     hx-target="this"  hx-swap="outerHTML" {
                     button class="btn btn-primary" hx-get="/ingredients/add" { "Add Ingredient (+)" }
                 }
-                table class="w-full text-inherit table-auto object-center" {
-                    thead { tr { th { "Name" } th { "Energy" } th { "Comment" } } }
+                table {
+                    thead { tr class="p-2" {
+                        th class="w-1/2" { "Name" }
+                        th class="w-1/4" { "Energy" }
+                        th class="w-1/4" { "Comment" }
+                    } }
                     tbody id="search-results" {
                         @for ingredient in ingredients.iter() {
                             (format_ingredient(ingredient))

@@ -2,6 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
+table {
+  @apply table-fixed rounded-lg;
+  @apply w-full;
+}
+
+th {
+  @apply bg-blue-500 text-white;
+  @apply p-4;
+}
+
+td {
+  @apply p-2;
+}
+
+tr:nth-child(even) { 
+  @apply bg-blue-700 rounded-lg;
+}
+
+tr:nth-child(odd) { 
+  @apply bg-blue-800 rounded-lg;
+}
+
 .text {
   @apply dark:text-white text-black bg-gray-300;
   @apply bg-white border-gray-500;
