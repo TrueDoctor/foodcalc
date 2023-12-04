@@ -95,7 +95,7 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
     }
 }
 
-pub async fn edit_ingredient_form() -> Markup {
+pub async fn edit_ingredient_form(State(_): State<MyAppState>) -> Markup {
     html! {
         form hx-put="/ingredients/edit" hx-target="#ingredients" hx-swap="outerHTML" class="w-full" {
             div class="flex flex-col items-center justify-center w-full" {
