@@ -86,7 +86,6 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
                         }
                     }
                 }
-                // Add Ingredient button
             }
         }
     }
@@ -94,16 +93,15 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
 
 pub async fn edit_ingredient_form() -> Markup {
     html! {
-        form hx-put="/ingredients/edit" hx-target="#ingredients" hx-swap="outerHTML" {
-            div class="flex flex-col items-center justify-center" {
-                h1 class="text-xl m-2" { "Edit Ingredient" }
-                div class="flex gap-2" {
+        form hx-put="/ingredients/edit" hx-target="#ingredients" hx-swap="outerHTML" class="w-full" {
+            div class="flex flex-col items-center justify-center w-full" {
+                div class="flex gap-2 w-full" {
                     input class="text" type="text" name="name" placeholder="Name" value="" required="required";
-                    input class="text shrink" type="number" name="energy" placeholder="Energy" value="0" required="required";
-                    input class="text" type="text" name="comment" placeholder="Comment" value="";
+                    input class="text shrink" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy (kJ/g)" required="required";
+                    input class="text grow" type="text" name="comment" placeholder="Comment" value="";
                     input class="text" type="hidden" name="ingredient_id" value="-1";
                     button class="btn btn-primary" type="submit" { "Submit" }
-                    button class="btn btn-secondary" hx-get="/ingredients" { "Cancel" }
+                    button class="btn btn-cancel" hx-get="/ingredients" { "Cancel" }
                 }
             }
         }

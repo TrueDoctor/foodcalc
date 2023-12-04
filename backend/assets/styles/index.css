@@ -13,6 +13,7 @@
 .btn {
 	@apply font-bold py-2 px-4 rounded;
 }
+
 .btn-primary {
 	@apply bg-blue-500 text-white;
 }
@@ -20,6 +21,10 @@
 	@apply bg-blue-700;
 }
 
-.fc-select {
-  @apply block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50;
+.btn-cancel {
+	@apply bg-red-500 text-white;
+}
+
+.btn-cancel:hover {
+	@apply bg-red-700;
 }
