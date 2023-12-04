@@ -44,12 +44,34 @@ pub fn navbar() -> Markup {
             mx-16 my-4 
             rounded-xl shadow-xl overflow-hidden
             " {
-             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/" { "Home" }
-             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/ingredients" { "Ingredients" }
-             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/inventories" { "Inventories" }
-             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/recipes" { "Recipes" }
-             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/events" { "Events" }
-             a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" href="/stores" { "Stores" }
+                (navbutton("Ingredients", "/ingredients"))
+                (navbutton("Recipes", "/recipes"))
+                (navbutton("Events", "/events"))
+                (navbutton("Stores", "/stores"))
         }
     }
 }
+
+fn navbutton(text: &str, link: &str) -> Markup {
+    html! {
+        a class="transition ease-in-out transition duration-200 ease-in-out rounded-xl hover:shadow-inner hover:bg-blue-800 p-6 grow text-center" hx-get=(link) hx-target="#content" { (text) }
+    }
+}
+
+//pub fn navbar() -> Markup {
+//    html! {
+//        div class="
+//            rounded-xl
+//            flex items-center justify-around flex-wrap
+//            mx-16 my-4
+//            gap-24
+//            bg-blue-700 text-white
+//            " {
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/" { "Home" }
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/ingredients" { "Ingredients" }
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/recipes" { "Recipes" }
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/events" { "Events" }
+//             a class="hover:bg-blue-500 p-6 round-lg" href="/stores" { "Stores" }
+//        }
+//    }
+//}
