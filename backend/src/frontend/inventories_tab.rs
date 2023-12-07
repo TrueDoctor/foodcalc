@@ -1,5 +1,6 @@
 use axum::extract::State;
-use foodlib::{IngredientWithWeight, Inventory, Ingredient};
+use bigdecimal::BigDecimal;
+use foodlib::{IngredientWithWeight, Inventory, Ingredient, InventoryIngredient};
 use maud::{html, Markup};
 use regex::Regex;
 
@@ -14,11 +15,33 @@ pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
         .route("/select", axum::routing::put(handle_select))
         .route("/manage", axum::routing::put(handle_manage))
         .route( "/delete-inventory", axum::routing::put(handle_delete_inventory))
+        .route( "/add-ingredient", axum::routing::put(add_ingredient_form))
+        .route( "/commit-ingredient", axum::routing::put(handle_ingredient_commit))
 }
+
+// Request parameters
+static INVENTORY_ID: &'static str = "inventory-id";
+static FILTER_TEXT: &'static str = "filter-text";
+static INGREDIENT_NAME: &'static str = "ingredient-name";
+static INGREDIENT_AMOUNT: &'static str = "ingredient-amount";
+
+// htmx ids
+static SEARCH_RESULTS_DIV: &'static str = "search-results";
+static INVENTORIES_DIV: &'static str = "inventories";
+static INVENTORY_CONTENTS_DIV: &'static str = "contents";
+static INGREDIENTS_DATALIST: &'static str = "ingredients";
+
+// TODO: Refactor request paths to constants
 
 pub struct InventoryHeaderData {
     pub inventory_id: i32,
     pub filter_text: String,
+}
+
+pub struct InventoryItemData {
+    pub inventory_id: i32,
+    pub ingredient_name: String,
+    pub ingredient_amount: BigDecimal,
 }
 
 impl Default for InventoryHeaderData {
@@ -27,15 +50,106 @@ impl Default for InventoryHeaderData {
     }
 }
 
+impl Default for InventoryItemData {
+    fn default() -> Self {
+        InventoryItemData { inventory_id: -1, ingredient_name: String::new(), ingredient_amount: BigDecimal::from(0) }
+    }
+}
+
 pub fn parse_inventory_header_data(query: String) -> InventoryHeaderData {
-    let parameter_regex = Regex::new(r"(?<param_name>selected-inv|filter-text)=(?<param_value>[^&]*)&?").unwrap();
+    // TODO: Let Dennis look this over and see if it's best practice
+    let parameter_regex = Regex::new(format!(r"(?<param_name>{}|{})=(?<param_value>[^&]*)&?", INVENTORY_ID, FILTER_TEXT).as_str()).unwrap();
     
     let mut data: InventoryHeaderData = InventoryHeaderData::default();
     for (_, [key, value]) in parameter_regex.captures_iter(query.as_str()).map(|c| c.extract()) {
-        if key == "selected-inv" { data.inventory_id = value.parse().unwrap(); }
-        else if key == "filter-text" { data.filter_text = String::from(value); }
+        if key == INVENTORY_ID { data.inventory_id = value.parse().unwrap(); }
+        else if key == FILTER_TEXT { data.filter_text = String::from(value.replace("%20", " ")); }
     }
     data
+}
+
+pub fn parse_inventory_item_data(query: String) -> InventoryItemData {
+    let parameter_regex = Regex::new(format!(r"(?<param_name>{}|{}|{})=(?<param_value>[^&]*)&?", INVENTORY_ID, INGREDIENT_NAME, INGREDIENT_AMOUNT).as_str()).unwrap();
+    
+    let mut data: InventoryItemData = InventoryItemData::default();
+    for (_, [key, value]) in parameter_regex.captures_iter(query.as_str()).map(|c| c.extract()) {
+        if key == INVENTORY_ID { data.inventory_id = value.parse().unwrap(); }
+        else if key == INGREDIENT_NAME { data.ingredient_name = String::from(value.replace("%20", " ")); }
+        else if key == INGREDIENT_AMOUNT { data.ingredient_amount = value.parse().unwrap(); }
+    }
+    data
+}
+
+fn return_to_inv_selection_error() -> Markup {
+    html! {
+        div id="error" class="flex flex-col items-center justify-center text-red-500" {
+            div {
+                h1 { "Error" }
+                p { "Failed to add ingredient" }
+            }
+            button class="btn btn-primary" hx-get="/inventories" hx-target=(["#", INVENTORIES_DIV].concat())  { "Back" }
+        }
+    }
+}
+
+fn return_to_inv_overview_error(inventory_id: i32) -> Markup {
+    html! {
+        div id="error" class="flex flex-col items-center justify-center text-red-500" {
+            form {
+                h1 { "Error" }
+                p { "Failed to add ingredient" }
+                input type="hidden" value=(inventory_id);
+            }
+            button class="btn btn-primary" hx-get="/inventories/select" hx-target=(INVENTORIES_DIV)  { "Back" }
+        }
+    }
+}
+
+pub async fn handle_ingredient_commit(State(state): State<MyAppState>, query: String) -> Markup {
+    let item_data = parse_inventory_item_data(query.clone());
+    let header_data = parse_inventory_header_data(query);
+    let ingredient_id = state
+        .db_connection
+        .get_ingredient_from_string_reference(item_data.ingredient_name.clone())
+        .await
+        .unwrap_or(Ingredient {ingredient_id: -1, name: String::new(), energy: BigDecimal::from(-1), comment: None})
+        .ingredient_id;
+
+    dbg!(format!("requested name {} yielded ingredient id {}", item_data.ingredient_name, ingredient_id));
+    if ingredient_id < 0 { 
+        add_ingredient_form(
+            State(state), 
+            format!("{}={}&{}={}", INVENTORY_ID, item_data.inventory_id, FILTER_TEXT, header_data.filter_text))
+            .await
+    }
+    else {
+        let Ok(res) = state.db_connection.update_inventory_item(InventoryIngredient {
+                inventory_id: item_data.inventory_id,
+                ingredient_id: ingredient_id, 
+                amount: item_data.ingredient_amount
+        }).await else {
+            return return_to_inv_overview_error(item_data.inventory_id)
+        };
+        dbg!(res);
+        (render_filtered_inventory_contents(State(state), item_data.inventory_id, header_data.filter_text)).await
+    }
+}
+
+pub async fn add_ingredient_form(State(_state): State<MyAppState>, query: String) -> Markup
+{
+    let header_data = parse_inventory_header_data(query);
+    html! {
+        form hx-put="inventories/commit-ingredient" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-swap="outerHTML" {
+            div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
+                h1 { "Add ingredient" }
+                input type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
+                input type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text);
+                input type="text" list=(INGREDIENTS_DATALIST) name=(INGREDIENT_NAME) placeholder="Ingredient" required="required" class="text";
+                input type="number" name=(INGREDIENT_AMOUNT) placeholder="Amount" value="" step="0.01" min="0.05" required="required";
+                button class="btn btn-primary" type="submit" { "Submit" }
+            }
+        }
+    }
 }
 
 pub async fn commit_inventory(
@@ -45,35 +159,20 @@ pub async fn commit_inventory(
     let inventory = form.0;
     if inventory.inventory_id < 0 {
         let Ok(inventory_id) = state.db_connection.add_inventory(inventory.name).await else {
-            return html! {
-                div id="error" class="flex flex-col items-center justify-center text-red-500" {
-                    div {
-                        h1 { "Error" }
-                        p { "Failed to add inventory" }
-                        button class="btn btn-primary" hx-get="/inventories" hx-target="#content"  { "Back" }
-                    }
-                }
-            }
+            return return_to_inv_selection_error();
         };
         manage_inventory_form(State(state), inventory_id).await
     } else {
+        let id = inventory.inventory_id;
         let Ok(inventory_id) = state.db_connection.update_inventory(inventory).await else {
-            return html! {
-                div id="error" class="flex flex-col items-center justify-center text-red-500" {
-                    div {
-                        h1 { "Error" }
-                        p { "Failed to rename inventory" }
-                        button class="btn btn-primary" hx-get="/inventories" hx-target="#content"  { "Back" }
-                    }
-                }
-            }
+            return return_to_inv_overview_error(id)
         };
         manage_inventory_form(State(state), inventory_id).await
     }
 }
 
 pub async fn handle_select(State(state): State<MyAppState>, query: String) -> Markup {
-    let inventory_id = query.replace("selected-inv=", "").parse().unwrap();
+    let inventory_id = parse_inventory_header_data(query).inventory_id;
     
     manage_inventory_form(State(state.clone()), inventory_id).await
 }
@@ -86,15 +185,7 @@ pub async fn handle_delete_inventory(State(state): State<MyAppState>, query: Str
     let data = parse_inventory_header_data(query);
 
     let Ok(_) = state.db_connection.delete_inventory(data.inventory_id).await else {
-        return html! {
-            div id="error" class="flex flex-col items-center justify-center text-red-500" {
-                div {
-                    h1 { "Error" }
-                    p { "Failed to delete inventory" }
-                    button class="btn btn-primary" hx-get="/inventories" hx-target="#content"  { "Back" }
-                }
-            }
-        };
+        return return_to_inv_overview_error(data.inventory_id);
     };
     select_inventory_form(State(state)).await
 }
@@ -124,11 +215,11 @@ pub async fn select_inventory_form(State(state): State<MyAppState>) -> Markup {
         .await
         .unwrap_or_default();
     html! {
-        div class="flex flex-col items-center justify-center gap-5" id="inventories" {
+        div class="flex flex-col items-center justify-center gap-5" id=(INVENTORIES_DIV) {
             form hx-put="/inventories/select" hx-target="this" hx-swap="outerHTML" hx-trigger="change" {
                 div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full" {
-                    button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target="#inventories" { "+" };
-                    select class="fc-select" name="selected-inv" hx-indicator=".htmx-indicator" {
+                    button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "+" };
+                    select class="fc-select" name=(INVENTORY_ID) hx-indicator=".htmx-indicator" {
                         option value="-1" selected { "Select inventory" }; 
                         @for inventory in inventories.iter() { (inventory.format_for_select(-1)) }
                     }
@@ -149,22 +240,19 @@ pub async fn manage_inventory_form(
         .unwrap_or_default();
         
     html! {
-        div class="flex flex-col items-center justify-center gap-5" id="inventories" {
-            form hx-put="/inventories/manage" hx-target="#search-results" hx-trigger="change" {
+        div class="flex flex-col items-center justify-center gap-5" id=(INVENTORIES_DIV) {
+            form hx-put="/inventories/manage" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-trigger="change" {
                 div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full" {
-                    button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target="#inventories" { "+" };
-                    button hx-put="/inventories/edit-inventory" class="btn btn-primary" hx-target="#inventories" { "Edit" }
-                    select class="fc-select" name="selected-inv" hx-indicator=".htmx-indicator" hx-target="#search-results" {
+                    button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "+" };
+                    button hx-put="/inventories/edit-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Edit" }
+                    select class="fc-select" name=(INVENTORY_ID) hx-indicator=".htmx-indicator" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) {
                         @for inventory in inventories.iter() { (inventory.format_for_select(selected_inventory_id)) }
                     }
-                    button hx-put="/inventories/delete-inventory" class="btn btn-primary" hx-target="#inventories" { "Delete" }
-                    input type="text" class="text w-full" name="filter-text" ;//hx-trigger="keyup changed delay:20ms, search";       // TODO: Would be nice if this updated the contents without having to press enter
+                    button hx-put="/inventories/delete-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Delete" }
+                    input type="text" class="text w-full" name=(FILTER_TEXT);       // TODO: Would be nice if this updated the contents without having to press enter
                 }
             }
             (render_filtered_inventory_contents(State(state), selected_inventory_id, String::new()).await)
-            div hx-target="this"  hx-swap="outerHTML" {
-                button hx-get="/inventories/add_ingredient" class="btn btn-primary"  { "+" }
-            }
         }
     }
 }
@@ -176,7 +264,7 @@ pub async fn render_filtered_inventory_contents(
 ) -> Markup {
     let contents = state
         .db_connection
-        .get_filtered_inventory_contents(inventory_id, filter)
+        .get_filtered_inventory_contents(inventory_id, filter.clone())
         .await
         .unwrap_or_default();
 
@@ -187,12 +275,21 @@ pub async fn render_filtered_inventory_contents(
         .unwrap_or_default();
 
     html! {
-        datalist id="ingredients" { @for ingredient in ingredient_list { (ingredient.format_for_datalist()) } }
-        span class="htmx-indicator" { "Searching..." }
-        table class="text-inherit table-auto object-center" padding="0 0.5em" display="block" 
-        max-height="60vh" overflow-y="scroll" {
-            thead { tr { th { "Name" } th { "Amount" } th {} } }
-            tbody id="search-results" { @for item in contents { (item.format_for_ingredient_table()) } }
+        div id=(INVENTORY_CONTENTS_DIV) {
+            div id=(SEARCH_RESULTS_DIV) {
+                datalist id=(INGREDIENTS_DATALIST) { @for ingredient in ingredient_list { (ingredient.format_for_datalist()) } }
+                span class="htmx-indicator" { "Searching..." }
+                table class="text-inherit table-auto object-center" padding="0 0.5em" display="block" 
+                max-height="60vh" overflow-y="scroll" {
+                    thead { tr { th { "Name" } th { "Amount" } th {} } }
+                    tbody { @for item in contents { (item.format_for_ingredient_table()) } }
+                }
+            }
+            form hx-target="this" hx-put="/inventories/add-ingredient" hx-swap="outerHTML" {
+                input type="hidden" name=(INVENTORY_ID) value=(inventory_id);
+                input type="hidden" name=(FILTER_TEXT) value=(filter);
+                button type="submit" class="btn btn-primary"  { "+" }
+            }
         }
     }
 }
@@ -252,7 +349,7 @@ impl IngredientTableFormattable for IngredientWithWeight {
         html! {
             tr id=(format!("ingredient-{}", self.ingredient_id)) { // TODO: Put into form
                 td { 
-                    input type="text" list="ingredients" class="text w-full" name="selected-ingredient" 
+                    input type="text" list=(INGREDIENTS_DATALIST) class="text w-full" name="selected-ingredient" 
                     hx-post="/inventories/select-ingredient" hx-indicator=".htmx-indicator" value=(self.name); 
                 }
                 td { input type="number" name="amount" value=(self.amount) required="required"; }

@@ -109,6 +109,7 @@ impl FoodBase {
     }
 
     pub async fn delete_inventory(&self, inventory_id: i32) -> eyre::Result<()> {
+        dbg!(format!("Trying to delete inventory {}", inventory_id));
         let mut transaction = self.pg_pool.begin().await?;
 
         sqlx::query!(
@@ -141,7 +142,7 @@ impl FoodBase {
         .execute(&mut *transaction)
         .await?;
 
-        transaction.commit();
+        transaction.commit().await?;
         Ok(())
     }
 
