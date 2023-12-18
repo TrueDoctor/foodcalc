@@ -227,6 +227,125 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn fetch_subrecipes(
+        &self,
+        recipe_id: i32,
+        weight: BigDecimal,
+    ) -> eyre::Result<Vec<SubRecipe>> {
+        let subrecipes = sqlx::query_as!(
+            SubRecipe,
+            r#"
+                SELECT
+                    recipe as "recipe!",
+                    ingredient as "ingredient!",
+                    round(weight * $2, 10)  as "weight!",
+                    subrecipe as "subrecipe!",
+                    is_subrecipe as "is_subrecipe!",
+                    subrecipe_id as "subrecipe_id!"
+                FROM subrecipes
+                WHERE recipe_id = $1
+                ORDER BY recipe, subrecipe_id, ingredient
+
+            "#,
+            recipe_id,
+            weight,
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(subrecipes)
+    }
+
+    //pub async fn fetch_subrecipes_from_meal(&self, meal_id: i32) -> eyre::Result<()> {
+    //    let meal = self.get_meal
+    //    let weight = meal.weight;
+    //    let recipe_id = meal.recipe_id;
+    //    self.fetch_subrecipes(recipe_id, weight).await
+    //}
+
+    pub async fn calc_energy_to_weight(
+        &self,
+        recipe_id: i32,
+        energy: BigDecimal,
+    ) -> eyre::Result<BigDecimal> {
+        let recipe_stats = sqlx::query!(
+            r#"
+                SELECT
+                    weight, energy
+                    FROM recipe_stats
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        let recipe_weight = recipe_stats.weight.unwrap();
+        let recipe_energy = recipe_stats.energy.unwrap();
+        Ok(recipe_weight / recipe_energy * energy)
+    }
+
+    pub async fn format_subrecipes_markdown(&self, subrecipes: Vec<SubRecipe>) -> String {
+        let mut keys = subrecipes
+            .iter()
+            .map(|sr| sr.subrecipe_id)
+            .collect::<Vec<i32>>();
+        keys.dedup();
+
+        let mut subrecipe_markdown = Vec::new();
+        for subrecipe_id in keys {
+            let mut text = String::new();
+            let ingredients: Vec<_> = subrecipes
+                .iter()
+                .filter(|sr| sr.subrecipe_id == subrecipe_id)
+                .collect();
+            let steps = self
+                .get_recipe_steps(subrecipe_id)
+                .await
+                .unwrap_or_default();
+            let title = ingredients
+                .first()
+                .ok_or(eyre::eyre!("No subrecipe provided"))
+                .unwrap()
+                .subrecipe
+                .clone();
+            text.push_str(&format!("# {}\n", title));
+
+            for ingredient in ingredients {
+                text.push_str(&format!(
+                    "* {:.3}kg {}\n",
+                    ingredient.weight, ingredient.ingredient
+                ));
+            }
+
+            if !steps.is_empty() {
+                for (i, step) in steps.iter().enumerate() {
+                    text.push_str(&format!(
+                        "## {}. {}\n{}\n",
+                        i + 1,
+                        step.step_name,
+                        step.step_description
+                    ));
+                }
+            }
+            subrecipe_markdown.push(text);
+        }
+        subrecipe_markdown.join("\n")
+    }
+
+    pub async fn fetch_subrecipes_from_user_input(
+        &self,
+        recipe: Recipe,
+        people: f64,
+        calories: u32,
+    ) -> eyre::Result<Vec<SubRecipe>> {
+        let total_calories = BigDecimal::from((calories as f64 * people) as u64);
+        let weight = self
+            .calc_energy_to_weight(recipe.recipe_id, total_calories)
+            .await
+            .unwrap_or_default();
+        self.fetch_subrecipes(recipe.recipe_id, weight).await
+    }
+
     pub async fn fetch_subrecipes_export(
         &self,
         recipe_id: i32,
@@ -628,7 +747,7 @@ impl FoodBase {
         let recipe_id = reference.parse::<i32>().unwrap_or_else(|_| -1);
 
         let records = sqlx::query_as!(
-            Recipe, 
+            Recipe,
             r#" 
                 SELECT * FROM recipes 
                 WHERE recipe_id = $1 OR name = $2
@@ -636,7 +755,7 @@ impl FoodBase {
             "#,
             recipe_id,
             reference
-            )
+        )
         .fetch_one(&*self.pg_pool)
         .await;
 

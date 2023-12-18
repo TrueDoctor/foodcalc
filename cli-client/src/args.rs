@@ -133,6 +133,9 @@ pub enum PrintCommands {
     Mealplan(PrintEvent),
     /// Print the recipe for a given meal
     Meal(PrintMeal),
+
+    /// Print a given Recipe
+    Recipe(PrintRecipe),
 }
 
 #[derive(Debug, Args)]
@@ -149,6 +152,19 @@ pub struct PrintEvent {
 pub struct PrintMeal {
     /// Meal to print (use ID or name)
     pub meal: String,
+}
+
+#[derive(Debug, Args)]
+pub struct PrintRecipe {
+    /// Recipe to print (use ID or name)
+    pub recipe: String,
+
+    /// Number of people to cook for
+    pub people: u32,
+
+    /// Number of calories per serving
+    #[clap(default_value = "2400")]
+    pub calories: Option<u32>,
 }
 
 // ---- Admin Commands ----

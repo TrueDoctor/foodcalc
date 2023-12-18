@@ -8,9 +8,7 @@ use clap::Parser;
 use tabled::{
     builder::Builder,
     settings::{
-        locator::ByColumnName,
-        style::BorderSpanCorrection,
-        Disable, Panel, Settings, Style,
+        locator::ByColumnName, style::BorderSpanCorrection, Disable, Panel, Settings, Style,
     },
     Table,
 };
@@ -344,40 +342,6 @@ async fn main() {
                             }
 
                             if tables.len() > 0 {
-                                //TODO Merge Tables like this:
-                                // ╭────────────────────────────────────────────────────────────────────╮
-                                // │ Saturday, 18.06.2022                                               │
-                                // ├───────────────────┬───────────┬───────┬───────┬──────────┬─────────┤
-                                // │ Name              │ Place     │ Start │ End   │ Servings │ Comment │
-                                // ├───────────────────┼───────────┼───────┼───────┼──────────┼─────────┤
-                                // │ Frühstück         │ Akk Halle │ 08:00 │ 10:00 │ 60       │         │
-                                // │ Snacks            │ Akk Halle │ 10:00 │ 00:00 │ 200      │         │
-                                // │ Reis-Nudel-Buffet │ Akk Halle │ 14:30 │ 18:00 │ 80       │         │
-                                // │ Lasagne           │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
-                                // │ Linsensuppe       │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
-                                // │ Flammkuchen mix   │ Akk Halle │ 18:00 │ 00:00 │ 200      │         │
-                                // ├───────────────────┴───────────┴───────┴───────┴──────────┴─────────┤
-                                // │ Saturday, 18.06.2022                                               │
-                                // ├───────────────────┬───────────┬───────┬───────┬──────────┬─────────┤
-                                // │ Frühstück         │ Akk Halle │ 08:00 │ 09:30 │ 20       │         │
-                                // │ Curry mit Reis    │ Akk Halle │ 12:30 │ 14:30 │ 100      │         │
-                                // │ Reis-Nudel-Buffet │ Akk Halle │ 14:00 │ 18:00 │ 80       │         │
-                                // │ Käsespätzle       │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
-                                // │ Chili con Reis    │ Akk Halle │ 18:00 │ 00:00 │ 160      │         │
-                                // │ Pizza mix         │ Akk Halle │ 18:00 │ 00:00 │ 200      │         │
-                                // │ Salat Mix         │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
-                                // ├───────────────────┴───────────┴───────┴───────┴──────────┴─────────┤
-                                // │ Saturday, 18.06.2022                                               │
-                                // ├───────────────────┬───────────┬───────┬───────┬──────────┬─────────┤
-                                // │ Frühstück         │ Akk Halle │ 08:00 │ 09:30 │ 20       │         │
-                                // │ Curry mit Reis    │ Akk Halle │ 12:30 │ 14:30 │ 100      │         │
-                                // │ Reis-Nudel-Buffet │ Akk Halle │ 14:00 │ 18:00 │ 80       │         │
-                                // │ Käsespätzle       │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
-                                // │ Chili con Reis    │ Akk Halle │ 18:00 │ 00:00 │ 160      │         │
-                                // │ Pizza mix         │ Akk Halle │ 18:00 │ 00:00 │ 200      │         │
-                                // │ Salat Mix         │ Akk Halle │ 18:00 │ 00:00 │ 120      │         │
-                                // ╰───────────────────┴───────────┴───────┴───────┴──────────┴─────────╯
-
                                 if tables.len() > 1 {
                                     tables.into_iter().for_each(|(date, mut table)| {
                                         table
@@ -400,6 +364,25 @@ async fn main() {
                     let meal_ref = meal.meal.as_str();
                     //TODO Print Meal
                     println!("Printing Meal {:?}", meal_ref);
+                }
+                PrintCommands::Recipe(recipe) => {
+                    let recipe_ref = &recipe.recipe;
+                    let people = recipe.people;
+                    let calories = recipe.calories.unwrap_or(1400);
+                    let recipe = food_base
+                        .get_recipe_from_string_reference(recipe_ref.to_string())
+                        .await
+                        .unwrap();
+
+                    let subrecipes = food_base
+                        .fetch_subrecipes_from_user_input(recipe, people as f64, calories)
+                        .await
+                        .unwrap();
+                    let markdown = food_base
+                        .format_subrecipes_markdown(subrecipes)
+                        .await;
+
+                    println!("{}", markdown);
                 }
             }
         }
