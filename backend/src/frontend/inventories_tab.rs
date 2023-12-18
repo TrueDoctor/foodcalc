@@ -1,8 +1,8 @@
-use axum::extract::State;
+use axum::extract::{State, Form};
 use bigdecimal::BigDecimal;
 use foodlib::{IngredientWithWeight, Inventory, Ingredient, InventoryIngredient};
 use maud::{html, Markup};
-use regex::Regex;
+use serde::Deserialize;
 
 use crate::MyAppState;
 
@@ -20,10 +20,11 @@ pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
 }
 
 // Request parameters
-static INVENTORY_ID: &'static str = "inventory-id";
-static FILTER_TEXT: &'static str = "filter-text";
-static INGREDIENT_NAME: &'static str = "ingredient-name";
-static INGREDIENT_AMOUNT: &'static str = "ingredient-amount";
+static INVENTORY_ID: &'static str = "inventory_id";
+static FILTER_TEXT: &'static str = "filter_text";
+static INGREDIENT_ID: &'static str = "ingredient_id";
+static INGREDIENT_NAME: &'static str = "ingredient_name";
+static INGREDIENT_AMOUNT: &'static str = "ingredient_amount";
 
 // htmx ids
 static SEARCH_RESULTS_DIV: &'static str = "search-results";
@@ -33,51 +34,31 @@ static INGREDIENTS_DATALIST: &'static str = "ingredients";
 
 // TODO: Refactor request paths to constants
 
+#[derive(Debug, Deserialize)]
 pub struct InventoryHeaderData {
     pub inventory_id: i32,
-    pub filter_text: String,
+    pub filter_text: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
 pub struct InventoryItemData {
     pub inventory_id: i32,
+    pub filter_text: Option<String>,
+    pub ingredient_id: i32,
     pub ingredient_name: String,
     pub ingredient_amount: BigDecimal,
 }
 
 impl Default for InventoryHeaderData {
     fn default() -> Self {
-        InventoryHeaderData { inventory_id: -1, filter_text: String::new() }
+        InventoryHeaderData { inventory_id: -1, filter_text: None }
     }
 }
 
 impl Default for InventoryItemData {
     fn default() -> Self {
-        InventoryItemData { inventory_id: -1, ingredient_name: String::new(), ingredient_amount: BigDecimal::from(0) }
+        InventoryItemData { inventory_id: -1, filter_text: None, ingredient_id: -1, ingredient_name: String::new(), ingredient_amount: BigDecimal::from(0) }
     }
-}
-
-pub fn parse_inventory_header_data(query: String) -> InventoryHeaderData {
-    // TODO: Let Dennis look this over and see if it's best practice
-    let parameter_regex = Regex::new(format!(r"(?<param_name>{}|{})=(?<param_value>[^&]*)&?", INVENTORY_ID, FILTER_TEXT).as_str()).unwrap();
-    
-    let mut data: InventoryHeaderData = InventoryHeaderData::default();
-    for (_, [key, value]) in parameter_regex.captures_iter(query.as_str()).map(|c| c.extract()) {
-        if key == INVENTORY_ID { data.inventory_id = value.parse().unwrap(); }
-        else if key == FILTER_TEXT { data.filter_text = String::from(value.replace("%20", " ")); }
-    }
-    data
-}
-
-pub fn parse_inventory_item_data(query: String) -> InventoryItemData {
-    let parameter_regex = Regex::new(format!(r"(?<param_name>{}|{}|{})=(?<param_value>[^&]*)&?", INVENTORY_ID, INGREDIENT_NAME, INGREDIENT_AMOUNT).as_str()).unwrap();
-    
-    let mut data: InventoryItemData = InventoryItemData::default();
-    for (_, [key, value]) in parameter_regex.captures_iter(query.as_str()).map(|c| c.extract()) {
-        if key == INVENTORY_ID { data.inventory_id = value.parse().unwrap(); }
-        else if key == INGREDIENT_NAME { data.ingredient_name = String::from(value.replace("%20", " ")); }
-        else if key == INGREDIENT_AMOUNT { data.ingredient_amount = value.parse().unwrap(); }
-    }
-    data
 }
 
 fn return_to_inv_selection_error() -> Markup {
@@ -105,45 +86,46 @@ fn return_to_inv_overview_error(inventory_id: i32) -> Markup {
     }
 }
 
-pub async fn handle_ingredient_commit(State(state): State<MyAppState>, query: String) -> Markup {
-    let item_data = parse_inventory_item_data(query.clone());
-    let header_data = parse_inventory_header_data(query);
+pub async fn handle_ingredient_commit(State(state): State<MyAppState>, data: Form<InventoryItemData>) -> Markup {
     let ingredient_id = state
         .db_connection
-        .get_ingredient_from_string_reference(item_data.ingredient_name.clone())
+        .get_ingredient_from_string_reference(data.ingredient_name.clone())
         .await
         .unwrap_or(Ingredient {ingredient_id: -1, name: String::new(), energy: BigDecimal::from(-1), comment: None})
         .ingredient_id;
 
-    dbg!(format!("requested name {} yielded ingredient id {}", item_data.ingredient_name, ingredient_id));
+    dbg!(format!("requested name {} yielded ingredient id {}", data.ingredient_name, ingredient_id));
     if ingredient_id < 0 { 
-        add_ingredient_form(
-            State(state), 
-            format!("{}={}&{}={}", INVENTORY_ID, item_data.inventory_id, FILTER_TEXT, header_data.filter_text))
-            .await
+        add_ingredient_form_with_header_data(InventoryHeaderData { inventory_id: data.inventory_id, filter_text: data.filter_text.clone() })
     }
     else {
         let Ok(res) = state.db_connection.update_inventory_item(InventoryIngredient {
-                inventory_id: item_data.inventory_id,
+                inventory_id: data.inventory_id,
                 ingredient_id: ingredient_id, 
-                amount: item_data.ingredient_amount
+                amount: data.ingredient_amount.clone()
         }).await else {
-            return return_to_inv_overview_error(item_data.inventory_id)
+            return return_to_inv_overview_error(data.inventory_id)
         };
         dbg!(res);
-        (render_filtered_inventory_contents(State(state), item_data.inventory_id, header_data.filter_text)).await
+        (render_filtered_inventory_contents(State(state), data.inventory_id, data.filter_text.clone())).await
     }
 }
 
-pub async fn add_ingredient_form(State(_state): State<MyAppState>, query: String) -> Markup
+
+
+pub async fn add_ingredient_form(Form(header_data): Form<InventoryHeaderData>) -> Markup
 {
-    let header_data = parse_inventory_header_data(query);
+    add_ingredient_form_with_header_data(header_data)
+}
+
+pub fn add_ingredient_form_with_header_data(header_data: InventoryHeaderData) -> Markup
+{
     html! {
         form hx-put="inventories/commit-ingredient" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-swap="outerHTML" {
             div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
                 h1 { "Add ingredient" }
                 input type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
-                input type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text);
+                input type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.unwrap_or_default());
                 input type="text" list=(INGREDIENTS_DATALIST) name=(INGREDIENT_NAME) placeholder="Ingredient" required="required" class="text";
                 input type="number" name=(INGREDIENT_AMOUNT) placeholder="Amount" value="" step="0.01" min="0.05" required="required";
                 button class="btn btn-primary" type="submit" { "Submit" }
@@ -154,7 +136,7 @@ pub async fn add_ingredient_form(State(_state): State<MyAppState>, query: String
 
 pub async fn commit_inventory(
     State(state): State<MyAppState>,
-    form: axum::extract::Form<foodlib::Inventory>,
+    form: Form<foodlib::Inventory>,
 ) -> Markup {
     let inventory = form.0;
     if inventory.inventory_id < 0 {
@@ -171,33 +153,27 @@ pub async fn commit_inventory(
     }
 }
 
-pub async fn handle_select(State(state): State<MyAppState>, query: String) -> Markup {
-    let inventory_id = parse_inventory_header_data(query).inventory_id;
-    
-    manage_inventory_form(State(state.clone()), inventory_id).await
+pub async fn handle_select(State(state): State<MyAppState>, header_data: axum::extract::Form<InventoryHeaderData>) -> Markup {
+    manage_inventory_form(State(state.clone()), header_data.inventory_id).await
 }
 
 pub async fn handle_add_inventory(State(state): State<MyAppState>) -> Markup {
     add_or_edit_inventory_form(State(state), -1, String::new())
 }
 
-pub async fn handle_delete_inventory(State(state): State<MyAppState>, query: String) -> Markup {
-    let data = parse_inventory_header_data(query);
-
+pub async fn handle_delete_inventory(State(state): State<MyAppState>, data: axum::extract::Form<InventoryHeaderData>) -> Markup {
     let Ok(_) = state.db_connection.delete_inventory(data.inventory_id).await else {
         return return_to_inv_overview_error(data.inventory_id);
     };
     select_inventory_form(State(state)).await
 }
 
-pub async fn handle_manage(State(state): State<MyAppState>, query: String) -> Markup {
-    let data = parse_inventory_header_data(query);
-    render_filtered_inventory_contents(State(state), data.inventory_id, data.filter_text).await
+pub async fn handle_manage(State(state): State<MyAppState>, data: axum::extract::Form<InventoryHeaderData>) -> Markup {
+    render_filtered_inventory_contents(State(state), data.inventory_id, data.filter_text.clone()).await
 }
 
-pub async fn handle_edit_inventory(State(state): State<MyAppState>, query: String) -> Markup {
-    let data = parse_inventory_header_data(query);
-    
+#[axum::debug_handler]
+pub async fn handle_edit_inventory(State(state): State<MyAppState>, data: axum::extract::Form<InventoryHeaderData>) -> Markup {
     let inventory_name = state
         .db_connection
         .get_inventory_from_id(data.inventory_id)
@@ -252,7 +228,7 @@ pub async fn manage_inventory_form(
                     input type="text" class="text w-full" name=(FILTER_TEXT);       // TODO: Would be nice if this updated the contents without having to press enter
                 }
             }
-            (render_filtered_inventory_contents(State(state), selected_inventory_id, String::new()).await)
+            (render_filtered_inventory_contents(State(state), selected_inventory_id, None).await)
         }
     }
 }
@@ -260,13 +236,14 @@ pub async fn manage_inventory_form(
 pub async fn render_filtered_inventory_contents(
     State(state): State<MyAppState>,
     inventory_id: i32,
-    filter: String,
+    filter: Option<String>,
 ) -> Markup {
     let contents = state
         .db_connection
         .get_filtered_inventory_contents(inventory_id, filter.clone())
         .await
         .unwrap_or_default();
+    dbg!(contents.clone());
 
     let ingredient_list = state
         .db_connection
@@ -282,12 +259,12 @@ pub async fn render_filtered_inventory_contents(
                 table class="text-inherit table-auto object-center" padding="0 0.5em" display="block" 
                 max-height="60vh" overflow-y="scroll" {
                     thead { tr { th { "Name" } th { "Amount" } th {} } }
-                    tbody { @for item in contents { (item.format_for_ingredient_table()) } }
+                    tbody { @for item in contents { (item.format_for_ingredient_table( InventoryHeaderData { inventory_id: inventory_id, filter_text: filter.clone() })) } }
                 }
             }
             form hx-target="this" hx-put="/inventories/add-ingredient" hx-swap="outerHTML" {
                 input type="hidden" name=(INVENTORY_ID) value=(inventory_id);
-                input type="hidden" name=(FILTER_TEXT) value=(filter);
+                input type="hidden" name=(FILTER_TEXT) value=(filter.unwrap_or_default());
                 button type="submit" class="btn btn-primary"  { "+" }
             }
         }
@@ -341,19 +318,22 @@ impl SelectFormattable for IngredientWithWeight {
 }
 
 pub trait IngredientTableFormattable {
-    fn format_for_ingredient_table(&self) -> Markup;
+    fn format_for_ingredient_table(&self, header_data: InventoryHeaderData) -> Markup;
 }
 
 impl IngredientTableFormattable for IngredientWithWeight {
-    fn format_for_ingredient_table(&self) -> Markup {
+    fn format_for_ingredient_table(&self, header_data: InventoryHeaderData) -> Markup {
+        let form_id = format!("ingredient-{}-form", self.ingredient_id);
         html! {
             tr id=(format!("ingredient-{}", self.ingredient_id)) { // TODO: Put into form
                 td { 
-                    input type="text" list=(INGREDIENTS_DATALIST) class="text w-full" name="selected-ingredient" 
-                    hx-post="/inventories/select-ingredient" hx-indicator=".htmx-indicator" value=(self.name); 
+                    input class=(form_id) type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
+                    input class=(form_id) type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.unwrap_or_default());
+                    input class=(form_id) type="hidden" name=(INGREDIENT_ID) value=(self.ingredient_id);
+                    input class=(format!("text w-full {}",form_id)) type="text" list=(INGREDIENTS_DATALIST) name=(INGREDIENT_NAME) value=(self.name); 
                 }
-                td { input type="number" name="amount" value=(self.amount) required="required"; }
-                td { button class="btn btn-primary" type="submit" { "X" } }
+                td { input  type="number" name="amount" value=(self.amount) required="required"; }
+                td { button hx-include=(format!(".{}", form_id)) class="btn btn-primary" hx-put="inventories/delete-ingredient" type="submit" hx-target=(format!("#{}", INVENTORY_CONTENTS_DIV)) hx-swap="innerHTML" { "X" } }
             }
         }
     }

@@ -11,7 +11,7 @@ default = []
 tectonic = ["foodlib/tectonic"]
 
 [dependencies]
-axum = { version = "0.6" }
+axum = { version = "0.6", features = ["macros"] }
 foodlib = { path = "../foodlib" }
 tower-http = { version = "*", features = ["cors", "fs", "trace"] }
 rust-embed = { version = "*", features = ["axum"] }

@@ -14,6 +14,7 @@ pub struct Inventory {
     pub name: String,
 }
 
+#[derive(Debug, Clone)]
 pub struct IngredientWithWeight {
     pub ingredient_id: i32,
     pub name: String,
@@ -202,8 +203,8 @@ impl FoodBase {
         }
     }
 
-    pub async fn get_filtered_inventory_contents(&self, inventory_id: i32, filter: String) -> eyre::Result<Vec<IngredientWithWeight>> {
-        let filter = format!("%{}%",filter);
+    pub async fn get_filtered_inventory_contents(&self, inventory_id: i32, filter: Option<String>) -> eyre::Result<Vec<IngredientWithWeight>> {
+        let filter_string = format!("%{}%", filter.unwrap_or_default());
         let records = sqlx::query_as!(
             IngredientWithWeight,
             r#" 
@@ -213,12 +214,12 @@ impl FoodBase {
                 ORDER BY name
             "#,
             inventory_id,
-            filter
+            filter_string
         )
         .fetch_all(&*self.pg_pool)
         .await?;
 
-        Ok(records)
+        Ok(dbg!(records))
     }
 
     pub async fn update_inventory_item(&self, values: InventoryIngredient) -> eyre::Result<()> {
