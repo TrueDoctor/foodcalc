@@ -117,10 +117,6 @@ pub struct PrintCommand {
     #[clap(subcommand)]
     pub print_type: PrintCommands,
 
-    #[arg(short, long, default_value = "h")]
-    // The Output Format
-    pub format: String,
-
     #[arg(short, long)]
     // The Output File
     pub output_file: Option<String>,
@@ -165,6 +161,11 @@ pub struct PrintRecipe {
     /// Number of calories per serving
     #[clap(default_value = "2400")]
     pub calories: Option<u32>,
+
+    #[arg(short, long, default_value = "markdown")]
+    // The Output Format
+    pub format: String,
+
 }
 
 // ---- Admin Commands ----

@@ -255,6 +255,20 @@ impl FoodBase {
         Ok(subrecipes)
     }
 
+    pub async fn fetch_subrecipes_from_user_input(
+        &self,
+        recipe: Recipe,
+        people: f64,
+        calories: u32,
+    ) -> eyre::Result<Vec<SubRecipe>> {
+        let total_calories = BigDecimal::from((calories as f64 * people) as u64);
+        let weight = self
+            .calc_energy_to_weight(recipe.recipe_id, total_calories)
+            .await
+            .unwrap_or_default();
+        self.fetch_subrecipes(recipe.recipe_id, weight).await
+    }
+
     //pub async fn fetch_subrecipes_from_meal(&self, meal_id: i32) -> eyre::Result<()> {
     //    let meal = self.get_meal
     //    let weight = meal.weight;
@@ -332,45 +346,7 @@ impl FoodBase {
         subrecipe_markdown.join("\n")
     }
 
-    pub async fn fetch_subrecipes_from_user_input(
-        &self,
-        recipe: Recipe,
-        people: f64,
-        calories: u32,
-    ) -> eyre::Result<Vec<SubRecipe>> {
-        let total_calories = BigDecimal::from((calories as f64 * people) as u64);
-        let weight = self
-            .calc_energy_to_weight(recipe.recipe_id, total_calories)
-            .await
-            .unwrap_or_default();
-        self.fetch_subrecipes(recipe.recipe_id, weight).await
-    }
-
-    pub async fn fetch_subrecipes_export(
-        &self,
-        recipe_id: i32,
-        weight: BigDecimal,
-    ) -> Result<(), eyre::Error> {
-        let subrecipes = sqlx::query_as!(
-            SubRecipe,
-            r#"
-                SELECT
-                    recipe as "recipe!",
-                    ingredient as "ingredient!",
-                    round(weight * $2, 10)  as "weight!",
-                    subrecipe as "subrecipe!",
-                    is_subrecipe as "is_subrecipe!",
-                    subrecipe_id as "subrecipe_id!"
-                FROM subrecipes
-                WHERE recipe_id = $1
-                ORDER BY recipe, subrecipe_id, ingredient
-
-            "#,
-            recipe_id,
-            weight,
-        )
-        .fetch_all(&*self.pg_pool)
-        .await?;
+    pub async fn format_subrecipes_latex(&self, subrecipes: Vec<SubRecipe>) -> String {
         let mut keys = subrecipes
             .iter()
             .map(|sr| sr.subrecipe_id)
@@ -412,9 +388,21 @@ impl FoodBase {
             self.format_subrecipe(&mut text, ingredients, steps)
                 .unwrap_or_else(|e| log::error!("{e}"));
         }
+        text.push_str("\\end{document}");
+        text
+    }
 
-        use std::fmt::Write as FmtWrite;
-        writeln!(text, "\\end{{document}}")?;
+    // TODO Should probabyl use fetch_subrecipes and format_subrecipes_latex
+    pub async fn fetch_subrecipes_export(
+        &self,
+        recipe_id: i32,
+        weight: BigDecimal,
+    ) -> Result<(), eyre::Error> {
+        let text = self
+            .format_subrecipes_latex(self.fetch_subrecipes(recipe_id, weight).await?)
+            .await;
+
+        let title = self.get_recipe_from_string_reference(recipe_id.to_string()).await.unwrap().name;
 
         #[cfg(feature = "tectonic")]
         {
@@ -485,7 +473,7 @@ impl FoodBase {
         {
             let mut file = std::fs::File::create(format!(
                 "recipes/{}.tex",
-                subrecipes.first().unwrap().recipe
+                title.replace(" ", "_").to_lowercase()
             ))
             .unwrap();
             use std::io::prelude::Write as WF;

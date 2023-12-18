@@ -369,20 +369,28 @@ async fn main() {
                     let recipe_ref = &recipe.recipe;
                     let people = recipe.people;
                     let calories = recipe.calories.unwrap_or(1400);
-                    let recipe = food_base
+                    let recipe_data = food_base
                         .get_recipe_from_string_reference(recipe_ref.to_string())
                         .await
                         .unwrap();
 
                     let subrecipes = food_base
-                        .fetch_subrecipes_from_user_input(recipe, people as f64, calories)
+                        .fetch_subrecipes_from_user_input(recipe_data, people as f64, calories)
                         .await
                         .unwrap();
-                    let markdown = food_base
-                        .format_subrecipes_markdown(subrecipes)
-                        .await;
 
-                    println!("{}", markdown);
+                    let output = match recipe.format.to_string().as_str() {
+                        "latex" | "tex" => {
+                            food_base.format_subrecipes_latex(subrecipes).await
+                        }
+                        "markdown" => {
+                            food_base.format_subrecipes_markdown(subrecipes).await
+                        }
+                        _ => {
+                            "Unknown Format".to_string()
+                        }
+                    };
+                    println!("{}", output);
                 }
             }
         }
