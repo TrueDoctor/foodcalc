@@ -323,6 +323,10 @@ impl FoodBase {
                 .subrecipe
                 .clone();
             text.push_str(&format!("# {}\n", title));
+            let weight: BigDecimal = ingredients
+                .iter()
+                .map(|ingredient| ingredient.weight.clone())
+                .sum();
 
             for ingredient in ingredients {
                 text.push_str(&format!(
@@ -332,11 +336,23 @@ impl FoodBase {
             }
 
             if !steps.is_empty() {
-                for (i, step) in steps.iter().enumerate() {
+                for (i, step) in steps.into_iter().enumerate() {
+
+                    fn to_minutes(duration: PgInterval) -> f64 {
+                        duration.microseconds as f64 / 1_000_000. / 60.
+                    }
+                    let fixed_duration = to_minutes(step.fixed_duration);
+                    let duration_per_kg = to_minutes(step.duration_per_kg);
+                    let scaled_duration = duration_per_kg * weight.to_f64().unwrap_or_default();
+                    let duration = fixed_duration + scaled_duration;
+
                     text.push_str(&format!(
-                        "## {}. {}\n{}\n",
+                        "## {}. {} ({:.3} + {:.3} = {:.3} min)\n{}\n",
                         i + 1,
                         step.step_name,
+                        fixed_duration,
+                        scaled_duration,
+                        duration,
                         step.step_description
                     ));
                 }
@@ -683,9 +699,7 @@ impl FoodBase {
         }
         for step in steps {
             fn to_minutes(duration: PgInterval) -> f64 {
-                let duration = chrono::Duration::microseconds(duration.microseconds);
-                duration.num_minutes().to_f64().unwrap_or_default()
-                    + duration.num_seconds().to_f64().unwrap_or_default() / 60.
+                duration.microseconds as f64 / 1_000_000. / 60.
             }
             let duration = to_minutes(step.duration_per_kg) * weight.to_f64().unwrap_or_default()
                 + to_minutes(step.fixed_duration);
