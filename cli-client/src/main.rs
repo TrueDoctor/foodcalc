@@ -131,12 +131,40 @@ async fn main() {
                     let table = Table::new(meals).with(table_config).to_string();
                     print!("{}", table);
                 }
+                ListTypes::Users => {
+                    // TODO Improve Formatting
+                    food_base
+                        .get_users()
+                        .await
+                        .unwrap()
+                        .iter()
+                        .for_each(|user| {
+                            print!("{}\t{}", user.id, user.username);
+                            if user.is_admin {
+                                print!("\tAdmin");
+                            }
+                            println!();
+                        });
+                }
             }
         }
-        Commands::Show(show_statement) => {
+        Commands::Info(show_statement) => {
             match &show_statement.show_type {
-                ShowCommands::Event(event) => {
-                    let event_ref = event.event.as_str();
+                InfoCommands::Ingredient(ingredient) => {
+                    let ingredient_ref = ingredient.ingredient_ref.as_str();
+
+                    let ingredient =
+                        food_base.get_ingredient_from_string_reference(ingredient_ref.to_string());
+
+                    if let Some(ingredient) = ingredient.await {
+                        println!("Showing Ingredient {:?}", ingredient);
+                        //TODO Add Ingredient Formatting
+                    } else {
+                        println!("Ingredient not found");
+                    }
+                }
+                InfoCommands::Event(event) => {
+                    let event_ref = event.event_ref.as_str();
 
                     let event = food_base
                         .get_event_from_string_reference(event_ref.to_string())
@@ -175,8 +203,8 @@ async fn main() {
                         println!("Event not found");
                     }
                 }
-                ShowCommands::Recipe(recipe) => {
-                    let recipe_ref = recipe.recipe.as_str();
+                InfoCommands::Recipe(recipe) => {
+                    let recipe_ref = recipe.recipe_ref.as_str();
                     println!("Showing Recipe {:?}", recipe_ref);
 
                     let recipe = food_base
@@ -190,8 +218,8 @@ async fn main() {
                         println!("Recipe not found");
                     }
                 }
-                ShowCommands::Meal(meal) => {
-                    let _recipe_ref = meal.recipe.as_str();
+                InfoCommands::Meal(meal) => {
+                    let _recipe_ref = meal.recipe_ref.as_str();
                     let recipe = food_base
                         .get_recipe_from_string_reference(_recipe_ref.to_string())
                         .await;
@@ -202,7 +230,7 @@ async fn main() {
                     }
                     let recipe = recipe.unwrap();
 
-                    let _event_ref = meal.event.as_str();
+                    let _event_ref = meal.event_ref.as_str();
                     let event = food_base
                         .get_event_from_string_reference(_event_ref.to_string())
                         .await;
@@ -216,6 +244,8 @@ async fn main() {
                     let meals = food_base
                         .get_event_meal(event.event_id, recipe.recipe_id)
                         .await;
+
+                    //TODO Implement time filter
 
                     match meals {
                         Ok(meals) => {
@@ -282,10 +312,10 @@ async fn main() {
                 }
             }
         }
-        Commands::Print(print_data) => {
+        Commands::Calc(print_data) => {
             match &print_data.print_type {
-                PrintCommands::Mealplan(event) => {
-                    let event_ref = &event.event;
+                CalcCommands::Mealplan(event) => {
+                    let event_ref = &event.event_ref;
 
                     let event = food_base
                         .get_event_from_string_reference(event_ref.to_string())
@@ -359,15 +389,18 @@ async fn main() {
                         }
                     }
                 }
-                PrintCommands::Meal(meal) => {
-                    let meal_ref = meal.meal.as_str();
+                CalcCommands::Meal(meal) => {
+                    let _event_ref = meal.event_ref.as_str();
+                    let _recipe_ref = meal.recipe_ref.as_str();
+                    //let start_time_ref = meal.start_time.as_str();
+
                     //TODO Print Meal
-                    println!("Printing Meal {:?}", meal_ref);
+                    println!("Printing Meal ");
                 }
-                PrintCommands::Recipe(recipe) => {
+                CalcCommands::Recipe(recipe) => {
                     let recipe_ref = &recipe.recipe;
                     let people = recipe.people;
-                    let calories = recipe.calories.unwrap_or(1400);
+                    let calories = recipe.calories;
                     let recipe_data = food_base
                         .get_recipe_from_string_reference(recipe_ref.to_string())
                         .await
@@ -391,32 +424,61 @@ async fn main() {
                 }
             }
         }
-        Commands::User(user_data) => match &user_data.user_type {
-            UserCommands::Create(params) => {
-                let user_name = params.user.as_str();
-                let user_password = params.password.as_str();
-                let user_email = params.email.as_str();
-                let is_admin = params.admin;
+        Commands::Add(add_data) => {
+            match &add_data.add_type {
+                AddCommands::Ingredient(ingredient) => {
+                    //TODO Implement
+                    let _name = ingredient.name.as_str();
+                    let _energy = ingredient.energy;
+                    let _comment = ingredient.comment.as_str();
+                }
+                AddCommands::Recipe(recipe) => {
+                    //TODO Implement
+                    let _name = recipe.name.as_str();
+                    let _comment = recipe.comment.as_str();
+                }
+                AddCommands::User(user) => {
+                    let user_name = user.user.as_str();
+                    let user_password = user.password.as_str();
+                    let user_email = user.email.as_str();
+                    let is_admin = user.admin;
 
-                let credentials = Credenitals {
-                    username: user_name.to_string(),
-                    password: user_password.to_string(),
-                };
+                    let credentials = Credenitals {
+                        username: user_name.to_string(),
+                        password: user_password.to_string(),
+                    };
 
-                match food_base
-                    .create_user(user_email.to_string(), credentials, is_admin)
-                    .await
-                {
-                    Ok(_) => {
-                        println!("Created user '{}' (Admin: {})", user_name, is_admin);
-                    }
-                    Err(error) => {
-                        println!("Error: {}", error)
+                    match food_base
+                        .create_user(user_email.to_string(), credentials, is_admin)
+                        .await
+                    {
+                        Ok(_) => {
+                            println!("Created user '{}' (Admin: {})", user_name, is_admin);
+                        }
+                        Err(error) => {
+                            println!("Error: {}", error)
+                        }
                     }
                 }
+                AddCommands::Event(event) => {
+                    //TODO Implement
+                    let _name = event.name.as_str();
+                    let _budget = event.budget;
+                    let _comment = event.comment.as_str();
+                }
             }
-            UserCommands::Remove(params) => {
-                let user_ref = params.user.as_str();
+        }
+        Commands::Delete(delete_data) => match &delete_data.delete_type {
+            DeleteCommands::Ingredient(ingredient) => {
+                let ingredient_ref = ingredient.ingredient.as_str();
+                println!("Deleting Ingredient {:?}", ingredient_ref);
+            }
+            DeleteCommands::Recipe(recipe) => {
+                let recipe_ref = recipe.recipe.as_str();
+                println!("Deleting Recipe {:?}", recipe_ref);
+            }
+            DeleteCommands::User(user) => {
+                let user_ref = user.user.as_str();
                 let user = food_base
                     .get_user_by_string_reference(user_ref.to_string())
                     .await;
@@ -434,24 +496,10 @@ async fn main() {
                     println!("User not found");
                 }
             }
-            UserCommands::List => {
-                food_base
-                    .get_users()
-                    .await
-                    .unwrap()
-                    .iter()
-                    .for_each(|user| {
-                        print!("{}\t{}", user.id, user.username);
-                        if user.is_admin {
-                            print!("\tAdmin");
-                        }
-                        println!();
-                    });
+            DeleteCommands::Event(event) => {
+                let event_ref = event.event.as_str();
+                println!("Deleting Event {:?}", event_ref);
             }
-        },
-        #[allow(unreachable_patterns)]
-        _default => {
-            println!("Unknown Command");
-        }
+        }, 
     }
 }

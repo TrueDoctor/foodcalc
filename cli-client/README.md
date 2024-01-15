@@ -73,28 +73,28 @@ This Project aims to creat a simple to use Commandline application that interfac
     * [x] ingredients
     * [x] reciepes
     * [x] meals
+    * [x] users
 * [ ] info
     * [ ] ingredient <ingredient_ref>
-    * [ ] event <event_ref>
+    * [x] event <event_ref>
     * [ ] reciepe <reciepe_ref> <people>
     * [ ] meal <event_ref> <reciepe_ref> [<start_time>]
 * [ ] calc
-    * [ ] mealplan <event_ref>
-    * [ ] meal <event_ref> <reciepe_ref> [<start_time>]
-    * [ ] meals <event_ref>
-    * [ ] reciepe <reciepe_ref <people>
+    * [x] mealplan <event_ref>
+    * [x] meal <event_ref> <reciepe_ref> [<start_time>]
+    * [x] reciepe <reciepe_ref> [<people>] [<calories>] [--format markdown]
 * [ ] add
     * [ ] ingredient <name> <energy> [<comment>]
     * [ ] reciepe <name> [<comment>]
-    * [ ] user <name> <password>
+    * [x] user <name> <password> <e-mail> [--is-admin]
     * [ ] event <name> <budget> [<comment>]
 * [ ] delete
     * [ ] ingredient <ingredient_ref>
     * [ ] reciepe <reciepe_ref>
-    * [ ] user <user_ref>
+    * [x] user <user_ref>
     * [ ] event <event_ref>
 * [ ] edit
-    * [ ] ingredient
+    * [ ] ingredient <ingredient_ref>
         * [ ] name <name>
         * [ ] energy <energy>
         * [ ] comment <comment>
@@ -107,7 +107,7 @@ This Project aims to creat a simple to use Commandline application that interfac
             * [ ] amount <ingredient_ref> <amount>
         * [ ] steps
             * [ ] add <name> [<description>] [<duration_fixed> <duration_scaled>] [<index>]
-            * [ ] remove Step <step_ref>
+            * [ ] remove <step_ref>
             * [ ] reorder <list_of_indices>
             * [ ] edit <step_ref>
                 * [ ] name <name>
@@ -116,18 +116,22 @@ This Project aims to creat a simple to use Commandline application that interfac
                     * [ ] fixed <duration>
                     * [ ] scaled <duration>
     * [ ] user <user_ref>
+        * [ ] name <name>
+        * [ ] password <password>
+        * [ ] email <e-mail>
         * [ ] admin <bool>
     * [ ] event <event_ref>
+        * [ ] name <name>
         * [ ] budget <budget>
         * [ ] comment <comment>
         * [ ] meals
-            * [ ] add <recipe_ref> <servings> <calories> <start_time> <end_time> [<location_ref>] [<comment>]
+            * [ ] add <recipe_ref> <servings> <calories> <start_time> <end_time> [<comment>] [<location_ref>]
             * [ ] remove <reciepe_ref> [<start_time>]
             * [ ] edit <reciepe_ref> [<start_time>]
                 * [ ] recipe <recipe_ref>
                 * [ ] location <location_ref>
-                * [ ] start <start_time>
-                * [ ] end <end_time>
                 * [ ] servings <servings>
                 * [ ] calories <calories>
+                * [ ] start <start_time>
+                * [ ] end <end_time>
                 * [ ] comment <comment>
