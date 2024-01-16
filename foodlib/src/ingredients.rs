@@ -52,6 +52,27 @@ impl Ingredient {
             comment,
         }
     }
+
+    pub fn change_name(&self, name: String) -> Self {
+        Self {
+            name,
+            ..self.clone()
+        }
+    }
+
+    pub fn change_energy(&self, energy: BigDecimal) -> Self {
+        Self {
+            energy,
+            ..self.clone()
+        }
+    }
+
+    pub fn change_comment(&self, comment: Option<String>) -> Self {
+        Self {
+            comment,
+            ..self.clone()
+        }
+    }
 }
 
 impl From<Ingredient> for IngredientCreate {
