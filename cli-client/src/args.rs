@@ -1,4 +1,5 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use sqlx::types::BigDecimal;
 use std::str::FromStr;
 
 #[derive(Debug, Parser)]
@@ -14,9 +15,13 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
+    /// Fetch prices from Vendors
+    UpdatePrices,
+
     /// List all Places, Events, Ingredients, Recipes or Meals
     List(ListCommand),
 
+    #[clap(alias = "show")]
     /// Get info about an Ingredient, Event, Recipe or Meal
     Info(InfoCommand),
 
@@ -38,7 +43,7 @@ pub enum Commands {
 // ---- List Commands ----
 #[derive(Debug, Args)]
 pub struct ListCommand {
-    pub list_type: ListTypes,
+    pub list_type: ListType,
 
     #[clap(short = 'p', long = "place")]
     /// Place to reference (use ID or name)
@@ -61,7 +66,7 @@ pub struct ListCommand {
 }
 
 #[derive(Debug, Clone)]
-pub enum ListTypes {
+pub enum ListType {
     /// List all places
     Places,
 
@@ -81,17 +86,17 @@ pub enum ListTypes {
     Users,
 }
 
-impl FromStr for ListTypes {
+impl FromStr for ListType {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "places" => Ok(ListTypes::Places),
-            "events" => Ok(ListTypes::Events),
-            "ingredients" => Ok(ListTypes::Ingredients),
-            "recipes" => Ok(ListTypes::Recipes),
-            "meals" => Ok(ListTypes::Meals),
-            "users" => Ok(ListTypes::Users),
+            "places" => Ok(ListType::Places),
+            "events" => Ok(ListType::Events),
+            "ingredients" => Ok(ListType::Ingredients),
+            "recipes" => Ok(ListType::Recipes),
+            "meals" => Ok(ListType::Meals),
+            "users" => Ok(ListType::Users),
             _ => Err(format!("Unknown List Type: {}", s)),
         }
     }
@@ -101,44 +106,47 @@ impl FromStr for ListTypes {
 #[derive(Debug, Args)]
 pub struct InfoCommand {
     #[clap(subcommand)]
-    pub show_type: InfoCommands,
+    pub show_type: InfoType,
 }
 
 #[derive(Debug, Subcommand)]
-pub enum InfoCommands {
+pub enum InfoType {
     /// Get info about an Ingredient
-    Ingredient(InfoIngredient),
+    Ingredient(InfoIngredientCommand),
 
     /// Get info about an Event
-    Event(InfoEvent),
+    Event(InfoEventCommand),
 
     /// Get info about a Recipe
-    Recipe(InfoRecipe),
+    Recipe(InfoRecipeCommand),
 
     /// Get info about a Meal
-    Meal(InfoMeal),
+    Meal(InfoMealCommand),
+
+    /// Get info about a User
+    User(InfoUserCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct InfoIngredient {
+pub struct InfoIngredientCommand {
     /// Recipe to show (use ID or name)
     pub ingredient_ref: String,
 }
 
 #[derive(Debug, Args)]
-pub struct InfoEvent {
+pub struct InfoEventCommand {
     /// Event to show (use ID or name)
     pub event_ref: String,
 }
 
 #[derive(Debug, Args)]
-pub struct InfoRecipe {
+pub struct InfoRecipeCommand {
     /// Recipe to show (use ID or name)
     pub recipe_ref: String,
 }
 
 #[derive(Debug, Args)]
-pub struct InfoMeal {
+pub struct InfoMealCommand {
     /// Event to show (use ID or name)
     pub event_ref: String,
 
@@ -149,11 +157,17 @@ pub struct InfoMeal {
     pub start_time: Option<String>,
 }
 
+#[derive(Debug, Args)]
+pub struct InfoUserCommand {
+    /// User to show (use ID or name)
+    pub user_ref: String,
+}
+
 // ---- Calc Commands ----
 #[derive(Debug, Args)]
 pub struct CalcCommand {
     #[clap(subcommand)]
-    pub print_type: CalcCommands,
+    pub print_type: CalcType,
 
     #[arg(short, long)]
     // The Output File
@@ -161,27 +175,27 @@ pub struct CalcCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum CalcCommands {
+pub enum CalcType {
     #[clap(alias = "event")]
     /// Print the mealplan for a given event
-    Mealplan(CalcMealplan),
+    Mealplan(CalcMealplanCommand),
 
     #[clap(alias = "meals")]
     /// Print the recipe for a given meal or for all meals in an event
-    Meal(CalcMeal),
+    Meal(CalcMealCommand),
 
     /// Print a given Recipe
-    Recipe(CalcRecipe),
+    Recipe(CalcRecipeCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct CalcMealplan {
+pub struct CalcMealplanCommand {
     /// Event to print (use ID or name)
     pub event_ref: String,
 }
 
 #[derive(Debug, Args)]
-pub struct CalcMeal {
+pub struct CalcMealCommand {
     /// Event to show (use ID or name)
     pub event_ref: String,
 
@@ -193,7 +207,7 @@ pub struct CalcMeal {
 }
 
 #[derive(Debug, Args)]
-pub struct CalcRecipe {
+pub struct CalcRecipeCommand {
     /// Recipe to print (use ID or name)
     pub recipe: String,
 
@@ -214,25 +228,26 @@ pub struct CalcRecipe {
 #[derive(Debug, Args)]
 pub struct AddCommand {
     #[clap(subcommand)]
-    pub add_type: AddCommands,
+    pub add_type: AddType,
 }
 
-pub enum AddCommands {
+#[derive(Debug, Subcommand)]
+pub enum AddType {
     /// Add a new Ingredient
-    Ingredient(AddIngredient),
+    Ingredient(AddIngredientCommand),
 
     /// Add a new Recipe
-    Recipe(AddRecipe),
+    Recipe(AddRecipeCommand),
 
     /// Add a new User
-    User(AddUser),
+    User(AddUserCommand),
 
     /// Add a new Event
-    Event(AddEvent),
+    Event(AddEventCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct AddIngredient {
+pub struct AddIngredientCommand {
     /// Name of the new ingredient
     pub name: String,
 
@@ -245,7 +260,7 @@ pub struct AddIngredient {
 }
 
 #[derive(Debug, Args)]
-pub struct AddRecipe {
+pub struct AddRecipeCommand {
     /// Name of the new recipe
     pub name: String,
 
@@ -255,7 +270,7 @@ pub struct AddRecipe {
 }
 
 #[derive(Debug, Args)]
-pub struct AddUser {
+pub struct AddUserCommand {
     /// Username of the new user
     pub user: String,
 
@@ -271,60 +286,59 @@ pub struct AddUser {
 }
 
 #[derive(Debug, Args)]
-pub struct AddEvent {
+pub struct AddEventCommand {
     /// Name of the new event
     pub name: String,
 
     /// Buget for the event
-    pub budget: u32,
+    pub budget: Option<BigDecimal>,
 
-    #[clap(default_value = "")]
     /// Add comments
-    pub comment: String,
+    pub comment: Option<String>,
 }
 
 //// --- Delete Commands ----
 #[derive(Debug, Args)]
 pub struct DeleteCommand {
     #[clap(subcommand)]
-    pub delete_type: DeleteCommands,
+    pub delete_type: DeleteType,
 }
 
 #[derive(Debug, Subcommand)]
-pub enum DeleteCommands {
+pub enum DeleteType {
     /// Delete an Ingredient
-    Ingredient(DeleteIngredient),
+    Ingredient(DeleteIngredientCommand),
 
     /// Delete a Recipe
-    Recipe(DeleteRecipe),
+    Recipe(DeleteRecipeCommand),
 
     /// Delete a User
-    User(DeleteUser),
+    User(DeleteUserCommand),
 
     /// Delete an Event
-    Event(DeleteEvent),
+    Event(DeleteEventCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct DeleteIngredient {
+pub struct DeleteIngredientCommand {
     /// Ingredient to delete (use ID or name)
     pub ingredient: String,
 }
 
 #[derive(Debug, Args)]
-pub struct DeleteRecipe {
+pub struct DeleteRecipeCommand {
     /// Recipe to delete (use ID or name)
     pub recipe: String,
 }
 
 #[derive(Debug, Args)]
-pub struct DeleteUser {
+pub struct DeleteUserCommand {
     /// User to delete (use ID or name)
     pub user: String,
 }
 
 #[derive(Debug, Args)]
-pub struct DeleteEvent {
+pub struct DeleteEventCommand {
     /// Event to delete (use ID or name)
     pub event: String,
 }
@@ -333,27 +347,27 @@ pub struct DeleteEvent {
 #[derive(Debug, Args)]
 pub struct EditCommand {
     #[clap(subcommand)]
-    pub edit_type: EditCommands,
+    pub edit_type: EditType,
 }
 
 #[derive(Debug, Subcommand)]
-pub enum EditCommands {
+pub enum EditType {
     /// Edit an Ingredient
-    Ingredient(EditIngredient),
+    Ingredient(EditIngredientCommand),
 
     /// Edit a Recipe
-    Recipe(EditRecipe),
+    Recipe(EditRecipeCommand),
 
     /// Edit a User
-    User(EditUser),
+    User(EditUserCommand),
 
     /// Edit an Event
-    Event(EditEvent),
+    Event(EditEventCommand),
 }
 
 //### Ingredient
 #[derive(Debug, Args)]
-pub struct EditIngredient {
+pub struct EditIngredientCommand {
     /// Ingredient to edit (use ID or name)
     pub ingredient: String,
 
@@ -364,37 +378,36 @@ pub struct EditIngredient {
 #[derive(Debug, Subcommand)]
 pub enum EditIngredientType {
     /// Edit the name of an Ingredient
-    Name(EditIngredientName),
+    Name(EditIngredientNameCommand),
 
     /// Edit the energy of an Ingredient
-    Energy(EditIngredientEnergy),
+    Energy(EditIngredientEnergyCommand),
 
     /// Edit the comment of an Ingredient
-    Comment(EditIngredientComment),
+    Comment(EditIngredientCommentCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct EditIngredientName {
+pub struct EditIngredientNameCommand {
     /// New name of the ingredient
     pub name: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditIngredientEnergy {
+pub struct EditIngredientEnergyCommand {
     /// New energy of the ingredient
-    pub energy: u32,
+    pub energy: BigDecimal,
 }
 
 #[derive(Debug, Args)]
-pub struct EditIngredientComment {
+pub struct EditIngredientCommentCommand {
     /// New comment of the ingredient
-    #[clap(default_value = "")]
-    pub comment: String,
+    pub comment: Option<String>,
 }
 
 //### Recipe
 #[derive(Debug, Args)]
-pub struct EditRecipe {
+pub struct EditRecipeCommand {
     /// Recipe to edit (use ID or name)
     pub recipe: String,
 
@@ -405,33 +418,32 @@ pub struct EditRecipe {
 #[derive(Debug, Subcommand)]
 pub enum EditRecipeType {
     /// Edit the name of a Recipe
-    Name(EditRecipeName),
+    Name(EditRecipeNameCommand),
 
     /// Edit the comment of a Recipe
-    Comment(EditRecipeComment),
+    Comment(EditRecipeCommentCommand),
 
     /// Edit the ingredients of a Recipe
-    Ingredients(EditRecipeIngredients),
+    Ingredients(EditRecipeIngredientsCommand),
 
     /// Edit the steps of a Recipe
-    Steps(EditRecipeSteps),
+    Steps(EditRecipeStepsCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeName {
+pub struct EditRecipeNameCommand {
     /// New name of the recipe
     pub name: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeComment {
+pub struct EditRecipeCommentCommand {
     /// New comment of the recipe
-    #[clap(default_value = "")]
-    pub comment: String,
+    pub comment: Option<String>,
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeIngredients {
+pub struct EditRecipeIngredientsCommand {
     /// New ingredients of the recipe
     #[clap(subcommand)]
     pub ingredient_edit_type: EditRecipeIngredientsType,
@@ -440,17 +452,17 @@ pub struct EditRecipeIngredients {
 #[derive(Debug, Subcommand)]
 pub enum EditRecipeIngredientsType {
     /// Add an ingredient to the recipe
-    Add(EditRecipeIngredientsAdd),
+    Add(EditRecipeIngredientsAddCommand),
 
     /// Remove an ingredient from the recipe
-    Remove(EditRecipeIngredientsRemove),
+    Remove(EditRecipeIngredientsRemoveCommand),
 
     /// Change the amount of an ingredient in the recipe
-    Amount(EditRecipeIngredientsAmount),
+    Amount(EditRecipeIngredientsAmountCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeIngredientsAdd {
+pub struct EditRecipeIngredientsAddCommand {
     /// Ingredient to add (use ID or name)
     pub ingredient: String,
 
@@ -459,13 +471,13 @@ pub struct EditRecipeIngredientsAdd {
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeIngredientsRemove {
+pub struct EditRecipeIngredientsRemoveCommand {
     /// Ingredient to remove (use ID or name)
     pub ingredient: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeIngredientsAmount {
+pub struct EditRecipeIngredientsAmountCommand {
     /// Ingredient to edit (use ID or name)
     pub ingredient: String,
 
@@ -474,7 +486,7 @@ pub struct EditRecipeIngredientsAmount {
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeSteps {
+pub struct EditRecipeStepsCommand {
     /// New steps of the recipe
     #[clap(subcommand)]
     pub step_edit_type: EditRecipeStepsType,
@@ -483,20 +495,20 @@ pub struct EditRecipeSteps {
 #[derive(Debug, Subcommand)]
 pub enum EditRecipeStepsType {
     /// Add a step to the recipe
-    Add(EditRecipeStepsAdd),
+    Add(EditRecipeStepsAddCommand),
 
     /// Remove a step from the recipe
-    Remove(EditRecipeStepsRemove),
+    Remove(EditRecipeStepsRemoveCommand),
 
     /// Reorder the steps of the recipe
-    Reorder(EditRecipeStepsReorder),
+    Reorder(EditRecipeStepsReorderCommand),
 
     /// Edit a Step of the recipe
-    Edit(EditRecipeStepsEdit),
+    Edit(EditRecipeStepsEditCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeStepsAdd {
+pub struct EditRecipeStepsAddCommand {
     /// Name of the step
     pub name: String,
 
@@ -517,19 +529,19 @@ pub struct EditRecipeStepsAdd {
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeStepsRemove {
+pub struct EditRecipeStepsRemoveCommand {
     /// Step to remove (use index or name)
     pub step: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeStepsReorder {
+pub struct EditRecipeStepsReorderCommand {
     /// New order of the steps
     pub order: Vec<String>,
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeStepsEdit {
+pub struct EditRecipeStepsEditCommand {
     /// Step to edit (use index or name)
     pub step: String,
 
@@ -540,58 +552,49 @@ pub struct EditRecipeStepsEdit {
 #[derive(Debug, Subcommand)]
 pub enum EditRecipeStepsEditType {
     /// Edit the name of a step
-    Name(EditRecipeStepsEditName),
+    Name(EditRecipeStepsEditNameCommand),
 
     /// Edit the description of a step
-    Description(EditRecipeStepsEditDescription),
+    Description(EditRecipeStepsEditDescriptionCommand),
 
     /// Edit the duration of a step
-    Duration(EditRecipeStepsEditDuration),
+    Duration(EditRecipeStepsEditDurationCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeStepsEditName {
+pub struct EditRecipeStepsEditNameCommand {
     /// New name of the step
     pub name: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeStepsEditDescription {
+pub struct EditRecipeStepsEditDescriptionCommand {
     /// New description of the step
     #[clap(default_value = "")]
     pub description: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditRecipeStepsEditDuration {
-    #[clap(subcommand)]
+pub struct EditRecipeStepsEditDurationCommand {
+    /// Type
     pub duration_type: EditRecipeStepsEditDurationType,
-}
 
-#[derive(Debug, Subcommand)]
-pub enum EditRecipeStepsEditDurationType {
-    /// Edit the fixed duration of a step
-    Fixed(EditRecipeStepsEditDurationFixed),
-
-    /// Edit the scaled duration of a step
-    Scaled(EditRecipeStepsEditDurationScaled),
-}
-
-#[derive(Debug, Args)]
-pub struct EditRecipeStepsEditDurationFixed {
-    /// New fixed duration of the step
+    /// New Duration Value
     pub fixed_time: String,
 }
 
-#[derive(Debug, Args)]
-pub struct EditRecipeStepsEditDurationScaled {
-    /// New scaled duration of the step
-    pub scaled_time: String,
+#[derive(Debug, ValueEnum, Clone)]
+pub enum EditRecipeStepsEditDurationType {
+    /// Edit the fixed duration of a step
+    Fixed,
+
+    /// Edit the scaled duration of a step
+    Scaled,
 }
 
 //### User
 #[derive(Debug, Args)]
-pub struct EditUser {
+pub struct EditUserCommand {
     /// User to edit (use ID or name)
     pub user: String,
 
@@ -602,46 +605,48 @@ pub struct EditUser {
 #[derive(Debug, Subcommand)]
 pub enum EditUserType {
     /// Edit the username of a User
-    Name(EditUserName),
+    Name(EditUserNameCommand),
 
     /// Edit the password of a User
-    Password(EditUserPassword),
+    Password(EditUserPasswordCommand),
 
     /// Edit the email of a User
-    Email(EditUserEmail),
+    Email(EditUserEmailCommand),
 
-    /// Edit the admin status of a User
-    Admin(EditUserAdmin),
+    /// Promote the user to admin
+    Promote,
+
+    /// Demote the user from admin
+    Demote
 }
 
 #[derive(Debug, Args)]
-pub struct EditUserName {
+pub struct EditUserNameCommand {
     /// New username of the user
     pub username: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditUserPassword {
+pub struct EditUserPasswordCommand {
     /// New password of the user
     pub password: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditUserEmail {
+pub struct EditUserEmailCommand {
     /// New email of the user
     pub email: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditUserAdmin {
-    #[clap(default_value = "true")]
+pub struct EditUserAdminCommand {
     /// New admin status of the user
     pub admin: bool,
 }
 
 //### Event
 #[derive(Debug, Args)]
-pub struct EditEvent {
+pub struct EditEventCommand {
     /// Event to edit (use ID or name)
     pub event: String,
 
@@ -652,39 +657,38 @@ pub struct EditEvent {
 #[derive(Debug, Subcommand)]
 pub enum EditEventType {
     /// Edit the name of an Event
-    Name(EditEventName),
+    Name(EditEventNameCommand),
 
     /// Edit the comment of an Event
-    Comment(EditEventComment),
+    Comment(EditEventCommentCommand),
 
     /// Edit the budget of an Event
-    Budget(EditEventBudget),
+    Budget(EditEventBudgetCommand),
 
     /// Meals of an Event
-    Meals(EditEventMeals),
+    Meals(EditEventMealsCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventName {
+pub struct EditEventNameCommand {
     /// New name of the event
     pub name: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventComment {
+pub struct EditEventCommentCommand {
     /// New comment of the event
-    #[clap(default_value = "")]
-    pub comment: String,
+    pub comment: Option<String>,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventBudget {
+pub struct EditEventBudgetCommand {
     /// New budget of the event
-    pub budget: u32,
+    pub budget: Option<BigDecimal>,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMeals {
+pub struct EditEventMealsCommand {
     /// New meals of the event
     #[clap(subcommand)]
     pub meal_edit_type: EditEventMealsType,
@@ -693,17 +697,17 @@ pub struct EditEventMeals {
 #[derive(Debug, Subcommand)]
 pub enum EditEventMealsType {
     /// Add a meal to the event
-    Add(EditEventMealsAdd),
+    Add(EditEventMealsAddCommand),
 
     /// Remove a meal from the event
-    Remove(EditEventMealsRemove),
+    Remove(EditEventMealsRemoveCommand),
 
     /// Reorder the meals of the event
-    Edit(EditEventMealsEdit),
+    Edit(EditEventMealsEditCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsAdd {
+pub struct EditEventMealsAddCommand {
     /// Recipe to add (use ID or name)
     pub recipe: String,
 
@@ -725,13 +729,13 @@ pub struct EditEventMealsAdd {
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsRemove {
+pub struct EditEventMealsRemoveCommand {
     /// Meal to remove (use index or name)
     pub meal: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsEdit {
+pub struct EditEventMealsEditCommand {
     /// Recipe of meal to edit (use index or name)
     pub recipe: String,
 
@@ -745,65 +749,65 @@ pub struct EditEventMealsEdit {
 #[derive(Debug, Subcommand)]
 pub enum EditEventMealsEditType {
     /// Edit the recipe of a meal
-    Recipe(EditEventMealsEditRecipe),
+    Recipe(EditEventMealsEditRecipeCommand),
 
     /// Location for giving out the meal
-    Location(EditEventMealsEditLocation),
+    Location(EditEventMealsEditLocationCommand),
 
     /// Edit the servings of a meal
-    Servings(EditEventMealsEditServings),
+    Servings(EditEventMealsEditServingsCommand),
 
     /// Edit the calories of a meal
-    Calories(EditEventMealsEditCalories),
+    Calories(EditEventMealsEditCaloriesCommand),
 
     /// Edit the start time of a meal
-    StartTime(EditEventMealsEditStartTime),
+    StartTime(EditEventMealsEditStartTimeCommand),
 
     /// Edit the end time of a meal
-    EndTime(EditEventMealsEditEndTime),
+    EndTime(EditEventMealsEditEndTimeCommand),
 
     /// Edit the comment of a meal
-    Comment(EditEventMealsEditComment),
+    Comment(EditEventMealsEditCommentCommand),
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsEditRecipe {
+pub struct EditEventMealsEditRecipeCommand {
     /// New recipe of the meal
     pub recipe: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsEditLocation {
+pub struct EditEventMealsEditLocationCommand {
     /// New location of the meal
     pub location: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsEditServings {
+pub struct EditEventMealsEditServingsCommand {
     /// New servings of the meal
     pub servings: u32,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsEditCalories {
+pub struct EditEventMealsEditCaloriesCommand {
     /// New calories of the meal
     pub calories: u32,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsEditStartTime {
+pub struct EditEventMealsEditStartTimeCommand {
     /// New start time of the meal
     pub start_time: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsEditEndTime {
+pub struct EditEventMealsEditEndTimeCommand {
     /// New end time of the meal
     pub end_time: String,
 }
 
 #[derive(Debug, Args)]
-pub struct EditEventMealsEditComment {
+pub struct EditEventMealsEditCommentCommand {
     /// New comment of the meal
     #[clap(default_value = "")]
     pub comment: String,

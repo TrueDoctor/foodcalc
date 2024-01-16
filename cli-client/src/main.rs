@@ -1,6 +1,7 @@
 mod args;
 
 use foodlib::*;
+use sqlx::postgres::types::PgMoney;
 use std::env;
 
 use args::*;
@@ -35,6 +36,7 @@ async fn main() {
     }
 
     match &cli.command {
+        Commands::UpdatePrices => todo!(),
         Commands::List(list) => {
             let _place_flag = list.place.as_ref();
             let _event_flag = list.event.as_ref();
@@ -98,27 +100,27 @@ async fn main() {
             }
 
             match &list.list_type {
-                ListTypes::Places => {
+                ListType::Places => {
                     let places = food_base.get_places().await.unwrap();
                     let table = Table::new(places).with(table_config).to_string();
                     print!("{}", table);
                 }
-                ListTypes::Events => {
-                    let events = food_base.get_events().await.unwrap();
+                ListType::Events => {
+                    let events = food_base.get_all_events().await.unwrap();
                     let table = Table::new(events).with(table_config).to_string();
                     print!("{}", table);
                 }
-                ListTypes::Ingredients => {
+                ListType::Ingredients => {
                     let ingredients = food_base.get_ingredients().await.unwrap();
                     let table = Table::new(ingredients).with(table_config).to_string();
                     print!("{}", table);
                 }
-                ListTypes::Recipes => {
+                ListType::Recipes => {
                     let recipes = food_base.get_recipes().await.unwrap();
                     let table = Table::new(recipes).with(table_config).to_string();
                     print!("{}", table);
                 }
-                ListTypes::Meals => {
+                ListType::Meals => {
                     let meals = if _event_filter.is_some() {
                         food_base
                             .get_event_meals(_event_filter.unwrap().event_id)
@@ -131,7 +133,7 @@ async fn main() {
                     let table = Table::new(meals).with(table_config).to_string();
                     print!("{}", table);
                 }
-                ListTypes::Users => {
+                ListType::Users => {
                     // TODO Improve Formatting
                     food_base
                         .get_users()
@@ -150,20 +152,20 @@ async fn main() {
         }
         Commands::Info(show_statement) => {
             match &show_statement.show_type {
-                InfoCommands::Ingredient(ingredient) => {
+                InfoType::Ingredient(ingredient) => {
                     let ingredient_ref = ingredient.ingredient_ref.as_str();
 
                     let ingredient =
                         food_base.get_ingredient_from_string_reference(ingredient_ref.to_string());
 
-                    if let Some(ingredient) = ingredient.await {
-                        println!("Showing Ingredient {:?}", ingredient);
-                        //TODO Add Ingredient Formatting
+                    if let Some(_ingredient) = ingredient.await {
+                        todo!();
                     } else {
                         println!("Ingredient not found");
                     }
                 }
-                InfoCommands::Event(event) => {
+                //TODO: Invastigate Performance
+                InfoType::Event(event) => {
                     let event_ref = event.event_ref.as_str();
 
                     let event = food_base
@@ -203,22 +205,20 @@ async fn main() {
                         println!("Event not found");
                     }
                 }
-                InfoCommands::Recipe(recipe) => {
+                InfoType::Recipe(recipe) => {
                     let recipe_ref = recipe.recipe_ref.as_str();
-                    println!("Showing Recipe {:?}", recipe_ref);
 
                     let recipe = food_base
                         .get_recipe_from_string_reference(recipe_ref.to_string())
                         .await;
 
-                    if let Some(recipe) = recipe {
-                        println!("Showing Recipe {:?}", recipe);
-                        //TODO Add Recipe Formatting
+                    if let Some(_recipe) = recipe {
+                        todo!();
                     } else {
                         println!("Recipe not found");
                     }
                 }
-                InfoCommands::Meal(meal) => {
+                InfoType::Meal(meal) => {
                     let _recipe_ref = meal.recipe_ref.as_str();
                     let recipe = food_base
                         .get_recipe_from_string_reference(_recipe_ref.to_string())
@@ -248,73 +248,48 @@ async fn main() {
                     //TODO Implement time filter
 
                     match meals {
-                        Ok(meals) => {
-                            match meals.len() {
-                                0 => {
-                                    println!("No Meals found");
-                                }
-                                1 => {
-                                    let meal = meals.first().unwrap();
-                                    // TODO Add better Meal Formatting
-                                    println!("Showing Meal {:?}", meal);
-                                    let ingredients = food_base
-                                        .get_event_recipe_ingredients(
-                                            meal.event_id,
-                                            meal.recipe_id,
-                                            meal.place_id,
-                                            meal.start_time,
-                                        )
-                                        .await;
-                                    if let Ok(ingredients) = ingredients {
-                                        let headers = vec!["Ingredient", "Amount", "Price"];
-
-                                        let mut builder = Builder::default();
-
-                                        builder.set_header(headers);
-
-                                        ingredients.iter().for_each(|ingredient| {
-                                            builder.push_record(vec![
-                                                ingredient.name.clone(),
-                                                format!("{} kg", ingredient.weight),
-                                                format!("{} €", ingredient.price.to_bigdecimal(2)),
-                                            ]);
-                                        });
-
-                                        println!(
-                                            "{}",
-                                            builder
-                                                .build()
-                                                .with(Panel::footer(format!(
-                                                    "{} €",
-                                                    meal.price.to_bigdecimal(2)
-                                                )))
-                                                .with(table_config)
-                                        );
-                                    } else {
-                                        println!("No Ingredients found");
-                                    }
-                                }
-                                _ => {
-                                    println!("Multiple Meals found: ");
-                                    meals.iter().for_each(|meal| {
-                                        println!(
-                                            "{} - {}, {} Servings",
-                                            meal.start_time, meal.end_time, meal.servings
-                                        );
-                                    });
-                                }
+                        Ok(meals) => match meals.len() {
+                            0 => {
+                                println!("No Meals found");
                             }
-                        }
+                            1 => {
+                                todo!();
+                            }
+                            _ => {
+                                println!("Multiple Meals found: ");
+                                meals.iter().for_each(|meal| {
+                                    println!(
+                                        "{} - {}, {} Servings",
+                                        meal.start_time, meal.end_time, meal.servings
+                                    );
+                                });
+                            }
+                        },
                         Err(error) => {
                             println!("Error: {}", error);
                         }
+                    }
+                }
+                InfoType::User(user) => {
+                    let user_ref = user.user_ref.as_str();
+
+                    let user = food_base
+                        .get_user_by_string_reference(user_ref.to_string())
+                        .await;
+
+                    if let Some(user) = user {
+                        println!("{} ({})", user.username, user.id);
+                        println!("E-Mail: {}", user.email);
+                        println!("Admin: {}", user.is_admin);
+                    } else {
+                        println!("User not found");
                     }
                 }
             }
         }
         Commands::Calc(print_data) => {
             match &print_data.print_type {
-                CalcCommands::Mealplan(event) => {
+                CalcType::Mealplan(event) => {
                     let event_ref = &event.event_ref;
 
                     let event = food_base
@@ -389,7 +364,7 @@ async fn main() {
                         }
                     }
                 }
-                CalcCommands::Meal(meal) => {
+                CalcType::Meal(meal) => {
                     let _event_ref = meal.event_ref.as_str();
                     let _recipe_ref = meal.recipe_ref.as_str();
                     //let start_time_ref = meal.start_time.as_str();
@@ -397,7 +372,7 @@ async fn main() {
                     //TODO Print Meal
                     println!("Printing Meal ");
                 }
-                CalcCommands::Recipe(recipe) => {
+                CalcType::Recipe(recipe) => {
                     let recipe_ref = &recipe.recipe;
                     let people = recipe.people;
                     let calories = recipe.calories;
@@ -424,60 +399,129 @@ async fn main() {
                 }
             }
         }
-        Commands::Add(add_data) => {
-            match &add_data.add_type {
-                AddCommands::Ingredient(ingredient) => {
-                    //TODO Implement
-                    let _name = ingredient.name.as_str();
-                    let _energy = ingredient.energy;
-                    let _comment = ingredient.comment.as_str();
-                }
-                AddCommands::Recipe(recipe) => {
-                    //TODO Implement
-                    let _name = recipe.name.as_str();
-                    let _comment = recipe.comment.as_str();
-                }
-                AddCommands::User(user) => {
-                    let user_name = user.user.as_str();
-                    let user_password = user.password.as_str();
-                    let user_email = user.email.as_str();
-                    let is_admin = user.admin;
+        Commands::Add(add_data) => match &add_data.add_type {
+            AddType::Ingredient(ingredient) => {
+                let name = ingredient.name.as_str();
+                let energy = ingredient.energy;
+                let comment = ingredient.comment.as_str();
 
-                    let credentials = Credenitals {
-                        username: user_name.to_string(),
-                        password: user_password.to_string(),
-                    };
-
-                    match food_base
-                        .create_user(user_email.to_string(), credentials, is_admin)
-                        .await
-                    {
-                        Ok(_) => {
-                            println!("Created user '{}' (Admin: {})", user_name, is_admin);
-                        }
-                        Err(error) => {
-                            println!("Error: {}", error)
+                match food_base
+                    .add_ingredient(name.to_string(), energy.into(), Some(comment.to_string()))
+                    .await
+                {
+                    Ok(_) => {
+                        if cli.debug {
+                            println!("Created Ingredient '{}'", name);
                         }
                     }
-                }
-                AddCommands::Event(event) => {
-                    //TODO Implement
-                    let _name = event.name.as_str();
-                    let _budget = event.budget;
-                    let _comment = event.comment.as_str();
+                    Err(error) => {
+                        println!("Error: {}", error)
+                    }
                 }
             }
-        }
+            AddType::Recipe(recipe) => {
+                let name = recipe.name.as_str();
+                let comment = recipe.comment.as_str();
+
+                match food_base
+                    .insert_recipe(&Recipe {
+                        recipe_id: -1,
+                        name: name.to_string(),
+                        comment: Some(comment.to_string()),
+                    })
+                    .await
+                {
+                    Ok(_) => {
+                        if cli.debug {
+                            println!("Created Recipe '{}'", name);
+                        }
+                    }
+                    Err(error) => {
+                        println!("Error: {}", error)
+                    }
+                }
+            }
+            AddType::User(user) => {
+                let user_name = user.user.as_str();
+                let user_password = user.password.as_str();
+                let user_email = user.email.as_str();
+                let is_admin = user.admin;
+
+                let credentials = Credenitals {
+                    username: user_name.to_string(),
+                    password: user_password.to_string(),
+                };
+
+                match food_base
+                    .create_user(user_email.to_string(), credentials, is_admin)
+                    .await
+                {
+                    Ok(_) => {
+                        if cli.debug {
+                            println!("Created user '{}' (Admin: {})", user_name, is_admin);
+                        }
+                    }
+                    Err(error) => {
+                        println!("Error: {}", error)
+                    }
+                }
+            }
+            AddType::Event(event) => {
+                let name = event.name.as_str();
+                let comment = &event.comment;
+                let budget = if let Some(budget) = &event.budget {
+                    Some(
+                        PgMoney::from_bigdecimal(budget.clone(), 2)
+                            .expect("Failed to convert budget to money"),
+                    )
+                } else {
+                    None
+                };
+
+                match food_base
+                    .add_event(name.to_string(), budget, comment.clone())
+                    .await
+                {
+                    Ok(_) => {
+                        if cli.debug {
+                            println!("Created Event '{}'", name);
+                        }
+                    }
+                    Err(error) => {
+                        println!("Error: {}", error)
+                    }
+                }
+            }
+        },
         Commands::Delete(delete_data) => match &delete_data.delete_type {
-            DeleteCommands::Ingredient(ingredient) => {
+            DeleteType::Ingredient(ingredient) => {
                 let ingredient_ref = ingredient.ingredient.as_str();
-                println!("Deleting Ingredient {:?}", ingredient_ref);
+
+                let ingredient = food_base
+                    .get_ingredient_from_string_reference(ingredient_ref.to_string())
+                    .await;
+
+                if let Some(_ingredient) = ingredient {
+                    // There currently isn't a method for deleting an ingredient
+                    todo!();
+                } else {
+                    println!("Ingredient not found");
+                }
             }
-            DeleteCommands::Recipe(recipe) => {
-                let recipe_ref = recipe.recipe.as_str();
-                println!("Deleting Recipe {:?}", recipe_ref);
+            DeleteType::Recipe(recipe) => {
+                let _recipe_ref = recipe.recipe.as_str();
+                let recipe = food_base
+                    .get_recipe_from_string_reference(_recipe_ref.to_string())
+                    .await;
+
+                if let Some(_recipe) = recipe {
+                    // There currently isn't a method for deleting a recipe
+                    todo!();
+                } else {
+                    println!("Recipe not found");
+                }
             }
-            DeleteCommands::User(user) => {
+            DeleteType::User(user) => {
                 let user_ref = user.user.as_str();
                 let user = food_base
                     .get_user_by_string_reference(user_ref.to_string())
@@ -496,23 +540,135 @@ async fn main() {
                     println!("User not found");
                 }
             }
-            DeleteCommands::Event(event) => {
-                let event_ref = event.event.as_str();
-                println!("Deleting Event {:?}", event_ref);
+            DeleteType::Event(event) => {
+                let _event_ref = event.event.as_str();
+                let event = food_base
+                    .get_event_from_string_reference(_event_ref.to_string())
+                    .await;
+
+                if let Some(_event) = event {
+                    // There currently isn't a method for deleting an event
+                    todo!();
+                } else {
+                    println!("Event not found");
+                }
             }
         },
         Commands::Edit(edit_data) => match &edit_data.edit_type {
-            EditCommands::Ingredient(_ingredient) => todo!(),
-            EditCommands::Recipe(recipe) => {
-                let _recipe_ref = recipe.recipe.as_str();
-                match &recipe.edit_type {
-                    EditRecipeType::Name(_name) => todo!(),
-                    EditRecipeType::Comment(_comment) => todo!(),
-                    EditRecipeType::Ingredients(ingredient) => match &ingredient.ingredient_edit_type {
-                        EditRecipeIngredientsType::Add(_ingredient) => todo!(),
-                        EditRecipeIngredientsType::Remove(_ingredient) => todo!(),
-                        EditRecipeIngredientsType::Amount(_ingredient) => todo!(),
+            EditType::Ingredient(cli_ingredient) => {
+                let ingredient_ref = cli_ingredient.ingredient.as_str();
+                let ingredient = food_base
+                    .get_ingredient_from_string_reference(ingredient_ref.to_string())
+                    .await;
+
+                let ingredient = if let Some(ingredient) = ingredient {
+                    ingredient
+                } else {
+                    println!("Ingredient not found");
+                    return;
+                };
+                match &cli_ingredient.edit_type {
+                    EditIngredientType::Name(name) => {
+                        let query =
+                            food_base.update_ingredient(ingredient.change_name(name.name.clone()));
+                        match query.await {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated Ingredient");
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
+                    EditIngredientType::Energy(energy) => {
+                        let query = food_base
+                            .update_ingredient(ingredient.change_energy(energy.energy.clone()));
+                        match query.await {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated Ingredient");
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
+                    EditIngredientType::Comment(comment) => {
+                        let query = food_base
+                            .update_ingredient(ingredient.change_comment(comment.comment.clone()));
+                        match query.await {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated Ingredient");
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
+                }
+            }
+            EditType::Recipe(cli_recipe) => {
+                let _recipe_ref = cli_recipe.recipe.as_str();
+
+                let recipe = food_base
+                    .get_recipe_from_string_reference(_recipe_ref.to_string())
+                    .await;
+
+                let recipe = if let Some(recipe) = recipe {
+                    recipe
+                } else {
+                    println!("Recipe not found");
+                    return;
+                };
+                match &cli_recipe.edit_type {
+                    EditRecipeType::Name(name) => {
+                        let recipe = Recipe {
+                            name: name.name.clone(),
+                            ..recipe
+                        };
+
+                        let query = food_base.update_recipe(&recipe);
+                        match query.await {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated Recipe name ({} => {})", recipe.name, name.name);
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
+                    EditRecipeType::Comment(comment) => {
+                        let recipe = Recipe {
+                            comment: comment.comment.clone(),
+                            ..recipe
+                        };
+
+                        let query = food_base.update_recipe(&recipe);
+                        match query.await {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated Recipe comment ('{}' => '{}')", recipe.comment.unwrap_or_default(), comment.comment.clone().unwrap_or_default());
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
                     },
+                    EditRecipeType::Ingredients(ingredient) => {
+                        match &ingredient.ingredient_edit_type {
+                            EditRecipeIngredientsType::Add(_ingredient) => todo!(),
+                            EditRecipeIngredientsType::Remove(_ingredient) => todo!(),
+                            EditRecipeIngredientsType::Amount(_ingredient) => todo!(),
+                        }
+                    }
                     EditRecipeType::Steps(steps) => match &steps.step_edit_type {
                         EditRecipeStepsType::Add(_step) => todo!(),
                         EditRecipeStepsType::Remove(_step) => todo!(),
@@ -521,21 +677,161 @@ async fn main() {
                     },
                 }
             }
-            EditCommands::User(user) => {
-                let _user_ref = user.user.as_str();
-                match &user.edit_type {
-                    EditUserType::Name(_name) => todo!(),
+            EditType::User(cli_user) => {
+                let _user_ref = cli_user.user.as_str();
+                let user = food_base.get_user_by_string_reference(_user_ref.to_string());
+
+                let user = if let Some(user) = user.await {
+                    user
+                } else {
+                    println!("User not found");
+                    return;
+                };
+
+                match &cli_user.edit_type {
+                    EditUserType::Name(name) => {
+                        let query = food_base.change_username(user.id, name.username.clone());
+                        match query.await {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!(
+                                        "Updated User ({} => {})",
+                                        user.username, name.username
+                                    );
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
                     EditUserType::Password(_password) => todo!(),
-                    EditUserType::Email(_email) => todo!(),
-                    EditUserType::Admin(_admin) => todo!(),
+                    EditUserType::Email(email) => {
+                        let query = food_base.change_email(user.id, email.email.clone());
+                        match query.await {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!(
+                                        "Updated User E-Mail ({} => {})",
+                                        user.email, email.email
+                                    );
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
+                    EditUserType::Promote => {
+                        let query = food_base.change_is_admin(user.id, true);
+                        match query.await {
+                            Ok(_) => {
+                                if user.is_admin {
+                                    println!("Warning: User {} is already an Admin", user.username);
+                                }
+                                if cli.debug {
+                                    println!("Promoted User {}", user.username);
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
+                    EditUserType::Demote => {
+                        let query = food_base.change_is_admin(user.id, false);
+                        match query.await {
+                            Ok(_) => {
+                                if !user.is_admin {
+                                    println!(
+                                        "Warning: User {} wasn't an Admin in the first place",
+                                        user.username
+                                    );
+                                }
+                                if cli.debug {
+                                    println!("Promoted User {}", user.username);
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
                 }
-            },
-            EditCommands::Event(event) => {
-                let _event_ref = event.event.as_str();
-                match &event.edit_type {
-                    EditEventType::Name(_name) => todo!(),
-                    EditEventType::Budget(_budget) => todo!(),
-                    EditEventType::Comment(_comment) => todo!(),
+            }
+            EditType::Event(cli_event) => {
+                let _event_ref = cli_event.event.as_str();
+                let event = food_base
+                    .get_event_from_string_reference(_event_ref.to_string())
+                    .await;
+
+                let event = if let Some(event) = event {
+                    event
+                } else {
+                    println!("Event not found");
+                    return;
+                };
+                match &cli_event.edit_type {
+                    EditEventType::Name(name) => {
+                        let event = Event {
+                            event_name: name.name.clone(),
+                            ..event
+                        };
+                        let query = food_base.update_event(&event).await;
+                        match query {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated Event name ({} => {})", event.event_name, name.name);
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    },
+                    EditEventType::Budget(budget) => {
+                        let budget = if let Some(budget) = &budget.budget {
+                            Some(
+                                PgMoney::from_bigdecimal(budget.clone(), 2)
+                                .expect("Failed to convert budget to money"),
+                                )
+                        } else {
+                            None
+                        };
+                        let event = Event {
+                            budget: budget.clone(),
+                            ..event
+                        };
+
+                        let query = food_base.update_event(&event).await;
+                        match query {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated Event budget ({:?} => {:?})", event.budget, budget);
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    },
+                    EditEventType::Comment(comment) => {
+                        let event = Event {
+                            comment: comment.comment.clone(),
+                            ..event
+                        };
+                        let query = food_base.update_event(&event).await;
+                        match query {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated Event comment ('{}' => '{}')", event.comment.unwrap_or_default(), comment.comment.clone().unwrap_or_default());
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    },
                     EditEventType::Meals(meals) => match &meals.meal_edit_type {
                         EditEventMealsType::Add(_meal) => todo!(),
                         EditEventMealsType::Remove(_meal) => todo!(),
@@ -552,10 +848,10 @@ async fn main() {
                                 EditEventMealsEditType::EndTime(_end_time) => todo!(),
                                 EditEventMealsEditType::Comment(_comment) => todo!(),
                             }
-                        },
+                        }
                     },
                 }
-            },
+            }
         },
     }
 }

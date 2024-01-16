@@ -143,4 +143,63 @@ impl FoodBase {
 
         Ok(())
     }
+
+    pub async fn change_username (
+        &self,
+        id: i64,
+        username: String,
+    ) -> Result<User, sqlx::Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+                UPDATE users SET username = $1
+                WHERE id = $2
+                RETURNING *
+            "#,
+            username,
+            id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(user)
+    }
+
+    pub async fn change_email (
+        &self,
+        id: i64,
+        email: String,
+    ) -> Result<User, sqlx::Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+                UPDATE users SET email = $1
+                WHERE id = $2
+                RETURNING *
+            "#,
+            email,
+            id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(user)
+    }
+
+    pub async fn change_is_admin(&self, id: i64, is_admin: bool) -> Result<User, sqlx::Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+                UPDATE users SET is_admin = $1
+                WHERE id = $2
+                RETURNING *
+            "#,
+            is_admin,
+            id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(user)
+    }
 }
