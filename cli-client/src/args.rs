@@ -30,6 +30,9 @@ pub enum Commands {
     #[clap(alias = "del")]
     /// Delete an Ingredient, Recipe, User or Event
     Delete(DeleteCommand),
+
+    /// Edit an Ingredient, Recipe, User or Event
+    Edit(EditCommand),
 }
 
 // ---- List Commands ----
@@ -599,7 +602,7 @@ pub struct EditUser {
 #[derive(Debug, Subcommand)]
 pub enum EditUserType {
     /// Edit the username of a User
-    Username(EditUserUsername),
+    Name(EditUserName),
 
     /// Edit the password of a User
     Password(EditUserPassword),
@@ -612,7 +615,7 @@ pub enum EditUserType {
 }
 
 #[derive(Debug, Args)]
-pub struct EditUserUsername {
+pub struct EditUserName {
     /// New username of the user
     pub username: String,
 }
@@ -729,8 +732,11 @@ pub struct EditEventMealsRemove {
 
 #[derive(Debug, Args)]
 pub struct EditEventMealsEdit {
-    /// Meal to edit (use index or name)
-    pub meal: String,
+    /// Recipe of meal to edit (use index or name)
+    pub recipe: String,
+
+    /// Start time of meal to edit
+    pub start_time: String,
 
     #[clap(subcommand)]
     pub edit_type: EditEventMealsEditType,
