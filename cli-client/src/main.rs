@@ -500,6 +500,62 @@ async fn main() {
                 let event_ref = event.event.as_str();
                 println!("Deleting Event {:?}", event_ref);
             }
-        }, 
+        },
+        Commands::Edit(edit_data) => match &edit_data.edit_type {
+            EditCommands::Ingredient(_ingredient) => todo!(),
+            EditCommands::Recipe(recipe) => {
+                let _recipe_ref = recipe.recipe.as_str();
+                match &recipe.edit_type {
+                    EditRecipeType::Name(_name) => todo!(),
+                    EditRecipeType::Comment(_comment) => todo!(),
+                    EditRecipeType::Ingredients(ingredient) => match &ingredient.ingredient_edit_type {
+                        EditRecipeIngredientsType::Add(_ingredient) => todo!(),
+                        EditRecipeIngredientsType::Remove(_ingredient) => todo!(),
+                        EditRecipeIngredientsType::Amount(_ingredient) => todo!(),
+                    },
+                    EditRecipeType::Steps(steps) => match &steps.step_edit_type {
+                        EditRecipeStepsType::Add(_step) => todo!(),
+                        EditRecipeStepsType::Remove(_step) => todo!(),
+                        EditRecipeStepsType::Reorder(_step) => todo!(),
+                        EditRecipeStepsType::Edit(_step) => todo!(),
+                    },
+                }
+            }
+            EditCommands::User(user) => {
+                let _user_ref = user.user.as_str();
+                match &user.edit_type {
+                    EditUserType::Name(_name) => todo!(),
+                    EditUserType::Password(_password) => todo!(),
+                    EditUserType::Email(_email) => todo!(),
+                    EditUserType::Admin(_admin) => todo!(),
+                }
+            },
+            EditCommands::Event(event) => {
+                let _event_ref = event.event.as_str();
+                match &event.edit_type {
+                    EditEventType::Name(_name) => todo!(),
+                    EditEventType::Budget(_budget) => todo!(),
+                    EditEventType::Comment(_comment) => todo!(),
+                    EditEventType::Meals(meals) => match &meals.meal_edit_type {
+                        EditEventMealsType::Add(_meal) => todo!(),
+                        EditEventMealsType::Remove(_meal) => todo!(),
+                        EditEventMealsType::Edit(meal) => {
+                            let _recipe_ref = meal.recipe.as_str();
+                            let _start_time = meal.start_time.as_str();
+
+                            match &meal.edit_type {
+                                EditEventMealsEditType::Recipe(_recipe) => todo!(),
+                                EditEventMealsEditType::Location(_place) => todo!(),
+                                EditEventMealsEditType::Servings(_servings) => todo!(),
+                                EditEventMealsEditType::Calories(_calories) => todo!(),
+                                EditEventMealsEditType::StartTime(_start_time) => todo!(),
+                                EditEventMealsEditType::EndTime(_end_time) => todo!(),
+                                EditEventMealsEditType::Comment(_comment) => todo!(),
+                            }
+                        },
+                    },
+                }
+            },
+        },
     }
 }
