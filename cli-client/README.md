@@ -99,6 +99,7 @@ This Project aims to creat a simple to use Commandline application that interfac
         * [x] name <name>
         * [x] energy <energy>
         * [x] comment <comment>
+        * [ ] add-source <url> [<amount> <price>]
     * [ ] recipe <recipe_ref>
         * [x] name <new_name>
         * [x] comment <new_comment>
