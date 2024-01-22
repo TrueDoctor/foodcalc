@@ -17,6 +17,8 @@ pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
         .route( "/delete-inventory", axum::routing::put(handle_delete_inventory))
         .route( "/add-ingredient", axum::routing::put(add_ingredient_form))
         .route( "/commit-ingredient", axum::routing::put(handle_ingredient_commit))
+        .route( "/delete-ingredient", axum::routing::put(handle_ingredient_delete))
+        .route( "/change-ingredient-amount", axum::routing::put(handle_ingredient_change))
 }
 
 // Request parameters
@@ -46,6 +48,14 @@ pub struct InventoryItemData {
     pub filter_text: Option<String>,
     pub ingredient_id: i32,
     pub ingredient_name: String,
+    pub ingredient_amount: BigDecimal,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateInventoryItemData {
+    pub inventory_id: i32,
+    pub filter_text: Option<String>,
+    pub ingredient_id: i32,
     pub ingredient_amount: BigDecimal,
 }
 
@@ -84,6 +94,20 @@ fn return_to_inv_overview_error(inventory_id: i32) -> Markup {
             button class="btn btn-primary" hx-get="/inventories/select" hx-target=(INVENTORIES_DIV)  { "Back" }
         }
     }
+}
+
+pub async fn handle_ingredient_change(State(state): State<MyAppState>, data: axum::extract::Form<UpdateInventoryItemData>) -> () {
+    state   .db_connection
+            .update_inventory_item(InventoryIngredient { inventory_id: data.inventory_id, ingredient_id: data.ingredient_id, amount: data.ingredient_amount.clone() })
+            .await;
+}
+
+pub async fn handle_ingredient_delete(State(state): State<MyAppState>, data: axum::extract::Form<UpdateInventoryItemData>) -> Markup {
+    // TODO: Delete ingredient
+    state.db_connection
+        .delete_inventory_item(InventoryIngredient{ inventory_id: data.inventory_id, ingredient_id: data.ingredient_id, amount: data.ingredient_amount.clone() })
+        .await;
+    (render_filtered_inventory_contents(State(state), data.inventory_id, data.filter_text.clone())).await
 }
 
 pub async fn handle_ingredient_commit(State(state): State<MyAppState>, data: Form<InventoryItemData>) -> Markup {
@@ -126,6 +150,7 @@ pub fn add_ingredient_form_with_header_data(header_data: InventoryHeaderData) ->
                 h1 { "Add ingredient" }
                 input type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
                 input type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.unwrap_or_default());
+                input type="hidden" name=(INGREDIENT_ID) value=(-1);
                 input type="text" list=(INGREDIENTS_DATALIST) name=(INGREDIENT_NAME) placeholder="Ingredient" required="required" class="text";
                 input type="number" name=(INGREDIENT_AMOUNT) placeholder="Amount" value="" step="0.01" min="0.05" required="required";
                 button class="btn btn-primary" type="submit" { "Submit" }
@@ -330,9 +355,9 @@ impl IngredientTableFormattable for IngredientWithWeight {
                     input class=(form_id) type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
                     input class=(form_id) type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.unwrap_or_default());
                     input class=(form_id) type="hidden" name=(INGREDIENT_ID) value=(self.ingredient_id);
-                    input class=(format!("text w-full {}",form_id)) type="text" list=(INGREDIENTS_DATALIST) name=(INGREDIENT_NAME) value=(self.name); 
+                    div class=(format!("text w-full {}",form_id)) type="text" name=(INGREDIENT_NAME) { (self.name) } 
                 }
-                td { input  type="number" name="amount" value=(self.amount) required="required"; }
+                td { input class=(form_id) type="number" name="ingredient_amount" value=(self.amount) required="required" hx-put="inventories/change-ingredient-amount" hx-target="" hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="innerHTML"; }
                 td { button hx-include=(format!(".{}", form_id)) class="btn btn-primary" hx-put="inventories/delete-ingredient" type="submit" hx-target=(format!("#{}", INVENTORY_CONTENTS_DIV)) hx-swap="innerHTML" { "X" } }
             }
         }

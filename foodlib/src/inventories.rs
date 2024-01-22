@@ -222,6 +222,22 @@ impl FoodBase {
         Ok(dbg!(records))
     }
 
+    pub async fn delete_inventory_item(&self, item: InventoryIngredient) -> eyre::Result<()> {
+        sqlx::query!(
+            r#"
+                DELETE FROM inventory_ingredients WHERE 
+                inventory_id = $1 AND
+                ingredient_id = $2
+            "#,
+            item.inventory_id,
+            item.ingredient_id
+        )
+        .execute(&*self.pg_pool)
+        .await;
+
+        Ok(())
+    }
+
     pub async fn update_inventory_item(&self, values: InventoryIngredient) -> eyre::Result<()> {
         // TODO: Maybe change so it will only update once, when the inventory is quit
         let mut transaction = self.pg_pool.begin().await?;
