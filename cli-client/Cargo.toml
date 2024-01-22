@@ -12,3 +12,4 @@ foodlib = { path = "../foodlib" }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 tabled = "0.14.0"
+humantime = "2.1.0"

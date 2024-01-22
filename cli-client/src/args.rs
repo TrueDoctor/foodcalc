@@ -497,6 +497,7 @@ pub enum EditRecipeStepsType {
     /// Add a step to the recipe
     Add(EditRecipeStepsAddCommand),
 
+    #[clap(alias = "rm")]
     /// Remove a step from the recipe
     Remove(EditRecipeStepsRemoveCommand),
 
@@ -536,8 +537,10 @@ pub struct EditRecipeStepsRemoveCommand {
 
 #[derive(Debug, Args)]
 pub struct EditRecipeStepsReorderCommand {
+    #[clap(use_value_delimiter = true)]
+    #[clap(value_delimiter = ' ')]
     /// New order of the steps
-    pub order: Vec<String>,
+    pub order: Vec<u32>,
 }
 
 #[derive(Debug, Args)]
@@ -580,7 +583,7 @@ pub struct EditRecipeStepsEditDurationCommand {
     pub duration_type: EditRecipeStepsEditDurationType,
 
     /// New Duration Value
-    pub fixed_time: String,
+    pub duration: String,
 }
 
 #[derive(Debug, ValueEnum, Clone)]

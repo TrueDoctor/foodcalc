@@ -1,7 +1,8 @@
 mod args;
 
 use foodlib::*;
-use sqlx::postgres::types::PgMoney;
+use humantime::parse_duration;
+use sqlx::postgres::types::{PgInterval, PgMoney};
 use std::env;
 
 use args::*;
@@ -630,16 +631,16 @@ async fn main() {
                 }
             }
             EditType::Recipe(cli_recipe) => {
-                let _recipe_ref = cli_recipe.recipe.as_str();
+                let recipe_ref = cli_recipe.recipe.as_str();
 
                 let recipe = food_base
-                    .get_recipe_from_string_reference(_recipe_ref.to_string())
+                    .get_recipe_from_string_reference(recipe_ref.to_string())
                     .await;
 
                 let recipe = if let Some(recipe) = recipe {
                     recipe
                 } else {
-                    println!("Recipe not found");
+                    println!("Couldn't find Recipe by reference \"{}\"", recipe_ref);
                     return;
                 };
                 match &cli_recipe.edit_type {
@@ -653,7 +654,10 @@ async fn main() {
                         match query.await {
                             Ok(_) => {
                                 if cli.debug {
-                                    println!("Updated Recipe name ({} => {})", recipe.name, name.name);
+                                    println!(
+                                        "Updated Recipe name ({} => {})",
+                                        recipe.name, name.name
+                                    );
                                 }
                             }
                             Err(error) => {
@@ -671,27 +675,220 @@ async fn main() {
                         match query.await {
                             Ok(_) => {
                                 if cli.debug {
-                                    println!("Updated Recipe comment ('{}' => '{}')", recipe.comment.unwrap_or_default(), comment.comment.clone().unwrap_or_default());
+                                    println!(
+                                        "Updated Recipe comment ('{}' => '{}')",
+                                        recipe.comment.unwrap_or_default(),
+                                        comment.comment.clone().unwrap_or_default()
+                                    );
                                 }
                             }
                             Err(error) => {
                                 println!("Error: {}", error)
                             }
                         }
-                    },
+                    }
                     EditRecipeType::Ingredients(ingredient) => {
+                        // Ask Dennis on how to implement this
                         match &ingredient.ingredient_edit_type {
                             EditRecipeIngredientsType::Add(_ingredient) => todo!(),
                             EditRecipeIngredientsType::Remove(_ingredient) => todo!(),
                             EditRecipeIngredientsType::Amount(_ingredient) => todo!(),
                         }
                     }
-                    EditRecipeType::Steps(steps) => match &steps.step_edit_type {
-                        EditRecipeStepsType::Add(_step) => todo!(),
-                        EditRecipeStepsType::Remove(_step) => todo!(),
-                        EditRecipeStepsType::Reorder(_step) => todo!(),
-                        EditRecipeStepsType::Edit(_step) => todo!(),
-                    },
+                    EditRecipeType::Steps(steps) => {
+                        let new_steps = food_base.get_recipe_steps(recipe.recipe_id).await;
+                        let mut new_steps: Vec<RecipeStep> = if let Ok(steps) = new_steps {
+                            steps
+                        } else {
+                            println!("Error: {}", new_steps.unwrap_err());
+                            return;
+                        };
+                        match &steps.step_edit_type {
+                            EditRecipeStepsType::Add(step) => {
+                                let name = step.name.as_str();
+                                let duration_fixed = PgInterval {
+                                    microseconds: parse_duration(step.fixed_time.as_str())
+                                        .unwrap()
+                                        .as_micros()
+                                        as i64,
+                                    days: 0,
+                                    months: 0,
+                                };
+                                let duration_scaled = PgInterval {
+                                    microseconds: parse_duration(step.scaled_time.as_str())
+                                        .unwrap()
+                                        .as_micros()
+                                        as i64,
+                                    days: 0,
+                                    months: 0,
+                                };
+
+                                let index = step.position;
+                                let index = if let Some(index) = index {
+                                    index as f64 - 1.
+                                } else {
+                                    new_steps.len() as f64
+                                };
+
+                                let added_step = RecipeStep {
+                                    step_id: 0,
+                                    step_order: index,
+                                    step_name: name.to_string(),
+                                    step_description: step.description.clone(),
+                                    fixed_duration: duration_fixed,
+                                    duration_per_kg: duration_scaled,
+                                    recipe_id: 0,
+                                };
+
+                                new_steps = new_steps
+                                    .into_iter()
+                                    .map(|step| {
+                                        if step.step_order >= index {
+                                            RecipeStep {
+                                                step_order: step.step_order + 1.,
+                                                ..step
+                                            }
+                                        } else {
+                                            step
+                                        }
+                                    })
+                                    .collect::<Vec<_>>();
+
+                                new_steps.push(added_step);
+                            }
+                            EditRecipeStepsType::Remove(_step) => {
+                                let step_ref = _step.step.as_str();
+                                let step_name = step_ref;
+                                let step_order = step_ref.parse::<f64>().unwrap_or(-1.) - 1.;
+
+                                let original_step = new_steps.iter().find(|step| {
+                                    step.step_order == step_order || step.step_name == step_name
+                                });
+
+                                let original_step = if let Some(step) = original_step {
+                                    step.clone()
+                                } else {
+                                    println!("Error: Step not found");
+                                    return;
+                                };
+
+                                new_steps = new_steps
+                                    .into_iter()
+                                    .filter(|step| step.step_id != original_step.step_id)
+                                    .enumerate()
+                                    .map(|(i, step)| {
+                                        RecipeStep {
+                                            step_order: i as f64,
+                                            ..step
+                                        }
+                                    })
+                                    .collect::<Vec<_>>();
+                            }
+                            EditRecipeStepsType::Reorder(step) => {
+                                let order = step.order.clone();
+                                if new_steps.len() != order.len() {
+                                    println!("Error: New Order must have the same length as the old one ({} != {})", order.len(), new_steps.len());
+                                    return;
+                                }
+
+                                // Check if every index is contained in the new order
+                                for i in 0..order.len() {
+                                    if !order.contains(&(i as u32)) {
+                                        println!("Error: New Order must contain every index ({} is missing)", i);
+                                        return;
+                                    }
+                                }
+
+                                // Build new order of Steps
+                                new_steps = new_steps
+                                    .into_iter()
+                                    .enumerate()
+                                    .map(|(i, step)| RecipeStep {
+                                        step_order: order
+                                            .iter()
+                                            .position(|&x| x == i as u32)
+                                            .unwrap()
+                                            as f64,
+                                        ..step
+                                    })
+                                    .collect::<Vec<_>>();
+                            }
+                            EditRecipeStepsType::Edit(step) => {
+                                let step_ref = step.step.as_str();
+                                let step_name = step_ref;
+                                let step_order = step_ref.parse::<f64>().unwrap_or(-1.);
+
+                                let original_step = new_steps.iter().find(|step| {
+                                    step.step_order == step_order || step.step_name == step_name
+                                });
+
+                                let mut edited_step = if let Some(step) = original_step {
+                                    step.clone()
+                                } else {
+                                    println!("Error: Step not found");
+                                    return;
+                                };
+                                let original_step = edited_step.clone();
+
+                                match &step.edit_type {
+                                    EditRecipeStepsEditType::Name(name) => {
+                                        edited_step.step_name = name.name.clone();
+                                    }
+                                    EditRecipeStepsEditType::Description(desc) => {
+                                        edited_step.step_description = desc.description.clone();
+                                    }
+                                    EditRecipeStepsEditType::Duration(duration) => {
+                                        let parsed_duration =
+                                            parse_duration(duration.duration.as_str());
+                                        let parsed_duration = if let Ok(duration) = parsed_duration
+                                        {
+                                            PgInterval {
+                                                microseconds: duration.as_micros() as i64,
+                                                days: 0,
+                                                months: 0,
+                                            }
+                                        } else {
+                                            println!("Error: {}", parsed_duration.unwrap_err());
+                                            return;
+                                        };
+
+                                        match duration.duration_type {
+                                            EditRecipeStepsEditDurationType::Fixed => {
+                                                edited_step.fixed_duration = parsed_duration;
+                                            }
+                                            EditRecipeStepsEditDurationType::Scaled => {
+                                                edited_step.duration_per_kg = parsed_duration;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                new_steps = new_steps
+                                    .iter()
+                                    .map(|step| {
+                                        if step.step_id == original_step.step_id {
+                                            edited_step.clone()
+                                        } else {
+                                            step.clone()
+                                        }
+                                    })
+                                    .collect::<Vec<_>>();
+                            }
+                        }
+                        let query =
+                            food_base.update_recipe_steps(recipe.recipe_id, new_steps.into_iter());
+
+                        match query.await {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated Recipe Steps");
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
                 }
             }
             EditType::User(cli_user) => {
@@ -798,20 +995,23 @@ async fn main() {
                         match query {
                             Ok(_) => {
                                 if cli.debug {
-                                    println!("Updated Event name ({} => {})", event.event_name, name.name);
+                                    println!(
+                                        "Updated Event name ({} => {})",
+                                        event.event_name, name.name
+                                    );
                                 }
                             }
                             Err(error) => {
                                 println!("Error: {}", error)
                             }
                         }
-                    },
+                    }
                     EditEventType::Budget(budget) => {
                         let budget = if let Some(budget) = &budget.budget {
                             Some(
                                 PgMoney::from_bigdecimal(budget.clone(), 2)
-                                .expect("Failed to convert budget to money"),
-                                )
+                                    .expect("Failed to convert budget to money"),
+                            )
                         } else {
                             None
                         };
@@ -824,14 +1024,17 @@ async fn main() {
                         match query {
                             Ok(_) => {
                                 if cli.debug {
-                                    println!("Updated Event budget ({:?} => {:?})", event.budget, budget);
+                                    println!(
+                                        "Updated Event budget ({:?} => {:?})",
+                                        event.budget, budget
+                                    );
                                 }
                             }
                             Err(error) => {
                                 println!("Error: {}", error)
                             }
                         }
-                    },
+                    }
                     EditEventType::Comment(comment) => {
                         let event = Event {
                             comment: comment.comment.clone(),
@@ -841,14 +1044,18 @@ async fn main() {
                         match query {
                             Ok(_) => {
                                 if cli.debug {
-                                    println!("Updated Event comment ('{}' => '{}')", event.comment.unwrap_or_default(), comment.comment.clone().unwrap_or_default());
+                                    println!(
+                                        "Updated Event comment ('{}' => '{}')",
+                                        event.comment.unwrap_or_default(),
+                                        comment.comment.clone().unwrap_or_default()
+                                    );
                                 }
                             }
                             Err(error) => {
                                 println!("Error: {}", error)
                             }
                         }
-                    },
+                    }
                     EditEventType::Meals(meals) => match &meals.meal_edit_type {
                         EditEventMealsType::Add(_meal) => todo!(),
                         EditEventMealsType::Remove(_meal) => todo!(),
