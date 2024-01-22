@@ -62,7 +62,7 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
         .unwrap_or_default();
 
     html! {
-        div id="ingredients" class="flex flex-col items-center justify-center" {
+        div id="ingredients" class="flex flex-col items-center justify-center mb-16" {
             div  class="w-3/4 flex flex-col items-center justify-center" {
                 div class="
                     flex flex-row items-center justify-stretch
