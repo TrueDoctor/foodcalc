@@ -227,6 +227,64 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn delete_recipe(
+        &self,
+        recipe_id: i32,
+        ) -> eyre::Result<()> {
+        let mut transaction = self.pg_pool.begin().await?;
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM recipe_ingredients
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} recipe_ingredients", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM meta_recipes
+                WHERE parent_id = $1 OR child_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} meta_recipes", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM steps
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        ).execute(&mut *transaction).await?;
+        log::debug!("Deleted {} steps", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM event_meals
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        ).execute(&mut *transaction).await?;
+        log::debug!("Deleted {} event_meals", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM recipes
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        ).execute(&mut *transaction).await?;
+        log::debug!("Deleted {} recipes", count.rows_affected());
+
+        transaction.commit().await?;
+        Ok(())
+    }
+
     pub async fn fetch_subrecipes(
         &self,
         recipe_id: i32,

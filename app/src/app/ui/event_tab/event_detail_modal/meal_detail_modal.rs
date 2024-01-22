@@ -142,11 +142,11 @@ impl MealDetail {
 
                 let old_meal = self.old_meal.clone();
                 if [
-                    self.start_time.valid(),
-                    self.end_time.valid(),
-                    self.comment.valid(),
-                    self.energy.valid() && self.energy.value_type.as_ref().unwrap() > &BigDecimal::zero(),
-                    self.servings.valid() && self.servings.value_type.unwrap() > 0,
+                    dbg!(self.start_time.valid()),
+                    dbg!(self.end_time.valid()),
+                    dbg!(self.comment.valid()),
+                    dbg!(self.energy.valid() && self.energy.value_type.as_ref().unwrap() > &BigDecimal::zero()),
+                    dbg!(self.servings.valid() && self.servings.value_type.unwrap() > 0),
                 ]
                 .iter()
                 .all(|input| *input)

@@ -1,4 +1,4 @@
-use axum::extract::State;
+use axum::extract::{State, Path};
 use maud::{html, Markup};
 
 use crate::MyAppState;
@@ -7,6 +7,8 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/search", axum::routing::post(search))
         .route("/add", axum::routing::get(edit_recipe_form))
+        .route("/delete/:recipe_id", axum::routing::get(delete_recipe))
+        .route("/delete_nqa/:recipe_id", axum::routing::delete(delete_recipe_nqa))
         .route("/", axum::routing::get(recipes_view))
 }
 
@@ -23,6 +25,47 @@ pub async fn search(State(state): State<MyAppState>, query: String) -> Markup {
             (format_recipe(recipe))
         }
     }
+}
+
+pub async fn delete_recipe_nqa(
+    State(state): State<MyAppState>,
+    Path(recipe_id): Path<i32>,
+) -> Markup {
+    if let Err(error) = state.db_connection.delete_recipe(recipe_id).await {
+        log::error!("Failed to delete recipe: {}", error);
+        return html! {
+            div id="error" class="flex flex-col items-center justify-center text-red-500" {
+                div {
+                    h1 { "Error" }
+                    p { "Failed to delete recipe" }
+                    p { (error) }
+                    button class="btn btn-primary" hx-get="/recipes" hx-target="#content"  { "Back" }
+                }
+            }
+        };
+    };
+
+    recipes_view(State(state)).await
+}
+
+pub async fn delete_recipe(
+    State(state): State<MyAppState>,
+    Path(recipe_id): Path<i32>,
+) -> Markup {
+    html! {
+        dialog class="dialog" open="open" {
+            div class="flex flex-col items-center justify-center" {
+                div class="flex flex-col items-center justify-center" {
+                    h1 { "Are you sure you want to delete this recipe?" }
+                    div class="flex flex-row items-center justify-center" {
+                        button class="btn btn-primary" hx-target="#content" hx-delete=(format!("/recipes/delete_nqa/{}", recipe_id)) { "Yes" }
+                        button class="btn btn-cancel" hx-target="#content" hx-get="/recipes" { "No" }
+                    }
+                }
+            }
+        }
+    }
+
 }
 
 pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
@@ -46,7 +89,7 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
                     button class="btn btn-primary" hx-get="/recipes/add" { "Add recipe (+)" }
                 }
                 table class="w-full text-inherit table-auto object-center" {
-                    thead { tr { th { "Name" } th { "Energy" } th { "Comment" } } }
+                    thead { tr { th { "Name" } th { "Energy" } th { "Comment" }  th {} th {} th {} th {}} }
                     tbody id="search-results" {
                         @for recipe in recipes.iter() {
                             (format_recipe(recipe))
@@ -81,6 +124,10 @@ fn format_recipe(recipe: &foodlib::Recipe) -> Markup {
             td { (recipe.recipe_id) }
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
+            td { button class="btn btn-primary" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
+            td { button class="btn btn-danger" hx-target="next #dialog" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
+            td { button class="btn btn-primary" hx-get=(format!("/recipes/export?recipe_id={}", recipe.recipe_id)) { "Export" } }
+            td { div id="dialog"; }
         }
     }
 }
