@@ -91,7 +91,7 @@ This Project aims to creat a simple to use Commandline application that interfac
     * [x] event <name> <budget> [<comment>]
 * [ ] delete
     * [ ] ingredient <ingredient_ref>
-    * [ ] reciepe <reciepe_ref>
+    * [x] reciepe <reciepe_ref>
     * [x] user <user_ref>
     * [ ] event <event_ref>
 * [ ] edit
