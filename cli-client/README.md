@@ -107,14 +107,14 @@ This Project aims to creat a simple to use Commandline application that interfac
             * [ ] add <ingredient_ref> <amount>
             * [ ] remove <ingredient_ref>
             * [ ] amount <ingredient_ref> <amount>
-        * [ ] steps
-            * [ ] add <name> [<description>] [<duration_fixed> <duration_scaled>] [<index>]
-            * [ ] remove <step_ref>
-            * [ ] reorder <list_of_indices>
-            * [ ] edit <step_ref>
-                * [ ] name <name>
-                * [ ] description
-                * [ ] duration <fixed|scaled> <duration>
+        * [x] steps
+            * [x] add <name> [<description>] [<duration_fixed> <duration_scaled>] [<index>]
+            * [x] remove <step_ref>
+            * [x] reorder <list_of_indices>
+            * [x] edit <step_ref>
+                * [x] name <name>
+                * [x] description
+                * [x] duration <fixed|scaled> <duration>
     * [ ] user <user_ref>
         * [x] name <name>
         * [ ] password <password>
