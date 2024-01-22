@@ -159,6 +159,11 @@ async fn main() {
                         food_base.get_ingredient_from_string_reference(ingredient_ref.to_string());
 
                     if let Some(_ingredient) = ingredient.await {
+                        // Possible information to be displayed:
+                        // - Name. (ID) [Comment]
+                        // - Price / Energy
+                        // - List of Recipes using this ingredient
+                        // - List of Events using recipes with this ingredient
                         todo!();
                     } else {
                         println!("Ingredient not found");
@@ -212,6 +217,11 @@ async fn main() {
                         .await;
 
                     if let Some(_recipe) = recipe {
+                        // Possible information to be displayed:
+                        // - Name. (ID) [Comment]
+                        // - Price / Energy
+                        // - Price / 100g
+                        // - List of Events using recipes with this ingredient
                         todo!();
                     } else {
                         println!("Recipe not found");
