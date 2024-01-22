@@ -95,7 +95,7 @@ This Project aims to creat a simple to use Commandline application that interfac
     * [x] user <user_ref>
     * [ ] event <event_ref>
 * [ ] edit
-    * [x] ingredient <ingredient_ref>
+    * [ ] ingredient <ingredient_ref>
         * [x] name <name>
         * [x] energy <energy>
         * [x] comment <comment>
