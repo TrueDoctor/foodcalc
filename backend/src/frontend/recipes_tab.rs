@@ -29,7 +29,7 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
     let recipes = state.db_connection.get_recipes().await.unwrap_or_default();
 
     html! {
-        div id="recipes" class="flex flex-col items-center justify-center" {
+        div id="recipes" class="flex flex-col items-center justify-center mb-16" {
             div  class="w-3/4 flex flex-col items-center justify-center" {
                 div class="
                     flex flex-row items-center justify-stretch
