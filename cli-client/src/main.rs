@@ -164,7 +164,6 @@ async fn main() {
                         println!("Ingredient not found");
                     }
                 }
-                //TODO: Invastigate Performance
                 InfoType::Event(event) => {
                     let event_ref = event.event_ref.as_str();
 
@@ -515,8 +514,16 @@ async fn main() {
                     .await;
 
                 if let Some(_recipe) = recipe {
-                    // There currently isn't a method for deleting a recipe
-                    todo!();
+                    let query = food_base.delete_recipe(_recipe.recipe_id);
+
+                    match query.await {
+                        Ok(_) => {
+                            println!("Recipe {} removed", _recipe.name);
+                        }
+                        Err(error) => {
+                            println!("Error: {}", error)
+                        }
+                    }
                 } else {
                     println!("Recipe not found");
                 }
