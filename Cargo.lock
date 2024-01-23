@@ -822,19 +822,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cli-client"
-version = "0.0.1"
-dependencies = [
- "clap 4.4.7",
- "dotenv",
- "foodlib",
- "humantime",
- "sqlx",
- "tabled",
- "tokio",
-]
-
-[[package]]
 name = "clipboard-win"
 version = "4.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1241,6 +1228,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dateparser"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2ef451feee09ae5ecd8a02e738bd9adee9266b8fa9b44e22d3ce968d8694238"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "lazy_static",
+ "regex",
+]
+
+[[package]]
 name = "der"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1610,6 +1609,20 @@ dependencies = [
  "sqlx",
  "time",
  "time-macros",
+ "tokio",
+]
+
+[[package]]
+name = "foodctl"
+version = "0.0.1"
+dependencies = [
+ "clap 4.4.7",
+ "dateparser",
+ "dotenv",
+ "foodlib",
+ "humantime",
+ "sqlx",
+ "tabled",
  "tokio",
 ]
 
