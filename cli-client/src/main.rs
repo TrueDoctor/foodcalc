@@ -690,9 +690,111 @@ async fn main() {
                     EditRecipeType::Ingredients(ingredient) => {
                         // Ask Dennis on how to implement this
                         match &ingredient.ingredient_edit_type {
-                            EditRecipeIngredientsType::Add(_ingredient) => todo!(),
-                            EditRecipeIngredientsType::Remove(_ingredient) => todo!(),
-                            EditRecipeIngredientsType::Amount(_ingredient) => todo!(),
+                            EditRecipeIngredientsType::Add(cli_ingredient) => {
+                                let amount = cli_ingredient.amount.as_str();
+                                let amount = if let Some(amount_tuple) = parse_package_size(amount) {
+                                    amount_tuple
+                                } else {
+                                    println!("Error: Invalid amount");
+                                    return;
+                                };
+
+                                let ingredient_ref = cli_ingredient.ingredient.as_str();
+                                let ingredient = food_base
+                                    .get_ingredient_from_string_reference(
+                                        ingredient_ref.to_string(),
+                                    );
+                                let ingredient = if let Some(ingredient) = ingredient.await {
+                                    ingredient
+                                } else {
+                                    println!("Ingredient not found");
+                                    return;
+                                };
+
+                                let query = food_base.add_recipe_ingredient(
+                                    recipe.recipe_id,
+                                    ingredient.ingredient_id,
+                                    amount,
+                                );
+
+                                match query.await {
+                                    Ok(_) => {
+                                        if cli.debug {
+                                            println!("Added {} of {} to Recipe", cli_ingredient.amount.as_str(), ingredient.name);
+                                        }
+                                    }
+                                    Err(error) => {
+                                        println!("Error: {}", error)
+                                    }
+                                };
+                            },
+                            EditRecipeIngredientsType::Remove(ingredient) => {
+                                let ingredient_ref = ingredient.ingredient.as_str();
+                                let ingredient = food_base
+                                    .get_ingredient_from_string_reference(
+                                        ingredient_ref.to_string(),
+                                    );
+                                let ingredient = if let Some(ingredient) = ingredient.await {
+                                    ingredient
+                                } else {
+                                    println!("Ingredient not found");
+                                    return;
+                                };
+
+                                let query = food_base.remove_recipe_ingredient(
+                                    recipe.recipe_id,
+                                    ingredient.ingredient_id,
+                                );
+
+                                match query.await {
+                                    Ok(_) => {
+                                        if cli.debug {
+                                            println!("Removed Ingredient \"{}\" from Recipe", ingredient.name);
+                                        }
+                                    }
+                                    Err(error) => {
+                                        println!("Error: {}", error)
+                                    }
+                                };
+                            },
+                            EditRecipeIngredientsType::Amount(cli_ingredient) => {
+                                let amount = cli_ingredient.amount.as_str();
+                                let amount = if let Some(amount_tuple) = parse_package_size(amount) {
+                                    amount_tuple
+                                } else {
+                                    println!("Error: Invalid amount");
+                                    return;
+                                };
+
+                                let ingredient_ref = cli_ingredient.ingredient.as_str();
+                                let ingredient = food_base
+                                    .get_ingredient_from_string_reference(
+                                        ingredient_ref.to_string(),
+                                    );
+                                let ingredient = if let Some(ingredient) = ingredient.await {
+                                    ingredient
+                                } else {
+                                    println!("Ingredient not found");
+                                    return;
+                                };
+
+                                let query = food_base.update_recipe_ingredient(
+                                    recipe.recipe_id,
+                                    ingredient.ingredient_id,
+                                    amount,
+                                );
+
+                                match query.await {
+                                    Ok(_) => {
+                                        if cli.debug {
+                                            println!("Updated Amount for {} to {}", ingredient.name, cli_ingredient.amount.as_str());
+                                        }
+                                    }
+                                    Err(error) => {
+                                        println!("Error: {}", error)
+                                    }
+                                };
+                            },
                         }
                     }
                     EditRecipeType::Steps(steps) => {

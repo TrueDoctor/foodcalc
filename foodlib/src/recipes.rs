@@ -227,6 +227,63 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn add_recipe_ingredient(
+        &self,
+        recipe_id: i32,
+        ingredient_id: i32,
+        amount: (BigDecimal, i32),
+    ) -> eyre::Result<()> {
+        let (amount, unit_id) = amount;
+        let count = sqlx::query!(
+            r#"
+                INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id)
+                VALUES ($1, $2, $3, $4)
+            "#,
+            recipe_id,
+            ingredient_id,
+            amount,
+            unit_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        assert_eq!(count.rows_affected(), 1);
+        Ok(())
+    }
+
+    pub async fn remove_recipe_ingredient (&self, recipe_id: i32, ingredient_id: i32) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM recipe_ingredients
+                WHERE recipe_id = $1 AND ingredient_id = $2
+            "#,
+            recipe_id,
+            ingredient_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        assert_eq!(count.rows_affected(), 1);
+        Ok(())
+    }
+
+    pub async fn update_recipe_ingredient (&self, recipe_id: i32, ingredient_id: i32, amount: (BigDecimal, i32)) -> eyre::Result<()> {
+        let (amount, unit_id) = amount;
+        let count = sqlx::query!(
+            r#"
+                UPDATE recipe_ingredients
+                SET amount = $3, unit_id = $4
+                WHERE recipe_id = $1 AND ingredient_id = $2
+            "#,
+            recipe_id,
+            ingredient_id,
+            amount,
+            unit_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        assert_eq!(count.rows_affected(), 1);
+        Ok(())
+    }
+
     pub async fn delete_recipe(&self, recipe_id: i32) -> eyre::Result<()> {
         let mut transaction = self.pg_pool.begin().await?;
         let count = sqlx::query!(
