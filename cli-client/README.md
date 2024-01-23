@@ -104,7 +104,7 @@ This Project aims to creat a simple to use Commandline application that interfac
         * [x] name <new_name>
         * [x] comment <new_comment>
         * [ ] ingredients
-            * [ ] add <ingredient_ref> <amount>
+            * [x] add <ingredient_ref> <amount>
             * [ ] remove <ingredient_ref>
             * [ ] amount <ingredient_ref> <amount>
         * [x] steps

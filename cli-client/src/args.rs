@@ -454,6 +454,7 @@ pub enum EditRecipeIngredientsType {
     /// Add an ingredient to the recipe
     Add(EditRecipeIngredientsAddCommand),
 
+    #[clap(alias = "rm")]
     /// Remove an ingredient from the recipe
     Remove(EditRecipeIngredientsRemoveCommand),
 
@@ -467,7 +468,7 @@ pub struct EditRecipeIngredientsAddCommand {
     pub ingredient: String,
 
     /// Amount of the ingredient
-    pub amount: u32,
+    pub amount: String,
 }
 
 #[derive(Debug, Args)]
@@ -482,7 +483,7 @@ pub struct EditRecipeIngredientsAmountCommand {
     pub ingredient: String,
 
     /// New amount of the ingredient
-    pub amount: u32,
+    pub amount: String,
 }
 
 #[derive(Debug, Args)]
