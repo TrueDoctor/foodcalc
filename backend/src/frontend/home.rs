@@ -18,8 +18,8 @@ pub async fn home_view(State(state): State<MyAppState>) -> Markup {
             script src="https://unpkg.com/htmx.org@1.9.6" {}
         }
         body class="
-            bg-white text-gray-800
-            dark:bg-gray-900 dark:text-gray-100" {
+            bg-light-bg-light text-gray-800
+            dark:bg-dark-bg-dark dark:text-gray-100" {
             div {
                 (navbar())
                 (content(State(state)).await)
@@ -40,7 +40,7 @@ pub fn navbar() -> Markup {
     html! {
         div class="
             flex items-center justify-between flex-wrap 
-            bg-blue-700 text-white 
+            bg-navbar text-white 
             mx-16 my-4 
             rounded-xl shadow-xl overflow-hidden
             " {

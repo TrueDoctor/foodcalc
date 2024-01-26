@@ -8,7 +8,8 @@ table {
 }
 
 th {
-  @apply bg-blue-500 text-white;
+  @apply bg-light-primary-normal text-white;
+  @apply dark:bg-dark-primary-normal;
   @apply p-4;
 }
 
@@ -17,11 +18,13 @@ td {
 }
 
 tr:nth-child(even) { 
-  @apply bg-blue-700 rounded-lg;
+  @apply bg-light-bg-light rounded-lg;
+  @apply dark:bg-dark-bg-light;
 }
 
 tr:nth-child(odd) { 
-  @apply bg-blue-800 rounded-lg;
+  @apply bg-light-bg-dark rounded-lg;
+  @apply dark:bg-dark-bg-dark;
 }
 
 .text {
@@ -37,16 +40,26 @@ tr:nth-child(odd) {
 }
 
 .btn-primary {
-	@apply bg-blue-500 text-white;
+	@apply bg-light-primary-normal text-white;
+	@apply dark:bg-dark-primary-normal;
 }
 .btn-primary:hover {
-	@apply bg-blue-700;
+	@apply bg-light-primary-hover;
+	@apply dark:bg-dark-primary-hover;
+}
+
+.btn-success {
+	@apply bg-btn-success-normal text-white;
+}
+
+.btn-success:hover {
+	@apply bg-btn-success-hover;
 }
 
 .btn-cancel {
-	@apply bg-red-500 text-white;
+	@apply bg-btn-cancel-normal text-white;
 }
 
 .btn-cancel:hover {
-	@apply bg-red-700;
+	@apply bg-btn-cancel-hover;
 }
