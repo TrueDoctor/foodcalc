@@ -125,7 +125,7 @@ fn format_recipe(recipe: &foodlib::Recipe) -> Markup {
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
             td { button class="btn btn-primary" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
-            td { button class="btn btn-danger" hx-target="next #dialog" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
+            td { button class="btn btn-cancel" hx-target="next #dialog" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
             td { button class="btn btn-primary" hx-get=(format!("/recipes/export?recipe_id={}", recipe.recipe_id)) { "Export" } }
             td { div id="dialog"; }
         }
