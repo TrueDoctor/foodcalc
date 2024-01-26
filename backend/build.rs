@@ -5,9 +5,9 @@ fn main() {
     println!("cargo:rerun-if-changed=tailwind.config.js");
     println!("cargo:rerun-if-changed=src/frontend");
 
-    let command = Command::new("npx")
+    let command = Command::new("tailwindcss")
         .args([
-            "tailwindcss",
+           // "tailwindcss",
             "-c",
             "tailwind.config.js",
             "-i",
