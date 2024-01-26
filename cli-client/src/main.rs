@@ -1021,7 +1021,19 @@ async fn main() {
                             }
                         }
                     }
-                    EditUserType::Password(_password) => todo!(),
+                    EditUserType::Password(password) => {
+                        let query = food_base.update_password(user.id, password.password.clone());
+                        match query.await {
+                            Ok(_) => {
+                                if cli.debug {
+                                    println!("Updated User Password");
+                                }
+                            }
+                            Err(error) => {
+                                println!("Error: {}", error)
+                            }
+                        }
+                    }
                     EditUserType::Email(email) => {
                         let query = food_base.change_email(user.id, email.email.clone());
                         match query.await {

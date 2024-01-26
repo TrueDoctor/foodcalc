@@ -89,6 +89,29 @@ impl FoodBase {
         Ok(user)
     }
 
+    pub async fn update_password(
+        &self,
+        id: i64,
+        password: String,
+    ) -> Result<User, sqlx::Error> {
+        let password_hash = bcrypt::hash(password, 12).unwrap();
+
+        let user = sqlx::query_as!(
+            User,
+            r#"
+                UPDATE users SET password_hash = $1
+                WHERE id = $2
+                RETURNING *
+            "#,
+            password_hash,
+            id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(user)
+    }
+
     pub async fn get_user(&self, id: i64) -> Result<User, sqlx::Error> {
         let user = sqlx::query_as!(
             User,

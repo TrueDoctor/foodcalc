@@ -115,9 +115,9 @@ This Project aims to creat a simple to use Commandline application that interfac
                 * [x] name <name>
                 * [x] description
                 * [x] duration <fixed|scaled> <duration>
-    * [ ] user <user_ref>
+    * [x] user <user_ref>
         * [x] name <name>
-        * [ ] password <password>
+        * [x] password <password>
         * [x] email <e-mail>
         * [x] admin <bool>
     * [ ] event <event_ref>
