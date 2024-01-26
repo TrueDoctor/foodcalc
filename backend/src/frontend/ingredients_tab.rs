@@ -1,5 +1,6 @@
-use axum::extract::State;
+use axum::extract::{State, Form};
 use maud::{html, Markup};
+use serde::Deserialize;
 
 use crate::MyAppState;
 
@@ -11,8 +12,13 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
         .route("/", axum::routing::get(ingredients_view))
 }
 
-pub async fn search(State(state): State<MyAppState>, query: String) -> Markup {
-    let query = query.replace("search=", "").to_lowercase();
+#[derive (Deserialize)]
+pub struct SearchParameters {
+    search: String
+}
+
+pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameters>) -> Markup {
+    let query = query.search.to_lowercase();
     let ingredients = state
         .db_connection
         .get_ingredients()
