@@ -163,7 +163,7 @@ pub fn add_ingredient_form_with_header_data(header_data: InventoryHeaderData) ->
                 input type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.unwrap_or_default());
                 input type="hidden" name=(INGREDIENT_ID) value=(-1);
                 input type="text" list=(INGREDIENTS_DATALIST) name=(INGREDIENT_NAME) placeholder="Ingredient" required="required" class="text";
-                input type="number" name=(INGREDIENT_AMOUNT) placeholder="Amount" value="" step="0.01" min="0.05" required="required";
+                input class="text" type="text" name=(INGREDIENT_AMOUNT) placeholder="Amount (kg)" value="" step="0.01" min="0.05" required="required";
                 button class="btn btn-primary" type="submit" { "Submit" }
             }
         }
@@ -230,7 +230,7 @@ pub async fn select_inventory_form(State(state): State<MyAppState>) -> Markup {
         div class="flex flex-col items-center justify-center gap-5" id=(INVENTORIES_DIV) {
             form hx-put="/inventories/select" hx-target="this" hx-swap="outerHTML" hx-trigger="change" {
                 div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full" {
-                    button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "+" };
+                    button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Add Inventory (+)" };
                     select class="fc-select" name=(INVENTORY_ID) hx-indicator=".htmx-indicator" {
                         option value="-1" selected { "Select inventory" }; 
                         @for inventory in inventories.iter() { (inventory.format_for_select(-1)) }
@@ -252,18 +252,27 @@ pub async fn manage_inventory_form(
         .unwrap_or_default();
         
     html! {
-        div class="flex flex-col items-center justify-center gap-5" id=(INVENTORIES_DIV) {
-            form hx-put="/inventories/manage" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-trigger="change" {
-                div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full" {
-                    button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "+" };
-                    button hx-put="/inventories/edit-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Edit" }
-                    select class="fc-select" name=(INVENTORY_ID) hx-indicator=".htmx-indicator" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) {
-                        @for inventory in inventories.iter() { (inventory.format_for_select(selected_inventory_id)) }
+        div class="flex flex-col items-center justify-center w-3/4" id=(INVENTORIES_DIV) {
+            form class="w-full" hx-put="/inventories/manage" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-trigger="keyup change" {
+                div class="flex flex-row items-center justify-between mb-2 h-10 w-full gap-5" {
+                    button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Add Inventory (+)" };
+                    button hx-put="/inventories/edit-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Edit Inventory" }
+                    div class="flex flex-row items-center gap-5" {
+                        "Select Inventory:"
+                        select class="fc-select" name=(INVENTORY_ID) hx-indicator=".htmx-indicator" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) {
+                            @for inventory in inventories.iter() { (inventory.format_for_select(selected_inventory_id)) }
+                        }
                     }
-                    button hx-put="/inventories/delete-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Delete" }
-                    input type="text" class="text w-full" name=(FILTER_TEXT);       // TODO: Would be nice if this updated the contents without having to press enter
+                    button hx-put="/inventories/delete-inventory" class="btn btn-cancel" hx-target=(["#", INVENTORIES_DIV].concat()) { "Delete Inventory" }
                 }
-            }
+                div class="h-10" {}
+                div class="flex flex-row items-center justify-stretch gap-5 h-10 w-full" {
+                    input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name=(FILTER_TEXT) autocomplete="off"
+                        autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
+                        hx-target="#search-results" hx-indicator=".htmx-indicator";
+
+                }
+           }
             (render_filtered_inventory_contents(State(state), selected_inventory_id, None).await)
         }
     }
@@ -288,20 +297,20 @@ pub async fn render_filtered_inventory_contents(
         .unwrap_or_default();
 
     html! {
-        div id=(INVENTORY_CONTENTS_DIV) {
-            div id=(SEARCH_RESULTS_DIV) {
+        div id=(INVENTORY_CONTENTS_DIV) class="flex flex-col items-center justify-center mb-16 w-full"{
+            form hx-target="this" hx-put="/inventories/add-ingredient" hx-swap="outerHTML" style="margin-bottom: 0px;"{
+                input type="hidden" name=(INVENTORY_ID) value=(inventory_id);
+                input type="hidden" name=(FILTER_TEXT) value=(filter.clone().unwrap_or_default().clone());
+                button type="submit" class="btn btn-primary"  { "Add Ingredient (+)" }
+            }
+            div id=(SEARCH_RESULTS_DIV) class="w-full" {
                 datalist id=(INGREDIENTS_DATALIST) { @for ingredient in ingredient_list { (ingredient.format_for_datalist()) } }
                 span class="htmx-indicator" { "Searching..." }
                 table class="text-inherit table-auto object-center" padding="0 0.5em" display="block" 
                 max-height="60vh" overflow-y="scroll" {
-                    thead { tr { th { "Name" } th { "Amount" } th {} } }
-                    tbody { @for item in contents { (item.format_for_ingredient_table( InventoryHeaderData { inventory_id: inventory_id, filter_text: filter.clone() })) } }
+                    thead { tr { th { "Name" } th { "Amount (kg)" } th { "Delete" } } }
+                    tbody { @for item in contents { (item.format_for_ingredient_table( InventoryHeaderData { inventory_id: inventory_id, filter_text: filter.clone()})) } }
                 }
-            }
-            form hx-target="this" hx-put="/inventories/add-ingredient" hx-swap="outerHTML" {
-                input type="hidden" name=(INVENTORY_ID) value=(inventory_id);
-                input type="hidden" name=(FILTER_TEXT) value=(filter.unwrap_or_default());
-                button type="submit" class="btn btn-primary"  { "+" }
             }
         }
     }
@@ -361,14 +370,14 @@ impl IngredientTableFormattable for IngredientWithWeight {
     fn format_for_ingredient_table(&self, header_data: InventoryHeaderData) -> Markup {
         let form_id = format!("ingredient-{}-form", self.ingredient_id);
         html! {
-            tr id=(format!("ingredient-{}", self.ingredient_id)) { // TODO: Put into form
-                td { 
+            tr id=(format!("ingredient-{}", self.ingredient_id)) style="text-align:center"{ // TODO: Put into form
+                td style="text-align:left" { 
                     input class=(form_id) type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
                     input class=(form_id) type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.unwrap_or_default());
                     input class=(form_id) type="hidden" name=(INGREDIENT_ID) value=(self.ingredient_id);
-                    div class=(format!("text w-full {}",form_id)) type="text" name=(INGREDIENT_NAME) { (self.name) } 
+                    div class=(format!("w-full {}",form_id)) name=(INGREDIENT_NAME) { (self.name) } 
                 }
-                td { input class=(form_id) type="number" name="ingredient_amount" value=(self.amount) required="required" hx-put="inventories/change-ingredient-amount" hx-target="" hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="innerHTML"; }
+                td { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="inventories/change-ingredient-amount" hx-target="" hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="innerHTML"; }
                 td { button hx-include=(format!(".{}", form_id)) class="btn btn-primary" hx-put="inventories/delete-ingredient" type="submit" hx-target=(format!("#{}", INVENTORY_CONTENTS_DIV)) hx-swap="innerHTML" { "X" } }
             }
         }
