@@ -256,13 +256,13 @@ pub async fn manage_inventory_form(
             form class="w-full" hx-put="/inventories/manage" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-trigger="keyup change" {
                 div class="flex flex-row items-center justify-between mb-2 h-10 w-full gap-5" {
                     button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Add Inventory (+)" };
-                    button hx-put="/inventories/edit-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Edit Inventory" }
                     div class="flex flex-row items-center gap-5" {
                         "Select Inventory:"
                         select class="fc-select" name=(INVENTORY_ID) hx-indicator=".htmx-indicator" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) {
                             @for inventory in inventories.iter() { (inventory.format_for_select(selected_inventory_id)) }
                         }
                     }
+                    button hx-put="/inventories/edit-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Edit Inventory" }
                     button hx-put="/inventories/delete-inventory" class="btn btn-cancel" hx-target=(["#", INVENTORIES_DIV].concat()) { "Delete Inventory" }
                 }
                 div class="h-10" {}
