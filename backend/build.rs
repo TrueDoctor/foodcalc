@@ -5,7 +5,11 @@ fn main() {
     println!("cargo:rerun-if-changed=tailwind.config.js");
     println!("cargo:rerun-if-changed=src/frontend");
 
-    let command = Command::new("npm")
+    #[cfg(target_os = "windows")]
+    let executable = "npm.cmd";
+    #[cfg(not(target_os = "windows"))]
+    let executable = "npm";
+    let command = Command::new(executable)
         .args([
             "exec",
             "tailwindcss",
