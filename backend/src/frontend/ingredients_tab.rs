@@ -35,7 +35,7 @@ pub async fn add_ingredient(
     form: axum::extract::Form<foodlib::Ingredient>,
 ) -> Markup {
     let ingredient = form.0;
-    let Ok(ingredient_id) = state
+    let Ok(_) = state
         .db_connection
         .add_ingredient(ingredient.name, ingredient.energy, ingredient.comment)
         .await
@@ -92,7 +92,7 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
     }
 }
 
-pub async fn edit_ingredient_form(State(state): State<MyAppState>) -> Markup {
+pub async fn edit_ingredient_form() -> Markup {
     html! {
         form hx-put="/ingredients/edit" hx-target="#ingredients" hx-swap="outerHTML" {
             div class="flex flex-col items-center justify-center" {

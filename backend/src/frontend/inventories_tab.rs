@@ -96,17 +96,28 @@ fn return_to_inv_overview_error(inventory_id: i32) -> Markup {
     }
 }
 
-pub async fn handle_ingredient_change(State(state): State<MyAppState>, data: axum::extract::Form<UpdateInventoryItemData>) -> () {
+pub async fn handle_ingredient_change(State(state): State<MyAppState>, data: axum::extract::Form<UpdateInventoryItemData>) -> Markup {
     state   .db_connection
             .update_inventory_item(InventoryIngredient { inventory_id: data.inventory_id, ingredient_id: data.ingredient_id, amount: data.ingredient_amount.clone() })
-            .await;
+            .await
+            .unwrap_or_else(|_|log::warn!("Failed to update ingredient {} in inventory {}", data.ingredient_id, data.inventory_id));
+
+        let ingredient_name = state.db_connection
+                                .get_ingredient_from_string_reference(data.ingredient_id.to_string())
+                                .await
+                                .unwrap_or_default()
+                                .name;
+        let ingredient = IngredientWithWeight{ ingredient_id: data.ingredient_id, name: ingredient_name, amount: data.ingredient_amount.clone() };
+
+        ingredient.format_for_ingredient_table(InventoryHeaderData { inventory_id: data.inventory_id, filter_text: data.filter_text.clone() })
 }
 
 pub async fn handle_ingredient_delete(State(state): State<MyAppState>, data: axum::extract::Form<UpdateInventoryItemData>) -> Markup {
     // TODO: Delete ingredient
     state.db_connection
         .delete_inventory_item(InventoryIngredient{ inventory_id: data.inventory_id, ingredient_id: data.ingredient_id, amount: data.ingredient_amount.clone() })
-        .await;
+        .await
+        .unwrap_or_else(|_|log::warn!("Failed to delete ingredient {} from inventory {}", data.ingredient_id, data.inventory_id));
     (render_filtered_inventory_contents(State(state), data.inventory_id, data.filter_text.clone())).await
 }
 

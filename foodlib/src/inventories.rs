@@ -233,7 +233,7 @@ impl FoodBase {
             item.ingredient_id
         )
         .execute(&*self.pg_pool)
-        .await;
+        .await?;
 
         Ok(())
     }
