@@ -4,15 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-tectonic = ["dep:tectonic", "tectonic_bundles"]
+tectonic = ["dep:tectonic", "tectonic_bundles", "tokio"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 metro-scrape = { version = "0.1.0", path = "../metro-scrape" }
 
-tectonic = { version = "0.13.1", optional = true }
-tectonic_bundles = { version = "0.3.0", optional = true }
+tectonic = { version = "0.14.1", optional = true }
+tectonic_bundles = { version = "0.3.1", optional = true }
 
+tokio = { workspace = true, optional = true }
 axum-login = { workspace = true }
 regex = { workspace = true }
 chrono = { workspace = true }

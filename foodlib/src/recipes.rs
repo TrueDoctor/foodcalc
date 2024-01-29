@@ -227,10 +227,7 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn delete_recipe(
-        &self,
-        recipe_id: i32,
-        ) -> eyre::Result<()> {
+    pub async fn delete_recipe(&self, recipe_id: i32) -> eyre::Result<()> {
         let mut transaction = self.pg_pool.begin().await?;
         let count = sqlx::query!(
             r#"
@@ -260,7 +257,9 @@ impl FoodBase {
                 WHERE recipe_id = $1
             "#,
             recipe_id,
-        ).execute(&mut *transaction).await?;
+        )
+        .execute(&mut *transaction)
+        .await?;
         log::debug!("Deleted {} steps", count.rows_affected());
 
         let count = sqlx::query!(
@@ -269,7 +268,9 @@ impl FoodBase {
                 WHERE recipe_id = $1
             "#,
             recipe_id,
-        ).execute(&mut *transaction).await?;
+        )
+        .execute(&mut *transaction)
+        .await?;
         log::debug!("Deleted {} event_meals", count.rows_affected());
 
         let count = sqlx::query!(
@@ -278,7 +279,9 @@ impl FoodBase {
                 WHERE recipe_id = $1
             "#,
             recipe_id,
-        ).execute(&mut *transaction).await?;
+        )
+        .execute(&mut *transaction)
+        .await?;
         log::debug!("Deleted {} recipes", count.rows_affected());
 
         transaction.commit().await?;
@@ -315,16 +318,16 @@ impl FoodBase {
 
     pub async fn fetch_subrecipes_from_user_input(
         &self,
-        recipe: Recipe,
+        recipe_id: i32,
         people: f64,
         calories: u32,
     ) -> eyre::Result<Vec<SubRecipe>> {
         let total_calories = BigDecimal::from((calories as f64 * people) as u64);
         let weight = self
-            .calc_energy_to_weight(recipe.recipe_id, total_calories)
+            .calc_energy_to_weight(recipe_id, total_calories)
             .await
             .unwrap_or_default();
-        self.fetch_subrecipes(recipe.recipe_id, weight).await
+        self.fetch_subrecipes(recipe_id, weight).await
     }
 
     //pub async fn fetch_subrecipes_from_meal(&self, meal_id: i32) -> eyre::Result<()> {
@@ -395,7 +398,6 @@ impl FoodBase {
 
             if !steps.is_empty() {
                 for (i, step) in steps.into_iter().enumerate() {
-
                     fn to_minutes(duration: PgInterval) -> f64 {
                         duration.microseconds as f64 / 1_000_000. / 60.
                     }
@@ -466,72 +468,38 @@ impl FoodBase {
         text
     }
 
+    pub async fn format_recipe_latex_from_user_input(
+        &self,
+        recipe_id: i32,
+        people: f64,
+        energy: u32,
+    ) -> eyre::Result<String> {
+        let subrecipes = self
+            .fetch_subrecipes_from_user_input(recipe_id, people, energy)
+            .await?;
+        Ok(self.format_subrecipes_latex(subrecipes).await)
+    }
+
     // TODO Should probabyl use fetch_subrecipes and format_subrecipes_latex
-    pub async fn fetch_subrecipes_export(
+    pub async fn save_recipe_export(
         &self,
         recipe_id: i32,
         weight: BigDecimal,
     ) -> Result<(), eyre::Error> {
+        use std::io::Write;
         let text = self
             .format_subrecipes_latex(self.fetch_subrecipes(recipe_id, weight).await?)
             .await;
 
-        let title = self.get_recipe_from_string_reference(recipe_id.to_string()).await.unwrap().name;
+        let title = self
+            .get_recipe_from_string_reference(recipe_id.to_string())
+            .await
+            .unwrap()
+            .name;
 
         #[cfg(feature = "tectonic")]
         {
-            use std::io::Write;
-            use std::path::Path;
-            use tectonic::driver::ProcessingSessionBuilder;
-            use tectonic::status;
-            use tokio::task::spawn_blocking;
-
-            let mut status = status::NoopStatusBackend::default();
-            let name = subrecipes
-                .first()
-                .ok_or(eyre::eyre!("No recipe name found"))?
-                .recipe
-                .clone();
-
-            let mut files = {
-                spawn_blocking(move || {
-                    let auto_create_config_file = false;
-                    let config =
-                        tectonic::config::PersistentConfig::open(auto_create_config_file).unwrap();
-
-                    let only_cached = false;
-                    let bundle = config.default_bundle(only_cached, &mut status).unwrap();
-
-                    let format_cache_path = config.format_cache_path().unwrap();
-
-                    let mut sb = ProcessingSessionBuilder::default();
-                    sb.filesystem_root(Path::new("./recipes"))
-                        .primary_input_buffer(text.as_bytes())
-                        .tex_input_name("texput.tex")
-                        .format_name("latex")
-                        .keep_logs(false)
-                        .keep_intermediates(false)
-                        .format_cache_path(format_cache_path)
-                        .bundle(bundle)
-                        .do_not_write_output_files()
-                        .print_stdout(false);
-                    let mut sess = sb
-                        .create(&mut status)
-                        .expect("failed to initialize the LaTeX processing session");
-                    if let Err(e) = sess.run(&mut status) {
-                        log::error!("failed to run the LaTeX processing session: {}", e);
-                    }
-                    sess.into_file_data()
-                })
-                .await?
-            };
-
-            let Some(pdf) = files.remove("texput.pdf") else {
-                return Err(eyre::eyre!(
-                    "LaTeX didn't report failure, but no PDF was created (??)"
-                ));
-            };
-            let pdf_data = pdf.data;
+            let pdf_data = compile_pdf(text).await?;
             println!("Output PDF size is {} bytes", pdf_data.len());
 
             let create_result = std::fs::create_dir("recipes/out");
@@ -540,7 +508,7 @@ impl FoodBase {
                     return Err(eyre::eyre!("failed to create output directory: {}", e));
                 }
             }
-            let mut file = std::fs::File::create(format!("recipes/out/{}.pdf", name))?;
+            let mut file = std::fs::File::create(format!("recipes/out/{}.pdf", title))?;
             file.write_all(&pdf_data)?;
         }
         #[cfg(not(feature = "tectonic"))]
@@ -803,6 +771,18 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn get_recipe(&self, recipe_id: i32) -> eyre::Result<Recipe> {
+        let records = sqlx::query_as!(
+            Recipe,
+            r#" SELECT * FROM recipes WHERE recipe_id = $1 ORDER BY recipe_id "#,
+            recipe_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(records)
+    }
+
     pub async fn get_recipe_from_string_reference(&self, reference: String) -> Option<Recipe> {
         let recipe_id = reference.parse::<i32>().unwrap_or_else(|_| -1);
 
@@ -825,4 +805,55 @@ impl FoodBase {
             None
         }
     }
+}
+#[cfg(not(feature = "tectonic"))]
+pub async fn compile_pdf(text: String) -> Result<Vec<u8>, eyre::ErrReport> {
+    Err(eyre::eyre!("tectonic feature not enabled"))
+}
+
+#[cfg(feature = "tectonic")]
+pub async fn compile_pdf(text: String) -> Result<Vec<u8>, eyre::ErrReport> {
+    use std::path::Path;
+    use tectonic::driver::ProcessingSessionBuilder;
+    use tectonic::status;
+    use tokio::task::spawn_blocking;
+    let mut status = status::NoopStatusBackend::default();
+    let mut files = {
+        spawn_blocking(move || {
+            let auto_create_config_file = false;
+            let config = tectonic::config::PersistentConfig::open(auto_create_config_file).unwrap();
+
+            let only_cached = false;
+            let bundle = config.default_bundle(only_cached, &mut status).unwrap();
+
+            let format_cache_path = config.format_cache_path().unwrap();
+
+            let mut sb = ProcessingSessionBuilder::default();
+            sb.filesystem_root(Path::new("../recipes"))
+                .primary_input_buffer(text.as_bytes())
+                .tex_input_name("texput.tex")
+                .format_name("latex")
+                .keep_logs(false)
+                .keep_intermediates(false)
+                .format_cache_path(format_cache_path)
+                .bundle(bundle)
+                .do_not_write_output_files()
+                .print_stdout(false);
+            let mut sess = sb
+                .create(&mut status)
+                .expect("failed to initialize the LaTeX processing session");
+            if let Err(e) = sess.run(&mut status) {
+                log::error!("failed to run the LaTeX processing session: {}", e);
+            }
+            sess.into_file_data()
+        })
+        .await?
+    };
+    let Some(pdf) = files.remove("texput.pdf") else {
+        return Err(eyre::eyre!(
+            "LaTeX didn't report failure, but no PDF was created (??)"
+        ));
+    };
+    let pdf_data = pdf.data;
+    Ok(pdf_data)
 }

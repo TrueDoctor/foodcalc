@@ -1630,6 +1630,7 @@ dependencies = [
  "tabled",
  "tectonic",
  "tectonic_bundles",
+ "tokio",
 ]
 
 [[package]]
@@ -5270,9 +5271,9 @@ dependencies = [
 
 [[package]]
 name = "tectonic"
-version = "0.13.1"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d34dab6522719999456e7b7de04766aa9e6c3a688ed73d09267e166bb56597ef"
+checksum = "554f8bc5b235e8a733a5a508e066b6377d1eac7d85f9bb4547e5e6a576ed28d3"
 dependencies = [
  "atty",
  "byte-unit",
