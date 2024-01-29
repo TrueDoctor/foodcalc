@@ -63,8 +63,8 @@ pub async fn delete_recipe(
             div class="flex flex-col items-center justify-center" {
                 div class="flex flex-col items-center justify-center" {
                     h1 { "Are you sure you want to delete this recipe?" }
-                    div class="flex flex-row items-center justify-center" {
-                        button class="btn btn-primary" hx-target="#content" hx-delete=(format!("/recipes/delete_nqa/{}", recipe_id)) { "Yes" }
+                    div class="flex flex-row items-center justify-center mt-6" {
+                        button class="btn btn-success mr-4" hx-target="#content" hx-delete=(format!("/recipes/delete_nqa/{}", recipe_id)) { "Yes" }
                         button class="btn btn-cancel" hx-target="#content" hx-get="/recipes" { "No" }
                     }
                 }
