@@ -47,6 +47,7 @@ pub fn navbar() -> Markup {
                 (navbutton("Ingredients", "/ingredients"))
                 (navbutton("Recipes", "/recipes"))
                 (navbutton("Events", "/events"))
+                (navbutton("Inventories", "/inventories"))
                 (navbutton("Stores", "/stores"))
         }
     }
