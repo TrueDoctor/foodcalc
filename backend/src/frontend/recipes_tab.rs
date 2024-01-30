@@ -1,4 +1,6 @@
-use axum::extract::{State, Path, Form};
+use axum::extract::{Form, Path, State};
+use axum::response::{AppendHeaders, IntoResponse};
+use bigdecimal::{BigDecimal, FromPrimitive};
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -8,15 +10,22 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/search", axum::routing::post(search))
         .route("/add", axum::routing::get(edit_recipe_form))
+        .route("/export/:recipe_id", axum::routing::get(export_recipe))
+        .route(
+            "/export_pdf/:recipe_id/",
+            axum::routing::get(export_recipe_pdf),
+        )
         .route("/delete/:recipe_id", axum::routing::get(delete_recipe))
-        .route("/delete_nqa/:recipe_id", axum::routing::delete(delete_recipe_nqa))
+        .route(
+            "/delete_nqa/:recipe_id",
+            axum::routing::delete(delete_recipe_nqa),
+        )
         .route("/", axum::routing::get(recipes_view))
 }
 
-
-#[derive (Deserialize)]
+#[derive(Deserialize)]
 pub struct SearchParameters {
-    search: String
+    search: String,
 }
 
 pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameters>) -> Markup {
@@ -30,6 +39,86 @@ pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameter
     html! {
         @for recipe in filtered_recipes {
             (format_recipe(recipe))
+        }
+    }
+}
+
+pub async fn export_recipe(State(state): State<MyAppState>, Path(recipe_id): Path<i32>) -> Markup {
+    html! {
+         dialog class="dialog" open="open" {
+             div class="flex flex-col items-center justify-center" {
+                 div class="flex flex-col items-center justify-center" {
+                     h1 { "Export recipe" }
+                     // Input mask for energy and number of servings as a form which downloads the recipe as a PDF on Submit
+                        form class="flex flex-col items-center justify-center" action=(format!("/recipes/export_pdf/{}/", recipe_id)) {
+                            div class="flex flex-row items-center justify-center" {
+                                input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy kJ/serving" required="required";
+                                input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="number_of_servings" placeholder="Number of servings" required="required";
+                                button class="btn btn-primary" type="submit" { "Export" }
+                            }
+                        }
+
+                 }
+             }
+         }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ExportRecipe {
+    energy: f64,
+    number_of_servings: u32,
+}
+
+pub async fn export_recipe_pdf(
+    State(state): State<MyAppState>,
+    Path(recipe_id): Path<i32>,
+    Form(form): Form<ExportRecipe>,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Markup> {
+    let energy = form.energy;
+    let number_of_servings = form.number_of_servings;
+
+    let latex = state
+        .db_connection
+        .format_recipe_latex_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
+        .await
+        .unwrap();
+
+    let title = state
+        .db_connection
+        .get_recipe(recipe_id)
+        .await
+        .unwrap()
+        .name;
+
+    let result = foodlib::compile_pdf(latex).await;
+
+    match result {
+        Ok(recipe) => {
+            let headers = [
+                (
+                    axum::http::header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}.pdf\"", title),
+                ),
+                (
+                    axum::http::header::CONTENT_TYPE,
+                    "application/pdf".to_string(),
+                ),
+            ];
+            Ok((headers, recipe))
+        }
+        Err(error) => {
+            log::error!("Failed to save recipe export: {}", error);
+            Err(html! {
+                div id="error" class="flex flex-col items-center justify-center text-red-500" {
+                    div {
+                        h1 { "Error" }
+                        p { "Failed to save recipe export" }
+                        p { (error) }
+                        button class="btn btn-primary" hx-get="/recipes" hx-target="#content"  { "Back" }
+                    }
+                }
+            })
         }
     }
 }
@@ -55,9 +144,7 @@ pub async fn delete_recipe_nqa(
     recipes_view(State(state)).await
 }
 
-pub async fn delete_recipe(
-    Path(recipe_id): Path<i32>,
-) -> Markup {
+pub async fn delete_recipe(Path(recipe_id): Path<i32>) -> Markup {
     html! {
         dialog class="dialog" open="open" {
             div class="flex flex-col items-center justify-center" {
@@ -71,7 +158,6 @@ pub async fn delete_recipe(
             }
         }
     }
-
 }
 
 pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
@@ -95,6 +181,7 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
                     button class="btn btn-primary" hx-get="/recipes/add" { "Add recipe (+)" }
                 }
                 table class="w-full text-inherit table-auto object-center" {
+                    // We add extra table headers to account for the buttons
                     thead { tr { th { "Name" } th { "Energy" } th { "Comment" }  th {} th {} th {} th {}} }
                     tbody id="search-results" {
                         @for recipe in recipes.iter() {
@@ -132,7 +219,7 @@ fn format_recipe(recipe: &foodlib::Recipe) -> Markup {
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
             td { button class="btn btn-primary" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
             td { button class="btn btn-cancel" hx-target="next #dialog" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
-            td { button class="btn btn-primary" hx-get=(format!("/recipes/export?recipe_id={}", recipe.recipe_id)) { "Export" } }
+            td { button class="btn btn-primary" hx-get=(format!("/recipes/export/{}", recipe.recipe_id)) hx-swap="afterend" { "Export" } }
             td { div id="dialog"; }
         }
     }

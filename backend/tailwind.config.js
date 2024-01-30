@@ -3,8 +3,8 @@ export const content = ["./src/frontend/*.rs"]
 const colors = require('tailwindcss/colors')
 
 export const theme = {
-	extend: {
-		colors: {
+  extend: {
+    colors: {
       light: {
         primary: {
           normal: colors.blue[600],
@@ -58,9 +58,9 @@ export const theme = {
           hover: colors.red[700],
         },
       },
-		},
-	},
-	plugins: [
-		require('@tailwindcss/forms'),
-	],
+    },
+  },
+  plugins: [
+    require('@tailwindcss/forms'),
+  ],
 }
