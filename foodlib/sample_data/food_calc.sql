@@ -2914,3 +2914,4 @@ REFRESH MATERIALIZED VIEW public.conversions;
 -- PostgreSQL database dump complete
 --
 
+REFRESH MATERIALIZED VIEW conversions;
