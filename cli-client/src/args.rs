@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
-pub struct CLI {
+pub struct Cli {
     #[clap(subcommand)]
     pub command: Commands,
 

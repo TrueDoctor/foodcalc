@@ -515,7 +515,7 @@ impl FoodBase {
         {
             let mut file = std::fs::File::create(format!(
                 "recipes/{}.tex",
-                title.replace(" ", "_").to_lowercase()
+                title.replace(' ', "_").to_lowercase()
             ))
             .unwrap();
             file.write_all(text.as_bytes()).unwrap();

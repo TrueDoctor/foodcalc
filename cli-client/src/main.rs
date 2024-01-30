@@ -28,7 +28,7 @@ async fn main() {
         //.with(BorderSpanCorrection)
         .with(Style::rounded());
 
-    let cli = CLI::parse();
+    let cli = Cli::parse();
 
     if cli.debug {
         println!("{:?}", cli);
@@ -161,7 +161,7 @@ async fn main() {
                             .await
                             .unwrap_or_else(|_| Vec::new());
 
-                        if meals.len() > 0 {
+                        if !meals.is_empty() {
                             println!("Meals:");
                             let table = Table::new(meals)
                                 .with(Disable::column(ByColumnName::new("event_id")))
@@ -196,7 +196,7 @@ async fn main() {
                         .get_recipe_from_string_reference(_recipe_ref.to_string())
                         .await;
 
-                    if recipe == None {
+                    if recipe.is_none() {
                         println!("Recipe not found");
                         return;
                     }
@@ -207,7 +207,7 @@ async fn main() {
                         .get_event_from_string_reference(_event_ref.to_string())
                         .await;
 
-                    if event == None {
+                    if event.is_none() {
                         println!("Event not found");
                         return;
                     }
@@ -259,7 +259,6 @@ async fn main() {
                                                     meal.price.to_bigdecimal(2)
                                                 )))
                                                 .with(table_config)
-                                                .to_string()
                                         );
                                     } else {
                                         println!("No Ingredients found");
@@ -341,7 +340,7 @@ async fn main() {
                                 //println!("{}", table);
                             }
 
-                            if tables.len() > 0 {
+                            if !tables.is_empty() {
                                 if tables.len() > 1 {
                                     tables.into_iter().for_each(|(date, mut table)| {
                                         table
@@ -375,7 +374,11 @@ async fn main() {
                         .unwrap();
 
                     let subrecipes = food_base
-                        .fetch_subrecipes_from_user_input(recipe_data, people as f64, calories)
+                        .fetch_subrecipes_from_user_input(
+                            recipe_data.recipe_id,
+                            people as f64,
+                            calories,
+                        )
                         .await
                         .unwrap();
 

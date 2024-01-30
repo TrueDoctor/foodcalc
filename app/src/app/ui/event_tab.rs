@@ -135,7 +135,7 @@ impl EventTab {
                         let meals = move_database.get_event_meals(event.event_id).await?;
                         let futures = meals
                             .into_iter()
-                            .map(|meal| move_database.fetch_subrecipes_export(meal.recipe_id, meal.weight));
+                            .map(|meal| move_database.save_recipe_export(meal.recipe_id, meal.weight));
                         futures::future::join_all(futures).await;
                         Ok(())
                     },
