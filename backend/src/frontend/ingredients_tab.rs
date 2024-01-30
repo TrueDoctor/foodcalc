@@ -1,4 +1,4 @@
-use axum::extract::{State, Form};
+use axum::extract::{Form, State};
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -12,9 +12,9 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
         .route("/", axum::routing::get(ingredients_view))
 }
 
-#[derive (Deserialize)]
+#[derive(Deserialize)]
 pub struct SearchParameters {
-    search: String
+    search: String,
 }
 
 pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameters>) -> Markup {

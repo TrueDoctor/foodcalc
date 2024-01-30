@@ -380,15 +380,9 @@ async fn main() {
                         .unwrap();
 
                     let output = match recipe.format.to_string().as_str() {
-                        "latex" | "tex" => {
-                            food_base.format_subrecipes_latex(subrecipes).await
-                        }
-                        "markdown" => {
-                            food_base.format_subrecipes_markdown(subrecipes).await
-                        }
-                        _ => {
-                            "Unknown Format".to_string()
-                        }
+                        "latex" | "tex" => food_base.format_subrecipes_latex(subrecipes).await,
+                        "markdown" => food_base.format_subrecipes_markdown(subrecipes).await,
+                        _ => "Unknown Format".to_string(),
                     };
                     println!("{}", output);
                 }

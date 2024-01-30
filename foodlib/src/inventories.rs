@@ -1,12 +1,10 @@
-use tabled::Tabled;
 use std::fmt::Display;
+use tabled::Tabled;
 
 use serde::{Deserialize, Serialize};
-use sqlx::{types::BigDecimal};
+use sqlx::types::BigDecimal;
 
-use crate::{
-    FoodBase,
-};
+use crate::FoodBase;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Inventory {
@@ -34,14 +32,8 @@ pub struct InventoryCreate {
 }
 
 impl Inventory {
-    pub fn new(
-        inventory_id: i32,
-        name: String,
-    ) -> Self {
-        Self {
-            inventory_id,
-            name,
-        }
+    pub fn new(inventory_id: i32, name: String) -> Self {
+        Self { inventory_id, name }
     }
 }
 
@@ -73,10 +65,7 @@ pub struct InventoryIngredient {
 }
 
 impl FoodBase {
-    pub async fn add_inventory(
-        &self,
-        name: String,
-    ) -> eyre::Result<i32> {
+    pub async fn add_inventory(&self, name: String) -> eyre::Result<i32> {
         log::debug!("add_inventory({:?})", name);
         let inventory = sqlx::query!(
             r#"
@@ -158,8 +147,11 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_inventory_from_string_reference(&self, reference: String) -> Option<Inventory> {
-        let inventory_id = reference.parse::<i32>().unwrap_or_else(|_| -1);
+    pub async fn get_inventory_from_string_reference(
+        &self,
+        reference: String,
+    ) -> Option<Inventory> {
+        let inventory_id = reference.parse::<i32>().unwrap_or(-1);
         let records = sqlx::query_as!(
             Inventory,
             r#" 
@@ -169,7 +161,6 @@ impl FoodBase {
             "#,
             reference,
             inventory_id
-
         )
         .fetch_one(&*self.pg_pool)
         .await;
@@ -181,8 +172,7 @@ impl FoodBase {
         }
     }
 
-    pub async fn get_inventory_from_id(&self, id: i32) -> Option<Inventory>
-    {
+    pub async fn get_inventory_from_id(&self, id: i32) -> Option<Inventory> {
         let records = sqlx::query_as!(
             Inventory,
             r#" 
@@ -191,7 +181,6 @@ impl FoodBase {
                 ORDER BY inventory_id
             "#,
             id
-
         )
         .fetch_one(&*self.pg_pool)
         .await;
@@ -203,7 +192,11 @@ impl FoodBase {
         }
     }
 
-    pub async fn get_filtered_inventory_contents(&self, inventory_id: i32, filter: Option<String>) -> eyre::Result<Vec<IngredientWithWeight>> {
+    pub async fn get_filtered_inventory_contents(
+        &self,
+        inventory_id: i32,
+        filter: Option<String>,
+    ) -> eyre::Result<Vec<IngredientWithWeight>> {
         let filter_string = format!("%{}%", filter.unwrap_or_default());
         let records = sqlx::query_as!(
             IngredientWithWeight,

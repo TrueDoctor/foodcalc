@@ -40,7 +40,6 @@ impl Tabled for Event {
             self.event_name.clone().into(),
             self.comment.clone().unwrap_or_default().into(),
             self.budget
-                .clone()
                 .map(crate::util::format_pg_money)
                 .unwrap_or_default()
                 .into(),
@@ -105,11 +104,7 @@ impl FoodBase {
         .fetch_one(&*self.pg_pool)
         .await;
 
-        if records.is_ok() {
-            Some(records.unwrap())
-        } else {
-            None
-        }
+        records.ok()
     }
 
     pub async fn get_event_recipe_ingredients(

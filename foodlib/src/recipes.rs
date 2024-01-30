@@ -518,7 +518,6 @@ impl FoodBase {
                 title.replace(" ", "_").to_lowercase()
             ))
             .unwrap();
-            use std::io::prelude::Write as WF;
             file.write_all(text.as_bytes()).unwrap();
         }
         Ok(())
@@ -784,7 +783,7 @@ impl FoodBase {
     }
 
     pub async fn get_recipe_from_string_reference(&self, reference: String) -> Option<Recipe> {
-        let recipe_id = reference.parse::<i32>().unwrap_or_else(|_| -1);
+        let recipe_id = reference.parse::<i32>().unwrap_or(-1);
 
         let records = sqlx::query_as!(
             Recipe,
@@ -799,15 +798,11 @@ impl FoodBase {
         .fetch_one(&*self.pg_pool)
         .await;
 
-        if records.is_ok() {
-            Some(records.unwrap())
-        } else {
-            None
-        }
+        records.ok()
     }
 }
 #[cfg(not(feature = "tectonic"))]
-pub async fn compile_pdf(text: String) -> Result<Vec<u8>, eyre::ErrReport> {
+pub async fn compile_pdf(_: String) -> Result<Vec<u8>, eyre::ErrReport> {
     Err(eyre::eyre!("tectonic feature not enabled"))
 }
 

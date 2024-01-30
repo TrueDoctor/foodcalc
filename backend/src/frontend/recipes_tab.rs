@@ -1,6 +1,4 @@
 use axum::extract::{Form, Path, State};
-use axum::response::{AppendHeaders, IntoResponse};
-use bigdecimal::{BigDecimal, FromPrimitive};
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -43,7 +41,7 @@ pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameter
     }
 }
 
-pub async fn export_recipe(State(state): State<MyAppState>, Path(recipe_id): Path<i32>) -> Markup {
+pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
     html! {
          dialog class="dialog" open="open" {
              div class="flex flex-col items-center justify-center" {
@@ -65,7 +63,7 @@ pub async fn export_recipe(State(state): State<MyAppState>, Path(recipe_id): Pat
 }
 
 #[derive(serde::Deserialize)]
-struct ExportRecipe {
+pub struct ExportRecipe {
     energy: f64,
     number_of_servings: u32,
 }

@@ -3,7 +3,6 @@ use std::str::FromStr;
 use sqlx::postgres::types::PgInterval;
 use sqlx::types::chrono::NaiveDateTime;
 
-
 #[derive(Debug, Clone)]
 pub struct InputState<T> {
     pub value: String,
