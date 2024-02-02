@@ -75,7 +75,7 @@ impl FoodBase {
                     event_name as "event_name!",
                     events.comment as "comment",
                     budget as "budget"
-                FROM events INNER JOIN event_meals USING (event_id)
+                FROM events LEFT JOIN event_meals USING (event_id)
                 GROUP BY event_id, event_name, events.comment, budget
                 ORDER BY MIN(start_time) DESC
             "#
@@ -93,7 +93,7 @@ impl FoodBase {
                     event_name as "event_name!",
                     events.comment as "comment",
                     budget as "budget"
-                FROM events INNER JOIN event_meals USING (event_id)
+                FROM events LEFT JOIN event_meals USING (event_id)
                 WHERE event_id = $1 OR event_name = $2
                 GROUP BY event_id, event_name, events.comment, budget
                 ORDER BY MIN(start_time) DESC
