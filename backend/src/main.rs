@@ -6,14 +6,14 @@ use sqlx::postgres::PgPool;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
-use foodlib::{AuthContext, Credenitals, FoodBase, User};
+use foodlib::{FoodBase, User};
 
 mod api;
 mod frontend;
 
 use axum::{
-    extract::State, http::StatusCode, response::IntoResponse, routing::get, routing::post,
-    Extension, Json,
+    response::IntoResponse, routing::get,
+    Extension,
 };
 use axum_login::{
     axum_sessions::{async_session::MemoryStore, SessionLayer},
