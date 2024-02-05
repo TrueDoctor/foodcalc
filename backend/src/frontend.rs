@@ -17,14 +17,12 @@ mod events_tab;
 pub fn frontend_router() -> Router {
     Router::new()
         .nest("/inventories", inventories_tab::inventories_router())
+        .nest("/events", events_tab::events_router())
         .route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .nest("/", home::home_router())
         .nest("/ingredients", ingredients_tab::ingredients_router())
-        //.route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .nest("/recipes", recipes_tab::recipes_router())
-        //.route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .nest("/auth", login_tab::login_router())
-        .nest("/events", events_tab::events_router())
         .route("/static/*-style.css", get(static_style))
 }
 
