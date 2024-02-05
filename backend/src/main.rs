@@ -33,8 +33,7 @@ async fn main() {
         PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
             .await
             .unwrap();
-
-    let colors = ColoredLevelConfig::new()
+let colors = ColoredLevelConfig::new()
         .debug(Color::Magenta)
         .info(Color::Green)
         .error(Color::Red);
