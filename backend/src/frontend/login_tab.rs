@@ -14,7 +14,7 @@ pub(crate) fn login_router() -> axum::Router<MyAppState> {
 pub async fn login_view(State(_state): State<MyAppState>) -> Markup {
     html!  {
         div class="flex items-center justify-center" {
-            div method="post" action="/auth/login" class="flex flex-col gap-1 justify-items-center justify-center h-full w-1/4" {
+            form method="post" action="/auth/login" class="flex flex-col gap-1 justify-items-center justify-center h-full w-1/4" {
                 input class="text" type="text" name="username" placeholder="Username" id="username" {}
                 input class="text" type="password" placeholder="Password" name="password" id="password" {}
                 input class="btn btn-success" type="submit" value="Login" {}
