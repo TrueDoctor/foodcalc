@@ -1,4 +1,4 @@
-use std::{str::FromStr, fmt::Display, borrow::Borrow};
+use std::{borrow::Borrow, fmt::Display, str::FromStr};
 
 use serde::Deserialize;
 use sqlx::postgres::types::{PgInterval, PgMoney};
@@ -79,6 +79,6 @@ pub(crate) fn display_optional<T: Display>(value: &Option<T>) -> String {
     }
 }
 
-pub (crate) fn format_pg_money(money: impl Borrow <PgMoney>) -> String {
+pub(crate) fn format_pg_money(money: impl Borrow<PgMoney>) -> String {
     format!("{} €", money.borrow().to_bigdecimal(2))
 }

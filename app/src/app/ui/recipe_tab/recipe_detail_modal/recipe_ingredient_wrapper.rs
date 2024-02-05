@@ -7,11 +7,11 @@ use iced::{Alignment, Element, Length};
 use num::Num;
 
 use crate::app::ui::Icon;
-use crate::db::{RecipeIngrdient, RecipeMetaIngredient, Unit};
+use crate::db::{RecipeIngredient, RecipeMetaIngredient, Unit};
 
 #[derive(Debug, Clone)]
 pub struct RecipeIngredientWrapper {
-    pub(crate) entry: RecipeIngrdient,
+    pub(crate) entry: RecipeIngredient,
     all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
     all_units: Arc<Vec<Unit>>,
     filtered_ingredients: Option<Vec<RecipeMetaIngredient>>,
@@ -23,7 +23,7 @@ pub struct RecipeIngredientWrapper {
 impl Default for RecipeIngredientWrapper {
     fn default() -> Self {
         Self {
-            entry: RecipeIngrdient::default(),
+            entry: RecipeIngredient::default(),
             all_ingredients: Arc::new(Vec::new()),
             all_units: Arc::new(Vec::new()),
             filtered_ingredients: None,
@@ -49,7 +49,11 @@ pub enum RecipeIngredientMessage {
 }
 
 impl RecipeIngredientWrapper {
-    pub fn new(ingredients: Arc<Vec<RecipeMetaIngredient>>, all_units: Arc<Vec<Unit>>, entry: RecipeIngrdient) -> Self {
+    pub fn new(
+        ingredients: Arc<Vec<RecipeMetaIngredient>>,
+        all_units: Arc<Vec<Unit>>,
+        entry: RecipeIngredient,
+    ) -> Self {
         Self {
             all_ingredients: ingredients,
             all_units,

@@ -6,7 +6,7 @@ use iced::{Alignment, Command, Element, Length};
 
 use super::RecipeTabMessage;
 use crate::app::ui::Icon;
-use crate::db::{FoodBase, Recipe, RecipeIngrdient, RecipeMetaIngredient, RecipeStep, Unit};
+use crate::db::{FoodBase, Recipe, RecipeIngredient, RecipeMetaIngredient, RecipeStep, Unit};
 
 mod recipe_ingredient_wrapper;
 use recipe_ingredient_wrapper::{RecipeIngredientMessage, RecipeIngredientWrapper};
@@ -45,7 +45,7 @@ impl RecipeDetail {
         all_ingredients: Arc<Vec<RecipeMetaIngredient>>,
         all_units: Arc<Vec<Unit>>,
         database: Arc<FoodBase>,
-        recipe_ingredients: Vec<RecipeIngrdient>,
+        recipe_ingredients: Vec<RecipeIngredient>,
         recipe_steps: Vec<RecipeStep>,
     ) -> Self {
         Self {
@@ -158,7 +158,7 @@ impl RecipeDetail {
                 self.ingredients.push(RecipeIngredientWrapper::new(
                     self.all_ingredients.clone(),
                     self.all_units.clone(),
-                    RecipeIngrdient::default(),
+                    RecipeIngredient::default(),
                 ));
             },
             RecipeDetailMessage::AddStep => {

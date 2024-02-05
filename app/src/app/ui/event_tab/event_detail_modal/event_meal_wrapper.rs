@@ -49,7 +49,7 @@ impl MealWrapper {
             return Command::perform(
                 async move {
                     move_database
-                        .fetch_subrecipes_export(meal.recipe_id, meal.weight)
+                        .save_recipe_export(meal.recipe_id, meal.weight)
                         .await
                         .unwrap_or_else(|e| log::error!("{e}"));
                 },

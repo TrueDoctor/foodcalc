@@ -34,8 +34,7 @@ impl From<AppTheme> for String {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TabBarPosition {
     #[default]
     Top,
@@ -54,8 +53,6 @@ impl From<TabBarPosition> for String {
         })
     }
 }
-
-
 
 //#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 

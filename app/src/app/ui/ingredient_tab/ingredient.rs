@@ -1,5 +1,3 @@
-
-
 use iced::alignment::Horizontal;
 use iced::widget::*;
 use iced::{Alignment, Command, Element, Length};

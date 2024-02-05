@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
-pub struct CLI {
+pub struct Cli {
     #[clap(subcommand)]
     pub command: Commands,
 
@@ -165,7 +165,6 @@ pub struct PrintRecipe {
     #[arg(short, long, default_value = "markdown")]
     // The Output Format
     pub format: String,
-
 }
 
 // ---- Admin Commands ----
@@ -177,7 +176,6 @@ pub struct UserCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum UserCommands {
-
     #[clap(alias = "add")]
     /// Print the mealplan for a given event
     Create(CreateArgs),
@@ -194,7 +192,7 @@ pub enum UserCommands {
 pub struct CreateArgs {
     /// Username of the new user
     pub user: String,
-    
+
     /// Password of the new user
     pub password: String,
 

@@ -96,8 +96,10 @@ impl IngredientTab {
                 Command::none()
             },
             IngredientTabMessage::EditIngredient(id) => {
-                let Some(ingredient) = self.ingredient_list.iter().find(|i| i.ingredient.ingredient_id == id)
-                    else { log::error!("Tried to edit non existing ingredient"); return Command::none() };
+                let Some(ingredient) = self.ingredient_list.iter().find(|i| i.ingredient.ingredient_id == id) else {
+                    log::error!("Tried to edit non existing ingredient");
+                    return Command::none();
+                };
                 self.ingredient_create = Some(IngredientCreationDialog::edit(ingredient.ingredient.clone()));
                 Command::none()
             },

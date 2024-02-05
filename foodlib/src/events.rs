@@ -40,7 +40,6 @@ impl Tabled for Event {
             self.event_name.clone().into(),
             self.comment.clone().unwrap_or_default().into(),
             self.budget
-                .clone()
                 .map(crate::util::format_pg_money)
                 .unwrap_or_default()
                 .into(),
@@ -76,7 +75,7 @@ impl FoodBase {
                     event_name as "event_name!",
                     events.comment as "comment",
                     budget as "budget"
-                FROM events INNER JOIN event_meals USING (event_id)
+                FROM events LEFT JOIN event_meals USING (event_id)
                 GROUP BY event_id, event_name, events.comment, budget
                 ORDER BY MIN(start_time) DESC
             "#
@@ -94,7 +93,7 @@ impl FoodBase {
                     event_name as "event_name!",
                     events.comment as "comment",
                     budget as "budget"
-                FROM events INNER JOIN event_meals USING (event_id)
+                FROM events LEFT JOIN event_meals USING (event_id)
                 WHERE event_id = $1 OR event_name = $2
                 GROUP BY event_id, event_name, events.comment, budget
                 ORDER BY MIN(start_time) DESC
@@ -105,11 +104,7 @@ impl FoodBase {
         .fetch_one(&*self.pg_pool)
         .await;
 
-        if records.is_ok() {
-            Some(records.unwrap())
-        } else {
-            None
-        }
+        records.ok()
     }
 
     pub async fn get_event_recipe_ingredients(

@@ -1,5 +1,3 @@
-
-
 use iced::widget::*;
 use iced::{Alignment, Element, Length};
 use sqlx::postgres::types::PgMoney;

@@ -1,9 +1,9 @@
 use num::FromPrimitive;
 use num::Num;
-use tabled::Tabled;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::str::FromStr;
+use tabled::Tabled;
 
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::types::PgMoney, types::BigDecimal};
@@ -240,8 +240,11 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_ingredient_from_string_reference(&self, reference: String) -> Option<Ingredient> {
-        let ingredient_id = reference.parse::<i32>().unwrap_or_else(|_| -1);
+    pub async fn get_ingredient_from_string_reference(
+        &self,
+        reference: String,
+    ) -> Option<Ingredient> {
+        let ingredient_id = reference.parse::<i32>().unwrap_or(-1);
         let records = sqlx::query_as!(
             Ingredient,
             r#" 
@@ -251,7 +254,6 @@ impl FoodBase {
             "#,
             reference,
             ingredient_id
-
         )
         .fetch_one(&*self.pg_pool)
         .await;
@@ -301,7 +303,10 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_meta_ingredients(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeIngredient>> {
+    pub async fn get_meta_ingredients(
+        &self,
+        recipe_id: i32,
+    ) -> eyre::Result<Vec<RecipeIngredient>> {
         let ingredients = self.get_recipe_ingredients(recipe_id).await?;
         let mut records = self.get_recipe_meta_ingredients(recipe_id).await?;
         records.extend(ingredients);
