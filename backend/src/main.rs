@@ -11,13 +11,9 @@ use foodlib::{FoodBase, User};
 mod api;
 mod frontend;
 
-use axum::{
-    response::IntoResponse, routing::get,
-    Extension,
-};
 use axum_login::{
     axum_sessions::{async_session::MemoryStore, SessionLayer},
-    AuthLayer, PostgresStore, RequireAuthorizationLayer,
+    AuthLayer, PostgresStore,
 };
 use rand::Rng;
 
@@ -71,14 +67,8 @@ let colors = ColoredLevelConfig::new()
         db_connection: FoodBase::new_with_pool(pool),
     };
 
-    async fn protected_handler(Extension(user): Extension<User>) -> impl IntoResponse {
-        format!("Logged in as: {}", user.username)
-    }
-
     // build our application with a route
     let app = axum::Router::new()
-        .route("/protected", get(protected_handler))
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .nest("/api", api::foodbase())
         .nest("/", frontend::frontend_router())
         .layer(auth_layer)
