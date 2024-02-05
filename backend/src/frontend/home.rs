@@ -2,7 +2,7 @@ use axum::extract::State;
 use maud::{html, Markup};
 
 use crate::{
-    frontend::{ingredients_tab::ingredients_view, inventories_tab::select_inventory_form, CSS_HASH},
+    frontend::{ingredients_tab::ingredients_view, CSS_HASH},
     MyAppState,
 };
 
