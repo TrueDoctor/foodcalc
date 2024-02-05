@@ -2,6 +2,8 @@ use std::hash::Hasher;
 
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
+use axum_login::RequireAuthorizationLayer;
+use foodlib::User;
 
 use crate::api::Router;
 
@@ -9,13 +11,18 @@ mod home;
 mod ingredients_tab;
 mod inventories_tab;
 mod recipes_tab;
+mod login_tab;
 
 pub fn frontend_router() -> Router {
     Router::new()
+        .nest("/inventories", inventories_tab::inventories_router())
+        .route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .nest("/", home::home_router())
         .nest("/ingredients", ingredients_tab::ingredients_router())
-        .nest("/inventories", inventories_tab::inventories_router())
+        //.route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .nest("/recipes", recipes_tab::recipes_router())
+        //.route_layer(RequireAuthorizationLayer::<i64, User>::login())
+        .nest("/auth", login_tab::login_router())
         .route("/static/*-style.css", get(static_style))
 }
 
