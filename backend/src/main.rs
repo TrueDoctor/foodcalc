@@ -72,25 +72,6 @@ async fn main() {
         db_connection: FoodBase::new_with_pool(pool),
     };
 
-    async fn login_handler(
-        mut auth: AuthContext,
-        State(state): State<MyAppState>,
-        Json(credentials): Json<Credenitals>,
-    ) -> Result<(), StatusCode> {
-        let user = state
-            .db_connection
-            .authenticate_user(credentials)
-            .await
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
-        auth.login(&user).await.unwrap();
-        Ok(())
-    }
-
-    async fn logout_handler(mut auth: AuthContext) {
-        dbg!("Logging out user: {}", &auth.current_user);
-        auth.logout().await;
-    }
-
     async fn protected_handler(Extension(user): Extension<User>) -> impl IntoResponse {
         format!("Logged in as: {}", user.username)
     }
@@ -101,11 +82,9 @@ async fn main() {
         .route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .nest("/api", api::foodbase())
         .nest("/", frontend::frontend_router())
-        .route("/login", post(login_handler))
-        .route("/logout", get(logout_handler))
-        .with_state(state)
         .layer(auth_layer)
         .layer(session_layer)
+        .with_state(state)
         .layer(CorsLayer::very_permissive())
         .layer(TraceLayer::new_for_http());
 
