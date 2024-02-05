@@ -1,6 +1,6 @@
-use axum::{extract::State, http::StatusCode, response::Redirect, routing::{get, post}, Form};
+use axum::{extract::State, http::StatusCode, response::{IntoResponse, Redirect}, routing::{get, post}, Form};
 use foodlib::{AuthContext, Credenitals};
-use maud::{html, Markup};
+use maud::html;
 
 use crate::MyAppState;
 
@@ -11,16 +11,20 @@ pub(crate) fn login_router() -> axum::Router<MyAppState> {
         .route("/logout", get(logout_handler))
 }
 
-pub async fn login_view(State(_state): State<MyAppState>) -> Markup {
-    html!  {
-        div class="flex items-center justify-center" {
-            form method="post" action="/auth/login" class="flex flex-col gap-1 justify-items-center justify-center h-full w-1/4" {
-                input class="text" type="text" name="username" placeholder="Username" id="username" {}
-                input class="text" type="password" placeholder="Password" name="password" id="password" {}
-                input class="btn btn-success" type="submit" value="Login" {}
+pub async fn login_view(State(_state): State<MyAppState>) -> impl IntoResponse {
+    let html = html!  {
+        dialog class="dialog" open="open" id="login-dialog" {
+            div class="flex items-center justify-center" {
+                form method="post" action="/auth/login" class="flex flex-col gap-1 justify-items-center justify-center h-full w-full" {
+                    input class="text" type="text" name="username" placeholder="Username" id="username" {}
+                    input class="text" type="password" placeholder="Password" name="password" id="password" {}
+                    input class="btn btn-success" hx-swap="delete" hx-target="#login-dialog" type="submit" value="Login" {}
+                }
             }
         }
-    }
+    };
+
+    ([("HX-Retarget", "#content"), ("HX-Reswap", "afterbegin")], html)
 }
 
 async fn login_handler(

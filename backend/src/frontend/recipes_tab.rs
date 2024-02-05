@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::extract::{Form, Path, State};
 use axum_login::RequireAuthorizationLayer;
 use foodlib::User;
@@ -6,17 +8,19 @@ use serde::Deserialize;
 
 use crate::MyAppState;
 
+use crate::frontend::LOGIN_URL;
+
 pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/add", axum::routing::get(edit_recipe_form))
-        .route("/export/:recipe_id", axum::routing::get(export_recipe))
         .route("/delete/:recipe_id", axum::routing::get(delete_recipe))
         .route(
             "/delete_nqa/:recipe_id",
             axum::routing::delete(delete_recipe_nqa),
         )
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login())
+        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(Arc::new(LOGIN_URL.into()), None))
         .route("/search", axum::routing::post(search))
+        .route("/export/:recipe_id", axum::routing::get(export_recipe))
         .route(
             "/export_pdf/:recipe_id/",
             axum::routing::get(export_recipe_pdf),
