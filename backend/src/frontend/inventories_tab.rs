@@ -31,6 +31,7 @@ pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
             "/change-ingredient-amount",
             axum::routing::put(handle_ingredient_change),
         )
+        .route("/abort", axum::routing::put(handle_abort))
 }
 
 // Request parameters
@@ -226,21 +227,32 @@ pub async fn handle_ingredient_commit(
     }
 }
 
+pub async fn handle_abort(State(_): State<MyAppState>, data: Form<InventoryHeaderData>) -> Markup {
+    add_ingredient_button(data.inventory_id, data.filter_text.clone())
+}
+
 pub async fn add_ingredient_form(Form(header_data): Form<InventoryHeaderData>) -> Markup {
     add_ingredient_form_with_header_data(header_data)
 }
 
 pub fn add_ingredient_form_with_header_data(header_data: InventoryHeaderData) -> Markup {
     html! {
-        form hx-put="inventories/commit-ingredient" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-swap="outerHTML" {
-            div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
-                h1 { "Add ingredient" }
+        div id="add-ingredient-div" class="gap-5 mb-2 flex flex-row items-center justify-center"{
+            form hx-put="inventories/commit-ingredient" id="add-ingredient-form" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-swap="outerHTML" {
+                div class="flex flex-row items-center justify-center gap-5 h-10 w-full"{
+                    h1 { "Add ingredient" }
+                    input type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
+                    input type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.clone().unwrap_or_default());
+                    input type="hidden" name=(INGREDIENT_ID) value=(-1);
+                    input type="text" list=(INGREDIENTS_DATALIST) name=(INGREDIENT_NAME) placeholder="Ingredient" required="required" class="text";
+                    input class="text" type="text" name=(INGREDIENT_AMOUNT) placeholder="Amount (kg)" value="" step="0.01" min="0.05" required="required";
+                    button class="btn btn-primary" type="submit" { "Submit" }
+                }
+            }
+            form hx-put="inventories/abort" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-swap="outerHTML" {
                 input type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
-                input type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.unwrap_or_default());
-                input type="hidden" name=(INGREDIENT_ID) value=(-1);
-                input type="text" list=(INGREDIENTS_DATALIST) name=(INGREDIENT_NAME) placeholder="Ingredient" required="required" class="text";
-                input class="text" type="text" name=(INGREDIENT_AMOUNT) placeholder="Amount (kg)" value="" step="0.01" min="0.05" required="required";
-                button class="btn btn-primary" type="submit" { "Submit" }
+                input type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.clone().unwrap_or_default());
+                button class="btn btn-cancel" type="submit" { "Abort" }
             }
         }
     }
@@ -394,11 +406,7 @@ pub async fn render_filtered_inventory_contents(
 
     html! {
         div id=(INVENTORY_CONTENTS_DIV) class="flex flex-col items-center justify-center mb-16 w-full"{
-            form hx-target="this" hx-put="/inventories/add-ingredient" hx-swap="outerHTML" style="margin-bottom: 0px;"{
-                input type="hidden" name=(INVENTORY_ID) value=(inventory_id);
-                input type="hidden" name=(FILTER_TEXT) value=(filter.clone().unwrap_or_default().clone());
-                button type="submit" class="btn btn-primary"  { "Add Ingredient (+)" }
-            }
+            (add_ingredient_button(inventory_id.clone(), filter.clone()))
             div id=(SEARCH_RESULTS_DIV) class="w-full" {
                 datalist id=(INGREDIENTS_DATALIST) { @for ingredient in ingredient_list { (ingredient.format_for_datalist()) } }
                 span class="htmx-indicator" { "Searching..." }
@@ -408,6 +416,16 @@ pub async fn render_filtered_inventory_contents(
                     tbody { @for item in contents { (item.format_for_ingredient_table( InventoryHeaderData { inventory_id, filter_text: filter.clone()})) } }
                 }
             }
+        }
+    }
+}
+
+pub fn add_ingredient_button(inventory_id: i32, filter: Option<String>) -> Markup {
+    html! {
+        form hx-target="this" hx-put="/inventories/add-ingredient" hx-swap="outerHTML" style="margin-bottom: 0px;"{
+            input type="hidden" name=(INVENTORY_ID) value=(inventory_id);
+            input type="hidden" name=(FILTER_TEXT) value=(filter.unwrap_or_default().clone());
+            button type="submit" class="btn btn-primary"  { "Add Ingredient (+)" }
         }
     }
 }
@@ -478,7 +496,7 @@ impl IngredientTableFormattable for IngredientWithWeight {
                     div class=(format!("w-full {}",form_id)) name=(INGREDIENT_NAME) { (self.name) }
                 }
                 td { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="inventories/change-ingredient-amount" hx-target="" hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="innerHTML"; }
-                td { button hx-include=(format!(".{}", form_id)) class="btn btn-primary" hx-put="inventories/delete-ingredient" type="submit" hx-target=(format!("#{}", INVENTORY_CONTENTS_DIV)) hx-swap="innerHTML" { "X" } }
+                td { button hx-include=(format!(".{}", form_id)) class="btn btn-cancel" hx-put="inventories/delete-ingredient" type="submit" hx-target=(format!("#{}", INVENTORY_CONTENTS_DIV)) hx-swap="innerHTML" { "X" } }
             }
         }
     }
