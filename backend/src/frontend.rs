@@ -12,6 +12,7 @@ mod ingredients_tab;
 mod inventories_tab;
 mod recipes_tab;
 mod login_tab;
+mod events_tab;
 
 pub fn frontend_router() -> Router {
     Router::new()
@@ -23,6 +24,7 @@ pub fn frontend_router() -> Router {
         .nest("/recipes", recipes_tab::recipes_router())
         //.route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .nest("/auth", login_tab::login_router())
+        .nest("/events", events_tab::events_router())
         .route("/static/*-style.css", get(static_style))
 }
 
