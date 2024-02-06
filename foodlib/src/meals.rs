@@ -88,7 +88,7 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_event_meal(&self, event_id: i32, recipe_id: i32) -> eyre::Result<Vec<Meal>> {
+    pub async fn get_event_meal(&self, event_id: i32, recipe_id: i32, start_time: NaiveDateTime, place_id: i32) -> eyre::Result<Vec<Meal>> {
         let records = sqlx::query_as!(
             Meal,
             r#" SELECT
@@ -112,11 +112,13 @@ impl FoodBase {
             AND event_ingredients.place_id = event_meals.place_id
             AND event_ingredients.start_time = event_meals.start_time
 
-            WHERE event_meals.event_id = $1 AND event_meals.recipe_id = $2
+            WHERE event_meals.event_id = $1 AND event_meals.recipe_id = $2 AND event_meals.start_time = $3 AND event_meals.place_id = $4
             GROUP BY event_meals.event_id, event_meals.recipe_id, recipe, event_meals.place_id, place, event_meals.start_time, event_meals.servings
             ORDER BY event_meals.start_time "#,
             event_id,
-            recipe_id
+            recipe_id,
+            start_time,
+            place_id
         )
         .fetch_all(&*self.pg_pool)
         .await?;
@@ -155,6 +157,11 @@ impl FoodBase {
         Ok(records)
     }
 
+    // Why is this not 2/3 functions?
+    // Why does the 'app' module have a copy of this function?
+    // WHY???
+    // I've added a functions for adding and deleting meals, so use those if you are not trying to
+    // update a single meal, this should probably be removed with the next refactor.
     pub async fn update_single_meal(
         &self,
         old_meal: Option<Meal>,
@@ -239,6 +246,62 @@ impl FoodBase {
 
             assert_eq!(count, 1);
         }
+        Ok(())
+    }
+
+    pub async fn add_meal(
+        &self,
+        event_id: i32,
+        recipe_id: i32,
+        place_id: i32,
+        start_time: NaiveDateTime,
+        end_time: NaiveDateTime,
+        energy: BigDecimal,
+        servings: i32,
+        comment: Option<String>,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+            INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            "#,
+            event_id,
+            recipe_id,
+            place_id,
+            start_time,
+            end_time,
+            energy,
+            servings,
+            comment,
+        )
+        .execute(&*self.pg_pool)
+        .await?
+        .rows_affected();
+
+        assert_eq!(count, 1);
+        Ok(())
+    }
+
+    pub async fn remove_meal(&self, meal: Meal) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+            DELETE FROM event_meals
+            WHERE
+                event_id = $1 AND
+                recipe_id = $2 AND
+                place_id = $3 AND
+                start_time = $4
+            "#,
+            meal.event_id,
+            meal.recipe_id,
+            meal.place_id,
+            meal.start_time,
+        )
+        .execute(&*self.pg_pool)
+        .await?
+        .rows_affected();
+
+        assert_eq!(count, 1);
         Ok(())
     }
 

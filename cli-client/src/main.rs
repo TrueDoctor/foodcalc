@@ -251,8 +251,11 @@ async fn main() {
                     }
                     let event = event.unwrap();
 
+                    let start_time_ref = meal.start_time.as_str();
+                    let start_time = dateparser::parse(start_time_ref).unwrap();
+
                     let meals = food_base
-                        .get_event_meal(event.event_id, recipe.recipe_id)
+                        .get_event_meal(event.event_id, recipe.recipe_id, start_time.naive_local(), meal.place.clone())
                         .await;
 
                     //TODO Implement time filter
@@ -1089,11 +1092,11 @@ async fn main() {
             }
             EditType::Event(cli_event) => {
                 let _event_ref = cli_event.event.as_str();
-                let event = food_base
+                let event_id = food_base
                     .get_event_from_string_reference(_event_ref.to_string())
                     .await;
 
-                let event = if let Some(event) = event {
+                let event_id = if let Some(event) = event_id {
                     event
                 } else {
                     println!("Event not found");
@@ -1103,7 +1106,7 @@ async fn main() {
                     EditEventType::Name(name) => {
                         let event = Event {
                             event_name: name.name.clone(),
-                            ..event
+                            ..event_id
                         };
                         let query = food_base.update_event(&event).await;
                         match query {
@@ -1131,7 +1134,7 @@ async fn main() {
                         };
                         let event = Event {
                             budget: budget.clone(),
-                            ..event
+                            ..event_id
                         };
 
                         let query = food_base.update_event(&event).await;
@@ -1152,7 +1155,7 @@ async fn main() {
                     EditEventType::Comment(comment) => {
                         let event = Event {
                             comment: comment.comment.clone(),
-                            ..event
+                            ..event_id
                         };
                         let query = food_base.update_event(&event).await;
                         match query {
@@ -1171,21 +1174,102 @@ async fn main() {
                         }
                     }
                     EditEventType::Meals(meals) => match &meals.meal_edit_type {
-                        EditEventMealsType::Add(_meal) => todo!(),
-                        EditEventMealsType::Remove(_meal) => todo!(),
-                        EditEventMealsType::Edit(meal) => {
-                            let _recipe_ref = meal.recipe.as_str();
-                            let _start_time = meal.start_time.as_str();
+                        EditEventMealsType::Add(meal) => {
+                            let recipe_ref = meal.recipe.as_str();
+                            let recipe = food_base
+                                .get_recipe_from_string_reference(recipe_ref.to_string())
+                                .await;
+                            let recipe = if let Some(recipe) = recipe {
+                                recipe
+                            } else {
+                                println!("Recipe not found");
+                                return;
+                            };
 
-                            match &meal.edit_type {
-                                EditEventMealsEditType::Recipe(_recipe) => todo!(),
-                                EditEventMealsEditType::Location(_place) => todo!(),
-                                EditEventMealsEditType::Servings(_servings) => todo!(),
-                                EditEventMealsEditType::Calories(_calories) => todo!(),
-                                EditEventMealsEditType::StartTime(_start_time) => todo!(),
-                                EditEventMealsEditType::EndTime(_end_time) => todo!(),
-                                EditEventMealsEditType::Comment(_comment) => todo!(),
+                            let servings = meal.servings;
+                            let calories = meal.calories;
+                            let start_time = meal.start_time.as_str();
+                            let end_time = meal.end_time.as_str();
+                            let start_time = dateparser::parse(start_time).unwrap();
+                            let end_time = dateparser::parse(end_time).unwrap();
+                            let place_id = meal.location;
+
+                            let query = food_base.add_meal(
+                                event_id.event_id,
+                                recipe.recipe_id,
+                                place_id,
+                                start_time.naive_local(),
+                                end_time.naive_local(),
+                                calories.into(),
+                                servings,
+                                meal.comment.clone()
+                            );
+
+                            match query.await {
+                                Ok(_) => {
+                                    if cli.debug {
+                                        println!("Added Meal");
+                                    }
+                                }
+                                Err(error) => {
+                                    println!("Error: {}", error)
+                                }
                             }
+                        },
+                        EditEventMealsType::Remove(meal) => {
+                            let recipe_ref = meal.recipe.as_str();
+                            let recipe = food_base
+                                .get_recipe_from_string_reference(recipe_ref.to_string())
+                                .await;
+                            let recipe = if let Some(recipe) = recipe {
+                                recipe
+                            } else {
+                                println!("Recipe not found");
+                                return;
+                            };
+
+                            let start_time = meal.start_time.as_str();
+                            let start_time = dateparser::parse(start_time).unwrap().naive_local();
+
+                            let pseudo_meal = Meal {
+                                event_id: event_id.event_id,
+                                recipe_id: recipe.recipe_id,
+                                start_time,
+                                end_time: start_time,
+                                ..Default::default()
+                            };
+
+                            //let query = food_base.remove_meal(pseudo_meal);
+                            //match query.await {
+                            //    Ok(_) => {
+                            //        if cli.debug {
+                            //            println!("Removed Meal");
+                            //        }
+                            //    }
+                            //    Err(error) => {
+                            //        println!("Error: {}", error)
+                            //    }
+                            //}
+                        },
+                        EditEventMealsType::Edit(meal) => {
+                            let start_time = meal.start_time.as_str();
+                            let start_time = dateparser::parse(start_time).unwrap().naive_local();
+                            let recipe_ref = meal.recipe.as_str();
+                            let recipe = food_base
+                                .get_recipe_from_string_reference(recipe_ref.to_string())
+                                .await;
+                            let recipe = if let Some(recipe) = recipe {
+                                recipe
+                            } else {
+                                println!("Recipe not found");
+                                return;
+                            };
+
+                            let place = meal.place;
+
+                            //let meal = food_base
+                            //    .get_event_meal(event_id.event_id, recipe_ref, start_time, place)
+                            //    .await;
                         }
                     },
                 }
