@@ -153,8 +153,11 @@ pub struct InfoMealCommand {
     /// Recipe to show (use ID or name)
     pub recipe_ref: String,
 
-    /// Start time - only needed if a recipe is cooked multiple times in one event
-    pub start_time: Option<String>,
+    /// Start time
+    pub start_time: String,
+
+    /// Place
+    pub place: i32,
 }
 
 #[derive(Debug, Args)]
@@ -716,38 +719,74 @@ pub struct EditEventMealsAddCommand {
     pub recipe: String,
 
     /// Servings to prepare
-    pub servings: u32,
+    pub servings: i32,
 
     /// Calories per serving
-    pub calories: u32,
+    pub calories: i32,
 
     /// Start time of the meal
     pub start_time: String,
 
     /// End time of the meal
     pub end_time: String,
+    
+    /// Location for giving out the meal
+    pub location: i32,
 
-    #[clap(default_value = "")]
     /// Comment
-    pub comment: String,
+    pub comment: Option<String>,
 }
 
 #[derive(Debug, Args)]
 pub struct EditEventMealsRemoveCommand {
-    /// Meal to remove (use index or name)
-    pub meal: String,
+    /// Recipe to add (use ID or name)
+    pub recipe: String,
+
+    /// Start time of the meal
+    pub start_time: String,
+
+    /// Place
+    pub place: i32,
 }
 
 #[derive(Debug, Args)]
 pub struct EditEventMealsEditCommand {
-    /// Recipe of meal to edit (use index or name)
+    /// Recipe to add (use ID or name)
     pub recipe: String,
 
-    /// Start time of meal to edit
+    /// Start time of the meal
     pub start_time: String,
 
-    #[clap(subcommand)]
-    pub edit_type: EditEventMealsEditType,
+    /// Place
+    pub place: i32,
+
+    #[clap(long, short)]
+    /// New recipe of the meal
+    pub new_recipe: Option<String>,
+
+    #[clap(long, short)]
+    /// New location of the meal
+    pub new_location: Option<String>,
+
+    #[clap(long, short)]
+    /// New servings of the meal
+    pub new_servings: Option<i32>,
+
+    #[clap(long, short)]
+    /// New calories of the meal
+    pub new_calories: Option<i32>,
+
+    #[clap(long, short)]
+    /// New start time of the meal
+    pub new_start_time: Option<String>,
+
+    #[clap(long, short)]
+    /// New end time of the meal
+    pub new_end_time: Option<String>,
+
+    #[clap(long, short)]
+    /// New comment of the meal
+    pub new_comment: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
