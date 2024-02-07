@@ -23,6 +23,11 @@
             expat
             fontconfig
             freetype
+            icu
+            graphite2
+            stdenv.cc.cc.lib
+            libpng
+            zlib
 
             libGL
             vulkan-loader
