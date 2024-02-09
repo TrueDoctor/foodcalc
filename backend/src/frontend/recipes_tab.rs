@@ -25,9 +25,10 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
             None,
         ))
         .route("/search", axum::routing::post(search))
+        .route("/shopping-list/:recipe_id", axum::routing::post(shopping_list))
         .route("/export/:recipe_id", axum::routing::get(export_recipe))
         .route(
-            "/export_pdf/:recipe_id/",
+            "/export_pdf/:recipe_id",
             axum::routing::get(export_recipe_pdf),
         )
         .route("/", axum::routing::get(recipes_view))
@@ -61,14 +62,15 @@ pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
                  div class="flex flex-col items-center justify-center" {
                      h1 { "Export recipe" }
                      // Input mask for energy and number of servings as a form which downloads the recipe as a PDF on Submit
-                        form class="flex flex-col items-center justify-center" action=(format!("/recipes/export_pdf/{}/", recipe_id)) {
+                        form class="flex flex-col items-center justify-center" action=(format!("/recipes/export_pdf/{}", recipe_id)) {
                             div class="flex flex-row items-center justify-center" {
                                 input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy kJ/serving" required="required";
                                 input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="number_of_servings" placeholder="Number of servings" required="required";
+                                button class="btn btn-primary" type="submit" hx-post=(format!("/recipes/shopping-list/{}", recipe_id)) hx-target="#shopping-list" { "Shopping list" }
                                 button class="btn btn-primary" type="submit" { "Export" }
                             }
                         }
-
+                    div id="shopping-list";
                  }
              }
          }
@@ -130,6 +132,50 @@ pub async fn export_recipe_pdf(
                     }
                 }
             })
+        }
+    }
+}
+
+pub async fn shopping_list(
+    State(state): State<MyAppState>,
+    Path(recipe_id): Path<i32>,
+    Form(form): Form<ExportRecipe>,
+) -> Markup {
+    let energy = form.energy;
+    let number_of_servings = form.number_of_servings;
+
+    let subrecipes = state
+        .db_connection
+        .fetch_subrecipes_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
+        .await
+        .unwrap();
+    let shopping_list = subrecipes
+        .iter()
+        .filter_map(|recipe| {
+            (!recipe.is_subrecipe).then(|| {
+                (
+                    recipe.ingredient.clone(),
+                    recipe.weight.to_string(),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+
+    html! {
+        div class="flex flex-col items-center justify-center" {
+            h1 { "Shopping list" }
+            table class="w-full text-inherit table-auto object-center" {
+                thead { tr { th { "Ingredient" } th { "Amount" } th { "Unit" } } }
+                tbody {
+                    @for (ingredient, amount) in shopping_list {
+                        tr {
+                            td { (ingredient) }
+                            td { (amount) }
+                            td { "kg" }
+                        }
+                    }
+                }
+            }
         }
     }
 }

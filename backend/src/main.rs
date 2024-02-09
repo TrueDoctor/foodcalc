@@ -29,16 +29,16 @@ async fn main() {
         PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
             .await
             .unwrap();
-let colors = ColoredLevelConfig::new()
+    let colors = ColoredLevelConfig::new()
         .debug(Color::Magenta)
         .info(Color::Green)
         .error(Color::Red);
 
     fern::Dispatch::new()
         .chain(std::io::stdout())
-        .level_for("axum", log::LevelFilter::Info)
-        .level_for("mio", log::LevelFilter::Info)
+        .level_for("axum", log::LevelFilter::Trace)
         .level_for("hyper", log::LevelFilter::Info)
+        .level_for("mio", log::LevelFilter::Info)
         .level_for("backend", log::LevelFilter::Trace)
         .level_for("sqlx", log::LevelFilter::Trace)
         .level(log::LevelFilter::Debug)
