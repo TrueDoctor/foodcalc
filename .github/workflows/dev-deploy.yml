@@ -32,11 +32,7 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Check database Locale
-      run: echo 'show LC_MONETARY;' | psql -p 5432 -h 127.0.0.1 -U postgres --no-password
-    - name: Set Database locale
-      run: echo 'set LC_MONETARY to "en_DE.UTF-8";' | psql -p 5432 -h 127.0.0.1 -U postgres --no-password
-    - name: Check database Locale
-      run: echo 'show LC_MONETARY;' | psql -p 5432 -h 127.0.0.1 -U postgres --no-password
+      run: psql -p 5432 -h 127.0.0.1 -U postgres --no-password -l
 
     - name: Apply Database Migrations
       run: |
