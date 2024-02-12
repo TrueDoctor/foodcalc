@@ -32,6 +32,12 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Apply Database Migrations
+      run: |
+        for migration in $(ls foodlib/migrations/ | sort)
+        do
+          psql -p 5432 -h 127.0.0.1 -U dennis --no-password -f $migration food_calc_testing
+        done
     - name: Load Sample Data
       run: psql -p 5432 -h 127.0.0.1 -U dennis --no-password -f foodlib/sample_data/food_calc.sql food_calc_testing
     
