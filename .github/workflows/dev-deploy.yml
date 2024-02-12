@@ -1,0 +1,33 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: ssh
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build
+      run: cargo build --verbose --release
+    - name: Run tests
+      run: cargo test --verbose
+      
+    - name: Deploy to Server
+      uses: easingthemes/ssh-deploy@main
+      with:
+        SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
+        REMOTE_USER: ${{ secrets.DEPLOY_USER }}
+        REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
+        REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
+        SOURCE: target/release/
+        TARGET: /srv/foodcalc
+        SCRIPT_AFTER: echo $RSYNC_STDOUT
