@@ -34,7 +34,7 @@ jobs:
 
     - name: Apply Database Migrations
       run: |
-        for migration in $(ls foodlib/migrations/ | sort)
+        for migration in $(find ./foodlib/migrations/ -type f | sort)
         do
           psql -p 5432 -h 127.0.0.1 -U dennis --no-password -f $migration food_calc_testing
         done
