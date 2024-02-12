@@ -16,8 +16,9 @@ jobs:
     environment: ssh
     services:
       postgres:
-        image: postgres
+        image: postgres:alpine
         env:
+          LANG: de_DE.utf8
           POSTGRES_USER: dennis
           POSTGRES_DB: food_calc_testing
           POSTGRES_HOST_AUTH_METHOD: trust
