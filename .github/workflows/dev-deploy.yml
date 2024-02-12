@@ -16,7 +16,7 @@ jobs:
     environment: ssh
     services:
       postgres:
-        image: postgresql
+        image: postgres
         env:
           POSTGRES_PASSWORD: ""
           POSTGRES_USER: dennis
