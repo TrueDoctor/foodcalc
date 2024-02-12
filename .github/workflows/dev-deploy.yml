@@ -16,7 +16,7 @@ jobs:
     environment: ssh
     services:
       postgres:
-        image: postgres:alpine
+        image: postgres:16-alpine
         env:
           LANG: de_DE.utf8
           POSTGRES_USER: dennis
