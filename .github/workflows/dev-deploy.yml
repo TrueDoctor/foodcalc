@@ -16,7 +16,7 @@ jobs:
     environment: ssh
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:alpine
         env:
           POSTGRES_USER: dennis
           POSTGRES_DB: food_calc_testing
