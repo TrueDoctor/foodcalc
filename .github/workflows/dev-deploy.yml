@@ -18,10 +18,10 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          LANG: de_DE.utf8
           POSTGRES_USER: dennis
           POSTGRES_DB: food_calc_testing
           POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=de-DE --locale=de_DE"
         ports:
           - 5432:5432
         options: >-
