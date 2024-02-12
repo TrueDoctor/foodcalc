@@ -20,7 +20,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: ""
           POSTGRES_USER: dennis
-          POSTGRES_DB: food_calc_test
+          POSTGRES_DB: food_calc_testing
         ports:
           - 5432:5432
     steps:
