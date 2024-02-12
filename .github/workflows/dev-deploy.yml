@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  DATABASE_URL: postgres://dennis@localhost/food_calc_testing
+  DATABASE_URL: postgres://postgres@localhost/food_calc_testing
 
 jobs:
   build:
@@ -18,7 +18,6 @@ jobs:
       postgres:
         image: postgres:alpine
         env:
-          POSTGRES_USER: dennis
           POSTGRES_DB: food_calc_testing
           POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_INITDB_ARGS: "--locale=en_DE.UTF-8 --encoding=UTF8 --data-checksums"
@@ -36,10 +35,10 @@ jobs:
       run: |
         for migration in $(find ./foodlib/migrations/ -type f | sort)
         do
-          psql -p 5432 -h 127.0.0.1 -U dennis --no-password -f $migration food_calc_testing
+          psql -p 5432 -h 127.0.0.1 -U postgres --no-password -f $migration food_calc_testing
         done
     - name: Load Sample Data
-      run: psql -p 5432 -h 127.0.0.1 -U dennis --no-password -f foodlib/sample_data/food_calc.sql food_calc_testing
+      run: psql -p 5432 -h 127.0.0.1 -U postgres --no-password -f foodlib/sample_data/food_calc.sql food_calc_testing
     
     #- name: Build
     #  run: cargo build --verbose --release
