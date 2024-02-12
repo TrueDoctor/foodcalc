@@ -33,7 +33,7 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Load Sample Data
-      run: psql -p 5432 -h 127.0.0.1 -U dennis --no-password -f foodlib/sample_data/food_calc.sql food_calc_testing -v ON_ERROR_STOP=1
+      run: psql -p 5432 -h 127.0.0.1 -U dennis --no-password -f foodlib/sample_data/food_calc.sql food_calc_testing
     
     #- name: Build
     #  run: cargo build --verbose --release
