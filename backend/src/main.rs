@@ -29,6 +29,8 @@ async fn main() {
         PgPool::connect(&env::var("DATABASE_URL").expect("DATABASE_URL env var was not set"))
             .await
             .unwrap();
+
+    let port = &env::var("PORT").unwrap_or("3000".to_string());
     let colors = ColoredLevelConfig::new()
         .debug(Color::Magenta)
         .info(Color::Green)
@@ -77,10 +79,10 @@ async fn main() {
         .layer(CorsLayer::very_permissive())
         .layer(TraceLayer::new_for_http());
 
-    println!("Listening on http://localhost:3000");
+    println!("Listening on http://localhost:{port}");
 
     // run it
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
+    axum::Server::bind(&format!("0.0.0.0:{port}").parse().unwrap())
         .serve(app.into_make_service())
         .await
         .unwrap();
