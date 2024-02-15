@@ -31,6 +31,11 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Check Runner Locale
+      run: locale -a
+    - name: Install Locale
+      run: locale-gen en_DE && locale-gen en_DE.UTF-8
+      
     - name: Check database Locale
       run: psql -p 5432 -h 127.0.0.1 -U postgres --no-password -l
 
