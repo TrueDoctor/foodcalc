@@ -31,25 +31,23 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Check Runner Locale
-      run: locale -a
-    - name: Install Locale
-      run: |
-        sudo apt install locales &&
-        sudo localedef -i de_DE -c -f UTF-8 -A /usr/share/locale/locale.alias de_DE.UTF-8
-      
-    - name: Check database Locale
-      run: psql -p 5432 -h 127.0.0.1 -U postgres --no-password -l
-
+    #- name: Check Runner Locale
+    #  run: locale -a
+    #- name: Install Locale
+    #  run: |
+    #    sudo apt install locales &&
+    #    sudo localedef -i de_DE -c -f UTF-8 -A /usr/share/locale/locale.alias de_DE.UTF-8
+    #  
+    #- name: Check database Locale
+    #  run: psql -p 5432 -h 127.0.0.1 -U postgres --no-password -l
+    #
     - name: Apply Database Migrations
       run: |
         for migration in $(find ./foodlib/migrations/ -type f | sort)
         do
           psql -p 5432 -h 127.0.0.1 -U postgres --no-password -f $migration food_calc_testing
         done
-    #- name: Load Sample Data
-    #  run: psql -p 5432 -h 127.0.0.1 -U postgres --no-password -f foodlib/sample_data/food_calc.sql food_calc_testing
-
+    
     - name: Install NPM Dependencies
       run: cd backend && npm install && cd ..
     - name: Build
