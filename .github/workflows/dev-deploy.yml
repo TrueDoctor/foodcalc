@@ -35,7 +35,7 @@ jobs:
       run: locale -a
     - name: Install Locale
       run: |
-        apt install locales &&
+        sudo apt install locales &&
         localedef -i en_DE -c -f UTF-8 -A /usr/share/locale/locale.alias en_DE.UTF-8
       
     - name: Check database Locale
