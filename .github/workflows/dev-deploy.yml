@@ -20,7 +20,7 @@ jobs:
         env:
           POSTGRES_DB: food_calc_testing
           POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_INITDB_ARGS: "--locale=en_DE.UTF-8 --encoding=UTF8 --data-checksums"
+          POSTGRES_INITDB_ARGS: "--locale=de_DE.UTF-8 --encoding=UTF8 --data-checksums"
         ports:
           - 5432:5432
         options: >-
@@ -36,7 +36,7 @@ jobs:
     - name: Install Locale
       run: |
         sudo apt install locales &&
-        localedef -i en_DE -c -f UTF-8 -A /usr/share/locale/locale.alias en_DE.UTF-8
+        localedef -i de_DE -c -f UTF-8 -A /usr/share/locale/locale.alias de_DE.UTF-8
       
     - name: Check database Locale
       run: psql -p 5432 -h 127.0.0.1 -U postgres --no-password -l
