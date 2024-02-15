@@ -49,11 +49,13 @@ jobs:
         done
     #- name: Load Sample Data
     #  run: psql -p 5432 -h 127.0.0.1 -U postgres --no-password -f foodlib/sample_data/food_calc.sql food_calc_testing
-    
+
+    - name: Install NPM Dependencies
+      run: cd backend && npm install && cd ..
     - name: Build
-      run: cargo build --verbose --release
+      run: cargo build --release --bin backend
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --bin backend
       
     - name: Deploy to Server
       uses: easingthemes/ssh-deploy@main
