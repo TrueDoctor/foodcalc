@@ -34,7 +34,9 @@ jobs:
     - name: Check Runner Locale
       run: locale -a
     - name: Install Locale
-      run: locale-gen en_DE && locale-gen en_DE.UTF-8
+      run: |
+        apt install locales &&
+        localedef -i en_DE -c -f UTF-8 -A /usr/share/locale/locale.alias en_DE.UTF-8
       
     - name: Check database Locale
       run: psql -p 5432 -h 127.0.0.1 -U postgres --no-password -l
