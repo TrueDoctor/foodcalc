@@ -54,4 +54,4 @@ jobs:
         REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
         SOURCE: target/release/${{ env.BIN_NAME }}
         TARGET: /srv/foodcalc/${{ env.BIN_NAME }}
-        SCRIPT_AFTER: echo $RSYNC_STDOUT
+        SCRIPT_AFTER: echo $RSYNC_STDOUT && sudo /bin/systemctl restart foodcalc
