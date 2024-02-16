@@ -33,7 +33,9 @@
         in with pkgs; {
         devShells.default = mkShell {
           packages = [
+            pkgs.sqlx-cli
             pkgs.bacon
+            pkgs.postgresql
           ];
           nativeBuildInputs = with pkgs; [
             rustc
