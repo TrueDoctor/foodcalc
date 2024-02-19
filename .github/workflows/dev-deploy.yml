@@ -3,8 +3,7 @@ name: Rust
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -41,7 +40,7 @@ jobs:
     - name: Install NPM Dependencies
       run: cd backend && npm install && cd ..
     - name: Build
-      run: cargo build --release --bin ${{ env.BIN_NAME }}
+      run: cargo build --release --bin ${{ env.BIN_NAME }} --features tectonic
     - name: Run tests
       run: cargo test --bin ${{ env.BIN_NAME }}
       
