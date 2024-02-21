@@ -39,6 +39,8 @@ jobs:
     
     - name: Install NPM Dependencies
       run: cd backend && npm install && cd ..
+    - name: Install Tectonic Dependencies
+      run: apt install libgraphite2-dev
     - name: Build
       run: cargo build --release --bin ${{ env.BIN_NAME }} --features tectonic
     - name: Run tests
