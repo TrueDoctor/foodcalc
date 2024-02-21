@@ -60,7 +60,7 @@ jobs:
         SCRIPT_AFTER: |
           echo $RSYNC_STDOUT && 
           cd /srv/foodcalc/build &&
-          cd backend && npm install && cd ..
+          cd backend && npm install && cd .. &&
           cargo build --release --bin ${{ env.BIN_NAME }} --features tectonic &&
           cp target/release/${{ env.BIN_NAME }} &&
           sudo /bin/systemctl restart foodcalc
