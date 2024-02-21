@@ -4,6 +4,8 @@ use serde::Deserialize;
 
 use crate::MyAppState;
 
+mod recipes_edit_tab;
+
 pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/search", axum::routing::post(search))
@@ -19,6 +21,7 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
             axum::routing::delete(delete_recipe_nqa),
         )
         .route("/", axum::routing::get(recipes_view))
+        .nest("/edit/", recipes_edit_tab::recipes_edit_router())
 }
 
 #[derive(Deserialize)]
@@ -215,7 +218,7 @@ fn format_recipe(recipe: &foodlib::Recipe) -> Markup {
             td { (recipe.recipe_id) }
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
-            td { button class="btn btn-primary" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
+            td { button class="btn btn-primary" hx-target="#recipes" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
             td { button class="btn btn-cancel" hx-target="next #dialog" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
             td { button class="btn btn-primary" hx-get=(format!("/recipes/export/{}", recipe.recipe_id)) hx-swap="afterend" { "Export" } }
             td { div id="dialog"; }
