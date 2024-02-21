@@ -11,6 +11,7 @@ use crate::MyAppState;
 mod recipes_edit_tab;
 
 use crate::frontend::LOGIN_URL;
+mod recipes_edit_tab;
 
 pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -25,7 +26,10 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
             None,
         ))
         .route("/search", axum::routing::post(search))
-        .route("/shopping-list/:recipe_id", axum::routing::post(shopping_list))
+        .route(
+            "/shopping-list/:recipe_id",
+            axum::routing::post(shopping_list),
+        )
         .route("/export/:recipe_id", axum::routing::get(export_recipe))
         .route(
             "/export_pdf/:recipe_id",
@@ -152,12 +156,7 @@ pub async fn shopping_list(
     let shopping_list = subrecipes
         .iter()
         .filter_map(|recipe| {
-            (!recipe.is_subrecipe).then(|| {
-                (
-                    recipe.ingredient.clone(),
-                    recipe.weight.to_string(),
-                )
-            })
+            (!recipe.is_subrecipe).then(|| (recipe.ingredient.clone(), recipe.weight.to_string()))
         })
         .collect::<Vec<_>>();
 
