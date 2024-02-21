@@ -60,6 +60,6 @@ jobs:
         SCRIPT_AFTER: |
           echo $RSYNC_STDOUT && 
           cd /srv/foodcalc/build &&
-          cargo build --release --bin {{ env.BIN_NAME }} --features tectonic &&
-          cp target/release/{{ env.BIN_NAME }} &&
+          cargo build --release --bin ${{ env.BIN_NAME }} --features tectonic &&
+          cp target/release/${{ env.BIN_NAME }} &&
           sudo /bin/systemctl restart foodcalc
