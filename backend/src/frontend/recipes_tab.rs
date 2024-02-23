@@ -8,8 +8,6 @@ use serde::Deserialize;
 
 use crate::MyAppState;
 
-mod recipes_edit_tab;
-
 use crate::frontend::LOGIN_URL;
 mod recipes_edit_tab;
 
