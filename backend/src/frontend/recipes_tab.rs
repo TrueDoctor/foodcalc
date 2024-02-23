@@ -9,6 +9,7 @@ use serde::Deserialize;
 use crate::MyAppState;
 
 use crate::frontend::LOGIN_URL;
+mod recipes_edit_tab;
 
 pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -18,15 +19,22 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
             "/delete_nqa/:recipe_id",
             axum::routing::delete(delete_recipe_nqa),
         )
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(Arc::new(LOGIN_URL.into()), None))
+        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
+            Arc::new(LOGIN_URL.into()),
+            None,
+        ))
         .route("/search", axum::routing::post(search))
-        .route("/shopping-list/:recipe_id", axum::routing::post(shopping_list))
+        .route(
+            "/shopping-list/:recipe_id",
+            axum::routing::post(shopping_list),
+        )
         .route("/export/:recipe_id", axum::routing::get(export_recipe))
         .route(
             "/export_pdf/:recipe_id",
             axum::routing::get(export_recipe_pdf),
         )
         .route("/", axum::routing::get(recipes_view))
+        .nest("/edit/", recipes_edit_tab::recipes_edit_router())
 }
 
 #[derive(Deserialize)]
@@ -146,12 +154,7 @@ pub async fn shopping_list(
     let shopping_list = subrecipes
         .iter()
         .filter_map(|recipe| {
-            (!recipe.is_subrecipe).then(|| {
-                (
-                    recipe.ingredient.clone(),
-                    recipe.weight.to_string(),
-                )
-            })
+            (!recipe.is_subrecipe).then(|| (recipe.ingredient.clone(), recipe.weight.to_string()))
         })
         .collect::<Vec<_>>();
 
@@ -268,7 +271,7 @@ fn format_recipe(recipe: &foodlib::Recipe) -> Markup {
             td { (recipe.recipe_id) }
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
-            td { button class="btn btn-primary" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
+            td { button class="btn btn-primary" hx-target="#recipes" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
             td { button class="btn btn-cancel" hx-target="next #dialog" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
             td { button class="btn btn-primary" hx-get=(format!("/recipes/export/{}", recipe.recipe_id)) hx-swap="afterend" { "Export" } }
             td { div id="dialog"; }
