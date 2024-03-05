@@ -58,9 +58,10 @@ jobs:
         SOURCE: ./
         TARGET: /srv/foodcalc/build
         SCRIPT_AFTER: |
-          echo $RSYNC_STDOUT && 
-          cd /srv/foodcalc/build/backend && npm install &&
-          cd /srv/foodcalc/build/ && cargo build --release --bin ${{ env.BIN_NAME }} --features tectonic &&
-          sudo /bin/systemctl stop foodcalc
-          cp /srv/foodcalc/build/target/release/${{ env.BIN_NAME }} /srv/foodcalc/${{ env.BIN_NAME }} &&
+          echo $RSYNC_STDOUT 
+          cd /srv/foodcalc/build/backend && npm install
+          cd /srv/foodcalc/build/
+          cargo build --release --bin ${{ env.BIN_NAME }} --features tectonic
+          sudo /bin/systemctl stop foodcalc 
+          cp /srv/foodcalc/build/target/release/${{ env.BIN_NAME }} /srv/foodcalc/${{ env.BIN_NAME }}
           sudo /bin/systemctl start foodcalc
