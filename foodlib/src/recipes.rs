@@ -227,6 +227,190 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn add_recipe_ingredient(
+        &self,
+        recipe_id: i32,
+        ingredient_id: i32,
+        amount: BigDecimal,
+        unit_id: i32,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id)
+                VALUES ($1, $2, $3, $4)
+            "#,
+            recipe_id,
+            ingredient_id,
+            amount,
+            unit_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Inserted {} recipe_ingredients", count.rows_affected());
+        Ok(())
+    }
+
+    pub async fn update_recipe_ingredient(
+        &self,
+        recipe_id: i32,
+        ingredient_id: i32,
+        amount: BigDecimal,
+        unit: Unit,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                UPDATE recipe_ingredients
+                SET amount = $3, unit_id = $4
+                WHERE recipe_id = $1 AND ingredient_id = $2
+            "#,
+            recipe_id,
+            ingredient_id,
+            amount,
+            unit.unit_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Updated {} recipe_ingredients", count.rows_affected());
+        Ok(())
+    }
+
+    pub async fn delete_recipe_ingredient(
+        &self,
+        recipe_id: i32,
+        ingredient_id: i32,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM recipe_ingredients
+                WHERE recipe_id = $1 AND ingredient_id = $2
+            "#,
+            recipe_id,
+            ingredient_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Deleted {} recipe_ingredients", count.rows_affected());
+        Ok(())
+    }
+
+    pub async fn delete_recipe_meta_ingredient(
+        &self,
+        recipe_id: i32,
+        meta_recipe_id: i32,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM meta_recipes
+                WHERE parent_id = $1 AND child_id = $2
+            "#,
+            recipe_id,
+            meta_recipe_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Deleted {} meta_recipes", count.rows_affected());
+        Ok(())
+    }
+
+    pub async fn add_recipe_meta_ingredient(
+        &self,
+        recipe_id: i32,
+        meta_recipe_id: i32,
+        weight: BigDecimal,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                INSERT INTO meta_recipes (parent_id, child_id, weight)
+                VALUES ($1, $2, $3)
+            "#,
+            recipe_id,
+            meta_recipe_id,
+            weight,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Inserted {} meta_recipes", count.rows_affected());
+        Ok(())
+    }
+
+    pub async fn update_recipe_meta_ingredient(
+        &self,
+        recipe_id: i32,
+        meta_recipe_id: i32,
+        weight: BigDecimal,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                UPDATE meta_recipes
+                SET weight = $3
+                WHERE parent_id = $1 AND child_id = $2
+            "#,
+            recipe_id,
+            meta_recipe_id,
+            weight,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Updated {} meta_recipes", count.rows_affected());
+        Ok(())
+    }
+
+    pub async fn add_recipe_step(&self, step: &RecipeStep) -> eyre::Result<RecipeStep> {
+        let step = sqlx::query_as!(
+            RecipeStep,
+            r#"
+                INSERT INTO steps (step_order, step_name, step_description, recipe_id, fixed_duration, duration_per_kg)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING *
+            "#,
+            step.step_order,
+            step.step_name,
+            step.step_description,
+            step.recipe_id,
+            step.fixed_duration,
+            step.duration_per_kg,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(step)
+    }
+
+    pub async fn update_recipe_step(&self, step: &RecipeStep) -> eyre::Result<RecipeStep> {
+        let step = sqlx::query_as!(
+            RecipeStep,
+            r#"
+                UPDATE steps
+                SET step_order = $1, step_name = $2, step_description = $3, fixed_duration = $4, duration_per_kg = $5
+                WHERE step_id = $6
+                RETURNING *
+            "#,
+            step.step_order,
+            step.step_name,
+            step.step_description,
+            step.fixed_duration,
+            step.duration_per_kg,
+            step.step_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(step)
+    }
+
+    pub async fn delete_step(&self, recipe_id: i32, step_id: i32) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM steps
+                WHERE recipe_id = $1 AND step_id = $2
+            "#,
+            recipe_id,
+            step_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Deleted {} steps", count.rows_affected());
+        Ok(())
+    }
+
     pub async fn delete_recipe(&self, recipe_id: i32) -> eyre::Result<()> {
         let mut transaction = self.pg_pool.begin().await?;
         let count = sqlx::query!(
