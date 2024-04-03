@@ -19,6 +19,7 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
             "/delete_nqa/:recipe_id",
             axum::routing::delete(delete_recipe_nqa),
         )
+        .nest("/edit/", recipes_edit_tab::recipes_edit_router())
         .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
             Arc::new(LOGIN_URL.into()),
             None,
@@ -34,7 +35,6 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
             axum::routing::get(export_recipe_pdf),
         )
         .route("/", axum::routing::get(recipes_view))
-        .nest("/edit/", recipes_edit_tab::recipes_edit_router())
 }
 
 #[derive(Deserialize)]
