@@ -70,7 +70,6 @@ pub struct UpdateSubrecipeHeader {
     pub subrecipe_id: i32,
     pub subrecipe_name: String,
     pub subrecipe_amount: BigDecimal,
-    pub subrecipe_unit_id: i32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -181,11 +180,7 @@ pub async fn handle_subrecipe_change(
             comment: None,
         }),
         amount: data.subrecipe_amount,
-        unit: state
-            .db_connection
-            .get_unit(data.subrecipe_unit_id)
-            .await
-            .unwrap_or_default(),
+        unit: state.db_connection.get_unit(0).await.unwrap_or_default(),
     };
     sub_recipe.format_for_subrecipe_table(data.recipe_id)
 }
