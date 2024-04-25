@@ -18,6 +18,9 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
+        toolchain = pkgs.rust-bin.stable.latest.default.override {
+          extensions = ["rust-src" "clippy" "rust-analyzer"];
+        };
         buildInputs = with pkgs; [
             openssl
             expat
@@ -41,7 +44,7 @@
             pkgs.bacon
           ];
           nativeBuildInputs = with pkgs; [
-            rustc
+            toolchain
             nodejs
             cargo
             pkg-config
