@@ -37,7 +37,12 @@ async fn main() {
     }
 
     match &cli.command {
-        Commands::UpdatePrices => todo!(),
+        Commands::UpdatePrices => {
+            let result = food_base.fetch_metro_prices(None).await;
+            if let Err(prices) = result {
+                println!("Error: {}", prices);
+            }
+        },
         Commands::List(list) => {
             let _place_flag = list.place.as_ref();
             let _event_flag = list.event.as_ref();
