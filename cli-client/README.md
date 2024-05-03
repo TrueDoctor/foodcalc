@@ -66,7 +66,7 @@ This Project aims to creat a simple to use Commandline application that interfac
     * Trigger Prices Update
 
 ## New Structure
-* [ ] update prices
+* [x] update prices
 * [x] list
     * [x] places
     * [x] events
@@ -125,7 +125,7 @@ This Project aims to creat a simple to use Commandline application that interfac
         * [x] budget <budget>
         * [x] comment <comment>
         * [ ] meals
-            * [ ] add <recipe_ref> <servings> <calories> <start_time> <end_time> [<comment>] [<location_ref>]
+            * [x] add <recipe_ref> <servings> <calories> <start_time> <end_time> [<comment>] [<location_ref>]
             * [ ] remove <reciepe_ref> [<start_time>]
             * [ ] edit <reciepe_ref> [<start_time>]
                 * [ ] recipe <recipe_ref>
