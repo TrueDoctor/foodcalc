@@ -364,7 +364,7 @@ impl FoodBase {
             let bundle = variant
                 .bundles
                 .values()
-                .next()
+                .min_by_key(|b| b.gross_weight)
                 .ok_or(eyre::eyre!("Bundle not found for id {}", s.ingredient_id))?;
             let price = bundle
                 .stores
