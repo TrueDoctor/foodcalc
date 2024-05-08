@@ -6,18 +6,14 @@ use sqlx::postgres::PgPool;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
-use foodlib::{AuthContext, Credenitals, FoodBase, User};
+use foodlib::{FoodBase, User};
 
 mod api;
 mod frontend;
 
-use axum::{
-    extract::State, http::StatusCode, response::IntoResponse, routing::get, routing::post,
-    Extension, Json,
-};
 use axum_login::{
     axum_sessions::{async_session::MemoryStore, SessionLayer},
-    AuthLayer, PostgresStore, RequireAuthorizationLayer,
+    AuthLayer, PostgresStore,
 };
 use rand::Rng;
 
@@ -34,6 +30,7 @@ async fn main() {
             .await
             .unwrap();
 
+    let port = &env::var("PORT").unwrap_or("3000".to_string());
     let colors = ColoredLevelConfig::new()
         .debug(Color::Magenta)
         .info(Color::Green)
@@ -41,9 +38,9 @@ async fn main() {
 
     fern::Dispatch::new()
         .chain(std::io::stdout())
-        .level_for("axum", log::LevelFilter::Info)
-        .level_for("mio", log::LevelFilter::Info)
+        .level_for("axum", log::LevelFilter::Trace)
         .level_for("hyper", log::LevelFilter::Info)
+        .level_for("mio", log::LevelFilter::Info)
         .level_for("backend", log::LevelFilter::Trace)
         .level_for("sqlx", log::LevelFilter::Trace)
         .level(log::LevelFilter::Debug)
@@ -72,47 +69,20 @@ async fn main() {
         db_connection: FoodBase::new_with_pool(pool),
     };
 
-    async fn login_handler(
-        mut auth: AuthContext,
-        State(state): State<MyAppState>,
-        Json(credentials): Json<Credenitals>,
-    ) -> Result<(), StatusCode> {
-        let user = state
-            .db_connection
-            .authenticate_user(credentials)
-            .await
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
-        auth.login(&user).await.unwrap();
-        Ok(())
-    }
-
-    async fn logout_handler(mut auth: AuthContext) {
-        dbg!("Logging out user: {}", &auth.current_user);
-        auth.logout().await;
-    }
-
-    async fn protected_handler(Extension(user): Extension<User>) -> impl IntoResponse {
-        format!("Logged in as: {}", user.username)
-    }
-
     // build our application with a route
     let app = axum::Router::new()
-        .route("/protected", get(protected_handler))
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login())
         .nest("/api", api::foodbase())
         .nest("/", frontend::frontend_router())
-        .route("/login", post(login_handler))
-        .route("/logout", get(logout_handler))
-        .with_state(state)
         .layer(auth_layer)
         .layer(session_layer)
+        .with_state(state)
         .layer(CorsLayer::very_permissive())
         .layer(TraceLayer::new_for_http());
 
-    println!("Listening on http://localhost:3000");
+    println!("Listening on http://localhost:{port}");
 
     // run it
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
+    axum::Server::bind(&format!("0.0.0.0:{port}").parse().unwrap())
         .serve(app.into_make_service())
         .await
         .unwrap();

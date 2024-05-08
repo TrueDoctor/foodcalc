@@ -488,6 +488,8 @@ pub enum UnitOfMeasure {
     KJ,
     #[serde(rename = "kcal")]
     Kcal,
+    #[serde(rename = "ml")]
+    Milliliter,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

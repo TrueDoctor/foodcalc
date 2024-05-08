@@ -1,22 +1,38 @@
+use std::sync::Arc;
+
 use axum::extract::{Form, Path, State};
+use axum_login::RequireAuthorizationLayer;
+use foodlib::User;
 use maud::{html, Markup};
 use serde::Deserialize;
 
 use crate::MyAppState;
 
+use crate::frontend::LOGIN_URL;
+mod recipes_edit_tab;
+
 pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/search", axum::routing::post(search))
         .route("/add", axum::routing::get(edit_recipe_form))
-        .route("/export/:recipe_id", axum::routing::get(export_recipe))
-        .route(
-            "/export_pdf/:recipe_id/",
-            axum::routing::get(export_recipe_pdf),
-        )
         .route("/delete/:recipe_id", axum::routing::get(delete_recipe))
         .route(
             "/delete_nqa/:recipe_id",
             axum::routing::delete(delete_recipe_nqa),
+        )
+        .nest("/edit/", recipes_edit_tab::recipes_edit_router())
+        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
+            Arc::new(LOGIN_URL.into()),
+            None,
+        ))
+        .route("/search", axum::routing::post(search))
+        .route(
+            "/shopping-list/:recipe_id",
+            axum::routing::post(shopping_list),
+        )
+        .route("/export/:recipe_id", axum::routing::get(export_recipe))
+        .route(
+            "/export_pdf/:recipe_id",
+            axum::routing::get(export_recipe_pdf),
         )
         .route("/", axum::routing::get(recipes_view))
 }
@@ -48,14 +64,15 @@ pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
                  div class="flex flex-col items-center justify-center" {
                      h1 { "Export recipe" }
                      // Input mask for energy and number of servings as a form which downloads the recipe as a PDF on Submit
-                        form class="flex flex-col items-center justify-center" action=(format!("/recipes/export_pdf/{}/", recipe_id)) {
+                        form class="flex flex-col items-center justify-center" action=(format!("/recipes/export_pdf/{}", recipe_id)) {
                             div class="flex flex-row items-center justify-center" {
                                 input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy kJ/serving" required="required";
                                 input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="number_of_servings" placeholder="Number of servings" required="required";
+                                button class="btn btn-primary" type="submit" hx-post=(format!("/recipes/shopping-list/{}", recipe_id)) hx-target="#shopping-list" { "Shopping list" }
                                 button class="btn btn-primary" type="submit" { "Export" }
                             }
                         }
-
+                    div id="shopping-list";
                  }
              }
          }
@@ -117,6 +134,45 @@ pub async fn export_recipe_pdf(
                     }
                 }
             })
+        }
+    }
+}
+
+pub async fn shopping_list(
+    State(state): State<MyAppState>,
+    Path(recipe_id): Path<i32>,
+    Form(form): Form<ExportRecipe>,
+) -> Markup {
+    let energy = form.energy;
+    let number_of_servings = form.number_of_servings;
+
+    let subrecipes = state
+        .db_connection
+        .fetch_subrecipes_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
+        .await
+        .unwrap();
+    let shopping_list = subrecipes
+        .iter()
+        .filter_map(|recipe| {
+            (!recipe.is_subrecipe).then(|| (recipe.ingredient.clone(), recipe.weight.to_string()))
+        })
+        .collect::<Vec<_>>();
+
+    html! {
+        div class="flex flex-col items-center justify-center" {
+            h1 { "Shopping list" }
+            table class="w-full text-inherit table-auto object-center" {
+                thead { tr { th { "Ingredient" } th { "Amount" } th { "Unit" } } }
+                tbody {
+                    @for (ingredient, amount) in shopping_list {
+                        tr {
+                            td { (ingredient) }
+                            td { (amount) }
+                            td { "kg" }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -215,7 +271,7 @@ fn format_recipe(recipe: &foodlib::Recipe) -> Markup {
             td { (recipe.recipe_id) }
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
-            td { button class="btn btn-primary" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
+            td { button class="btn btn-primary" hx-target="#recipes" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
             td { button class="btn btn-cancel" hx-target="next #dialog" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
             td { button class="btn btn-primary" hx-get=(format!("/recipes/export/{}", recipe.recipe_id)) hx-swap="afterend" { "Export" } }
             td { div id="dialog"; }

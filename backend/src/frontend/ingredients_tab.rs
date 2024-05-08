@@ -1,14 +1,21 @@
+use std::sync::Arc;
+
 use axum::extract::{Form, State};
+use axum_login::RequireAuthorizationLayer;
+use foodlib::User;
 use maud::{html, Markup};
 use serde::Deserialize;
 
 use crate::MyAppState;
 
+use crate::frontend::LOGIN_URL;
+
 pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/search", axum::routing::post(search))
         .route("/edit", axum::routing::put(add_ingredient))
         .route("/add", axum::routing::get(edit_ingredient_form))
+        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(Arc::new(LOGIN_URL.into()), None))
+        .route("/search", axum::routing::post(search))
         .route("/", axum::routing::get(ingredients_view))
 }
 

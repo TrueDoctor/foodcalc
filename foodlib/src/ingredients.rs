@@ -240,6 +240,18 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn get_ingredient(&self, ingredient_id: i32) -> eyre::Result<Ingredient> {
+        let record = sqlx::query_as!(
+            Ingredient,
+            r#" SELECT * FROM ingredients WHERE ingredient_id = $1 "#,
+            ingredient_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(record)
+    }
+
     pub async fn get_ingredient_from_string_reference(
         &self,
         reference: String,
@@ -281,6 +293,14 @@ impl FoodBase {
             .collect();
 
         Ok(records)
+    }
+
+    pub async fn get_unit(&self, unit_id: i32) -> eyre::Result<Unit> {
+        let record = sqlx::query_as!(Unit, r#" SELECT * FROM units WHERE unit_id = $1 "#, unit_id)
+            .fetch_one(&*self.pg_pool)
+            .await?;
+
+        Ok(record)
     }
 
     pub async fn get_all_meta_ingredients(&self) -> eyre::Result<Vec<RecipeMetaIngredient>> {
@@ -344,7 +364,7 @@ impl FoodBase {
             let bundle = variant
                 .bundles
                 .values()
-                .next()
+                .min_by_key(|b| (f64::from_str(&b.gross_weight).unwrap_or_default() * 1000.) as u64)
                 .ok_or(eyre::eyre!("Bundle not found for id {}", s.ingredient_id))?;
             let price = bundle
                 .stores

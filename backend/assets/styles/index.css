@@ -79,3 +79,7 @@ tr:nth-child(odd) {
 .btn-cancel:hover {
 	@apply bg-btn-cancel-hover;
 }
+
+svg {
+  color: red;
+}
