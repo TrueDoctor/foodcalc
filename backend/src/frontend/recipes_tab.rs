@@ -106,7 +106,7 @@ pub async fn export_recipe_pdf(
         .unwrap()
         .name;
 
-    let result = foodlib::compile_pdf(latex).await;
+    let result = foodlib::export::compile_pdf(latex).await;
 
     match result {
         Ok(recipe) => {
