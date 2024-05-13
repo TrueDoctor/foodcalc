@@ -121,6 +121,24 @@ impl FoodBase {
         records.ok()
     }
 
+    pub async fn get_event(&self, id: i32) -> Option<Event> {
+        let records = sqlx::query_as!(
+            Event,
+            r#" SELECT event_id as "event_id!",
+                    event_name as "event_name!",
+                    events.comment as "comment",
+                    budget as "budget"
+                FROM events
+                WHERE event_id = $1
+            "#,
+            id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await;
+
+        records.ok()
+    }
+
     pub async fn get_event_recipe_ingredients(
         &self,
         event_id: i32,

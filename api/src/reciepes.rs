@@ -1,6 +1,11 @@
-use axum::{http::StatusCode, response::IntoResponse, routing::{delete, get, post, put}, Router};
+use axum::{
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{delete, get, post, put},
+    Router,
+};
 
-pub fn router() -> Router {
+pub fn router() -> Router<crate::ApiState> {
     Router::new()
         .route("/", get(list_reciepes))
         .route("/", put(add_reciepe))

@@ -305,6 +305,29 @@ impl FoodBase {
         Ok(())
     }
 
+    pub async fn remove_meal_by_reference(&self, event_id: i32, recipe_id: i32, place_id: i32, start_time: NaiveDateTime) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+            DELETE FROM event_meals
+            WHERE
+                event_id = $1 AND
+                recipe_id = $2 AND
+                place_id = $3 AND
+                start_time = $4
+            "#,
+            event_id,
+            recipe_id,
+            place_id,
+            start_time,
+        )
+        .execute(&*self.pg_pool)
+        .await?
+        .rows_affected();
+
+        assert_eq!(count, 1);
+        Ok(())
+    }
+
     pub async fn update_event_meals(
         &self,
         event_id: i32,
