@@ -9,7 +9,11 @@ use foodlib::Event;
 use serde::{Deserialize, Serialize};
 use sqlx::{
     postgres::types::PgMoney,
-    types::{chrono::NaiveDateTime, BigDecimal},
+    types::{
+        chrono::{NaiveDate, NaiveDateTime},
+        BigDecimal,
+    },
+    Encode,
 };
 
 use crate::ApiState;
@@ -177,9 +181,57 @@ async fn meal_update(
     return StatusCode::OK;
 }
 
+#[derive(Serialize, Deserialize)]
+struct IdAndName {
+    id: i32,
+    name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct APIDate {
+    start: i64,
+    end: i64,
+}
+#[derive(Serialize, Deserialize)]
+struct MealReturn {
+    event_id: i32,
+    recipe: IdAndName,
+    place: IdAndName,
+    date: APIDate,
+    weight: BigDecimal,
+    energy: BigDecimal,
+    price: BigDecimal,
+    servings: i32,
+    comment: Option<String>,
+}
 async fn meal_list(State(state): State<ApiState>, Path(event_id): Path<i32>) -> impl IntoResponse {
     let query = state.food_base.get_event_meals(event_id).await;
     if let Ok(meals) = query {
+        let meals: Vec<MealReturn> = meals
+            .into_iter()
+            .map(|meal| {
+                return MealReturn {
+                    event_id: event_id,
+                    recipe: IdAndName {
+                        id: meal.recipe_id,
+                        name: meal.name,
+                    },
+                    place: IdAndName {
+                        id: meal.place_id,
+                        name: meal.place,
+                    },
+                    date: APIDate {
+                        start: meal.start_time.timestamp_millis(),
+                        end: meal.start_time.timestamp_millis(),
+                    },
+                    weight: meal.weight,
+                    energy: meal.energy,
+                    price: meal.price.to_bigdecimal(2),
+                    servings: meal.servings,
+                    comment: meal.comment,
+                };
+            })
+            .collect();
         return (StatusCode::OK, Json(meals));
     } else {
         todo!()
