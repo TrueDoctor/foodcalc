@@ -1,8 +1,11 @@
 use axum::Router;
+use http::header::CONTENT_TYPE;
+use http::Method;
 use tokio::net::TcpListener;
 
 use foodlib::*;
 use std::env;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 mod events;
@@ -31,6 +34,11 @@ async fn main() {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST])
+        .allow_origin(Any)
+        .allow_headers([CONTENT_TYPE]);
+
     println!("Loading Routes");
     let app = Router::<ApiState>::new()
         .nest("/events", events::router())
@@ -38,7 +46,8 @@ async fn main() {
         .nest("/places", places::router())
         .nest("/reciepes", reciepes::router())
         .with_state(ApiState { food_base })
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        .layer(cors);
 
     println!("Setting up Webserver");
     let interface = &env::var("API_INTERFACE").expect("API_INTERFACE env var was not set");
