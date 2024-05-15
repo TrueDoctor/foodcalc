@@ -34,18 +34,18 @@ pub fn router() -> Router<crate::ApiState> {
 
 async fn list(State(state): State<ApiState>) -> impl IntoResponse {
     if let Ok(event_list) = state.food_base.get_events().await {
-        return (StatusCode::OK, Json(event_list));
+        (StatusCode::OK, Json(event_list)).into_response()
     } else {
-        todo!()
+        StatusCode::INTERNAL_SERVER_ERROR.into_response()
     }
 }
 
 // TODO: Also show Meals
 async fn show_event(State(state): State<ApiState>, Path(event_id): Path<i32>) -> impl IntoResponse {
     if let Some(event) = state.food_base.get_event(event_id).await {
-        return (StatusCode::OK, Json(event));
+        (StatusCode::OK, Json(event)).into_response()
     } else {
-        todo!()
+        StatusCode::NOT_FOUND.into_response()
     }
 }
 
@@ -58,9 +58,9 @@ async fn delete_event(
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 struct UpdateEventBody {
-    name: String,
+    event_name: String,
     comment: Option<String>,
-    budget: Option<f64>,
+    budget: Option<BigDecimal>,
 }
 
 async fn update_event(
@@ -68,17 +68,23 @@ async fn update_event(
     Path(event_id): Path<i32>,
     Json(body): Json<UpdateEventBody>,
 ) -> impl IntoResponse {
+    let budget: Option<PgMoney> = if body.budget.is_some() {
+        Some(PgMoney::from_bigdecimal(body.budget.unwrap(), 2).unwrap())
+    } else {
+        None
+    };
+
     let event = Event {
         event_id: event_id.clone(),
-        event_name: body.name.clone(),
+        event_name: body.event_name.clone(),
         comment: body.comment.clone(),
-        budget: body.budget.map(|b| PgMoney(b as i64)),
+        budget: budget,
     };
 
     if let Ok(result) = state.food_base.update_event(&event).await {
-        return (StatusCode::OK, Json(result));
+        (StatusCode::OK, Json(result)).into_response()
     } else {
-        todo!();
+        StatusCode::INTERNAL_SERVER_ERROR.into_response()
     }
 }
 
@@ -206,34 +212,38 @@ struct MealReturn {
 }
 async fn meal_list(State(state): State<ApiState>, Path(event_id): Path<i32>) -> impl IntoResponse {
     let query = state.food_base.get_event_meals(event_id).await;
-    if let Ok(meals) = query {
-        let meals: Vec<MealReturn> = meals
-            .into_iter()
-            .map(|meal| {
-                return MealReturn {
-                    event_id: event_id,
-                    recipe: IdAndName {
-                        id: meal.recipe_id,
-                        name: meal.name,
-                    },
-                    place: IdAndName {
-                        id: meal.place_id,
-                        name: meal.place,
-                    },
-                    date: APIDate {
-                        start: meal.start_time.timestamp_millis(),
-                        end: meal.start_time.timestamp_millis(),
-                    },
-                    weight: meal.weight,
-                    energy: meal.energy,
-                    price: meal.price.to_bigdecimal(2),
-                    servings: meal.servings,
-                    comment: meal.comment,
-                };
-            })
-            .collect();
-        return (StatusCode::OK, Json(meals));
-    } else {
-        todo!()
+    match query {
+        Ok(meals) => {
+            let meals: Vec<MealReturn> = meals
+                .into_iter()
+                .map(|meal| {
+                    return MealReturn {
+                        event_id: event_id,
+                        recipe: IdAndName {
+                            id: meal.recipe_id,
+                            name: meal.name,
+                        },
+                        place: IdAndName {
+                            id: meal.place_id,
+                            name: meal.place,
+                        },
+                        date: APIDate {
+                            start: meal.start_time.timestamp_millis(),
+                            end: meal.start_time.timestamp_millis(),
+                        },
+                        weight: meal.weight,
+                        energy: meal.energy,
+                        price: meal.price.to_bigdecimal(2),
+                        servings: meal.servings,
+                        comment: meal.comment,
+                    };
+                })
+                .collect();
+            (StatusCode::OK, Json(meals)).into_response()
+        }
+        Err(error) => {
+            println!("{:?}", error);
+            (StatusCode::INTERNAL_SERVER_ERROR).into_response()
+        }
     }
 }
