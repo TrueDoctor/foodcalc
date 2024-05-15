@@ -51,35 +51,42 @@
       #  }
       #);
       devShell = forAllSystems ( system:
-        let pkgs = import nixpkgs { inherit system overlays; };
+        let 
+          pkgs = import nixpkgs { inherit system overlays; };
+          toolchain = pkgs.rust-bin.stable.latest.default.override {
+            extensions = ["rust-src" "clippy" "rust-analyzer"];
+          };
+          buildInputs = with pkgs; [
+              openssl
+              expat
+              fontconfig
+              freetype
+              icu
+              graphite2
+              stdenv.cc.cc.lib
+              libpng
+              zlib
+
+              libGL
+              vulkan-loader
+              wayland
+              wayland-protocols
+              libxkbcommon
+          ];        
         in pkgs.mkShell {
           packages = [
             pkgs.bacon
             pkgs.sqlx-cli
           ];
           nativeBuildInputs = with pkgs; [
-            rustc
+            toolchain
             nodejs
             cargo
             pkg-config
          ];
-          buildInputs = with pkgs; [
-            openssl
-            expat
-            fontconfig
-            freetype
-            icu
-            graphite2
-            stdenv.cc.cc.lib
-            libpng
-            zlib
-
-            libGL
-            vulkan-loader
-            wayland
-            wayland-protocols
-            libxkbcommon
-          ];
+         inherit buildInputs;
+          
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
         }
       );
     };

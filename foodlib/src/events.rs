@@ -186,7 +186,12 @@ impl FoodBase {
         Ok(event)
     }
 
-    pub async fn add_event(&self, name: String, budget: Option<PgMoney>, comment: Option<String>) -> eyre::Result<Event> {
+    pub async fn add_event(
+        &self,
+        name: String,
+        budget: Option<PgMoney>,
+        comment: Option<String>,
+    ) -> eyre::Result<Event> {
         let event = sqlx::query_as!(
             Event,
             r#"

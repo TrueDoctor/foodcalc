@@ -42,7 +42,7 @@ async fn main() {
             if let Err(prices) = result {
                 println!("Error: {}", prices);
             }
-        },
+        }
         Commands::List(list) => {
             let _place_flag = list.place.as_ref();
             let _event_flag = list.event.as_ref();
@@ -260,7 +260,12 @@ async fn main() {
                     let start_time = dateparser::parse(start_time_ref).unwrap();
 
                     let meals = food_base
-                        .get_event_meal(event.event_id, recipe.recipe_id, start_time.naive_local(), meal.place.clone())
+                        .get_event_meal(
+                            event.event_id,
+                            recipe.recipe_id,
+                            start_time.naive_local(),
+                            meal.place.clone(),
+                        )
                         .await;
 
                     //TODO Implement time filter
@@ -700,7 +705,8 @@ async fn main() {
                         match &ingredient.ingredient_edit_type {
                             EditRecipeIngredientsType::Add(cli_ingredient) => {
                                 let amount = cli_ingredient.amount.as_str();
-                                let amount = if let Some(amount_tuple) = parse_package_size(amount) {
+                                let amount = if let Some(amount_tuple) = parse_package_size(amount)
+                                {
                                     amount_tuple
                                 } else {
                                     println!("Error: Invalid amount");
@@ -708,10 +714,9 @@ async fn main() {
                                 };
 
                                 let ingredient_ref = cli_ingredient.ingredient.as_str();
-                                let ingredient = food_base
-                                    .get_ingredient_from_string_reference(
-                                        ingredient_ref.to_string(),
-                                    );
+                                let ingredient = food_base.get_ingredient_from_string_reference(
+                                    ingredient_ref.to_string(),
+                                );
                                 let ingredient = if let Some(ingredient) = ingredient.await {
                                     ingredient
                                 } else {
@@ -728,20 +733,23 @@ async fn main() {
                                 match query.await {
                                     Ok(_) => {
                                         if cli.debug {
-                                            println!("Added {} of {} to Recipe", cli_ingredient.amount.as_str(), ingredient.name);
+                                            println!(
+                                                "Added {} of {} to Recipe",
+                                                cli_ingredient.amount.as_str(),
+                                                ingredient.name
+                                            );
                                         }
                                     }
                                     Err(error) => {
                                         println!("Error: {}", error)
                                     }
                                 };
-                            },
+                            }
                             EditRecipeIngredientsType::Remove(ingredient) => {
                                 let ingredient_ref = ingredient.ingredient.as_str();
-                                let ingredient = food_base
-                                    .get_ingredient_from_string_reference(
-                                        ingredient_ref.to_string(),
-                                    );
+                                let ingredient = food_base.get_ingredient_from_string_reference(
+                                    ingredient_ref.to_string(),
+                                );
                                 let ingredient = if let Some(ingredient) = ingredient.await {
                                     ingredient
                                 } else {
@@ -757,17 +765,21 @@ async fn main() {
                                 match query.await {
                                     Ok(_) => {
                                         if cli.debug {
-                                            println!("Removed Ingredient \"{}\" from Recipe", ingredient.name);
+                                            println!(
+                                                "Removed Ingredient \"{}\" from Recipe",
+                                                ingredient.name
+                                            );
                                         }
                                     }
                                     Err(error) => {
                                         println!("Error: {}", error)
                                     }
                                 };
-                            },
+                            }
                             EditRecipeIngredientsType::Amount(cli_ingredient) => {
                                 let amount = cli_ingredient.amount.as_str();
-                                let amount = if let Some(amount_tuple) = parse_package_size(amount) {
+                                let amount = if let Some(amount_tuple) = parse_package_size(amount)
+                                {
                                     amount_tuple
                                 } else {
                                     println!("Error: Invalid amount");
@@ -775,10 +787,9 @@ async fn main() {
                                 };
 
                                 let ingredient_ref = cli_ingredient.ingredient.as_str();
-                                let ingredient = food_base
-                                    .get_ingredient_from_string_reference(
-                                        ingredient_ref.to_string(),
-                                    );
+                                let ingredient = food_base.get_ingredient_from_string_reference(
+                                    ingredient_ref.to_string(),
+                                );
                                 let ingredient = if let Some(ingredient) = ingredient.await {
                                     ingredient
                                 } else {
@@ -795,14 +806,18 @@ async fn main() {
                                 match query.await {
                                     Ok(_) => {
                                         if cli.debug {
-                                            println!("Updated Amount for {} to {}", ingredient.name, cli_ingredient.amount.as_str());
+                                            println!(
+                                                "Updated Amount for {} to {}",
+                                                ingredient.name,
+                                                cli_ingredient.amount.as_str()
+                                            );
                                         }
                                     }
                                     Err(error) => {
                                         println!("Error: {}", error)
                                     }
                                 };
-                            },
+                            }
                         }
                     }
                     EditRecipeType::Steps(steps) => {
@@ -886,11 +901,9 @@ async fn main() {
                                     .into_iter()
                                     .filter(|step| step.step_id != original_step.step_id)
                                     .enumerate()
-                                    .map(|(i, step)| {
-                                        RecipeStep {
-                                            step_order: i as f64,
-                                            ..step
-                                        }
+                                    .map(|(i, step)| RecipeStep {
+                                        step_order: i as f64,
+                                        ..step
                                     })
                                     .collect::<Vec<_>>();
                             }
@@ -1207,7 +1220,7 @@ async fn main() {
                                 end_time.naive_local(),
                                 calories.into(),
                                 servings,
-                                meal.comment.clone()
+                                meal.comment.clone(),
                             );
 
                             match query.await {
@@ -1220,7 +1233,7 @@ async fn main() {
                                     println!("Error: {}", error)
                                 }
                             }
-                        },
+                        }
                         EditEventMealsType::Remove(meal) => {
                             let recipe_ref = meal.recipe.as_str();
                             let recipe = food_base
@@ -1255,7 +1268,7 @@ async fn main() {
                             //        println!("Error: {}", error)
                             //    }
                             //}
-                        },
+                        }
                         EditEventMealsType::Edit(meal) => {
                             let start_time = meal.start_time.as_str();
                             let start_time = dateparser::parse(start_time).unwrap().naive_local();

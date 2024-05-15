@@ -1,4 +1,10 @@
-use axum::{extract::State, http::StatusCode, response::{IntoResponse, Redirect}, routing::{get, post}, Form};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Redirect},
+    routing::{get, post},
+    Form,
+};
 use foodlib::{AuthContext, Credenitals};
 use maud::html;
 
@@ -12,7 +18,7 @@ pub(crate) fn login_router() -> axum::Router<MyAppState> {
 }
 
 pub async fn login_view(State(_state): State<MyAppState>) -> impl IntoResponse {
-    let html = html!  {
+    let html = html! {
         dialog class="dialog" open="open" id="login-dialog" {
             div class="flex items-center justify-center" {
                 form method="post" action="/auth/login" class="flex flex-col gap-1 justify-items-center justify-center h-full w-full" {
@@ -24,14 +30,17 @@ pub async fn login_view(State(_state): State<MyAppState>) -> impl IntoResponse {
         }
     };
 
-    ([("HX-Retarget", "#content"), ("HX-Reswap", "afterbegin")], html)
+    (
+        [("HX-Retarget", "#content"), ("HX-Reswap", "afterbegin")],
+        html,
+    )
 }
 
 async fn login_handler(
     mut auth: AuthContext,
     State(state): State<MyAppState>,
     Form(credentials): Form<Credenitals>,
-    ) -> Result<Redirect, StatusCode> {
+) -> Result<Redirect, StatusCode> {
     let user = state
         .db_connection
         .authenticate_user(credentials)

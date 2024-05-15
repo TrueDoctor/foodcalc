@@ -624,7 +624,7 @@ pub enum EditUserType {
     Promote,
 
     /// Demote the user from admin
-    Demote
+    Demote,
 }
 
 #[derive(Debug, Args)]
@@ -729,7 +729,7 @@ pub struct EditEventMealsAddCommand {
 
     /// End time of the meal
     pub end_time: String,
-    
+
     /// Location for giving out the meal
     pub location: i32,
 
