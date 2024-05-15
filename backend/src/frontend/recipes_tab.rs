@@ -93,9 +93,9 @@ pub async fn export_recipe_pdf(
     let energy = form.energy;
     let number_of_servings = form.number_of_servings;
 
-    let latex = state
+    let subrecipes = state
         .db_connection
-        .format_recipe_latex_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
+        .fetch_subrecipes_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
         .await
         .unwrap();
 
@@ -106,7 +106,10 @@ pub async fn export_recipe_pdf(
         .unwrap()
         .name;
 
-    let result = foodlib::export::compile_pdf(latex).await;
+    let result = state
+        .db_connection
+        .generate_recipes_typst(&subrecipes)
+        .await;
 
     match result {
         Ok(recipe) => {

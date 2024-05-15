@@ -171,8 +171,8 @@ impl FoodBase {
         subrecipe_markdown.join("\n")
     }
 
-    pub async fn generate_recipes_typst(&self, subrecipes: &[SubRecipe]) -> Vec<u8> {
-        crate::typst::export_recipes(subrecipes)
+    pub async fn generate_recipes_typst(&self, subrecipes: &[SubRecipe]) -> eyre::Result<Vec<u8>> {
+        crate::typst::export_recipes(subrecipes, self).await
     }
 
     pub async fn format_subrecipes_latex(&self, subrecipes: Vec<SubRecipe>) -> String {

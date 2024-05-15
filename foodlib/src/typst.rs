@@ -6,17 +6,22 @@ use sqlx::postgres::types::PgInterval;
 use typst::{eval::Tracer, foundations::Smart};
 use typst_as_library::TypstWrapperWorld;
 
-fn create_pdf(text: String) -> Vec<u8> {
-    let world = TypstWrapperWorld::new("./".to_owned(), text);
+fn create_pdf(text: String) -> eyre::Result<Vec<u8>> {
+    let world = TypstWrapperWorld::new("./".to_owned(), text.clone());
 
     let mut tracer = Tracer::default();
-    let document = typst::compile(&world, &mut tracer).expect("Error compiling typst");
-    let pdf = typst_pdf::pdf(&document, Smart::Auto, None);
-    pdf
+    let document = typst::compile(&world, &mut tracer)
+        .map_err(|e| eyre::eyre!("encountered error: {} in:\n{}", e[0].message, text))?;
+    Ok(typst_pdf::pdf(&document, Smart::Auto, None))
 }
 
-pub(crate) fn export_recipes(subrecipes: &[SubRecipe]) -> Vec<u8> {
-    create_pdf("foo".into())
+pub(crate) async fn export_recipes(
+    subrecipes: &[SubRecipe],
+    db: &FoodBase,
+) -> eyre::Result<Vec<u8>> {
+    let typst = format_recipe_typst(subrecipes, db).await?;
+    println!("{}", &typst);
+    create_pdf(typst)
 }
 
 /* #recipe("Rezeptname", "22.04.2024 11:00",
@@ -28,14 +33,14 @@ pub(crate) fn export_recipes(subrecipes: &[SubRecipe]) -> Vec<u8> {
 
 async fn format_recipe_typst(subrecipes: &[SubRecipe], db: &FoodBase) -> eyre::Result<String> {
     let mut preamble = include_str!("../templates/recipe.typ").to_string();
-    let mut keys = subrecipes
+    let keys = subrecipes
         .iter()
         .map(|sr| sr.subrecipe_id)
         .collect::<HashSet<i32>>();
 
     for subrecipe_id in keys {
         let ingredients: Vec<_> = subrecipes
-            .into_iter()
+            .iter()
             .filter(|sr| sr.subrecipe_id == subrecipe_id)
             .collect();
         let steps = db.get_recipe_steps(subrecipe_id).await.unwrap_or_default();
@@ -66,21 +71,21 @@ fn format_subrecipe(
         s.replace('_', " ")
     }
     use std::fmt::Write;
-    writeln!(text, "#recipe({title},\"22.04.2024 11:00\",")?;
-    writeln!(text, "(\"subrecipes\": ")?;
+    writeln!(text, "#recipe(\"{title}\",\"22.04.2024 11:00\",")?;
+    writeln!(text, "(\"subrecipes\":( ")?;
     for ingredient in meta_ingredients {
         writeln!(
             text,
-            r#""{}":"{}","#,
+            r#"("{}",{}),"#,
             escape_underscore(&ingredient.ingredient),
             ingredient.weight
         )?;
     }
-    writeln!(text, "), (\"ingredients\": ")?;
+    writeln!(text, "), \"ingredients\": (")?;
     for ingredient in ingredients {
         writeln!(
             text,
-            r#""{}":"{}","#,
+            r#"("{}",{}),"#,
             escape_underscore(&ingredient.ingredient),
             ingredient.weight
         )?;
@@ -92,7 +97,7 @@ fn format_subrecipe(
         }
         writeln!(
             text,
-            r#"("title": "{}", "desc":{}, "duration": ("fix":{:.3},"var":{:.3})),"#,
+            r#"("title": "{}", "desc":"{}", "duration": ("fix":{:.3},"var":{:.3})),"#,
             step.step_name,
             step.step_description,
             to_minutes(&step.fixed_duration),
