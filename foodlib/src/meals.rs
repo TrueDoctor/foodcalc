@@ -88,7 +88,13 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_event_meal(&self, event_id: i32, recipe_id: i32, start_time: NaiveDateTime, place_id: i32) -> eyre::Result<Vec<Meal>> {
+    pub async fn get_event_meal(
+        &self,
+        event_id: i32,
+        recipe_id: i32,
+        start_time: NaiveDateTime,
+        place_id: i32,
+    ) -> eyre::Result<Vec<Meal>> {
         let records = sqlx::query_as!(
             Meal,
             r#" SELECT
@@ -305,7 +311,13 @@ impl FoodBase {
         Ok(())
     }
 
-    pub async fn remove_meal_by_reference(&self, event_id: i32, recipe_id: i32, place_id: i32, start_time: NaiveDateTime) -> eyre::Result<()> {
+    pub async fn remove_meal_by_reference(
+        &self,
+        event_id: i32,
+        recipe_id: i32,
+        place_id: i32,
+        start_time: NaiveDateTime,
+    ) -> eyre::Result<()> {
         let count = sqlx::query!(
             r#"
             DELETE FROM event_meals

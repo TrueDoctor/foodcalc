@@ -89,11 +89,7 @@ impl FoodBase {
         Ok(user)
     }
 
-    pub async fn update_password(
-        &self,
-        id: i64,
-        password: String,
-    ) -> Result<User, sqlx::Error> {
+    pub async fn update_password(&self, id: i64, password: String) -> Result<User, sqlx::Error> {
         let password_hash = bcrypt::hash(password, 12).unwrap();
 
         let user = sqlx::query_as!(
@@ -167,11 +163,7 @@ impl FoodBase {
         Ok(())
     }
 
-    pub async fn change_username (
-        &self,
-        id: i64,
-        username: String,
-    ) -> Result<User, sqlx::Error> {
+    pub async fn change_username(&self, id: i64, username: String) -> Result<User, sqlx::Error> {
         let user = sqlx::query_as!(
             User,
             r#"
@@ -188,11 +180,7 @@ impl FoodBase {
         Ok(user)
     }
 
-    pub async fn change_email (
-        &self,
-        id: i64,
-        email: String,
-    ) -> Result<User, sqlx::Error> {
+    pub async fn change_email(&self, id: i64, email: String) -> Result<User, sqlx::Error> {
         let user = sqlx::query_as!(
             User,
             r#"
