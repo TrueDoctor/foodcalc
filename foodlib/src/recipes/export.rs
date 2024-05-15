@@ -165,34 +165,7 @@ impl FoodBase {
                 .map(|ingredient| ingredient.weight.clone())
                 .sum();
 
-            for ingredient in ingredients {
-                text.push_str(&format!(
-                    "* {:.3}kg {}\n",
-                    ingredient.weight, ingredient.ingredient
-                ));
-            }
-
-            if !steps.is_empty() {
-                for (i, step) in steps.into_iter().enumerate() {
-                    pub(crate) fn to_minutes(duration: PgInterval) -> f64 {
-                        duration.microseconds as f64 / 1_000_000. / 60.
-                    }
-                    let fixed_duration = to_minutes(step.fixed_duration);
-                    let duration_per_kg = to_minutes(step.duration_per_kg);
-                    let scaled_duration = duration_per_kg * weight.to_f64().unwrap_or_default();
-                    let duration = fixed_duration + scaled_duration;
-
-                    text.push_str(&format!(
-                        "## {}. {} ({:.3} + {:.3} = {:.3} min)\n{}\n",
-                        i + 1,
-                        step.step_name,
-                        fixed_duration,
-                        scaled_duration,
-                        duration,
-                        step.step_description
-                    ));
-                }
-            }
+            format_recipe_markdown(ingredients, &mut text, steps, weight);
             subrecipe_markdown.push(text);
         }
         subrecipe_markdown.join("\n")
@@ -359,5 +332,41 @@ impl FoodBase {
         }
         writeln!(text, "\\printrecipe{{{title}}}")?;
         Ok(())
+    }
+}
+
+fn format_recipe_markdown(
+    ingredients: Vec<&SubRecipe>,
+    text: &mut String,
+    steps: Vec<RecipeStep>,
+    weight: BigDecimal,
+) {
+    for ingredient in ingredients {
+        text.push_str(&format!(
+            "* {:.3}kg {}\n",
+            ingredient.weight, ingredient.ingredient
+        ));
+    }
+
+    if !steps.is_empty() {
+        for (i, step) in steps.into_iter().enumerate() {
+            pub(crate) fn to_minutes(duration: PgInterval) -> f64 {
+                duration.microseconds as f64 / 1_000_000. / 60.
+            }
+            let fixed_duration = to_minutes(step.fixed_duration);
+            let duration_per_kg = to_minutes(step.duration_per_kg);
+            let scaled_duration = duration_per_kg * weight.to_f64().unwrap_or_default();
+            let duration = fixed_duration + scaled_duration;
+
+            text.push_str(&format!(
+                "## {}. {} ({:.3} + {:.3} = {:.3} min)\n{}\n",
+                i + 1,
+                step.step_name,
+                fixed_duration,
+                scaled_duration,
+                duration,
+                step.step_description
+            ));
+        }
     }
 }
