@@ -15,8 +15,9 @@ pub async fn home_view(State(state): State<MyAppState>) -> Markup {
     html! {
         head {
             title { "Foodbase" }
-            link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x))) {};
+            link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x))) {}
             script src="https://unpkg.com/htmx.org@1.9.6" {}
+            script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/debug.js" {}
         }
         body class="
             bg-light-bg-light text-gray-800

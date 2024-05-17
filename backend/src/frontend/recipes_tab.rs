@@ -47,6 +47,7 @@ pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameter
         .iter()
         .filter(|x| x.name.to_lowercase().contains(&query));
 
+    // (recipe_add_form())
     html! {
         (recipe_add_form())
         @for recipe in filtered_recipes {
@@ -125,16 +126,7 @@ pub async fn export_recipe_pdf(
         }
         Err(error) => {
             log::error!("Failed to save recipe export: {}", error);
-            Err(html! {
-                div id="error" class="flex flex-col items-center justify-center text-red-500" {
-                    div {
-                        h1 { "Error" }
-                        p { "Failed to save recipe export" }
-                        p { (error) }
-                        button class="btn btn-primary" hx-get="/recipes" hx-target="#content"  { "Back" }
-                    }
-                }
-            })
+            Err(html_error("Failed to save recipe export"))
         }
     }
 }
@@ -233,19 +225,24 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
                     w-full
                     " {
                     input class="grow text h-full" type="search" placeholder="Search for recipe" id="search" name="search" autocomplete="off"
-                        autofocus="autofocus" hx-post="/recipes/search" hx-trigger="keyup changed delay:20ms, search"
+                        autofocus="autofocus" hx-post="/recipes/search" hx-trigger="keyup changed delay:100ms, search"
                         hx-target="#search-results" hx-indicator=".htmx-indicator";
 
                 }
                 table class="w-full text-inherit table-auto object-center" {
                     // We add extra table headers to account for the buttons
                     thead { tr { th { "Name" } th { "Energy" } th { "Comment" }  th {} th {} th {} th {}} }
-                    tbody id="search-results" {
-                        (recipe_add_form())
-                        @for recipe in recipes.iter() {
-                            (format_recipe(recipe))
+                    form hx-post="/recipes" hx-target="#recipes"  class="w-full" {
+                        tbody id="search-results"  {
+                            (recipe_add_form())
+                            @for recipe in recipes.iter() {
+                                (format_recipe(recipe))
+                            }
                         }
-                }
+                    }
+                    span class="htmx-indicator" {
+                        "Searching..."
+                    }
                 }
             }
         }
@@ -254,13 +251,11 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
 
 fn recipe_add_form() -> Markup {
     html! {
-            form hx-post="/recipes" hx-target="#recipes"  class="w-full" {
-            tr  { td {  }
-                td { input class="grow text" type="text" name="name";}
-                td { input class="grow text" type="text" name="comment";}
-                td { button class="btn btn-primary" type="submit"  { "Add" } }
-                td {} td {} td { div id="dialog"; }
-            }
+        tr  { td {  }
+            td { input class="grow text" type="text" name="name";}
+            td { input class="grow text" type="text" name="comment";}
+            td { button class="btn btn-primary" type="submit"  { "Add" } }
+            td {} td {} td { div id="dialog"; }
         }
     }
 }
