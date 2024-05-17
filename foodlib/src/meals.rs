@@ -88,7 +88,7 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_event_meal(&self, meal_id: i32) -> eyre::Result<Vec<Meal>> {
+    pub async fn get_event_meal(&self, meal_id: i32) -> eyre::Result<Meal> {
         let records = sqlx::query_as!(
             Meal,
             r#" SELECT
@@ -102,7 +102,7 @@ impl FoodBase {
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
              round(sum(weight),2) as "weight!",
-             round(sum(energy) / event_meals.servings,0) as "energy!",
+             (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
              sum(price) as "price!",
              event_meals.servings as "servings!"
 
@@ -115,7 +115,7 @@ impl FoodBase {
             ORDER BY event_meals.start_time "#,
             meal_id,
         )
-        .fetch_all(&*self.pg_pool)
+        .fetch_one(&*self.pg_pool)
         .await?;
         Ok(records)
     }
@@ -134,7 +134,7 @@ impl FoodBase {
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
              round(sum(weight),2) as "weight!",
-             round(sum(energy) / event_meals.servings,0) as "energy!",
+             (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
              sum(price) as "price!",
              event_meals.servings as "servings!"
 
