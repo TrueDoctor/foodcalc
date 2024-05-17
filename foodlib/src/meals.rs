@@ -275,20 +275,14 @@ impl FoodBase {
         Ok(())
     }
 
-    pub async fn remove_meal(&self, meal: Meal) -> eyre::Result<()> {
+    pub async fn remove_meal(&self, meal_id: i32) -> eyre::Result<()> {
         let count = sqlx::query!(
             r#"
             DELETE FROM event_meals
             WHERE
-                event_id = $1 AND
-                recipe_id = $2 AND
-                place_id = $3 AND
-                start_time = $4
+                meal_id = $1
             "#,
-            meal.event_id,
-            meal.recipe_id,
-            meal.place_id,
-            meal.start_time,
+            meal_id
         )
         .execute(&*self.pg_pool)
         .await?

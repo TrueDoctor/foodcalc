@@ -256,7 +256,7 @@ impl FoodBase {
         recipe_id: i32,
         ingredient_id: i32,
         amount: BigDecimal,
-        unit: Unit,
+        unit: i32,
     ) -> eyre::Result<()> {
         let count = sqlx::query!(
             r#"
@@ -267,7 +267,7 @@ impl FoodBase {
             recipe_id,
             ingredient_id,
             amount,
-            unit.unit_id,
+            unit,
         )
         .execute(&*self.pg_pool)
         .await?;

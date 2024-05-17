@@ -147,17 +147,8 @@ pub struct InfoRecipeCommand {
 
 #[derive(Debug, Args)]
 pub struct InfoMealCommand {
-    /// Event to show (use ID or name)
-    pub event_ref: String,
-
-    /// Recipe to show (use ID or name)
-    pub recipe_ref: String,
-
-    /// Start time
-    pub start_time: String,
-
-    /// Place
-    pub place: i32,
+    /// Meal ID
+    pub meal_id: i32,
 }
 
 #[derive(Debug, Args)]
@@ -739,26 +730,14 @@ pub struct EditEventMealsAddCommand {
 
 #[derive(Debug, Args)]
 pub struct EditEventMealsRemoveCommand {
-    /// Recipe to add (use ID or name)
-    pub recipe: String,
-
-    /// Start time of the meal
-    pub start_time: String,
-
-    /// Place
-    pub place: i32,
+    /// Meal ID
+    pub meal_id: i32,
 }
 
 #[derive(Debug, Args)]
 pub struct EditEventMealsEditCommand {
-    /// Recipe to add (use ID or name)
-    pub recipe: String,
-
-    /// Start time of the meal
-    pub start_time: String,
-
-    /// Place
-    pub place: i32,
+    /// Meal ID
+    pub meal_id: i32,
 
     #[clap(long, short)]
     /// New recipe of the meal

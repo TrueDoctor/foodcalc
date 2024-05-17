@@ -118,7 +118,7 @@ pub async fn handle_ingredient_change(
             data.recipe_id,
             data.ingredient_id,
             data.ingredient_amount.clone(),
-            unit,
+            unit.unit_id,
         )
         .await
         .unwrap_or_else(|_| {
