@@ -1,5 +1,6 @@
 use super::LOGIN_URL;
-use axum::extract::State;
+use axum::extract::{Host, State};
+use foodlib::{AuthContext, User};
 use maud::{html, Markup};
 
 use crate::{
@@ -11,7 +12,20 @@ pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
     axum::Router::new().route("/", axum::routing::get(home_view))
 }
 
-pub async fn home_view(State(state): State<MyAppState>) -> Markup {
+pub async fn home_view(mut auth: AuthContext, host: Host, state: State<MyAppState>) -> Markup {
+    let (host, _) = host.0.split_once(':').unwrap_or_default();
+    if host == "127.0.0.1" || host == "localhost" {
+        let user = User {
+            username: "test".into(),
+            id: 0,
+            is_admin: true,
+            // TODO: replace this with a better way to handle this
+            password_hash: String::from("password"),
+            ..Default::default()
+        };
+        auth.login(&user).await.unwrap();
+        log::info!("logged in test user");
+    }
     html! {
         head {
             title { "Foodbase" }
@@ -24,7 +38,7 @@ pub async fn home_view(State(state): State<MyAppState>) -> Markup {
             dark:bg-dark-bg-dark dark:text-gray-100" {
             div {
                 (navbar())
-                (content(State(state)).await)
+                (content(state).await)
             }
         }
     }
