@@ -20,7 +20,6 @@ pub(crate) async fn export_recipes(
     db: &FoodBase,
 ) -> eyre::Result<Vec<u8>> {
     let typst = format_recipe_typst(subrecipes, db).await?;
-    println!("{}", &typst);
     create_pdf(typst)
 }
 
