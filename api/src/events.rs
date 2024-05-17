@@ -46,8 +46,8 @@ async fn show_event(State(state): State<ApiState>, Path(event_id): Path<i32>) ->
 }
 
 async fn delete_event(
-    State(state): State<ApiState>,
-    Path(event_id): Path<i32>,
+    State(_state): State<ApiState>,
+    Path(_event_id): Path<i32>,
 ) -> impl IntoResponse {
     todo!()
 }
@@ -97,7 +97,7 @@ async fn meal_add(
     Path(event_id): Path<i32>,
     Json(body): Json<MealBody>,
 ) -> impl IntoResponse {
-    state
+    let _ = state
         .food_base
         .add_meal(
             event_id,
@@ -125,12 +125,15 @@ async fn meal_delete(
     Path(event_id): Path<i32>,
     Json(body): Json<MealBody>,
 ) -> impl IntoResponse {
-    state.food_base.remove_meal_by_reference(
-        event_id,
-        body.recipe,
-        body.place,
-        NaiveDateTime::from_timestamp_millis(body.start).unwrap(),
-    );
+    let _ = state
+        .food_base
+        .remove_meal_by_reference(
+            event_id,
+            body.recipe,
+            body.place,
+            NaiveDateTime::from_timestamp_millis(body.start).unwrap(),
+        )
+        .await;
     StatusCode::OK
 }
 
