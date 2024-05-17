@@ -15,17 +15,17 @@ pub fn router() -> Router<crate::ApiState> {
 }
 
 async fn add() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn list() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn show_ingredient() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn delete_ingredient() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }

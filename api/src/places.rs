@@ -15,21 +15,21 @@ pub fn router() -> Router<crate::ApiState> {
 }
 
 async fn list_places() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn add_places() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn get_place() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn update_place() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn delete_place() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }

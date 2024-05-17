@@ -19,17 +19,17 @@ pub fn router() -> Router<crate::ApiState> {
 }
 
 async fn list_reciepes() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn add_reciepe() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn calc_reciepe() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }
 
 async fn update_reciepe() -> impl IntoResponse {
-    StatusCode::OK
+    StatusCode::NOT_IMPLEMENTED
 }

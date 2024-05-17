@@ -10,6 +10,7 @@ use tower_http::trace::TraceLayer;
 
 mod events;
 mod ingredients;
+mod mealcalc;
 mod places;
 mod reciepes;
 
@@ -45,6 +46,7 @@ async fn main() {
         .nest("/ingredients", ingredients::router())
         .nest("/places", places::router())
         .nest("/reciepes", reciepes::router())
+        .nest("/calc", mealcalc::router())
         .with_state(ApiState { food_base })
         .layer(TraceLayer::new_for_http())
         .layer(cors);

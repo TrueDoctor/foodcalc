@@ -9,11 +9,7 @@ use foodlib::Event;
 use serde::{Deserialize, Serialize};
 use sqlx::{
     postgres::types::PgMoney,
-    types::{
-        chrono::{NaiveDate, NaiveDateTime},
-        BigDecimal,
-    },
-    Encode,
+    types::{chrono::NaiveDateTime, BigDecimal},
 };
 
 use crate::ApiState;
@@ -60,7 +56,7 @@ async fn delete_event(
 struct UpdateEventBody {
     event_name: String,
     comment: Option<String>,
-    budget: Option<BigDecimal>,
+    budget: Option<i64>,
 }
 
 async fn update_event(
@@ -68,12 +64,9 @@ async fn update_event(
     Path(event_id): Path<i32>,
     Json(body): Json<UpdateEventBody>,
 ) -> impl IntoResponse {
-    let budget: Option<PgMoney> = if body.budget.is_some() {
-        Some(PgMoney::from_bigdecimal(body.budget.unwrap(), 2).unwrap())
-    } else {
-        None
-    };
+    let budget = body.budget.map(|budget| PgMoney(budget));
 
+    dbg!(budget);
     let event = Event {
         event_id: event_id.clone(),
         event_name: body.event_name.clone(),
