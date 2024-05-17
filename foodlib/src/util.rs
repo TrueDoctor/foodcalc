@@ -27,7 +27,7 @@ where
     S: serde::Serializer,
 {
     match money {
-        Some(money) => serializer.serialize_str(&money.0.to_string()),
+        Some(money) => serializer.serialize_i64(money.0),
         None => serializer.serialize_none(),
     }
 }
