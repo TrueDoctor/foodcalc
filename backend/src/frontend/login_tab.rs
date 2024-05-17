@@ -13,12 +13,16 @@ use crate::MyAppState;
 
 pub(crate) fn login_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/login", axum::routing::get(login_view))
+        .route("/login/form", axum::routing::any(login_view))
         .route("/login", post(login_handler))
         .route("/logout", get(logout_handler))
 }
+#[derive(Deserialize)]
+pub struct RedirectUrl {
+    protected: Option<String>,
+}
 
-pub async fn login_view(Form(redirect): Form<LoginData>) -> impl IntoResponse {
+pub async fn login_view(Form(redirect): Form<RedirectUrl>) -> impl IntoResponse {
     let html = html! {
         dialog class="dialog" open="open" id="login-dialog" {
             div class="flex items-center justify-center" {
@@ -40,8 +44,8 @@ pub async fn login_view(Form(redirect): Form<LoginData>) -> impl IntoResponse {
 #[derive(Deserialize)]
 pub struct LoginData {
     protected: Option<String>,
-    username: Option<String>,
-    password: Option<String>,
+    username: String,
+    password: String,
 }
 
 async fn login_handler(
@@ -49,9 +53,7 @@ async fn login_handler(
     State(state): State<MyAppState>,
     Form(data): Form<LoginData>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let (Some(username), Some(password)) = (data.username.clone(), data.password.clone()) else {
-        return Ok(login_view(Form(data)).await.into_response());
-    };
+    let (username, password) = (data.username, data.password);
     let user = state
         .db_connection
         .authenticate_user(Credenitals { username, password })
