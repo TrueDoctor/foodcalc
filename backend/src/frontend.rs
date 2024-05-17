@@ -15,7 +15,7 @@ mod inventories_tab;
 mod login_tab;
 mod recipes_tab;
 
-const LOGIN_URL: &str = "http://localhost:3000/auth/login";
+const LOGIN_URL: &str = "/auth/login";
 
 pub fn frontend_router() -> Router {
     let login_url = Arc::new(LOGIN_URL.into());
