@@ -48,6 +48,7 @@ pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameter
         .filter(|x| x.name.to_lowercase().contains(&query));
 
     html! {
+        (recipe_add_form())
         @for recipe in filtered_recipes {
             (format_recipe(recipe))
         }
@@ -239,24 +240,31 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
                 table class="w-full text-inherit table-auto object-center" {
                     // We add extra table headers to account for the buttons
                     thead { tr { th { "Name" } th { "Energy" } th { "Comment" }  th {} th {} th {} th {}} }
-                    form hx-post="/recipes" hx-target="#search-results" hx-swap="outerHTML" class="w-full" {
-                        tr  { td {  }
-                            td { input class="grow text" type="text" name="name";}
-                            td { input class="grow text" type="text" name="comment";}
-                            td { button class="btn btn-primary" type="submit"  { "Add" } }
-                            td {} td {} td { div id="dialog"; }
-                        }
-                    }
                     tbody id="search-results" {
+                        (recipe_add_form())
                         @for recipe in recipes.iter() {
                             (format_recipe(recipe))
                         }
-                    }
+                }
                 }
             }
         }
     }
 }
+
+fn recipe_add_form() -> Markup {
+    html! {
+            form hx-post="/recipes" hx-target="#recipes"  class="w-full" {
+            tr  { td {  }
+                td { input class="grow text" type="text" name="name";}
+                td { input class="grow text" type="text" name="comment";}
+                td { button class="btn btn-primary" type="submit"  { "Add" } }
+                td {} td {} td { div id="dialog"; }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct NewRecipe {
     name: String,
@@ -269,11 +277,8 @@ async fn add_recipe(state: State<MyAppState>, Form(recipe): Form<NewRecipe>) -> 
         comment: recipe.comment,
         recipe_id: -1,
     };
-    let form = Form(SearchParameters {
-        search: recipe.name.clone(),
-    });
     match state.db_connection.insert_recipe(&recipe).await {
-        Ok(_) => search(state, form).await,
+        Ok(recipe) => recipes_edit_tab::recipe_edit_view(state, Path(recipe.recipe_id)).await,
         Err(e) => html_error(&e.to_string()),
     }
 }
