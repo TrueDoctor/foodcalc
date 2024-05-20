@@ -15,7 +15,7 @@ mod inventories_tab;
 mod login_tab;
 mod recipes_tab;
 
-const LOGIN_URL: &str = "/auth/login/form";
+pub(crate) const LOGIN_URL: &str = "/auth/login/form";
 
 pub fn frontend_router() -> Router {
     let login_url = Arc::new(LOGIN_URL.into());
