@@ -14,6 +14,7 @@ pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
 
 pub async fn home_view(mut auth: AuthContext, host: Host, state: State<MyAppState>) -> Markup {
     let (host, _) = host.0.split_once(':').unwrap_or_default();
+    #[cfg(debug_assertions)]
     if host == "127.0.0.1" || host == "localhost" {
         let user = User {
             username: "test".into(),
