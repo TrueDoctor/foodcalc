@@ -2,11 +2,14 @@ use axum::extract::{Form, State};
 use maud::{html, Markup};
 use serde::Deserialize;
 
+mod event_detail_tab;
+
 use crate::MyAppState;
 
 pub(crate) fn events_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/", axum::routing::get(event_list))
+        .nest("/edit", event_detail_tab::event_detail_router())
         .route("/search", axum::routing::post(search))
 }
 
@@ -69,6 +72,7 @@ fn format_event(event: &foodlib::Event) -> Markup {
         tr id=(format!("event-{}", event.event_id)) {
             td { (event.event_name) }
             td class="text-center" { (event.comment.clone().unwrap_or_default()) }
+            td { button class="btn-primary" hx-target="#content" hx-get=(format!("/events/edit/{}", event.event_id)) {"Edit"} }
         }
     }
 }
