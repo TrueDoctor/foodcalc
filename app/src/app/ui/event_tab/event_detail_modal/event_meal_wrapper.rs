@@ -8,6 +8,8 @@ use crate::{
     db::{FoodBase, Meal, Place, Recipe},
 };
 
+use foodlib::typst::export_recipes;
+
 use super::EventDetailMessage;
 
 #[derive(Debug, Clone)]
@@ -46,15 +48,7 @@ impl MealWrapper {
     pub fn update(&mut self, message: MealWrapperMessage) -> Command<EventDetailMessage> {
         if let MealWrapperMessage::PrintMeal(Some(meal)) = message {
             let move_database = self.database.clone();
-            return Command::perform(
-                async move {
-                    move_database
-                        .save_recipe_export(meal.recipe_id, meal.weight)
-                        .await
-                        .unwrap_or_else(|e| log::error!("{e}"));
-                },
-                |_| EventDetailMessage::MealWrapperMessage(0, MealWrapperMessage::Nothing),
-            );
+            return Command::none();
         }
         Command::none()
     }

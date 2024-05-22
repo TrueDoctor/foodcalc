@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
+use crate::MyAppState;
 use axum::extract::{Form, Path, State};
 use axum::routing::{get, post};
 use axum_login::RequireAuthorizationLayer;
+use foodlib::typst::export_recipes;
 use foodlib::{Recipe, User};
 use maud::{html, Markup};
 use serde::Deserialize;
-
-use crate::MyAppState;
+use tokio::time::error::Elapsed;
 
 use crate::frontend::LOGIN_URL;
 mod recipes_edit_tab;
@@ -92,23 +93,37 @@ pub async fn export_recipe_pdf(
     let energy = form.energy;
     let number_of_servings = form.number_of_servings;
 
-    let subrecipes = state
+    let Ok(recipe_info) = state
         .db_connection
-        .fetch_subrecipes_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
+        .fetch_user_input_meal(
+            recipe_id,
+            number_of_servings as f64,
+            energy as u32,
+            "".to_string(),
+        )
         .await
-        .unwrap();
+    else {
+        return Err(html_error("Meal fetching failed"));
+    };
+    let title = recipe_info.name.to_owned();
+    let result = export_recipes(recipe_info).await;
+    // let subrecipes = state
+    //     .db_connection
+    //     .fetch_subrecipes_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
+    //     .await
+    //     .unwrap();
 
-    let title = state
-        .db_connection
-        .get_recipe(recipe_id)
-        .await
-        .unwrap()
-        .name;
+    // let title = state
+    //     .db_connection
+    //     .get_recipe(recipe_id)
+    //     .await
+    //     .unwrap()
+    //     .name;
 
-    let result = state
-        .db_connection
-        .generate_recipes_typst(&subrecipes)
-        .await;
+    // let result = state
+    //     .db_connection
+    //     .generate_recipes_typst(&subrecipes)
+    //     .await;
 
     match result {
         Ok(recipe) => {
