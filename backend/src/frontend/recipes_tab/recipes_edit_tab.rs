@@ -48,11 +48,19 @@ pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
             "/change-subrecipe",
             axum::routing::put(handle_subrecipe_change),
         )
+        .route("/change-name", axum::routing::put(handle_name_change))
         .route("/change-step", axum::routing::put(handle_step_change))
         .route(
             "/change-step-order",
             axum::routing::put(handle_step_order_change),
         )
+}
+
+#[derive(Deserialize, Debug)]
+pub struct UpdateNameHeader {
+    pub recipe_id: i32,
+    pub name: String,
+    pub comment: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -101,6 +109,28 @@ fn return_to_recipe_edit_error(recipe_id: i32) -> Markup {
             button class="btn btn-primary" hx-get=(format!("/recipes/edit/{}", recipe_id)) hx-swap="outerHTML" hx-target="#error" { "Return to Recipe Edit" }
         }
     }
+}
+
+pub async fn handle_name_change(
+    State(state): State<MyAppState>,
+    Form(data): axum::extract::Form<UpdateNameHeader>,
+) {
+    state
+        .db_connection
+        .update_recipe(&foodlib::Recipe {
+            recipe_id: data.recipe_id,
+            name: data.name.clone(),
+            comment: Some(data.comment.clone()),
+        })
+        .await
+        .unwrap_or_else(|_| {
+            log::warn!("Failed to update recipe {}", data.recipe_id);
+            Recipe {
+                recipe_id: -1,
+                name: String::new(),
+                comment: None,
+            }
+        });
 }
 
 pub async fn handle_ingredient_change(
@@ -483,7 +513,15 @@ pub async fn recipe_edit_view(
         div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full"{
             put
 
-            div id=("styling bullshit") class="mb-6" {
+            div id=("recipe-information") class="w-3/4" {
+                form hx-put="recipes/edit/change-name" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
+                    input type="hidden" name=("recipe_id") value=(recipe_id);
+                    input class="text" type="text" name="name" value=(state.db_connection.get_recipe(recipe_id).await.unwrap_or_default().name) required="required";
+                    textarea class="text" name="comment" required="required" { (state.db_connection.get_recipe(recipe_id).await.unwrap_or_default().comment.unwrap_or_default()) }
+                    button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
+            }
+
+            div id=("styling bullshit") class="mb-6 mt-6" {
                 form hx-put=(format!("recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" class="w-full flex flex-col items-center justify-center pb-4" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     button type="submit" class="btn btn-primary"  { "Add Subrecipe (+)" }
