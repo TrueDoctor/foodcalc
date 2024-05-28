@@ -89,6 +89,25 @@ impl FoodBase {
         Ok(user)
     }
 
+    pub async fn update_password(&self, id: i64, password: String) -> Result<User, sqlx::Error> {
+        let password_hash = bcrypt::hash(password, 12).unwrap();
+
+        let user = sqlx::query_as!(
+            User,
+            r#"
+                UPDATE users SET password_hash = $1
+                WHERE id = $2
+                RETURNING *
+            "#,
+            password_hash,
+            id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(user)
+    }
+
     pub async fn get_user(&self, id: i64) -> Result<User, sqlx::Error> {
         let user = sqlx::query_as!(
             User,
@@ -142,5 +161,56 @@ impl FoodBase {
         .await?;
 
         Ok(())
+    }
+
+    pub async fn change_username(&self, id: i64, username: String) -> Result<User, sqlx::Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+                UPDATE users SET username = $1
+                WHERE id = $2
+                RETURNING *
+            "#,
+            username,
+            id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(user)
+    }
+
+    pub async fn change_email(&self, id: i64, email: String) -> Result<User, sqlx::Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+                UPDATE users SET email = $1
+                WHERE id = $2
+                RETURNING *
+            "#,
+            email,
+            id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(user)
+    }
+
+    pub async fn change_is_admin(&self, id: i64, is_admin: bool) -> Result<User, sqlx::Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+                UPDATE users SET is_admin = $1
+                WHERE id = $2
+                RETURNING *
+            "#,
+            is_admin,
+            id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(user)
     }
 }

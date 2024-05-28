@@ -7,6 +7,7 @@ mod ingredients;
 mod inventories;
 mod meals;
 mod recipes;
+mod typst;
 mod users;
 mod util;
 

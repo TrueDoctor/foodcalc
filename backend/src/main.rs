@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, sync::Arc};
 
 use fern::colors::{Color, ColoredLevelConfig};
 use sqlx::postgres::PgPool;
@@ -13,7 +13,7 @@ mod frontend;
 
 use axum_login::{
     axum_sessions::{async_session::MemoryStore, SessionLayer},
-    AuthLayer, PostgresStore,
+    AuthLayer, PostgresStore, RequireAuthorizationLayer,
 };
 use rand::Rng;
 
@@ -72,6 +72,10 @@ async fn main() {
     // build our application with a route
     let app = axum::Router::new()
         .nest("/api", api::foodbase())
+        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
+            Arc::new(frontend::LOGIN_URL.into()),
+            Some(Arc::new("protected".into())),
+        ))
         .nest("/", frontend::frontend_router())
         .layer(auth_layer)
         .layer(session_layer)

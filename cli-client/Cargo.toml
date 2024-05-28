@@ -1,5 +1,5 @@
 [package]
-name = "cli-client"
+name = "foodctl"
 version = "0.0.1"
 edition = "2021"
 
@@ -12,3 +12,6 @@ foodlib = { path = "../foodlib" }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 tabled = "0.14.0"
+humantime = "2.1.0"
+dateparser = "0.2.1"
+

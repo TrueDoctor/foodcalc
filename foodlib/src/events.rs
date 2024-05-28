@@ -68,6 +68,7 @@ pub struct Store {
 }
 
 impl FoodBase {
+    //TODO Merge this with function below, as this currently excludes events without meals
     pub async fn get_events(&self) -> eyre::Result<Vec<Event>> {
         let records = sqlx::query_as!(
             Event,
@@ -85,6 +86,21 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn get_all_events(&self) -> eyre::Result<Vec<Event>> {
+        let records = sqlx::query_as!(
+            Event,
+            r#" SELECT event_id as "event_id!",
+                    event_name as "event_name!",
+                    events.comment as "comment",
+                    budget as "budget"
+                FROM events
+            "#
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
     pub async fn get_event_from_string_reference(&self, reference: String) -> Option<Event> {
         let event_id = reference.parse::<i32>().unwrap_or(-1);
         let records = sqlx::query_as!(
@@ -95,11 +111,27 @@ impl FoodBase {
                     budget as "budget"
                 FROM events LEFT JOIN event_meals USING (event_id)
                 WHERE event_id = $1 OR event_name = $2
-                GROUP BY event_id, event_name, events.comment, budget
-                ORDER BY MIN(start_time) DESC
             "#,
             event_id,
             reference
+        )
+        .fetch_one(&*self.pg_pool)
+        .await;
+
+        records.ok()
+    }
+
+    pub async fn get_event(&self, id: i32) -> Option<Event> {
+        let records = sqlx::query_as!(
+            Event,
+            r#" SELECT event_id as "event_id!",
+                    event_name as "event_name!",
+                    events.comment as "comment",
+                    budget as "budget"
+                FROM events
+                WHERE event_id = $1
+            "#,
+            id
         )
         .fetch_one(&*self.pg_pool)
         .await;
@@ -148,6 +180,28 @@ impl FoodBase {
                 RETURNING *
             "#,
             "",
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(event)
+    }
+
+    pub async fn add_event(
+        &self,
+        name: String,
+        budget: Option<PgMoney>,
+        comment: Option<String>,
+    ) -> eyre::Result<Event> {
+        let event = sqlx::query_as!(
+            Event,
+            r#"
+                INSERT INTO events (event_name, comment, budget)
+                VALUES ($1, $3, $2)
+                RETURNING *
+            "#,
+            name,
+            budget,
+            comment,
         )
         .fetch_one(&*self.pg_pool)
         .await?;

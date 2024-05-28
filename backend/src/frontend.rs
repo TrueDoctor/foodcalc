@@ -8,21 +8,23 @@ use foodlib::User;
 
 use crate::api::Router;
 
+mod events_tab;
 mod home;
 mod ingredients_tab;
 mod inventories_tab;
-mod recipes_tab;
 mod login_tab;
-mod events_tab;
+mod recipes_tab;
 
-const LOGIN_URL: &str = "http://localhost:3000/auth/login";
+pub(crate) const LOGIN_URL: &str = "/auth/login/form";
 
 pub fn frontend_router() -> Router {
     let login_url = Arc::new(LOGIN_URL.into());
     Router::new()
         .nest("/inventories", inventories_tab::inventories_router())
         .nest("/events", events_tab::events_router())
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(login_url, None))
+        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
+            login_url, None,
+        ))
         .nest("/", home::home_router())
         .nest("/ingredients", ingredients_tab::ingredients_router())
         .nest("/recipes", recipes_tab::recipes_router())

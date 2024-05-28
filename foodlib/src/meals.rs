@@ -8,6 +8,7 @@ use crate::FoodBase;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Meal {
+    pub meal_id: i32,
     pub event_id: i32,
     #[tabled(skip)]
     pub recipe_id: i32,
@@ -37,6 +38,7 @@ impl Default for Meal {
         let time = chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap();
         let start_time = NaiveDateTime::new(date, time);
         Self {
+            meal_id: Default::default(),
             event_id: Default::default(),
             recipe_id: Default::default(),
             name: Default::default(),
@@ -59,6 +61,7 @@ impl FoodBase {
             Meal,
             r#" SELECT
             event_meals.event_id as "event_id!",
+            event_meals.meal_id,
             event_meals.recipe_id as "recipe_id!",
              recipe as "name!",
              comment,
@@ -67,19 +70,16 @@ impl FoodBase {
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
              round(sum(weight),2) as "weight!",
-             round(sum(energy) / event_meals.servings,0) as "energy!",
+             (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
              sum(price) as "price!",
              event_meals.servings as "servings!"
 
             FROM event_ingredients
             INNER JOIN event_meals
-            ON event_ingredients.event_id=event_meals.event_id
-            AND event_ingredients.recipe_id = event_meals.recipe_id
-            AND event_ingredients.place_id = event_meals.place_id
-            AND event_ingredients.start_time = event_meals.start_time
+            ON event_ingredients.meal_id = event_meals.meal_id
 
             WHERE event_meals.event_id = $1
-            GROUP BY event_meals.event_id, event_meals.recipe_id, recipe, event_meals.place_id, place, event_meals.start_time, event_meals.servings
+            GROUP BY recipe, place, event_meals.servings, event_meals.meal_id
             ORDER BY event_meals.start_time "#,
             event_id
         )
@@ -88,10 +88,11 @@ impl FoodBase {
         Ok(records)
     }
 
-    pub async fn get_event_meal(&self, event_id: i32, recipe_id: i32) -> eyre::Result<Vec<Meal>> {
+    pub async fn get_event_meal(&self, meal_id: i32) -> eyre::Result<Meal> {
         let records = sqlx::query_as!(
             Meal,
             r#" SELECT
+            event_meals.meal_id,
             event_meals.event_id as "event_id!",
             event_meals.recipe_id as "recipe_id!",
              recipe as "name!",
@@ -101,24 +102,20 @@ impl FoodBase {
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
              round(sum(weight),2) as "weight!",
-             round(sum(energy) / event_meals.servings,0) as "energy!",
+             (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
              sum(price) as "price!",
              event_meals.servings as "servings!"
 
             FROM event_ingredients
             INNER JOIN event_meals
-            ON event_ingredients.event_id=event_meals.event_id
-            AND event_ingredients.recipe_id = event_meals.recipe_id
-            AND event_ingredients.place_id = event_meals.place_id
-            AND event_ingredients.start_time = event_meals.start_time
+            ON event_ingredients.meal_id=event_meals.meal_id
 
-            WHERE event_meals.event_id = $1 AND event_meals.recipe_id = $2
-            GROUP BY event_meals.event_id, event_meals.recipe_id, recipe, event_meals.place_id, place, event_meals.start_time, event_meals.servings
+            WHERE event_meals.meal_id = $1
+            GROUP BY recipe, place, event_meals.servings, event_meals.meal_id
             ORDER BY event_meals.start_time "#,
-            event_id,
-            recipe_id
+            meal_id,
         )
-        .fetch_all(&*self.pg_pool)
+        .fetch_one(&*self.pg_pool)
         .await?;
         Ok(records)
     }
@@ -127,6 +124,7 @@ impl FoodBase {
         let records = sqlx::query_as!(
             Meal,
             r#" SELECT
+            event_meals.meal_id,
             event_meals.event_id as "event_id!",
             event_meals.recipe_id as "recipe_id!",
              recipe as "name!",
@@ -136,18 +134,15 @@ impl FoodBase {
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
              round(sum(weight),2) as "weight!",
-             round(sum(energy) / event_meals.servings,0) as "energy!",
+             (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
              sum(price) as "price!",
              event_meals.servings as "servings!"
 
             FROM event_ingredients
             INNER JOIN event_meals
-            ON event_ingredients.event_id=event_meals.event_id
-            AND event_ingredients.recipe_id = event_meals.recipe_id
-            AND event_ingredients.place_id = event_meals.place_id
-            AND event_ingredients.start_time = event_meals.start_time
+            ON event_ingredients.meal_id=event_meals.meal_id
 
-            GROUP BY event_meals.event_id, event_meals.recipe_id, recipe, event_meals.place_id, place, event_meals.start_time, event_meals.servings
+            GROUP BY event_meals.meal_id, recipe, place, event_meals.servings
             ORDER BY event_meals.start_time "#
         )
         .fetch_all(&*self.pg_pool)
@@ -155,6 +150,11 @@ impl FoodBase {
         Ok(records)
     }
 
+    // Why is this not 2/3 functions?
+    // Why does the 'app' module have a copy of this function?
+    // WHY???
+    // I've added a functions for adding and deleting meals, so use those if you are not trying to
+    // update a single meal, this should probably be removed with the next refactor.
     pub async fn update_single_meal(
         &self,
         old_meal: Option<Meal>,
@@ -239,6 +239,85 @@ impl FoodBase {
 
             assert_eq!(count, 1);
         }
+        Ok(())
+    }
+
+    pub async fn add_meal(
+        &self,
+        event_id: i32,
+        recipe_id: i32,
+        place_id: i32,
+        start_time: NaiveDateTime,
+        end_time: NaiveDateTime,
+        energy: BigDecimal,
+        servings: i32,
+        comment: Option<String>,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+            INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            "#,
+            event_id,
+            recipe_id,
+            place_id,
+            start_time,
+            end_time,
+            energy,
+            servings,
+            comment,
+        )
+        .execute(&*self.pg_pool)
+        .await?
+        .rows_affected();
+
+        assert_eq!(count, 1);
+        Ok(())
+    }
+
+    pub async fn remove_meal(&self, meal_id: i32) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+            DELETE FROM event_meals
+            WHERE
+                meal_id = $1
+            "#,
+            meal_id
+        )
+        .execute(&*self.pg_pool)
+        .await?
+        .rows_affected();
+
+        assert_eq!(count, 1);
+        Ok(())
+    }
+
+    pub async fn remove_meal_by_reference(
+        &self,
+        event_id: i32,
+        recipe_id: i32,
+        place_id: i32,
+        start_time: NaiveDateTime,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+            DELETE FROM event_meals
+            WHERE
+                event_id = $1 AND
+                recipe_id = $2 AND
+                place_id = $3 AND
+                start_time = $4
+            "#,
+            event_id,
+            recipe_id,
+            place_id,
+            start_time,
+        )
+        .execute(&*self.pg_pool)
+        .await?
+        .rows_affected();
+
+        assert_eq!(count, 1);
         Ok(())
     }
 
