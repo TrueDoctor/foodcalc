@@ -8,7 +8,6 @@ use tower_http::trace::TraceLayer;
 
 use foodlib::{FoodBase, User};
 
-mod api;
 mod frontend;
 
 use axum_login::{
@@ -71,11 +70,6 @@ async fn main() {
 
     // build our application with a route
     let app = axum::Router::new()
-        .nest("/api", api::foodbase())
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
-            Arc::new(frontend::LOGIN_URL.into()),
-            Some(Arc::new("protected".into())),
-        ))
         .nest("/", frontend::frontend_router())
         .layer(auth_layer)
         .layer(session_layer)

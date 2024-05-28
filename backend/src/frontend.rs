@@ -5,8 +5,11 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum_login::RequireAuthorizationLayer;
 use foodlib::User;
+use maud::{html, Markup};
 
-use crate::api::Router;
+use crate::MyAppState;
+
+pub type Router = axum::Router<MyAppState>;
 
 mod events_tab;
 mod home;
@@ -46,4 +49,17 @@ async fn static_style() -> impl IntoResponse {
         .header("Content-Type", "text/css")
         .body(style.to_owned())
         .unwrap()
+}
+
+pub fn html_error(reason: &str, redirect: &str) -> Markup {
+    html! {
+        div id="error" class="flex flex-col items-center justify-center text-red-500" {
+            div {
+                h1 { "Error" }
+                p { "Failed to delete recipe" }
+                p { (reason) }
+                button class="btn btn-primary" hx-get="/recipes" hx-target="#content"  { "Back" }
+            }
+        }
+    }
 }

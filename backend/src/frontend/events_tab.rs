@@ -72,7 +72,7 @@ fn format_event(event: &foodlib::Event) -> Markup {
         tr id=(format!("event-{}", event.event_id)) {
             td { (event.event_name) }
             td class="text-center" { (event.comment.clone().unwrap_or_default()) }
-            td { button class="btn-primary" hx-target="#content" hx-get=(format!("/events/edit/{}", event.event_id)) {"Edit"} }
+            td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/{}", event.event_id)) {"Edit"} }
         }
     }
 }

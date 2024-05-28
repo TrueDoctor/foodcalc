@@ -141,10 +141,7 @@ impl FoodBase {
 
     pub async fn get_event_recipe_ingredients(
         &self,
-        event_id: i32,
-        recipe_id: i32,
-        place_id: i32,
-        start_time: NaiveDateTime,
+        meal_id: i32,
     ) -> eyre::Result<Vec<EventRecipeIngredient>> {
         let records = sqlx::query_as!(
             EventRecipeIngredient,
@@ -154,16 +151,10 @@ impl FoodBase {
                    round(sum(energy) /servings, 2) as "energy!",
                    sum(price) / servings as "price!"
                 FROM event_ingredients
-                WHERE event_id = $1
-                    AND recipe_id = $2
-                    AND place_id = $3
-                    AND start_time = $4
+                WHERE meal_id = $1
                 GROUP BY ingredient_id, ingredient, servings
                 ORDER BY sum(weight) DESC"#,
-            event_id,
-            recipe_id,
-            place_id,
-            start_time
+            meal_id
         )
         .fetch_all(&*self.pg_pool)
         .await?;

@@ -183,16 +183,7 @@ pub async fn delete_recipe_nqa(
 }
 
 fn html_error(reason: &str) -> Markup {
-    html! {
-        div id="error" class="flex flex-col items-center justify-center text-red-500" {
-            div {
-                h1 { "Error" }
-                p { "Failed to delete recipe" }
-                p { (reason) }
-                button class="btn btn-primary" hx-get="/recipes" hx-target="#content"  { "Back" }
-            }
-        }
-    }
+    crate::frontend::html_error(reason, "/recipes")
 }
 
 pub async fn delete_recipe(Path(recipe_id): Path<i32>) -> Markup {
