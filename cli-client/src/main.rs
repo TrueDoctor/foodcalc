@@ -154,6 +154,9 @@ async fn main() {
                             println!();
                         });
                 }
+                ListType::ShoppingTours(_) => todo!(),
+                ListType::SourceOverrides(_) => todo!(),
+                ListType::FoodPrep(_) => todo!(),
             }
         }
         Commands::Info(show_statement) => {
@@ -237,7 +240,7 @@ async fn main() {
                     let meals = food_base.get_event_meal(meal.meal_id).await;
 
                     match meals {
-                        Ok(meals) => todo!(),
+                        Ok(_) => todo!(),
                         Err(error) => {
                             println!("Error: {}", error);
                         }
@@ -370,7 +373,7 @@ async fn main() {
                     };
                     println!("{}", output);
                 }
-                CalcType::ShopingList(shoping_list) => {}
+                CalcType::ShoppingList(_) => todo!(),
             }
         }
         Commands::Add(add_data) => match &add_data.add_type {
@@ -1200,13 +1203,26 @@ async fn main() {
                                 }
                             }
                         }
-                        EditEventMealsType::Edit(_meal) => {
-                            todo!()
-
-                            //let meal = food_base
-                            //    .get_event_meal(event_id.event_id, recipe_ref, start_time, place)
-                            //    .await;
+                        EditEventMealsType::Edit(_meal) => todo!(),
+                    },
+                    EditEventType::Shopping(shopping_data) => match &shopping_data.edit_type {
+                        EditEventShoppingType::Add(add_data) => match &add_data.edit_type {
+                            EditEventShoppingAddType::Tour(_) => todo!(),
+                            EditEventShoppingAddType::SourceOverride(_) => todo!(),
+                            EditEventShoppingAddType::FoodPrep(_) => todo!(),
+                        },
+                        EditEventShoppingType::Delete(delete_data) => {
+                            match &delete_data.edit_type {
+                                EditEventShoppingDeleteType::Tour(_) => todo!(),
+                                EditEventShoppingDeleteType::SourceOverride(_) => todo!(),
+                                EditEventShoppingDeleteType::FoodPrep(_) => todo!(),
+                            }
                         }
+                        EditEventShoppingType::Edit(edit_data) => match &edit_data.edit_type {
+                            EditEventShoppingEditType::Tour(_) => todo!(),
+                            EditEventShoppingEditType::SourceOverride(_) => todo!(),
+                            EditEventShoppingEditType::FoodPrep(_) => todo!(),
+                        },
                     },
                 }
             }
