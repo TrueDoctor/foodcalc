@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::extract::{Form, Path, State};
 use axum::response::{IntoResponse, Response};
 use axum_login::RequireAuthorizationLayer;
-use foodlib::{Ingredient, User};
+use foodlib::{Ingredient, IngredientSource, User};
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -23,6 +23,7 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
         ))
         .route("/edit", axum::routing::get(edit_ingredient_form))
         .route("/delete/:id", axum::routing::get(delete_ingredient_form))
+        .route("/sources/:id", axum::routing::get(sources_table))
         .route("/search", axum::routing::post(search))
         .route("/", axum::routing::get(ingredients_view))
 }
@@ -167,6 +168,62 @@ async fn delete_ingredient_form(state: State<MyAppState>, id: Path<i32>) -> Mark
     }
 }
 
+async fn sources_table(state: State<MyAppState>, id: Path<i32>) -> Markup {
+    let Ok(sources) = state.get_ingredient_sources(Some(id.0)).await else {
+        return html_error("Failed to fetch ingredient_sources", "ingredients");
+    };
+    let dummy_ingredient = IngredientSource::default();
+    html! {
+        tr {
+            td colspan="6" {
+            table {
+                thead { tr {
+                    th { "ID" }
+                    th { "Store" }
+                    th { "Weight" }
+                    th { "Price" }
+                    th { "Url" }
+                }
+                tbody {
+                    (format_ingredient_source(&dummy_ingredient))
+                    @for source in sources {
+                        (format_ingredient_source(&source))
+                    }
+                }
+            }
+            }
+        }
+        }
+    }
+}
+
+fn format_ingredient_source(source: &IngredientSource) -> Markup {
+    let button = |text, id| {
+        html! {
+            button class="btn btn-primary" hx-post=(format!("/ingredients/{id}")) hx-include="closest tr" { (text) }
+        }
+    };
+
+    let (id, button) = if source.ingredient_source_id == -1 {
+        ("New".into(), button("Add", -1))
+    } else {
+        (
+            source.ingredient_source_id.to_string(),
+            button("Save", source.ingredient_source_id),
+        )
+    };
+    html! {
+        tr {
+            td { (&id) }
+            td {input class="text" name="store_id" value=(source.store_id); }
+            td {input class="text" name="package_size" value=(source.package_size);}
+            td {input class="text" name="price" type="number" value=(&(source.price.0 as f64 / 100.));}
+            td {input class="text" name="url" value=(source.url.clone().unwrap_or_default());}
+            td {(button)}
+        }
+    }
+}
+
 fn format_ingredient(ingredient: &Ingredient) -> Markup {
     html! {
         tr id=(format!("ingredient-{}", ingredient.ingredient_id)) {
@@ -174,13 +231,22 @@ fn format_ingredient(ingredient: &Ingredient) -> Markup {
             td { (ingredient.energy) }
             td class="text-center" { (ingredient.comment.as_ref().unwrap_or(&String::new())) }
             td {
-                button class="btn btn-primary" hx-get="/ingredients/edit" hx-target=(format!("#ingredient-{}", ingredient.ingredient_id)) hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Edit" }
+                button class="btn btn-primary"
+                hx-get="/ingredients/edit"
+                hx-target=(format!("#ingredient-{}", ingredient.ingredient_id))
+                hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Edit" }
             }
             td {
                 button class="btn btn-cancel"
                 hx-get=(format!("/ingredients/delete/{}", ingredient.ingredient_id))
-                hx-swap="beforebegin"
-                hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Delete" }
+                hx-swap="beforebegin" { "Delete" }
+            }
+            td {
+                button class="btn btn-primary"
+                hx-get=(format!("/ingredients/sources/{}", ingredient.ingredient_id))
+                hx-swap="afterend"
+                hx-target=(format!("#ingredient-{}", ingredient.ingredient_id))
+                { "Sources ▼" }
             }
         }
     }

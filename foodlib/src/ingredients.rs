@@ -144,6 +144,21 @@ pub struct IngredientSource {
     pub comment: Option<String>,
 }
 
+impl Default for IngredientSource {
+    fn default() -> Self {
+        IngredientSource {
+            ingredient_source_id: -1,
+            ingredient_id: -1,
+            store_id: 0,
+            package_size: 0.into(),
+            unit_id: 0,
+            price: PgMoney(0),
+            url: None,
+            comment: None,
+        }
+    }
+}
+
 pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
     use regex::Regex;
     let number_regex = Regex::new(r"^[0-9][0-9,\.]*").expect("failed to compile number regex");
@@ -474,6 +489,28 @@ impl FoodBase {
                 .unwrap_or_else(|e| log::error!("{e}"));
         }
         Ok(())
+    }
+    pub async fn get_ingredient_sources(
+        &self,
+        ingredient_id: Option<i32>,
+    ) -> eyre::Result<Vec<IngredientSource>> {
+        let records = match ingredient_id {
+            Some(id) => sqlx::query_as!(
+                IngredientSource,
+                r#" SELECT * FROM ingredient_sources WHERE ingredient_id = $1 ORDER BY ingredient_id "#,
+                id
+            )
+            .fetch_all(&*self.pg_pool)
+            .await?,
+            None => sqlx::query_as!(
+                IngredientSource,
+                r#" SELECT * FROM ingredient_sources ORDER BY ingredient_id "#,
+            )
+            .fetch_all(&*self.pg_pool)
+            .await?,
+        };
+
+        Ok(records)
     }
 
     pub async fn get_metro_ingredient_sources(
