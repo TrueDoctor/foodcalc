@@ -237,23 +237,7 @@ async fn main() {
                     let meals = food_base.get_event_meal(meal.meal_id).await;
 
                     match meals {
-                        Ok(meals) => match meals.len() {
-                            0 => {
-                                println!("No Meals found");
-                            }
-                            1 => {
-                                todo!();
-                            }
-                            _ => {
-                                println!("Multiple Meals found: ");
-                                meals.iter().for_each(|meal| {
-                                    println!(
-                                        "{} - {}, {} Servings",
-                                        meal.start_time, meal.end_time, meal.servings
-                                    );
-                                });
-                            }
-                        },
+                        Ok(meals) => todo!(),
                         Err(error) => {
                             println!("Error: {}", error);
                         }
@@ -386,6 +370,7 @@ async fn main() {
                     };
                     println!("{}", output);
                 }
+                CalcType::ShopingList(shoping_list) => {}
             }
         }
         Commands::Add(add_data) => match &add_data.add_type {
