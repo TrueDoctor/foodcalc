@@ -53,7 +53,9 @@ async fn static_style() -> impl IntoResponse {
 
 pub fn html_error(reason: &str, redirect: &str) -> Markup {
     html! {
-        div id="error" class="flex flex-col items-center justify-center text-red-500" {
+        dialog open="true"
+        id="error"
+        class="flex flex-col items-center justify-center text-red-500" {
             div {
                 h1 { "Error" }
                 p { "Failed to delete recipe" }
@@ -61,5 +63,6 @@ pub fn html_error(reason: &str, redirect: &str) -> Markup {
                 button class="btn btn-primary" hx-get="/recipes" hx-target="#content"  { "Back" }
             }
         }
+
     }
 }

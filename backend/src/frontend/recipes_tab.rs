@@ -208,32 +208,30 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
     };
 
     html! {
-        div id="recipes" class="flex flex-col items-center justify-center mb-16" {
-            div  class="w-3/4 flex flex-col items-center justify-center" {
-                div class="
-                    flex flex-row items-center justify-stretch
-                    mb-2 gap-5 h-10
-                    w-full
-                    " {
-                    input class="grow text h-full" type="search" placeholder="Search for recipe" id="search" name="search" autocomplete="off"
-                        autofocus="autofocus" hx-post="/recipes/search" hx-trigger="keyup changed delay:100ms, search"
-                        hx-target="#search-results" hx-indicator=".htmx-indicator";
+        div id="recipes"  {
+            div class="
+                flex flex-row items-center justify-stretch
+                mb-2 gap-5 h-10
+                w-full
+                " {
+                input class="grow text h-full" type="search" placeholder="Search for recipe" id="search" name="search" autocomplete="off"
+                    autofocus="autofocus" hx-post="/recipes/search" hx-trigger="keyup changed delay:100ms, search"
+                    hx-target="#search-results" hx-indicator=".htmx-indicator";
 
-                }
-                table class="w-full text-inherit table-auto object-center" {
-                    // We add extra table headers to account for the buttons
-                    thead { tr { th { "Name" } th { "Energy" } th { "Comment" }  th {} th {} th {} th {}} }
-                    form hx-post="/recipes" hx-target="#recipes"  class="w-full" {
-                        tbody id="search-results"  {
-                            (recipe_add_form())
-                            @for recipe in recipes.iter() {
-                                (format_recipe(recipe))
-                            }
+            }
+            table class="w-full text-inherit table-auto object-center" {
+                // We add extra table headers to account for the buttons
+                thead { tr { th { "Name" } th { "Energy" } th { "Comment" }  th {} th {} th {} th {}} }
+                form hx-post="/recipes" hx-target="#content"  class="w-full" {
+                    tbody id="search-results"  {
+                        (recipe_add_form())
+                        @for recipe in recipes.iter() {
+                            (format_recipe(recipe))
                         }
                     }
-                    span class="htmx-indicator" {
-                        "Searching..."
-                    }
+                }
+                span class="htmx-indicator" {
+                    "Searching..."
                 }
             }
         }
@@ -275,7 +273,7 @@ fn format_recipe(recipe: &foodlib::Recipe) -> Markup {
             td { (recipe.recipe_id) }
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
-            td { button class="btn btn-primary" type="button" hx-target="#recipes" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
+            td { button class="btn btn-primary" type="button" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
             td { button class="btn btn-cancel"  type="button" hx-target="next #dialog" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
             td { button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.recipe_id)) hx-swap="afterend" { "Export" } }
             td { div id="dialog"; }

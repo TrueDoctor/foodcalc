@@ -41,6 +41,11 @@ async fn event_form(state: State<MyAppState>, event_id: Path<i32>) -> Markup {
                 }
             }
         }
+        table class="w-full text-inherit table-auto object-center" {
+            thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} }  }
+            tbody {
+            }
+        }
     }
 }
 
@@ -124,7 +129,7 @@ fn format_event_meal(event_meal: &Meal) -> Markup {
             (format(event_meal.energy.to_f64().unwrap_or_default(), "kj"))
             (format(event_meal.weight.to_f64().unwrap_or_default() /  event_meal.servings as f64 * 100., "g"))
             (format(event_meal.price.0 as f64 / 100. / event_meal.servings as f64, "€"))
-            td { button hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ingredients per serving"} }
+            td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ingredients per serving"} }
         }
     }
 }

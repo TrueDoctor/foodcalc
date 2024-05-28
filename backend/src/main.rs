@@ -1,4 +1,4 @@
-use std::{env, sync::Arc};
+use std::{env, ops::Deref, sync::Arc};
 
 use fern::colors::{Color, ColoredLevelConfig};
 use sqlx::postgres::PgPool;
@@ -19,6 +19,14 @@ use rand::Rng;
 #[derive(Debug, Clone)]
 pub struct MyAppState {
     db_connection: FoodBase,
+}
+
+impl Deref for MyAppState {
+    type Target = FoodBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.db_connection
+    }
 }
 
 #[tokio::main]

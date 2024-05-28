@@ -47,8 +47,10 @@ pub async fn home_view(mut auth: AuthContext, host: Host, state: State<MyAppStat
 
 pub async fn content(State(state): State<MyAppState>) -> Markup {
     html! {
-        div id="content" {
-            (ingredients_view(State(state)).await)
+        div class="flex flex-col items-center justify-center mb-16" {
+            div id="content" class="w-3/4 flex flex-col items-center justify-center" {
+                (ingredients_view(State(state)).await)
+            }
         }
     }
 }
