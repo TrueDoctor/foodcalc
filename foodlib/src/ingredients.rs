@@ -596,6 +596,34 @@ impl FoodBase {
         .await
         .map_err(Into::into)
     }
+
+    pub async fn get_store_by_ref(&self, store_ref: String) -> eyre::Result<Store> {
+        if let Ok(store_id) = store_ref.parse::<i32>() {
+            let result = sqlx::query_as!(
+                Store,
+                r#"
+                    SELECT * FROM stores
+                    WHERE store_id = $1
+                "#,
+                store_id
+            )
+            .fetch_one(&*self.pg_pool)
+            .await;
+            Ok(result?)
+        } else {
+            let result = sqlx::query_as!(
+                Store,
+                r#"
+                    SELECT * FROM stores
+                    WHERE name = $1
+                "#,
+                store_ref
+            )
+            .fetch_one(&*self.pg_pool)
+            .await;
+            Ok(result?)
+        }
+    }
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Store {

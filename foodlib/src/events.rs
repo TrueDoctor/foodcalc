@@ -320,7 +320,20 @@ impl FoodBase {
         tour_id: i32,
         date: NaiveDateTime,
     ) -> eyre::Result<ShoppingTour> {
-        todo!()
+        let result = sqlx::query_as!(
+            ShoppingTour,
+            r#"
+                UPDATE shopping_tours
+                SET tour_date = $2 
+                WHERE tour_id = $1
+                RETURNING *
+            "#,
+            tour_id,
+            date,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
     }
 
     pub async fn update_event_shopping_tour_store(
@@ -328,7 +341,20 @@ impl FoodBase {
         tour_id: i32,
         store_id: i32,
     ) -> eyre::Result<ShoppingTour> {
-        todo!()
+        let result = sqlx::query_as!(
+            ShoppingTour,
+            r#"
+                UPDATE shopping_tours
+                SET store_id = $2 
+                WHERE tour_id = $1
+                RETURNING *
+            "#,
+            tour_id,
+            store_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
     }
 
     pub async fn get_event_food_prep(&self, event_id: i32) -> eyre::Result<Vec<FoodPrep>> {
