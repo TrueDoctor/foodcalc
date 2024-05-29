@@ -1,6 +1,7 @@
+use chrono::NaiveDateTime;
 use core::fmt::Display;
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::types::PgMoney, types::chrono::NaiveDateTime};
+use sqlx::postgres::types::PgMoney;
 use std::borrow::Cow;
 use tabled::Tabled;
 
@@ -61,10 +62,29 @@ impl Display for Place {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Store {
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
+pub struct FoodPrep {
+    pub prep_id: i32,
+    pub event_id: i32,
+    pub recipe_id: i32,
+    pub prep_date: NaiveDateTime,
+    #[tabled(display_with = "crate::util::display_optional")]
+    pub use_from: Option<NaiveDateTime>,
+    pub use_until: NaiveDateTime,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
+pub struct ShoppingTour {
+    pub tour_id: i32,
+    pub event_id: i32,
+    pub tour_date: NaiveDateTime,
     pub store_id: i32,
-    pub name: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
+pub struct SourceOverride {
+    event_id: i32,
+    ingredient_source_id: i32,
 }
 
 impl FoodBase {
@@ -141,10 +161,7 @@ impl FoodBase {
 
     pub async fn get_event_recipe_ingredients(
         &self,
-        event_id: i32,
-        recipe_id: i32,
-        place_id: i32,
-        start_time: NaiveDateTime,
+        meal_id: i32,
     ) -> eyre::Result<Vec<EventRecipeIngredient>> {
         let records = sqlx::query_as!(
             EventRecipeIngredient,
@@ -154,16 +171,10 @@ impl FoodBase {
                    round(sum(energy) /servings, 2) as "energy!",
                    sum(price) / servings as "price!"
                 FROM event_ingredients
-                WHERE event_id = $1
-                    AND recipe_id = $2
-                    AND place_id = $3
-                    AND start_time = $4
+                WHERE meal_id = $1
                 GROUP BY ingredient_id, ingredient, servings
                 ORDER BY sum(weight) DESC"#,
-            event_id,
-            recipe_id,
-            place_id,
-            start_time
+            meal_id
         )
         .fetch_all(&*self.pg_pool)
         .await?;
@@ -269,5 +280,151 @@ impl FoodBase {
         .fetch_one(&*self.pg_pool)
         .await?;
         Ok(records.price.unwrap_or(PgMoney(0)))
+    }
+
+    pub async fn get_event_shopping_tours(&self, event_id: i32) -> eyre::Result<Vec<ShoppingTour>> {
+        let records = sqlx::query_as!(
+            ShoppingTour,
+            "SELECT * FROM shopping_tours WHERE event_id=$1",
+            event_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
+    pub async fn add_event_shopping_tour(
+        &self,
+        event_id: i32,
+        store_id: i32,
+        date: NaiveDateTime,
+    ) -> eyre::Result<ShoppingTour> {
+        let tour = sqlx::query_as!(
+            ShoppingTour,
+            r#"
+                INSERT INTO public.shopping_tours (tour_id, event_id, tour_date, store_id) 
+                VALUES (DEFAULT, $1, $2, $3)
+                RETURNING *
+            "#,
+            event_id,
+            date,
+            store_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(tour)
+    }
+
+    pub async fn update_event_shopping_tour_date(
+        &self,
+        tour_id: i32,
+        date: NaiveDateTime,
+    ) -> eyre::Result<ShoppingTour> {
+        let result = sqlx::query_as!(
+            ShoppingTour,
+            r#"
+                UPDATE shopping_tours
+                SET tour_date = $2 
+                WHERE tour_id = $1
+                RETURNING *
+            "#,
+            tour_id,
+            date,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
+    }
+
+    pub async fn update_event_shopping_tour_store(
+        &self,
+        tour_id: i32,
+        store_id: i32,
+    ) -> eyre::Result<ShoppingTour> {
+        let result = sqlx::query_as!(
+            ShoppingTour,
+            r#"
+                UPDATE shopping_tours
+                SET store_id = $2 
+                WHERE tour_id = $1
+                RETURNING *
+            "#,
+            tour_id,
+            store_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
+    }
+
+    pub async fn get_event_food_prep(&self, event_id: i32) -> eyre::Result<Vec<FoodPrep>> {
+        let records = sqlx::query_as!(
+            FoodPrep,
+            "SELECT * FROM food_prep WHERE event_id=$1",
+            event_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
+    pub async fn add_event_food_prep(
+        &self,
+        event_id: i32,
+        recipe_id: i32,
+        prep_date: NaiveDateTime,
+        use_from: Option<NaiveDateTime>,
+        use_til: NaiveDateTime,
+    ) -> eyre::Result<FoodPrep> {
+        let query = sqlx::query_as!(
+            FoodPrep,
+            r#"
+                INSERT INTO public.food_prep (event_id, recipe_id, prep_date, use_from, use_until)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING *
+            "#,
+            event_id,
+            recipe_id,
+            prep_date,
+            use_from,
+            use_til
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(query)
+    }
+
+    pub async fn get_event_source_overrides(
+        &self,
+        event_id: i32,
+    ) -> eyre::Result<Vec<SourceOverride>> {
+        let records = sqlx::query_as!(
+            SourceOverride,
+            "SELECT * FROM event_source_overrides WHERE event_id=$1",
+            event_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
+    pub async fn add_event_source_override(
+        &self,
+        event_id: i32,
+        source_id: i32,
+    ) -> eyre::Result<SourceOverride> {
+        let source_override = sqlx::query_as!(
+            SourceOverride,
+            r#"
+                INSERT INTO public.event_source_overrides (event_id, ingredient_source_id) 
+                VALUES ($1, $2)
+                RETURNING *
+            "#,
+            event_id,
+            source_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(source_override)
     }
 }

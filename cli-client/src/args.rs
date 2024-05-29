@@ -1,6 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use sqlx::types::BigDecimal;
-use std::str::FromStr;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
@@ -43,6 +42,7 @@ pub enum Commands {
 // ---- List Commands ----
 #[derive(Debug, Args)]
 pub struct ListCommand {
+    #[clap(subcommand)]
     pub list_type: ListType,
 
     #[clap(short = 'p', long = "place")]
@@ -65,7 +65,7 @@ pub struct ListCommand {
     pub meal: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Subcommand)]
 pub enum ListType {
     /// List all places
     Places,
@@ -84,22 +84,19 @@ pub enum ListType {
 
     /// List all users
     Users,
+    /// List all users
+    ShoppingTours(EventSpecifier),
+
+    /// List all users
+    SourceOverrides(EventSpecifier),
+
+    /// List all users
+    FoodPrep(EventSpecifier),
 }
 
-impl FromStr for ListType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "places" => Ok(ListType::Places),
-            "events" => Ok(ListType::Events),
-            "ingredients" => Ok(ListType::Ingredients),
-            "recipes" => Ok(ListType::Recipes),
-            "meals" => Ok(ListType::Meals),
-            "users" => Ok(ListType::Users),
-            _ => Err(format!("Unknown List Type: {}", s)),
-        }
-    }
+#[derive(Debug, Args, Clone)]
+pub struct EventSpecifier {
+    pub event_ref: String,
 }
 
 // ---- Info Commands ----
@@ -180,6 +177,9 @@ pub enum CalcType {
 
     /// Print a given Recipe
     Recipe(CalcRecipeCommand),
+
+    /// Prints a Shopping List
+    ShoppingList(CalcShoppingList),
 }
 
 #[derive(Debug, Args)]
@@ -216,6 +216,15 @@ pub struct CalcRecipeCommand {
     #[arg(short, long, default_value = "markdown")]
     // The Output Format
     pub format: String,
+}
+
+#[derive(Debug, Args)]
+pub struct CalcShoppingList {
+    /// Event Reference
+    pub event_ref: String,
+
+    /// Tour to calc
+    pub tour_id: u32,
 }
 
 // ----- Add Commands -----
@@ -665,6 +674,8 @@ pub enum EditEventType {
 
     /// Meals of an Event
     Meals(EditEventMealsCommand),
+    /// Shopping config
+    Shopping(EditEventShoppingCommand),
 }
 
 #[derive(Debug, Args)]
@@ -833,4 +844,129 @@ pub struct EditEventMealsEditCommentCommand {
     /// New comment of the meal
     #[clap(default_value = "")]
     pub comment: String,
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingCommand {
+    #[clap(subcommand)]
+    pub edit_type: EditEventShoppingType,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum EditEventShoppingType {
+    Add(EditEventShoppingAdd),
+    Delete(EditEventShoppingDelete),
+    Edit(EditEventShoppingEdit),
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingAdd {
+    #[clap(subcommand)]
+    pub edit_type: EditEventShoppingAddType,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum EditEventShoppingAddType {
+    Tour(EditEventShoppingAddTour),
+    SourceOverride(EditEventShoppingAddSourceOverride),
+    FoodPrep(EditEventShoppingAddFoodPrep),
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingAddTour {
+    pub date: String,
+    pub store: String,
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingAddSourceOverride {
+    pub source_id: u32,
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingAddFoodPrep {
+    pub recipe_ref: String,
+    pub prep_date: String,
+    pub use_start_date: Option<String>,
+    pub use_end_date: String,
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingDelete {
+    #[clap(subcommand)]
+    pub edit_type: EditEventShoppingDeleteType,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum EditEventShoppingDeleteType {
+    Tour(EditEventShoppingDeleteTour),
+    SourceOverride(EditEventShoppingDeleteSourceOverride),
+    FoodPrep(EditEventShoppingDeleteFoodPrep),
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingDeleteTour {
+    pub tour_id: u32,
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingDeleteSourceOverride {
+    pub ingredient_id: u32,
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingDeleteFoodPrep {
+    pub prep_id: u32,
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingEdit {
+    #[clap(subcommand)]
+    pub edit_type: EditEventShoppingEditType,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum EditEventShoppingEditType {
+    Tour(EditEventShoppingEditTour),
+    SourceOverride(EditEventShoppingEditSourceOverride),
+    FoodPrep(EditEventShoppingEditFoodPrep),
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingEditTour {
+    pub tour_id: u32,
+
+    #[clap(long, short)]
+    /// New Date
+    pub date: Option<String>,
+
+    #[clap(long, short)]
+    /// New store
+    pub store: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingEditSourceOverride {
+    pub ingredient_id: u32,
+}
+
+#[derive(Debug, Args)]
+pub struct EditEventShoppingEditFoodPrep {
+    pub prep_id: u32,
+
+    #[clap(long, short)]
+    /// New Reciep
+    pub recipe: Option<String>,
+
+    #[clap(long, short)]
+    /// New Reciep
+    pub prep_date: Option<String>,
+
+    #[clap(long, short)]
+    /// New start
+    pub start: Option<String>,
+
+    #[clap(long, short)]
+    /// New end
+    pub end: Option<String>,
 }

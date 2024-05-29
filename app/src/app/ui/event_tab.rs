@@ -128,19 +128,8 @@ impl EventTab {
                 );
             },
             EventTabMessage::AddEvent(Ok(event)) => self.event_list.push(EventWrapper::new(event, 0.0)),
-            EventTabMessage::PrintRecipes(event) => {
-                let move_database = self.database.clone();
-                return Command::perform(
-                    async move {
-                        let meals = move_database.get_event_meals(event.event_id).await?;
-                        let futures = meals
-                            .into_iter()
-                            .map(|meal| move_database.save_recipe_export(meal.recipe_id, meal.weight));
-                        futures::future::join_all(futures).await;
-                        Ok(())
-                    },
-                    |_: Result<(), Error>| TabMessage::EventTab(EventTabMessage::Nothing.into()),
-                );
+            EventTabMessage::PrintRecipes(_event) => {
+                return Command::none();
             },
             _ => debug!("recieved event tab message without handler: {message:?}"),
         }

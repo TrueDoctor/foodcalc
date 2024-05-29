@@ -67,23 +67,27 @@ This Project aims to creat a simple to use Commandline application that interfac
 
 ## New Structure
 * [x] update prices
-* [x] list
+* [ ] list
     * [x] places
     * [x] events
     * [x] ingredients
     * [x] reciepes
     * [x] meals
     * [x] users
+    * [ ] tours <event_id>
+    * [ ] source_overrides <event_id>
+    * [ ] food_prep_sessions <event_id>
 * [ ] info
     * [ ] ingredient <ingredient_ref>
     * [x] event <event_ref>
     * [ ] reciepe <reciepe_ref> <people>
     * [x] meal <event_ref> <reciepe_ref> [<start_time>]
     * [x] users
-* [x] calc
+* [ ] calc
     * [x] mealplan <event_ref>
     * [x] meal <event_ref> <reciepe_ref> [<start_time>]
     * [x] reciepe <reciepe_ref> [<people>] [<calories>] [--format markdown]
+    * [ ] shopping_list <event_id> [<tour_id>]
 * [x] add
     * [x] ingredient <name> <energy> [<comment>]
     * [x] reciepe <name> [<comment>]
@@ -135,3 +139,20 @@ This Project aims to creat a simple to use Commandline application that interfac
                 * [ ] start <start_time>
                 * [ ] end <end_time>
                 * [ ] comment <comment>
+        * [ ] shopping 
+            * [ ] add
+                * [ ] tour <date> <store>
+                * [ ] source_override <source_id>
+                * [ ] food_prep <recipe_id> <prep_date> <use_until> <use_from>
+            * [ ] delete
+                * [ ] tour (<tour_id>|<date> <store>)
+                * [ ] source_override <ingredient_id>
+                * [ ] food_prep (<prep_id>|<recipe_id> <prep_date>)
+            * [ ] edit
+                * [ ] tour <tour_id> [--date <date>] [--store <store>]
+                * [ ] source_override <source_id>
+                * [ ] food_prep <prep_id>
+                    * [ ] [--recipe_id <new_recipe_id>
+                    * [ ] [--prep_date <new_date>
+                    * [ ] [--start <start_date>]
+                    * [ ] [--end <end_date>]

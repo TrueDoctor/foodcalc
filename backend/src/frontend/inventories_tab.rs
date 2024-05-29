@@ -264,13 +264,13 @@ pub async fn commit_inventory(
 ) -> Markup {
     let inventory = form.0;
     if inventory.inventory_id < 0 {
-        let Ok(inventory_id) = state.db_connection.add_inventory(inventory.name).await else {
+        let Ok(inventory_id) = state.add_inventory(inventory.name).await else {
             return return_to_inv_selection_error();
         };
         manage_inventory_form(State(state), inventory_id).await
     } else {
         let id = inventory.inventory_id;
-        let Ok(inventory_id) = state.db_connection.update_inventory(inventory).await else {
+        let Ok(inventory_id) = state.update_inventory(inventory).await else {
             return return_to_inv_overview_error(id);
         };
         manage_inventory_form(State(state), inventory_id).await

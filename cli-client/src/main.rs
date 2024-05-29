@@ -154,6 +154,9 @@ async fn main() {
                             println!();
                         });
                 }
+                ListType::ShoppingTours(_) => todo!(),
+                ListType::SourceOverrides(_) => todo!(),
+                ListType::FoodPrep(_) => todo!(),
             }
         }
         Commands::Info(show_statement) => {
@@ -237,23 +240,7 @@ async fn main() {
                     let meals = food_base.get_event_meal(meal.meal_id).await;
 
                     match meals {
-                        Ok(meals) => match meals.len() {
-                            0 => {
-                                println!("No Meals found");
-                            }
-                            1 => {
-                                todo!();
-                            }
-                            _ => {
-                                println!("Multiple Meals found: ");
-                                meals.iter().for_each(|meal| {
-                                    println!(
-                                        "{} - {}, {} Servings",
-                                        meal.start_time, meal.end_time, meal.servings
-                                    );
-                                });
-                            }
-                        },
+                        Ok(_) => todo!(),
                         Err(error) => {
                             println!("Error: {}", error);
                         }
@@ -386,6 +373,7 @@ async fn main() {
                     };
                     println!("{}", output);
                 }
+                CalcType::ShoppingList(_) => todo!(),
             }
         }
         Commands::Add(add_data) => match &add_data.add_type {
@@ -566,8 +554,8 @@ async fn main() {
                 };
                 match &cli_ingredient.edit_type {
                     EditIngredientType::Name(name) => {
-                        let query =
-                            food_base.update_ingredient(ingredient.change_name(name.name.clone()));
+                        let ingredient = &ingredient.change_name(name.name.clone());
+                        let query = food_base.update_ingredient(ingredient);
                         match query.await {
                             Ok(_) => {
                                 if cli.debug {
@@ -580,8 +568,8 @@ async fn main() {
                         }
                     }
                     EditIngredientType::Energy(energy) => {
-                        let query = food_base
-                            .update_ingredient(ingredient.change_energy(energy.energy.clone()));
+                        let ingredient = &ingredient.change_energy(energy.energy.clone());
+                        let query = food_base.update_ingredient(ingredient);
                         match query.await {
                             Ok(_) => {
                                 if cli.debug {
@@ -594,8 +582,8 @@ async fn main() {
                         }
                     }
                     EditIngredientType::Comment(comment) => {
-                        let query = food_base
-                            .update_ingredient(ingredient.change_comment(comment.comment.clone()));
+                        let ingredient = &ingredient.change_comment(comment.comment.clone());
+                        let query = food_base.update_ingredient(ingredient);
                         match query.await {
                             Ok(_) => {
                                 if cli.debug {
@@ -1215,13 +1203,26 @@ async fn main() {
                                 }
                             }
                         }
-                        EditEventMealsType::Edit(_meal) => {
-                            todo!()
-
-                            //let meal = food_base
-                            //    .get_event_meal(event_id.event_id, recipe_ref, start_time, place)
-                            //    .await;
+                        EditEventMealsType::Edit(_meal) => todo!(),
+                    },
+                    EditEventType::Shopping(shopping_data) => match &shopping_data.edit_type {
+                        EditEventShoppingType::Add(add_data) => match &add_data.edit_type {
+                            EditEventShoppingAddType::Tour(_) => todo!(),
+                            EditEventShoppingAddType::SourceOverride(_) => todo!(),
+                            EditEventShoppingAddType::FoodPrep(_) => todo!(),
+                        },
+                        EditEventShoppingType::Delete(delete_data) => {
+                            match &delete_data.edit_type {
+                                EditEventShoppingDeleteType::Tour(_) => todo!(),
+                                EditEventShoppingDeleteType::SourceOverride(_) => todo!(),
+                                EditEventShoppingDeleteType::FoodPrep(_) => todo!(),
+                            }
                         }
+                        EditEventShoppingType::Edit(edit_data) => match &edit_data.edit_type {
+                            EditEventShoppingEditType::Tour(_) => todo!(),
+                            EditEventShoppingEditType::SourceOverride(_) => todo!(),
+                            EditEventShoppingEditType::FoodPrep(_) => todo!(),
+                        },
                     },
                 }
             }

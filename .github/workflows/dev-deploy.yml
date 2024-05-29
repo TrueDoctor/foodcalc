@@ -42,7 +42,7 @@ jobs:
     - name: Install Tectonic Dependencies
       run: sudo apt install libgraphite2-dev
     - name: Run tests
-      run: cargo test --bin ${{ env.BIN_NAME }} --features tectonic
+      run: cargo test --all
   deploy:
     runs-on: ubuntu-latest
     environment: ssh

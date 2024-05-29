@@ -43,19 +43,7 @@ impl MealWrapper {
         }
     }
 
-    pub fn update(&mut self, message: MealWrapperMessage) -> Command<EventDetailMessage> {
-        if let MealWrapperMessage::PrintMeal(Some(meal)) = message {
-            let move_database = self.database.clone();
-            return Command::perform(
-                async move {
-                    move_database
-                        .save_recipe_export(meal.recipe_id, meal.weight)
-                        .await
-                        .unwrap_or_else(|e| log::error!("{e}"));
-                },
-                |_| EventDetailMessage::MealWrapperMessage(0, MealWrapperMessage::Nothing),
-            );
-        }
+    pub fn update(&mut self, _message: MealWrapperMessage) -> Command<EventDetailMessage> {
         Command::none()
     }
 

@@ -1,4 +1,4 @@
-use std::{env, sync::Arc};
+use std::{env, ops::Deref};
 
 use fern::colors::{Color, ColoredLevelConfig};
 use sqlx::postgres::PgPool;
@@ -8,18 +8,25 @@ use tower_http::trace::TraceLayer;
 
 use foodlib::{FoodBase, User};
 
-mod api;
 mod frontend;
 
 use axum_login::{
     axum_sessions::{async_session::MemoryStore, SessionLayer},
-    AuthLayer, PostgresStore, RequireAuthorizationLayer,
+    AuthLayer, PostgresStore,
 };
 use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct MyAppState {
     db_connection: FoodBase,
+}
+
+impl Deref for MyAppState {
+    type Target = FoodBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.db_connection
+    }
 }
 
 #[tokio::main]
@@ -71,11 +78,6 @@ async fn main() {
 
     // build our application with a route
     let app = axum::Router::new()
-        .nest("/api", api::foodbase())
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
-            Arc::new(frontend::LOGIN_URL.into()),
-            Some(Arc::new("protected".into())),
-        ))
         .nest("/", frontend::frontend_router())
         .layer(auth_layer)
         .layer(session_layer)

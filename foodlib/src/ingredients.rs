@@ -133,7 +133,8 @@ pub struct ShoppingListItem {
 }
 
 #[derive(Clone)]
-pub struct IngredientSorce {
+pub struct IngredientSource {
+    pub ingredient_source_id: i32,
     pub ingredient_id: i32,
     pub store_id: i32,
     pub package_size: BigDecimal,
@@ -141,6 +142,21 @@ pub struct IngredientSorce {
     pub price: PgMoney,
     pub url: Option<String>,
     pub comment: Option<String>,
+}
+
+impl Default for IngredientSource {
+    fn default() -> Self {
+        IngredientSource {
+            ingredient_source_id: -1,
+            ingredient_id: -1,
+            store_id: 0,
+            package_size: 0.into(),
+            unit_id: 0,
+            price: PgMoney(0),
+            url: None,
+            comment: None,
+        }
+    }
 }
 
 pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
@@ -203,7 +219,7 @@ impl FoodBase {
         Ok(ingredient.ingredient_id)
     }
 
-    pub async fn update_ingredient(&self, ingredient: Ingredient) -> eyre::Result<i32> {
+    pub async fn update_ingredient(&self, ingredient: &Ingredient) -> eyre::Result<i32> {
         let ingredient = sqlx::query!(
             r#"
                 UPDATE ingredients
@@ -250,6 +266,28 @@ impl FoodBase {
         Ok(ingredient.ingredient_id)
     }
 
+    pub async fn update_ingredient_source(&self, source: &IngredientSource) -> eyre::Result<i32> {
+        let source = sqlx::query!(
+            r#"
+                UPDATE ingredient_sources
+                SET ingredient_id = $1, store_id = $2, url = $3, package_size = $4, price = $5, unit_id = $6
+                WHERE ingredient_source_id = $7
+                RETURNING ingredient_source_id 
+            "#,
+            source.ingredient_id,
+            source.store_id,
+            source.url,
+            source.package_size,
+            source.price,
+            source.unit_id,
+            source.ingredient_source_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(source.ingredient_source_id)
+    }
+
     pub async fn get_ingredients(&self) -> eyre::Result<Vec<Ingredient>> {
         let records = sqlx::query_as!(
             Ingredient,
@@ -271,6 +309,41 @@ impl FoodBase {
         .await?;
 
         Ok(record)
+    }
+    pub async fn ingredient_usages(&self, ingredient_id: i32) -> eyre::Result<Vec<Recipe>> {
+        let record = sqlx::query_as!(
+            Recipe,
+            r#" SELECT name, recipes.recipe_id, comment FROM recipe_ingredients
+                INNER JOIN recipes USING(recipe_id)
+                WHERE ingredient_id = $1
+                GROUP BY recipes.name, recipes.recipe_id, recipes.comment
+            "#,
+            ingredient_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        Ok(record)
+    }
+
+    pub async fn delete_ingredient(&self, ingredient_id: i32) -> eyre::Result<()> {
+        sqlx::query!(
+            r#"
+                DELETE FROM recipe_ingredients WHERE ingredient_id = $1
+            "#,
+            ingredient_id
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        sqlx::query!(
+            r#"
+                DELETE FROM ingredients WHERE ingredient_id = $1
+            "#,
+            ingredient_id
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn get_ingredient_from_string_reference(
@@ -356,7 +429,7 @@ impl FoodBase {
 
     pub async fn fetch_metro_prices(&self, ingredient_id: Option<i32>) -> eyre::Result<()> {
         // get urls of metro articles
-        let urls: Vec<IngredientSorce> = self
+        let urls: Vec<IngredientSource> = self
             .get_metro_ingredient_sources(ingredient_id)
             .await?
             .into_iter()
@@ -375,7 +448,7 @@ impl FoodBase {
         async fn update_ingredient_price(
             foodbase: &FoodBase,
             article: metro_scrape::article::Article,
-            s: IngredientSorce,
+            s: IngredientSource,
         ) -> Result<(), eyre::ErrReport> {
             let variant = article
                 .variants
@@ -439,14 +512,36 @@ impl FoodBase {
         }
         Ok(())
     }
+    pub async fn get_ingredient_sources(
+        &self,
+        ingredient_id: Option<i32>,
+    ) -> eyre::Result<Vec<IngredientSource>> {
+        let records = match ingredient_id {
+            Some(id) => sqlx::query_as!(
+                IngredientSource,
+                r#" SELECT * FROM ingredient_sources WHERE ingredient_id = $1 ORDER BY ingredient_id "#,
+                id
+            )
+            .fetch_all(&*self.pg_pool)
+            .await?,
+            None => sqlx::query_as!(
+                IngredientSource,
+                r#" SELECT * FROM ingredient_sources ORDER BY ingredient_id "#,
+            )
+            .fetch_all(&*self.pg_pool)
+            .await?,
+        };
+
+        Ok(records)
+    }
 
     pub async fn get_metro_ingredient_sources(
         &self,
         ingredient_id: Option<i32>,
-    ) -> eyre::Result<Vec<IngredientSorce>> {
+    ) -> eyre::Result<Vec<IngredientSource>> {
         let records = match ingredient_id {
             Some(id) => sqlx::query_as!(
-                IngredientSorce,
+                IngredientSource,
                 r#" SELECT * FROM ingredient_sources WHERE store_id = $1 AND ingredient_id = $2 ORDER BY ingredient_id "#,
                 METRO,
                 id
@@ -454,7 +549,7 @@ impl FoodBase {
             .fetch_all(&*self.pg_pool)
             .await?,
             None => sqlx::query_as!(
-                IngredientSorce,
+                IngredientSource,
                 r#" SELECT * FROM ingredient_sources WHERE store_id = $1 ORDER BY ingredient_id "#,
                 METRO,
             )
@@ -488,6 +583,52 @@ impl FoodBase {
         .map(|result| result.rows_affected())
         .map_err(|err| err.into())
     }
+
+    pub async fn get_stores(&self) -> eyre::Result<Vec<Store>> {
+        sqlx::query_as!(
+            Store,
+            r#"
+                SELECT * FROM stores
+                ORDER BY store_id
+            "#
+        )
+        .fetch_all(&*self.pg_pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn get_store_by_ref(&self, store_ref: String) -> eyre::Result<Store> {
+        if let Ok(store_id) = store_ref.parse::<i32>() {
+            let result = sqlx::query_as!(
+                Store,
+                r#"
+                    SELECT * FROM stores
+                    WHERE store_id = $1
+                "#,
+                store_id
+            )
+            .fetch_one(&*self.pg_pool)
+            .await;
+            Ok(result?)
+        } else {
+            let result = sqlx::query_as!(
+                Store,
+                r#"
+                    SELECT * FROM stores
+                    WHERE name = $1
+                "#,
+                store_ref
+            )
+            .fetch_one(&*self.pg_pool)
+            .await;
+            Ok(result?)
+        }
+    }
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Store {
+    pub store_id: i32,
+    pub name: String,
 }
 
 mod tests {

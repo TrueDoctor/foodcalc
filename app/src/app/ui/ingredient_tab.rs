@@ -145,7 +145,7 @@ impl IngredientTab {
                 Command::perform(
                     async move {
                         if ingredient.id.is_some() {
-                            move_database.update_ingredient(ingredient.to_ingredient()?).await?;
+                            move_database.update_ingredient(&ingredient.to_ingredient()?).await?;
                         } else {
                             move_database
                                 .add_ingredient(ingredient.name, ingredient.energy, ingredient.comment)
