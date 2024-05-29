@@ -58,11 +58,16 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
         ..Default::default()
     };
 
+    let event = state
+        .get_event(event_id)
+        .await
+        .ok_or(html_error(&format!("Failed to fetch event"), "/events"))?;
+
     Ok(html! {
         form class="flex flex-row items-center justify-center" action=(format!("/{}", event_id)) {
-            input name="name" class="text" type="text";
-            input name="comment" class="text" type="text";
-            input name="budget" class="text" type="number";
+            input name="name" class="text" type="text" value=(&event.event_name);
+            input name="comment" class="text" type="text" value=(&event.comment.unwrap_or_default());
+            input name="budget" class="text" type="number" value=(&(event.budget.map(|x|x.0).unwrap_or(0) as f64 / 100.));
             button class="btn btn-primary" type="submit" {"Submit"}
         }
         table class="w-full text-inherit table-auto object-center" {
