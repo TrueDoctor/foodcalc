@@ -128,8 +128,7 @@ impl EventTab {
                 );
             },
             EventTabMessage::AddEvent(Ok(event)) => self.event_list.push(EventWrapper::new(event, 0.0)),
-            EventTabMessage::PrintRecipes(event) => {
-                let move_database = self.database.clone();
+            EventTabMessage::PrintRecipes(_event) => {
                 return Command::none();
             },
             _ => debug!("recieved event tab message without handler: {message:?}"),

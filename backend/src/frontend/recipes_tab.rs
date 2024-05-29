@@ -8,7 +8,6 @@ use foodlib::typst::export_recipes;
 use foodlib::{Recipe, User};
 use maud::{html, Markup};
 use serde::Deserialize;
-use tokio::time::error::Elapsed;
 
 use crate::frontend::LOGIN_URL;
 mod recipes_edit_tab;

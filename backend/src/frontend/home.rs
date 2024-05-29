@@ -1,4 +1,3 @@
-use super::LOGIN_URL;
 use axum::extract::{Host, State};
 use foodlib::{AuthContext, User};
 use maud::{html, Markup};
