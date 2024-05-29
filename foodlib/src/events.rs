@@ -450,6 +450,29 @@ impl FoodBase {
         Ok(source_override)
     }
 
+    pub async fn update_event_ingredient_source_override(
+        &self,
+        event_id: i32,
+        old_source_id: i32,
+        new_source_id: i32,
+    ) -> eyre::Result<SourceOverride> {
+        let result = sqlx::query_as!(
+            SourceOverride,
+            r#"
+                UPDATE event_source_overrides
+                SET ingredient_source_id = $3 
+                WHERE ingredient_source_id = $1 AND ingredient_source_id = $2
+                RETURNING *
+            "#,
+            event_id,
+            old_source_id,
+            new_source_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
+    }
+
     pub async fn delete_event_source_override(&self, source_id: i32) -> eyre::Result<()> {
         let _ = sqlx::query!(
             "DELETE FROM event_source_overrides WHERE ingredient_source_id = $1",
@@ -458,6 +481,90 @@ impl FoodBase {
         .fetch_optional(&*self.pg_pool)
         .await?;
         Ok(())
+    }
+
+    pub async fn update_event_food_prep_recipe_id(
+        &self,
+        prep_id: i32,
+        recipe_id: i32,
+    ) -> eyre::Result<FoodPrep> {
+        let result = sqlx::query_as!(
+            FoodPrep,
+            r#"
+                UPDATE food_prep
+                SET recipe_id = $2 
+                WHERE prep_id = $1
+                RETURNING *
+            "#,
+            prep_id,
+            recipe_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
+    }
+
+    pub async fn update_event_food_prep_prep_date(
+        &self,
+        prep_id: i32,
+        prep_date: NaiveDateTime,
+    ) -> eyre::Result<FoodPrep> {
+        let result = sqlx::query_as!(
+            FoodPrep,
+            r#"
+                UPDATE food_prep
+                SET prep_date = $2 
+                WHERE prep_id = $1
+                RETURNING *
+            "#,
+            prep_id,
+            prep_date
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
+    }
+
+    pub async fn update_event_food_prep_use_from(
+        &self,
+        prep_id: i32,
+        use_from: NaiveDateTime,
+    ) -> eyre::Result<FoodPrep> {
+        let result = sqlx::query_as!(
+            FoodPrep,
+            r#"
+                UPDATE food_prep
+                SET use_from = $2 
+                WHERE prep_id = $1
+                RETURNING *
+            "#,
+            prep_id,
+            use_from
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
+    }
+
+    pub async fn update_event_food_prep_use_until(
+        &self,
+        prep_id: i32,
+        use_until: NaiveDateTime,
+    ) -> eyre::Result<FoodPrep> {
+        let result = sqlx::query_as!(
+            FoodPrep,
+            r#"
+                UPDATE food_prep
+                SET use_until = $2 
+                WHERE prep_id = $1
+                RETURNING *
+            "#,
+            prep_id,
+            use_until
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
     }
 }
 
