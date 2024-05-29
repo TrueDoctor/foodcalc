@@ -461,6 +461,7 @@ impl FoodBase {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct SourceOverrideView {
     pub event_id: i32,
     pub ingredient_id: i32,
