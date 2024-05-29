@@ -154,9 +154,67 @@ async fn main() {
                             println!();
                         });
                 }
-                ListType::ShoppingTours(_) => todo!(),
-                ListType::SourceOverrides(_) => todo!(),
-                ListType::FoodPrep(_) => todo!(),
+                ListType::ShoppingTours(shopping_data) => {
+                    let event = food_base
+                        .get_event_from_string_reference(shopping_data.event_ref.to_string())
+                        .await;
+
+                    if event.is_none() {
+                        println!("Error: {:?}", event);
+                    }
+                    let event = event.unwrap();
+
+                    let shopping_tours = food_base.get_event_shopping_tours(event.event_id).await;
+
+                    if shopping_tours.is_err() {
+                        println!("Error: {:?}", shopping_tours);
+                    }
+                    let shopping_tours = shopping_tours.unwrap();
+
+                    let table = Table::new(shopping_tours).with(table_config).to_string();
+                    println!("{}", table);
+                }
+                ListType::SourceOverrides(override_data) => {
+                    let event = food_base
+                        .get_event_from_string_reference(override_data.event_ref.to_string())
+                        .await;
+
+                    if event.is_none() {
+                        println!("Error: {:?}", event);
+                    }
+                    let event = event.unwrap();
+
+                    let shopping_tours = food_base.get_event_source_overrides(event.event_id).await;
+
+                    if shopping_tours.is_err() {
+                        println!("Error: {:?}", shopping_tours);
+                    }
+                    let shopping_tours = shopping_tours.unwrap();
+
+                    //TODO: List actual Sources and not just their IDs
+                    let table = Table::new(shopping_tours).with(table_config).to_string();
+                    println!("{}", table);
+                }
+                ListType::FoodPrep(ford_prep_data) => {
+                    let event = food_base
+                        .get_event_from_string_reference(ford_prep_data.event_ref.to_string())
+                        .await;
+
+                    if event.is_none() {
+                        println!("Error: {:?}", event);
+                    }
+                    let event = event.unwrap();
+
+                    let shopping_tours = food_base.get_event_food_prep(event.event_id).await;
+
+                    if shopping_tours.is_err() {
+                        println!("Error: {:?}", shopping_tours);
+                    }
+                    let shopping_tours = shopping_tours.unwrap();
+
+                    let table = Table::new(shopping_tours).with(table_config).to_string();
+                    println!("{}", table);
+                }
             }
         }
         Commands::Info(show_statement) => {
@@ -367,7 +425,20 @@ async fn main() {
                         .unwrap();
 
                     let output = match recipe.format.to_string().as_str() {
-                        "latex" | "tex" => food_base.format_subrecipes_latex(subrecipes).await,
+                        // TODO Fix PDF Export
+                        // "latex" | "tex" => {
+                        //     let recipe_info = food_base
+                        //         .fetch_user_input_meal(
+                        //             recipe_data.recipe_id,
+                        //             people as f64,
+                        //             calories,
+                        //             "" as String,
+                        //         )
+                        //         .await
+                        //         .unwrap();
+                        //     let _pdf = foodlib::typst::export_recipes(recipe_info);
+                        //     return "";
+                        // }
                         "markdown" => food_base.format_subrecipes_markdown(subrecipes).await,
                         _ => "Unknown Format".to_string(),
                     };
@@ -1207,9 +1278,43 @@ async fn main() {
                     },
                     EditEventType::Shopping(shopping_data) => match &shopping_data.edit_type {
                         EditEventShoppingType::Add(add_data) => match &add_data.edit_type {
-                            EditEventShoppingAddType::Tour(_) => todo!(),
-                            EditEventShoppingAddType::SourceOverride(_) => todo!(),
-                            EditEventShoppingAddType::FoodPrep(_) => todo!(),
+                            EditEventShoppingAddType::Tour(tour_data) => {
+                                let _ = food_base
+                                    .add_event_shopping_tour(
+                                        event_id.event_id,
+                                        tour_data.store,
+                                        tour_data.date,
+                                    )
+                                    .await;
+                            }
+                            EditEventShoppingAddType::SourceOverride(override_data) => {
+                                let _ = food_base
+                                    .add_event_source_override(
+                                        event_id.event_id,
+                                        override_data.source_id,
+                                    )
+                                    .await;
+                            }
+                            EditEventShoppingAddType::FoodPrep(prep_data) => {
+                                let recipe = food_base
+                                    .get_recipe_from_string_reference(prep_data.recipe_ref.clone())
+                                    .await;
+                                if recipe.is_none() {
+                                    println!("Couldn't find Recipe");
+                                    return;
+                                }
+                                let recipe = recipe.unwrap();
+
+                                let _ = food_base
+                                    .add_event_food_prep(
+                                        event_id.event_id,
+                                        recipe.recipe_id.clone(),
+                                        prep_data.prep_date,
+                                        prep_data.use_start_date,
+                                        prep_data.use_end_date,
+                                    )
+                                    .await;
+                            }
                         },
                         EditEventShoppingType::Delete(delete_data) => {
                             match &delete_data.edit_type {
@@ -1219,7 +1324,32 @@ async fn main() {
                             }
                         }
                         EditEventShoppingType::Edit(edit_data) => match &edit_data.edit_type {
-                            EditEventShoppingEditType::Tour(_) => todo!(),
+                            EditEventShoppingEditType::Tour(tour_data) => {
+                                let tour_id = tour_data.tour_id;
+
+                                if let Some(date) = tour_data.date {
+                                    let _ = food_base
+                                        .update_event_shopping_tour_date(tour_id, date)
+                                        .await;
+                                    println!("Updated tour date");
+                                }
+
+                                if let Some(store) = &tour_data.store {
+                                    let store =
+                                        food_base.get_store_by_ref((&store).to_string()).await;
+                                    if store.is_err() {
+                                        println!("Could not find Store");
+                                        return;
+                                    }
+                                    let store = store.unwrap();
+
+                                    let _ = food_base
+                                        .update_event_shopping_tour_store(tour_id, store.store_id)
+                                        .await;
+
+                                    println!("Updated tour destination")
+                                }
+                            }
                             EditEventShoppingEditType::SourceOverride(_) => todo!(),
                             EditEventShoppingEditType::FoodPrep(_) => todo!(),
                         },

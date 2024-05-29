@@ -315,6 +315,13 @@ impl FoodBase {
         Ok(tour)
     }
 
+    pub async fn delete_event_shopping_tour(&self, tour_id: i32) -> eyre::Result<()> {
+        let _ = sqlx::query!("DELETE FROM shopping_tours WHERE tour_id = $1", tour_id)
+            .fetch_optional(&*self.pg_pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn update_event_shopping_tour_date(
         &self,
         tour_id: i32,
