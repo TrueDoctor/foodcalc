@@ -23,7 +23,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
 }
 
 async fn event_form(state: State<MyAppState>, event_id: Path<i32>) -> Markup {
-    let Ok(meals) = state.db_connection.get_event_meals(event_id.0).await else {
+    let Ok(meals) = state.get_event_meals(event_id.0).await else {
         return html_error("Failed to fetch meals", "/events");
     };
     html! {
@@ -112,7 +112,7 @@ async fn update_event(
         budget,
     };
 
-    if let Ok(result) = state.db_connection.update_event(&event).await {
+    if let Ok(result) = state.update_event(&event).await {
         (StatusCode::OK, event_form(state, event_id).await).into_response()
     } else {
         StatusCode::INTERNAL_SERVER_ERROR.into_response()

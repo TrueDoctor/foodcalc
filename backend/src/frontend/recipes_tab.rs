@@ -39,7 +39,7 @@ pub struct SearchParameters {
 
 pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameters>) -> Markup {
     let query = query.search.to_lowercase();
-    let Ok(recipes) = state.db_connection.get_recipes().await else {
+    let Ok(recipes) = state.get_recipes().await else {
         return html_error("Failed to fetch recipes");
     };
 
@@ -174,7 +174,7 @@ pub async fn delete_recipe_nqa(
     State(state): State<MyAppState>,
     Path(recipe_id): Path<i32>,
 ) -> Markup {
-    if let Err(error) = state.db_connection.delete_recipe(recipe_id).await {
+    if let Err(error) = state.delete_recipe(recipe_id).await {
         log::error!("Failed to delete recipe: {}", error);
         return html_error("Failed to delete recipe");
     };
@@ -203,7 +203,7 @@ pub async fn delete_recipe(Path(recipe_id): Path<i32>) -> Markup {
 }
 
 pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
-    let Ok(recipes) = state.db_connection.get_recipes().await else {
+    let Ok(recipes) = state.get_recipes().await else {
         return html_error("Failed to fetch recipes");
     };
 
@@ -261,7 +261,7 @@ async fn add_recipe(state: State<MyAppState>, Form(recipe): Form<NewRecipe>) -> 
         comment: recipe.comment,
         recipe_id: -1,
     };
-    match state.db_connection.insert_recipe(&recipe).await {
+    match state.insert_recipe(&recipe).await {
         Ok(recipe) => recipes_edit_tab::recipe_edit_view(state, Path(recipe.recipe_id)).await,
         Err(e) => html_error(&e.to_string()),
     }

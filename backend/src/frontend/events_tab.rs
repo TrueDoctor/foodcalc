@@ -20,7 +20,7 @@ pub struct SearchParameters {
 }
 
 pub async fn event_list(State(state): State<MyAppState>) -> Markup {
-    let events = state.db_connection.get_events().await.unwrap_or_default();
+    let events = state.get_events().await.unwrap_or_default();
 
     html! {
         div class="
@@ -51,7 +51,7 @@ pub async fn event_list(State(state): State<MyAppState>) -> Markup {
 
 pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameters>) -> Markup {
     let query = query.search.to_lowercase();
-    let events = state.db_connection.get_events().await.unwrap_or_default();
+    let events = state.get_events().await.unwrap_or_default();
 
     let filtered_events = events
         .iter()

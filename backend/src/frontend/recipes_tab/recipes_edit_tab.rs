@@ -213,7 +213,7 @@ pub async fn handle_subrecipe_change(
             comment: None,
         }),
         amount: data.subrecipe_amount,
-        unit: state.db_connection.get_unit(0).await.unwrap_or_default(),
+        unit: state.get_unit(0).await.unwrap_or_default(),
     };
     sub_recipe.format_for_subrecipe_table(data.recipe_id)
 }
@@ -406,7 +406,7 @@ pub async fn handle_step_add(
         duration_per_kg: pg_interval_from_minutes(data.duration_per_kg_minutes),
         recipe_id: data.recipe_id,
     };
-    let Ok(res) = state.db_connection.add_recipe_step(&step).await else {
+    let Ok(res) = state.add_recipe_step(&step).await else {
         return return_to_recipe_edit_error(data.recipe_id);
     };
     dbg!(res);
@@ -422,7 +422,7 @@ pub async fn add_ingredient_form(
         .get_ingredients()
         .await
         .unwrap_or_default();
-    let unit_types = state.db_connection.get_units().await.unwrap_or_default();
+    let unit_types = state.get_units().await.unwrap_or_default();
     html! {
         form hx-put="recipes/edit/commit-ingredient" hx-swap="outerHTML" hx-target="#contents" {
             datalist id=("ingredient_data_list") {
@@ -451,7 +451,7 @@ pub async fn add_subrecipe_form(
     State(state): State<MyAppState>,
     Path(recipe_id): Path<i32>,
 ) -> Markup {
-    let subrecipes = state.db_connection.get_recipes().await.unwrap_or_default();
+    let subrecipes = state.get_recipes().await.unwrap_or_default();
     html! {
         form hx-put="recipes/edit/commit-subrecipe" hx-swap="outerHTML" hx-target="#contents" {
             datalist id=("subrecipe_data_list") {
@@ -504,7 +504,7 @@ pub async fn recipe_edit_view(
         .get_recipe_ingredients(recipe_id)
         .await
         .unwrap_or_default();
-    let unit_types = state.db_connection.get_units().await.unwrap_or_default();
+    let unit_types = state.get_units().await.unwrap_or_default();
 
     let steps = state
         .db_connection
@@ -519,8 +519,8 @@ pub async fn recipe_edit_view(
             div id=("recipe-information") class="w-3/4" {
                 form hx-put="recipes/edit/change-name" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
-                    input class="text" type="text" name="name" value=(state.db_connection.get_recipe(recipe_id).await.unwrap_or_default().name) required="required";
-                    textarea class="text" name="comment" required="required" { (state.db_connection.get_recipe(recipe_id).await.unwrap_or_default().comment.unwrap_or_default()) }
+                    input class="text" type="text" name="name" value=(state.get_recipe(recipe_id).await.unwrap_or_default().name) required="required";
+                    textarea class="text" name="comment" required="required" { (state.get_recipe(recipe_id).await.unwrap_or_default().comment.unwrap_or_default()) }
                     button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
             }
 
