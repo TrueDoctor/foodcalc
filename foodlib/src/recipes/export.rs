@@ -1,6 +1,5 @@
 use super::RecipeStep;
 use std::collections::HashSet;
-use std::future::IntoFuture;
 
 use bigdecimal::ToPrimitive;
 use sqlx::postgres::types::PgInterval;

@@ -1,6 +1,6 @@
 use core::fmt::Display;
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::types::PgMoney, types::chrono::NaiveDateTime};
+use sqlx::postgres::types::PgMoney;
 use std::borrow::Cow;
 use tabled::Tabled;
 
