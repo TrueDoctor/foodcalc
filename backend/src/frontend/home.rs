@@ -56,6 +56,30 @@ pub async fn content(State(state): State<MyAppState>) -> Markup {
 
 pub fn navbar() -> Markup {
     html! {
+
+        //Warn if using production database
+        @if std::env::var("DATABASE_URL").unwrap().ends_with("food_calc") {
+            dialog open="true" class="bg-btn-cancel-normal text-white rounded-lg w-full" id="banner" {
+                div class="p-4 flex flex-col items-center justify-center gap-4" {
+                    p class="text-2xl" {
+                        "WARNING: You are using the production database!"
+                    }
+                    button class="btn bg-black w-1/2" hx-on:click="document.getElementById('banner').remove()" {
+                        "Close"
+                    }
+                }
+            }
+        } @else {
+            div class="bg-green-800 text-white p-4 rounded-lg flex items-center justify-between" id="banner"{
+                //print the database url
+                "Database URL: "
+                (std::env::var("DATABASE_URL").unwrap())
+                button class="bg-dark-primary-normal text-white p-2 rounded-lg" hx-on:click="document.getElementById('banner').remove()" {
+                    "Close"
+                }
+            }
+        }
+
         div class="
             flex items-center justify-between flex-wrap 
             bg-navbar text-white 
