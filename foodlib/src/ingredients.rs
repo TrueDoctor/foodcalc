@@ -267,17 +267,19 @@ impl FoodBase {
         weight: BigDecimal,
         price: PgMoney,
         url: Option<String>,
+        comment: Option<String>,
         unit_id: i32,
     ) -> eyre::Result<i32> {
         let ingredient = sqlx::query!(
             r#"
-                INSERT INTO ingredient_sources ( ingredient_id, store_id, url, package_size, price, unit_id)
-                VALUES ( $1, $2, $3, $4, $5, $6)
+                INSERT INTO ingredient_sources ( ingredient_id, store_id, url, comment, package_size, price, unit_id)
+                VALUES ( $1, $2, $3, $4, $5, $6, $7)
                 RETURNING ingredient_id
             "#,
             ingredient_id,
             store_id,
             url,
+            comment,
             weight,
             price,
             unit_id
@@ -292,13 +294,14 @@ impl FoodBase {
         let source = sqlx::query!(
             r#"
                 UPDATE ingredient_sources
-                SET ingredient_id = $1, store_id = $2, url = $3, package_size = $4, price = $5, unit_id = $6
-                WHERE ingredient_source_id = $7
+                SET ingredient_id = $1, store_id = $2, url = $3, comment = $4, package_size = $5, price = $6, unit_id = $7
+                WHERE ingredient_source_id = $8
                 RETURNING ingredient_source_id 
             "#,
             source.ingredient_id,
             source.store_id,
             source.url,
+            source.comment,
             source.package_size,
             source.price,
             source.unit_id,

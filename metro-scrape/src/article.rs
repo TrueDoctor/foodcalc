@@ -533,6 +533,7 @@ pub enum ValueType {
 pub enum AppliedAdjustment {
     Shelf,
     Promotion,
+    Dnr,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

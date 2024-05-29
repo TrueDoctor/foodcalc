@@ -106,6 +106,7 @@ async fn update_source(
                 ingredient.store_id,
                 ingredient.weight,
                 PgMoney((ingredient.price * 100.) as i64),
+                ingredient.url,
                 ingredient.comment,
                 0,
             )
