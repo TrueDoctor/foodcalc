@@ -554,8 +554,8 @@ async fn main() {
                 };
                 match &cli_ingredient.edit_type {
                     EditIngredientType::Name(name) => {
-                        let query =
-                            food_base.update_ingredient(ingredient.change_name(name.name.clone()));
+                        let ingredient = &ingredient.change_name(name.name.clone());
+                        let query = food_base.update_ingredient(ingredient);
                         match query.await {
                             Ok(_) => {
                                 if cli.debug {
@@ -568,8 +568,8 @@ async fn main() {
                         }
                     }
                     EditIngredientType::Energy(energy) => {
-                        let query = food_base
-                            .update_ingredient(ingredient.change_energy(energy.energy.clone()));
+                        let ingredient = &ingredient.change_energy(energy.energy.clone());
+                        let query = food_base.update_ingredient(ingredient);
                         match query.await {
                             Ok(_) => {
                                 if cli.debug {
@@ -582,8 +582,8 @@ async fn main() {
                         }
                     }
                     EditIngredientType::Comment(comment) => {
-                        let query = food_base
-                            .update_ingredient(ingredient.change_comment(comment.comment.clone()));
+                        let ingredient = &ingredient.change_comment(comment.comment.clone());
+                        let query = food_base.update_ingredient(ingredient);
                         match query.await {
                             Ok(_) => {
                                 if cli.debug {
