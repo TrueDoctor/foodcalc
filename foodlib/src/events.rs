@@ -5,7 +5,7 @@ use sqlx::postgres::types::PgMoney;
 use std::borrow::Cow;
 use tabled::Tabled;
 
-use crate::{recipes::EventRecipeIngredient, FoodBase};
+use crate::{recipes::EventRecipeIngredient, FoodBase, ShoppingListItem};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Event {
@@ -280,6 +280,21 @@ impl FoodBase {
         .fetch_one(&*self.pg_pool)
         .await?;
         Ok(records.price.unwrap_or(PgMoney(0)))
+    }
+
+    pub async fn get_shopping_list(&self, tour_id: i32) -> eyre::Result<Vec<ShoppingListItem>> {
+        let shopping_list = sqlx::query_as!(
+            ShoppingListItem,
+            r#"
+                SELECT ingredient_id as "ingredient_id!", ingredient as "ingredient_name!", price as "price!", weight as "weight!"
+                FROM shopping_list 
+                WHERE tour_id = $1
+            "#,
+            tour_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(shopping_list)
     }
 
     pub async fn get_event_shopping_tours(&self, event_id: i32) -> eyre::Result<Vec<ShoppingTour>> {

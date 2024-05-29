@@ -444,7 +444,14 @@ async fn main() {
                     };
                     println!("{}", output);
                 }
-                CalcType::ShoppingList(_) => todo!(),
+                CalcType::ShoppingList(tour_id) => {
+                    let shopping_list = food_base.get_shopping_list(tour_id.tour_id).await;
+
+                    if let Ok(shopping_list) = shopping_list {
+                        let table = Table::new(shopping_list).with(table_config).to_string();
+                        println!("{}", table);
+                    }
+                }
             }
         }
         Commands::Add(add_data) => match &add_data.add_type {

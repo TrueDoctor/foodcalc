@@ -220,11 +220,8 @@ pub struct CalcRecipeCommand {
 
 #[derive(Debug, Args)]
 pub struct CalcShoppingList {
-    /// Event Reference
-    pub event_ref: String,
-
     /// Tour to calc
-    pub tour_id: u32,
+    pub tour_id: i32,
 }
 
 // ----- Add Commands -----
