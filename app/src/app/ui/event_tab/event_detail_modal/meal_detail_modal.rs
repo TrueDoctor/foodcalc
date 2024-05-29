@@ -77,7 +77,7 @@ impl MealDetail {
             recipe_filter: Default::default(),
             place_filter: Default::default(),
             start_time: InputState::new(start_time[..(start_time.len() - 3)].to_string()),
-            end_time: InputState::new(end_time[..(start_time.len() - 1)].to_string()),
+            end_time: InputState::new(end_time[..(end_time.len() - 3)].to_string()),
             servings: InputState::new(new_meal.servings.to_string()),
             energy: InputState::new(new_meal.energy.to_string()),
             comment: InputState::new(new_meal.comment.unwrap_or_default()),
