@@ -58,9 +58,8 @@ pub fn html_error(reason: &str, redirect: &str) -> Markup {
         class="flex flex-col items-center justify-center text-red-500" {
             div {
                 h1 { "Error" }
-                p { "Failed to delete recipe" }
                 p { (reason) }
-                button class="btn btn-primary" hx-get="/recipes" hx-target="#content"  { "Back" }
+                button class="btn btn-primary" hx-get=(redirect) hx-target="#content"  { "Back" }
             }
         }
 

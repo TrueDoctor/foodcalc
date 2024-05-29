@@ -1,4 +1,4 @@
-use std::{env, ops::Deref, sync::Arc};
+use std::{env, ops::Deref};
 
 use fern::colors::{Color, ColoredLevelConfig};
 use sqlx::postgres::PgPool;
@@ -12,7 +12,7 @@ mod frontend;
 
 use axum_login::{
     axum_sessions::{async_session::MemoryStore, SessionLayer},
-    AuthLayer, PostgresStore, RequireAuthorizationLayer,
+    AuthLayer, PostgresStore,
 };
 use rand::Rng;
 

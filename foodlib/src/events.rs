@@ -61,12 +61,6 @@ impl Display for Place {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Store {
-    pub store_id: i32,
-    pub name: String,
-}
-
 impl FoodBase {
     //TODO Merge this with function below, as this currently excludes events without meals
     pub async fn get_events(&self) -> eyre::Result<Vec<Event>> {
