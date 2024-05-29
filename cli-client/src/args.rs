@@ -911,7 +911,7 @@ pub struct EditEventShoppingDeleteTour {
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingDeleteSourceOverride {
-    pub ingredient_id: i32,
+    pub ingredient_id: String,
 }
 
 #[derive(Debug, Args)]

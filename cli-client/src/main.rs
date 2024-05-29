@@ -1318,9 +1318,27 @@ async fn main() {
                         },
                         EditEventShoppingType::Delete(delete_data) => {
                             match &delete_data.edit_type {
-                                EditEventShoppingDeleteType::Tour(_) => todo!(),
-                                EditEventShoppingDeleteType::SourceOverride(_) => todo!(),
-                                EditEventShoppingDeleteType::FoodPrep(_) => todo!(),
+                                EditEventShoppingDeleteType::Tour(tour_id) => {
+                                    let _ =
+                                        food_base.delete_event_shopping_tour(tour_id.tour_id).await;
+                                }
+                                EditEventShoppingDeleteType::SourceOverride(source_id) => {
+                                    let ingredient = food_base
+                                        .get_ingredient_from_string_reference(
+                                            source_id.ingredient_id.clone(),
+                                        )
+                                        .await;
+                                    if ingredient.is_none() {
+                                        println!("Could not find Ingredient");
+                                        return;
+                                    }
+                                    let ingredient = ingredient.unwrap();
+                                    let _ = food_base
+                                        .delete_event_source_override(ingredient.ingredient_id);
+                                }
+                                EditEventShoppingDeleteType::FoodPrep(prep_id) => {
+                                    let _ = food_base.delete_event_food_prep(prep_id.prep_id).await;
+                                }
                             }
                         }
                         EditEventShoppingType::Edit(edit_data) => match &edit_data.edit_type {

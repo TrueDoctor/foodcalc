@@ -401,6 +401,27 @@ impl FoodBase {
         Ok(query)
     }
 
+    pub async fn delete_event_food_prep(&self, prep_id: i32) -> eyre::Result<()> {
+        let _ = sqlx::query!("DELETE FROM food_prep WHERE prep_id = $1", prep_id)
+            .fetch_optional(&*self.pg_pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_event_source_overrides(
+        &self,
+        event_id: i32,
+    ) -> eyre::Result<Vec<SourceOverride>> {
+        let records = sqlx::query_as!(
+            SourceOverride,
+            "SELECT * FROM event_source_overrides WHERE event_id=$1",
+            event_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
     pub async fn add_event_source_override(
         &self,
         event_id: i32,
@@ -419,6 +440,16 @@ impl FoodBase {
         .fetch_one(&*self.pg_pool)
         .await?;
         Ok(source_override)
+    }
+
+    pub async fn delete_event_source_override(&self, source_id: i32) -> eyre::Result<()> {
+        let _ = sqlx::query!(
+            "DELETE FROM event_source_overrides WHERE ingredient_source_id = $1",
+            source_id
+        )
+        .fetch_optional(&*self.pg_pool)
+        .await?;
+        Ok(())
     }
 }
 

@@ -146,8 +146,8 @@ This Project aims to creat a simple to use Commandline application that interfac
                 * [x] food_prep <recipe_id> <prep_date> <use_until> <use_from>
             * [ ] delete
                 * [x] tour (<tour_id>|<date> <store>)
-                * [ ] source_override <ingredient_id>
-                * [ ] food_prep (<prep_id>|<recipe_id> <prep_date>)
+                * [x] source_override <ingredient_id>
+                * [x] food_prep (<prep_id>|<recipe_id> <prep_date>)
             * [ ] edit
                 * [x] tour <tour_id> [--date <date>] [--store <store>]
                 * [ ] source_override <source_id>
