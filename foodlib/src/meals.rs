@@ -54,6 +54,7 @@ impl Default for Meal {
         }
     }
 }
+// (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
 
 impl FoodBase {
     pub async fn get_event_meals(&self, event_id: i32) -> eyre::Result<Vec<Meal>> {
@@ -69,8 +70,8 @@ impl FoodBase {
              place as "place!",
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
-             sum(weight) as "weight!",
-             (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
+             round(sum(weight),2) as "weight!",
+             0 as "energy!",
              sum(price) as "price!",
              event_meals.servings as "servings!"
 

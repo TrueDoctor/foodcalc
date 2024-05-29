@@ -407,7 +407,57 @@ impl FoodBase {
             .await?;
         Ok(())
     }
+    pub async fn set_default_event_source_override(
+        &self,
+        event_id: i32,
+        ingredient: String,
+        store_id: i32,
+    ) -> eyre::Result<SourceOverride> {
+        struct Id {
+            ingredient_source_id: i32,
+        }
+        let ingredient_source_id = sqlx::query_as!(
+            Id,
+            "
+                SELECT ingredient_source_id
+                FROM ingredient_sources
+                INNER JOIN ingredients USING (ingredient_id)
+                WHERE ingredients.name = $1 AND  store_id = $2
+            ",
+            ingredient,
+            store_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
 
+        let source_override = sqlx::query_as!(
+            SourceOverride,
+            r#"
+                INSERT INTO public.event_source_overrides (event_id, ingredient_source_id) 
+                VALUES ($1, $2)
+                ON CONFLICT (event_id, ingredient_source_id) DO UPDATE SET event_id = $1, ingredient_source_id = $2
+                RETURNING *
+            "#,
+            event_id,
+            ingredient_source_id.ingredient_source_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(source_override)
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
+pub struct SourceOverrideView {
+    pub event_id: i32,
+    pub ingredient_id: i32,
+    pub ingredient_source_id: i32,
+    pub ingredient: String,
+    pub store_id: i32,
+    pub store: String,
+}
+
+impl FoodBase {
     pub async fn get_event_source_overrides(
         &self,
         event_id: i32,
@@ -415,7 +465,7 @@ impl FoodBase {
         let overrides = sqlx::query_as!(
             SourceOverrideView,
             r#"
-                SELECT event_id, ingredient_id, ingredients.name as ingredient, store_id, stores.name as store
+                SELECT event_id, ingredient_id, ingredient_sources.ingredient_source_id, ingredients.name as ingredient, store_id, stores.name as store
                 FROM event_source_overrides
                 INNER JOIN ingredient_sources USING (ingredient_source_id)
                 INNER JOIN ingredients USING (ingredient_id)
@@ -567,14 +617,3 @@ impl FoodBase {
         Ok(result)
     }
 }
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
-pub struct SourceOverrideView {
-    pub event_id: i32,
-    pub ingredient_id: i32,
-    pub ingredient: String,
-    pub store_id: i32,
-    pub store: String,
-}
-
-impl FoodBase {}
