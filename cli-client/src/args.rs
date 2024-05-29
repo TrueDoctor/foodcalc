@@ -1,5 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use sqlx::types::BigDecimal;
+use sqlx::types::{chrono::NaiveDateTime, BigDecimal};
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
@@ -874,21 +874,21 @@ pub enum EditEventShoppingAddType {
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingAddTour {
-    pub date: String,
-    pub store: String,
+    pub date: NaiveDateTime,
+    pub store: i32,
 }
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingAddSourceOverride {
-    pub source_id: u32,
+    pub source_id: i32,
 }
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingAddFoodPrep {
     pub recipe_ref: String,
-    pub prep_date: String,
-    pub use_start_date: Option<String>,
-    pub use_end_date: String,
+    pub prep_date: NaiveDateTime,
+    pub use_start_date: Option<NaiveDateTime>,
+    pub use_end_date: NaiveDateTime,
 }
 
 #[derive(Debug, Args)]
@@ -906,17 +906,17 @@ pub enum EditEventShoppingDeleteType {
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingDeleteTour {
-    pub tour_id: u32,
+    pub tour_id: i32,
 }
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingDeleteSourceOverride {
-    pub ingredient_id: u32,
+    pub ingredient_id: i32,
 }
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingDeleteFoodPrep {
-    pub prep_id: u32,
+    pub prep_id: i32,
 }
 
 #[derive(Debug, Args)]
@@ -934,11 +934,11 @@ pub enum EditEventShoppingEditType {
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingEditTour {
-    pub tour_id: u32,
+    pub tour_id: i32,
 
     #[clap(long, short)]
     /// New Date
-    pub date: Option<String>,
+    pub date: Option<NaiveDateTime>,
 
     #[clap(long, short)]
     /// New store
@@ -947,12 +947,12 @@ pub struct EditEventShoppingEditTour {
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingEditSourceOverride {
-    pub ingredient_id: u32,
+    pub ingredient_id: i32,
 }
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingEditFoodPrep {
-    pub prep_id: u32,
+    pub prep_id: i32,
 
     #[clap(long, short)]
     /// New Reciep
