@@ -524,7 +524,7 @@ pub async fn recipe_edit_view(
                     button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
             }
 
-            div id=("styling bullshit") class="mb-6 mt-6" {
+            div id=("styling bullshit") class="mb-6 mt-6 w-1/4" {
                 form hx-put=(format!("recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" class="w-full flex flex-col items-center justify-center pb-4" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     button type="submit" class="btn btn-primary"  { "Add Subrecipe (+)" }
@@ -540,7 +540,7 @@ pub async fn recipe_edit_view(
                 }
             }
 
-            form hx-put=(format!("recipes/edit/add-ingredient/{}", recipe_id)) hx-swap="outerHTML" class="w-full mt-6 flex flex-col items-center justify-center" {
+            form hx-put=(format!("recipes/edit/add-ingredient/{}", recipe_id)) hx-swap="outerHTML" class="w-1/4 mt-6 flex flex-col items-center justify-center" {
                 input type="hidden" name=("recipe_id") value=(recipe_id);
                 button type="submit" class="btn btn-primary"  { "Add Ingredient (+)" }
             }
@@ -554,7 +554,7 @@ pub async fn recipe_edit_view(
                 }
             }
 
-            form hx-put=(format!("recipes/edit/add-step/{}", recipe_id)) hx-swap="outerHTML" class="w-full mt-6 flex flex-col items-center justify-center" {
+            form hx-put=(format!("recipes/edit/add-step/{}", recipe_id)) hx-swap="outerHTML" class="w-1/4 mt-6 flex flex-col items-center justify-center" {
                 input type="hidden" name=("recipe_id") value=(recipe_id);
                 button type="submit" class="btn btn-primary"  { "Add Step (+)" }
             }

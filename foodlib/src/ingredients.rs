@@ -313,6 +313,18 @@ impl FoodBase {
         Ok(source.ingredient_source_id)
     }
 
+    pub async fn delete_ingredient_source(&self, source_id: i32) -> eyre::Result<()> {
+        sqlx::query!(
+            r#"
+                DELETE FROM ingredient_sources WHERE ingredient_source_id = $1
+            "#,
+            source_id
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn get_ingredients(&self) -> eyre::Result<Vec<Ingredient>> {
         let records = sqlx::query_as!(
             Ingredient,
