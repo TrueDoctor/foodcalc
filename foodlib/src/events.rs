@@ -167,8 +167,8 @@ impl FoodBase {
             EventRecipeIngredient,
             r#" SELECT ingredient_id as "ingredient_id!",
                    ingredient as "name!",
-                   round(sum(weight) / servings, 2) as "weight!",
-                   round(sum(energy) /servings, 2) as "energy!",
+                   sum(weight) / servings as "weight!",
+                   sum(energy) /servings as "energy!",
                    sum(price) / servings as "price!"
                 FROM event_ingredients
                 WHERE meal_id = $1
@@ -401,20 +401,6 @@ impl FoodBase {
         Ok(query)
     }
 
-    pub async fn get_event_source_overrides(
-        &self,
-        event_id: i32,
-    ) -> eyre::Result<Vec<SourceOverride>> {
-        let records = sqlx::query_as!(
-            SourceOverride,
-            "SELECT * FROM event_source_overrides WHERE event_id=$1",
-            event_id
-        )
-        .fetch_all(&*self.pg_pool)
-        .await?;
-        Ok(records)
-    }
-
     pub async fn add_event_source_override(
         &self,
         event_id: i32,
@@ -433,5 +419,37 @@ impl FoodBase {
         .fetch_one(&*self.pg_pool)
         .await?;
         Ok(source_override)
+    }
+}
+
+pub struct SourceOverrideView {
+    pub event_id: i32,
+    pub ingredient_id: i32,
+    pub ingredient: String,
+    pub store_id: i32,
+    pub store: String,
+}
+
+impl FoodBase {
+    pub async fn get_event_source_overrides(
+        &self,
+        event_id: i32,
+    ) -> eyre::Result<Vec<SourceOverrideView>> {
+        let overrides = sqlx::query_as!(
+            SourceOverrideView,
+            r#"
+                SELECT event_id, ingredient_id, ingredients.name as ingredient, store_id, stores.name as store
+                FROM event_source_overrides
+                INNER JOIN ingredient_sources USING (ingredient_source_id)
+                INNER JOIN ingredients USING (ingredient_id)
+                INNER JOIN stores USING (store_id)
+                WHERE event_id = $1
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        Ok(overrides)
     }
 }

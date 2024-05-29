@@ -65,6 +65,8 @@ impl MealDetail {
     ) -> Self {
         let mut new_meal = meal.clone().unwrap_or_default();
         new_meal.event_id = event_id;
+        let start_time = new_meal.start_time.to_string();
+        let end_time = new_meal.end_time.to_string();
         Self {
             new_meal: new_meal.clone(),
             old_meal: meal,
@@ -74,8 +76,8 @@ impl MealDetail {
             filtered_places: None,
             recipe_filter: Default::default(),
             place_filter: Default::default(),
-            start_time: InputState::new(new_meal.start_time.to_string()),
-            end_time: InputState::new(new_meal.end_time.to_string()),
+            start_time: InputState::new(start_time[..(start_time.len() - 3)].to_string()),
+            end_time: InputState::new(end_time[..(start_time.len() - 1)].to_string()),
             servings: InputState::new(new_meal.servings.to_string()),
             energy: InputState::new(new_meal.energy.to_string()),
             comment: InputState::new(new_meal.comment.unwrap_or_default()),
