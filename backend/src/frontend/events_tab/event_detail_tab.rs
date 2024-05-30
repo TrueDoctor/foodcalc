@@ -64,13 +64,19 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
         .ok_or(html_error(&format!("Failed to fetch event"), "/events"))?;
 
     Ok(html! {
-        form class="flex flex-row items-center justify-center" action=(format!("/{}", event_id)) {
+        form class="flex flex-row items-center justify-center gap-4" action=(format!("/{}", event_id)) {
+            label for="name" { "Name:" };
             input name="name" class="text" type="text" value=(&event.event_name);
+            label for="comment" { "Comment:" };
             input name="comment" class="text" type="text" value=(&event.comment.unwrap_or_default());
-            input name="budget" class="text" type="number" value=(&(event.budget.map(|x|x.0).unwrap_or(0) as f64 / 100.));
+            label for="budget" { "Budget:" };
+            input name="budget" class="text" type="text" value=(&(event.budget.map(|x|x.0).unwrap_or(0) as f64 / 100.));
             button class="btn btn-primary" type="submit" {"Submit"}
         }
-        table class="w-full text-inherit table-auto object-center" {
+        div class="flex-col items-center justify-center mb-2" {
+            p class="text-2xl" { "Meals" }
+        }
+        table class="w-full text-inherit table-auto object-center mb-2" {
             thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} }  }
             tbody {
                 @for meal in meals {
@@ -82,6 +88,9 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
             @for ingredient in ingredients {
                 option value=(ingredient.name) {}
             }
+        }
+        div class="flex-col items-center justify-center mb-2" {
+            p class="text-2xl" { "Ingredient Sources Overrides" }
         }
         table class="w-full text-inherit table-auto object-center" {
             thead { tr { th { "Ingredient" } th {"Store"} th {} }  }
@@ -121,7 +130,7 @@ fn format_event_source_override(source_override: &SourceOverrideView, stores: &[
     };
     html! {
         tr {
-            td { input name="ingredient" class="text" type="text" list="ingredients" value=(source_override.ingredient); }
+            td { input name="ingredient" class="text" type="text" list="ingredients" value=(source_override.ingredient) placeholder="Ingredient Name" required="true"; }
             td {
                 select name="store_id" id="stores" required="true" class="text" {
                     @for store in stores {
