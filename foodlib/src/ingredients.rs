@@ -505,6 +505,10 @@ impl FoodBase {
                 .selling_price_info
                 .gross_price;
             let weight = &bundle.gross_weight;
+            let category = bundle
+                .categories
+                .iter()
+                .fold(String::new(), |acc, n| format!("{acc}/{}", n.name));
             println!(
                 "#{}: {}€ {}kg {} {:?}",
                 s.ingredient_id,
@@ -520,7 +524,7 @@ impl FoodBase {
                 2,
             )
             .map_err(|e| eyre::eyre!(e))?;
-            foodbase
+            let id = foodbase
                 .update_ingredient_source_price(
                     s.ingredient_id,
                     s.url,
@@ -528,6 +532,7 @@ impl FoodBase {
                     BigDecimal::from_str(weight)?,
                 )
                 .await?;
+            foodbase.set_metro_category(id, &category).await?;
             Ok(())
         }
         for source in urls.iter() {
@@ -603,21 +608,48 @@ impl FoodBase {
         url: Option<String>,
         price: PgMoney,
         weight: BigDecimal,
-    ) -> eyre::Result<u64> {
+    ) -> eyre::Result<i32> {
         sqlx::query!(
             r#"
                 UPDATE ingredient_sources
                 SET price = $3, package_size = $4, unit_id = 0
                 WHERE ingredient_id = $1 AND url = $2
+                RETURNING ingredient_source_id
             "#,
             ingredient_id,
             url,
             price,
             weight,
         )
+        .fetch_one(&*self.pg_pool)
+        .await
+        .map(|r| r.ingredient_source_id)
+        .map_err(|err| err.into())
+    }
+
+    pub async fn set_metro_category(
+        &self,
+        ingredient_source_id: i32,
+        category: &str,
+    ) -> eyre::Result<()> {
+        println!(
+            "Inserting into categories: {}{}",
+            ingredient_source_id, category
+        );
+        sqlx::query!(
+            r#"
+                INSERT INTO metro_categories (ingredient_source_id, category)
+                VALUES ($1, $2)
+                ON CONFLICT (ingredient_source_id) DO
+                UPDATE SET category = $2
+                WHERE metro_categories.ingredient_source_id = $1
+            "#,
+            ingredient_source_id,
+            category
+        )
         .execute(&*self.pg_pool)
         .await
-        .map(|result| result.rows_affected())
+        .map(|r| ())
         .map_err(|err| err.into())
     }
 
