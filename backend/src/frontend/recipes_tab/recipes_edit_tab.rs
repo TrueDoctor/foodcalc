@@ -222,17 +222,6 @@ pub async fn handle_step_change(
     State(state): State<MyAppState>,
     Form(data): axum::extract::Form<UpdateRecipeStepHeader>,
 ) -> Markup {
-    state
-        .db_connection
-        .delete_step(data.recipe_id, data.step_id)
-        .await
-        .unwrap_or_else(|_| {
-            log::warn!(
-                "Failed to update subrecipe {} in recipe {}",
-                data.step_id,
-                data.recipe_id
-            )
-        });
     let step = RecipeStep {
         step_id: data.step_id,
         step_order: data.step_order,
@@ -242,6 +231,11 @@ pub async fn handle_step_change(
         duration_per_kg: pg_interval_from_minutes(data.duration_per_kg_minutes),
         recipe_id: data.recipe_id,
     };
+    state
+        .db_connection
+        .update_recipe_step(&step)
+        .await
+        .unwrap_or_default();
     step.format_for_step_table(data.recipe_id)
 }
 
@@ -480,7 +474,7 @@ pub async fn add_step_form(State(_): State<MyAppState>, Path(recipe_id): Path<i3
                 input type="hidden" name=("step_id") value=(-1);
                 input class="text" type="text" name=("step_name") placeholder="Name" value="" required="required";
                 input class="text" type="text" name=("step_order") placeholder="Order" value="" required="required";
-                input class="text" type="text" name=("step_description") placeholder="Description" value="" required="required";
+                input class="text" type="text" name=("step_description") placeholder="Description" value="";
                 input class="text" type="text" name=("fixed_duration_minutes") placeholder="Fixed Duration in Minutes" value="" required="required";
                 input class="text" type="text" name=("duration_per_kg_minutes") placeholder="Duration per kg in Minutes" value="" required="required";
                 button class="btn btn-primary" type="submit" { "Submit" }
@@ -520,12 +514,12 @@ pub async fn recipe_edit_view(
                 form hx-put="recipes/edit/change-name" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     input class="text" type="text" name="name" value=(state.get_recipe(recipe_id).await.unwrap_or_default().name) required="required";
-                    textarea class="text" name="comment" required="required" { (state.get_recipe(recipe_id).await.unwrap_or_default().comment.unwrap_or_default()) }
+                    textarea class="text" name="comment" { (state.get_recipe(recipe_id).await.unwrap_or_default().comment.unwrap_or_default()) }
                     button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
             }
 
-            div id=("styling bullshit") class="mb-6 mt-6 w-1/4" {
-                form hx-put=(format!("recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" class="w-full flex flex-col items-center justify-center pb-4" {
+            div id="styling-bullshit" class="mb-6 mt-6 w-1/4" {
+                form hx-put=(format!("recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" hx-target="#styling-bullshit" class="w-full flex flex-col items-center justify-center pb-4" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     button type="submit" class="btn btn-primary"  { "Add Subrecipe (+)" }
                 }
@@ -645,11 +639,10 @@ impl StepTableFormattable for RecipeStep {
                 td style="text-align:left" {
                     input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
                     input class=(form_id) type="hidden" name=("step_id") value=(self.step_id);
-                    input class=(form_id) type="hidden" name=("step_name") value=(self.step_name);
-                    div class=(format!("w-full {}",form_id)) name=("step_name") { (self.step_name) }
+                    input class=(format!("text {}",form_id)) name="step_order" value=(self.step_order) required="required" hx-put="recipes/edit/change-step-order" hx-target="#contents" hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML";
                 }
-                td { input class=(format!("text {}",form_id)) name="step_order" value=(self.step_order) required="required" hx-put="recipes/edit/change-step-order" hx-target="#contents" hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML"; }
-                td { input class=(format!("text {}",form_id)) name="step_description" value=(self.step_description) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.step_id)) hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML"; }
+                td { input class=(format!("text {}",form_id)) name=("step_name") value=(self.step_name) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.step_id)) hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML"; }
+                td { input class=(format!("text {}",form_id)) name="step_description" value=(self.step_description) hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.step_id)) hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML"; }
                 td { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.step_id)) hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML"; }
                 td { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.step_id)) hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML"; }
                 td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("recipes/edit/delete-step/{}/{}", recipe_id, self.step_id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
