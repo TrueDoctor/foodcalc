@@ -64,6 +64,9 @@ pub fn navbar() -> Markup {
                     p class="text-2xl" {
                         "WARNING: You are using the production database!"
                     }
+                    p class="text-lg" {
+                        (std::env::var("DATABASE_URL").unwrap())
+                    }
                     button class="btn bg-black w-1/2" hx-on:click="document.getElementById('banner').remove()" {
                         "Close"
                     }
