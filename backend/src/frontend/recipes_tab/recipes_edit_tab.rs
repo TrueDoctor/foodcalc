@@ -527,7 +527,7 @@ pub async fn recipe_edit_view(
 
             @if !subrecipes.is_empty() {
                 div id=("meta-ingredients") class="w-3/4" {
-                    table class="text-inherit table-auto object-center" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
+                    table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
                         thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
                         tbody { @for item in subrecipes { (item.format_for_subrecipe_table(recipe_id)) } }
                     }
@@ -541,7 +541,7 @@ pub async fn recipe_edit_view(
 
             @if !ingredients.is_empty() {
                 div id=("ingredients") class="w-3/4" {
-                    table class="text-inherit table-auto object-center" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
+                    table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
                         thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
                         tbody { @for item in ingredients { (item.format_for_ingredient_table(unit_types.clone(), recipe_id)) } }
                     }
@@ -555,7 +555,7 @@ pub async fn recipe_edit_view(
 
             @if steps.len() > 0 {
                 div id=("steps") class="w-3/4" {
-                    table class="text-inherit table-auto object-center" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
+                    table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
                         thead { tr { th { "Order" } th { "Name" } th { "Description" } th { "Duration"} th { "Duration per kg" } th { "Delete" } } }
                         tbody { @for item in steps { (item.format_for_step_table(recipe_id)) } }
                     }

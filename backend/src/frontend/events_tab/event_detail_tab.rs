@@ -76,7 +76,7 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
         }
-        table class="w-full text-inherit table-auto object-center mb-2" {
+        table class="w-full text-inherit table-auto object-center mb-2 table-fixed" {
             thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} }  }
             tbody {
                 @for meal in meals {
@@ -92,7 +92,7 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Ingredient Sources Overrides" }
         }
-        table class="w-full text-inherit table-auto object-center" {
+        table class="w-full text-inherit table-auto object-center table-fixed" {
             thead { tr { th { "Ingredient" } th {"Store"} th {} }  }
             tbody {
                 (format_event_source_override(&dummy_source, &stores))
@@ -152,7 +152,7 @@ async fn ingredients_per_serving(state: State<MyAppState>, meal_id: Path<i32>) -
     html! {
         dialog open="true" id="popup" {
             div class="flex-col items-center justify-center" {
-                table class="w-full table-auto object-center" {
+                table class="w-full table-auto object-center table-fixed" {
                     thead { tr { th { "Ingredient" } th {"Amount"} th {"Energy"} th {"Price"} } }
                     tbody {
                         @for event_meal_ingredint in event_meal_ingredints {

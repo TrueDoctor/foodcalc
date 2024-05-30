@@ -168,7 +168,7 @@ pub async fn shopping_list(
     html! {
         div class="flex flex-col items-center justify-center" {
             h1 { "Shopping list" }
-            table class="w-full text-inherit table-auto object-center" {
+            table class="w-full text-inherit table-auto object-center table-fixed" {
                 thead { tr { th { "Ingredient" } th { "Amount" } th { "Unit" } } }
                 tbody {
                     @for (ingredient, amount) in shopping_list {
@@ -231,7 +231,7 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
                     hx-target="#search-results" hx-indicator=".htmx-indicator";
 
             }
-            table class="w-full text-inherit table-auto object-center" {
+            table class="w-full text-inherit table-auto object-center table-fixed" {
                 // We add extra table headers to account for the buttons
                 thead { tr { th { "ID" } th { "Name" } th { "Comment" }  th {} th {} th {}} }
                 form hx-post="/recipes" hx-target="#content"  class="w-full" {

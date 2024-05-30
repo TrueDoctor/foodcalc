@@ -98,7 +98,7 @@ pub async fn event_list(State(state): State<MyAppState>) -> Markup {
             hx-target="this"  hx-swap="outerHTML" {
             button class="btn btn-primary" hx-put="/events/add" { "Add event (+)" }
         }
-        table class="w-full text-inherit table-auto object-center" {
+        table class="w-full text-inherit table-auto object-center table-fixed" {
             // We add extra table headers to account for the buttons
             thead { tr { th { "Name" } th { "Comment" } th {} th {}} }
             tbody id="search-results" {

@@ -170,7 +170,7 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
             }
             (add_ingredient_button())
 
-            table {
+            table class="table-fixed"{
                 thead { tr class="p-2" {
                     th class="w-1/4" { "Name" }
                     th class="w-1/8" { "Energy" }
@@ -266,7 +266,7 @@ async fn sources_table(state: State<MyAppState>, id: Path<i32>) -> Markup {
                 p class="text-2xl" { (format!("Sources for {}", ingredient.name)) }
                 button  class="btn bg-btn-cancel-normal" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
             }
-            table {
+            table class="table-fixed" {
                 thead {
                     tr {
                         th { "Store" }
