@@ -209,7 +209,7 @@ struct SourceData {
 
 async fn update_override(
     State(state): State<MyAppState>,
-    Path((event_id, ingredient_id)): Path<(i32, i32)>,
+    Path((event_id, _ingredient_id)): Path<(i32, i32)>,
     Form(source): axum::extract::Form<SourceData>,
 ) -> Markup {
     match state

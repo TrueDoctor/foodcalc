@@ -238,6 +238,13 @@ impl FoodBase {
         Ok(event)
     }
 
+    pub async fn delete_event(&self, event_id: i32) -> eyre::Result<i32> {
+        let _ = sqlx::query!("DELETE FROM events WHERE event_id = $1", event_id)
+            .fetch_optional(&*self.pg_pool)
+            .await?;
+        Ok(event_id)
+    }
+
     pub async fn get_places(&self) -> eyre::Result<Vec<Place>> {
         let records = sqlx::query_as!(
             Place,
