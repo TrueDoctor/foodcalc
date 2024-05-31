@@ -25,6 +25,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         .route("/:event_id", post(update_event))
         .route("/:event_id/overrides/:source_id", post(update_override))
         .route("/:event_id/overrides/:source_id", delete(delete_override))
+        .route("/export/pdf/:meal_id", get(export_recipe_pdf))
         .route(
             "/:event_id/overrides/:source_id/delete_dialog",
             get(delete_override_dialog),
@@ -96,6 +97,43 @@ pub async fn delete_meal_dialog(
     }
 }
 
+
+
+pub async fn export_recipe_pdf(
+    State(state): State<MyAppState>,
+    Path(meal_id): Path<i32>,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Markup> {
+    let Ok(recipe_info) = state
+        .db_connection
+        .fetch_meal_recipe(meal_id        )
+        .await
+    else {
+        return Err(html_error("Meal fetching failed"));
+    };
+    let title = recipe_info.name.to_owned();
+    let result = export_recipes(recipe_info).await;
+
+    match result {
+        Ok(recipe) => {
+            let headers = [
+                (
+                    axum::http::header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}.pdf\"", title),
+                ),
+                (
+                    axum::http::header::CONTENT_TYPE,
+                    "application/pdf".to_string(),
+                ),
+            ];
+            Ok((headers, recipe))
+        }
+        Err(error) => {
+            log::error!("Failed to save recipe export: {}", error);
+            Err(html_error("Failed to save recipe export"))
+        }
+    }
+}
+
 async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Result<Markup, Markup> {
     let stores = state
         .get_stores()
@@ -143,7 +181,7 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
             button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/-1", event_id)) {"Add Meal"}
         }
         table class="w-full text-inherit table-auto object-center mb-2 table-fixed" {
-            thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} }  }
+            thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} }  }
             tbody {
                 @for meal in meals {
                     (format_event_meal(event_id, &meal))
@@ -312,6 +350,7 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
             (format(event_meal.weight.to_f64().unwrap_or_default() /  event_meal.servings as f64 * 1000., "g"))
             (format(event_meal.price.0 as f64 / 100. / event_meal.servings as f64, "€"))
             td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ingredients per serving"} }
+            td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/evets/edit/export/pdf/{}", event_meal.meal_id)) {"Print"} }
             td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
             td { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/edit/delete/{}/{}", event_id, event_meal.meal_id)) {"Delete"} }
         }

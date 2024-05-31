@@ -106,23 +106,6 @@ pub async fn export_recipe_pdf(
     };
     let title = recipe_info.name.to_owned();
     let result = export_recipes(recipe_info).await;
-    // let subrecipes = state
-    //     .db_connection
-    //     .fetch_subrecipes_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
-    //     .await
-    //     .unwrap();
-
-    // let title = state
-    //     .db_connection
-    //     .get_recipe(recipe_id)
-    //     .await
-    //     .unwrap()
-    //     .name;
-
-    // let result = state
-    //     .db_connection
-    //     .generate_recipes_typst(&subrecipes)
-    //     .await;
 
     match result {
         Ok(recipe) => {
