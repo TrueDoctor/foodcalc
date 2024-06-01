@@ -72,7 +72,20 @@ async fn meal_form(
         .get_event_meal(dbg!(meal_id))
         .await
         .map_err(|e| html_error(&format!("Failed to fetch meal {e}"), "/events"))?;
+    let mut recipes = state
+        .get_recipes()
+        .await
+        .map_err(|e| html_error(&format!("Failed to fetch recipes {e}"), "/events"))?;
+    recipes.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut places = state
+        .get_places()
+        .await
+        .map_err(|e| html_error(&format!("Failed to fetch places {e}"), "/events"))?;
+    places.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(html! {
+        div class="flex justify-center w-full mb-4" {
+            p class="text-3xl" { "Edit Meal" }
+        }
         table class="table-auto" {
             thead {
                 tr {
@@ -82,12 +95,26 @@ async fn meal_form(
             }
             tbody {
                 tr {
-                    td { "Recipe_id" }
-                    td { input class="text" type="number" name="recipe_id" value=(meal.recipe_id.to_string()); }
+                    td { "Recipe" }
+                    td { select name="recipe_id" class="text" {
+                        @for recipe in recipes {
+                            (html! {
+                                option value=(recipe.recipe_id) selected { (recipe.name) }
+                            })
+                        }
+                        (html! {option value=(meal.recipe_id) selected { (meal.name) }})
+                    } }
                 }
                 tr {
-                    td { "Place_id" }
-                    td { input class="text" type="number" name="place_id" value=(meal.place_id.to_string()); }
+                    td { "Place" }
+                    td { select name="place_id" class="text" {
+                        @for place in places {
+                            (html! {
+                                option value=(place.place_id) selected { (place.name) }
+                            })
+                        }
+                        (html! {option value=(meal.place_id) selected { (meal.place) }})
+                    } }
                 }
                 tr {
                     td { "Start Time" }
@@ -98,12 +125,24 @@ async fn meal_form(
                     td { input class="text" type="datetime-local" name="end_time" value=(meal.end_time.format("%Y-%m-%dT%H:%M").to_string()); }
                 }
                 tr {
-                    td { "Energy" }
-                    td { input class="text" type="number" name="energy" value=(meal.energy.to_string()); }
+                    td { "Weight" }
+                    td { (meal.weight.to_string()) "g" }
+                }
+                tr {
+                    td {
+                    div class="group" {
+                        p { "Energy" }
+                        span class="absolute z-50 hidden px-6 py-2 -mt-16 text-center text-white bg-blue-900 border border-grey-600 rounded tooltip-text group-hover:block" {"Size of 1 Serving"}
+                    }}
+                    td { input class="text" type="text" name="energy" value=(meal.energy.to_string()); }
+                }
+                tr {
+                    td { "Price" }
+                    td { (meal.price.to_bigdecimal(2).to_string()) "€" }
                 }
                 tr {
                     td { "Servings" }
-                    td { input class="text" type="number" name="servings" value=(meal.servings.to_string()); }
+                    td { input class="text" type="text" name="servings" value=(meal.servings.to_string()); }
                 }
                 tr {
                     td { "Comment" }
@@ -111,9 +150,9 @@ async fn meal_form(
                 }
             }
         }
-
         div class="flex justify-between w-full mt-4 gap-2" {
             button class="btn btn-abort" hx-target="#content" hx-get=(format!("/events/edit/{}", event_id)) { "Abort" }
+
             button class="btn btn-primary mx-4" hx-target="#content" hx-post=(format!("events/edit/event_edit_meal/{}/{}", event_id, meal_id)) hx-include="*" { "Save" }
         }
     })

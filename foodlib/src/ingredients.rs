@@ -649,7 +649,7 @@ impl FoodBase {
         )
         .execute(&*self.pg_pool)
         .await
-        .map(|r| ())
+        .map(|_r| ())
         .map_err(|err| err.into())
     }
 
