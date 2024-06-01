@@ -13,6 +13,8 @@ use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgMoney;
 
+mod event_edit_meal_tab;
+
 use crate::{
     frontend::{html_error, LOGIN_URL},
     MyAppState,
@@ -30,6 +32,10 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         .route(
             "/ingredients-per-serving/:meal_id",
             get(ingredients_per_serving),
+        )
+        .nest(
+            "/event_edit_meal",
+            event_edit_meal_tab::event_edit_meal_router(),
         )
 }
 
@@ -77,10 +83,10 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
             p class="text-2xl" { "Meals" }
         }
         table class="w-full text-inherit table-auto object-center mb-2 table-fixed" {
-            thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} }  }
+            thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} }  }
             tbody {
                 @for meal in meals {
-                    (format_event_meal(&meal))
+                    (format_event_meal(event_id, &meal))
                 }
             }
         }
@@ -150,7 +156,7 @@ async fn ingredients_per_serving(state: State<MyAppState>, meal_id: Path<i32>) -
     };
 
     html! {
-        dialog open="true" id="popup" {
+        dialog open="true" id="popup" class="w-1/2" {
             div class="flex-col items-center justify-center" {
                 table class="w-full table-auto object-center table-fixed" {
                     thead { tr { th { "Ingredient" } th {"Amount"} th {"Energy"} th {"Price"} } }
@@ -232,7 +238,7 @@ async fn update_override(
     }
 }
 
-fn format_event_meal(event_meal: &Meal) -> Markup {
+fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
     let format = |x, unit| html! { td { (&format!("{:.3}{}", x,unit)) } };
     html! {
         tr {
@@ -242,6 +248,7 @@ fn format_event_meal(event_meal: &Meal) -> Markup {
             (format(event_meal.energy.to_f64().unwrap_or_default(), "kj"))
             (format(event_meal.weight.to_f64().unwrap_or_default() /  event_meal.servings as f64 * 1000., "g"))
             (format(event_meal.price.0 as f64 / 100. / event_meal.servings as f64, "€"))
+            td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
             td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ingredients per serving"} }
         }
     }

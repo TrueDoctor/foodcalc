@@ -28,7 +28,7 @@ pub async fn home_view(mut auth: AuthContext, host: Host, state: State<MyAppStat
     }
     html! {
         head {
-            title { "Foodbase" }
+            title { "Foodcalc" }
             link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x))) {}
             script src="https://unpkg.com/htmx.org@1.9.6" {}
             script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/debug.js" {}
