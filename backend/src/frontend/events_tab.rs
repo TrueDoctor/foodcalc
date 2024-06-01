@@ -76,7 +76,14 @@ pub async fn delete_dialog(State(state): State<MyAppState>, Path(event_id): Path
 pub async fn delete(State(state): State<MyAppState>, Path(event_id): Path<i32>) -> Response {
     match state.delete_event(event_id).await {
         Ok(_) => (event_list(State(state)).await).into_response(),
-        Err(_) => html_error("Failed to delete event", "/events").into_response(),
+        Err(e) => html_error(
+            &format!(
+                "Failed to delete Event with id {} because of DB Error {} ",
+                event_id, e
+            ),
+            "/events",
+        )
+        .into_response(),
     }
 }
 

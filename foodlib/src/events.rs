@@ -239,6 +239,9 @@ impl FoodBase {
     }
 
     pub async fn delete_event(&self, event_id: i32) -> eyre::Result<i32> {
+        let _ = sqlx::query!("DELETE FROM event_meals WHERE event_id = $1", event_id)
+            .fetch_optional(&*self.pg_pool)
+            .await?;
         let _ = sqlx::query!("DELETE FROM events WHERE event_id = $1", event_id)
             .fetch_optional(&*self.pg_pool)
             .await?;
