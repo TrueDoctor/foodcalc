@@ -107,7 +107,7 @@ pub async fn event_list(State(state): State<MyAppState>) -> Markup {
         }
         table class="w-full text-inherit table-auto object-center table-fixed" {
             // We add extra table headers to account for the buttons
-            thead { tr { th { "Name" } th { "Comment" } th {} th {}} }
+            thead { tr { th class="w-1/3" { "Name" } th class="w-1/3" { "Comment" } th {} th {}} }
             tbody id="search-results" {
                 @for recipe in events.iter() {
                     (format_event(recipe))

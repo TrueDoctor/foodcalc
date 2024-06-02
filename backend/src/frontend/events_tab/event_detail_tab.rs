@@ -33,10 +33,28 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
             "/ingredients-per-serving/:meal_id",
             get(ingredients_per_serving),
         )
+        .route("/delete/:event_id/:meal_id", get(delete_meal_dialog))
         .nest(
             "/event_edit_meal",
             event_edit_meal_tab::event_edit_meal_router(),
         )
+}
+
+pub async fn delete_meal_dialog(
+    state: State<MyAppState>,
+    Path((event_id, meal_id)): Path<(i32, i32)>,
+) -> Markup {
+    let meal = state.get_event_meal(meal_id).await.unwrap_or_default();
+
+    html! {
+        dialog open="true" class="dialog" id="delete" {
+            p class="text-2xl" { (format!("Do you really want to delete meal: {}", meal.name)) }
+            div class="flex justify-between w-full m-2 gap-2" {
+                button class="btn btn-abort" hx-get=(format!("/events/edit/{}", event_id)) hx-target="#content" { "Abort" }
+                button class="btn btn-cancel mx-4" hx-target="#content" hx-delete=(format!("/events/edit/event_edit_meal/{}/{}", event_id, meal_id)) { "Confirm Delete" }
+            }
+        }
+    }
 }
 
 async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Result<Markup, Markup> {
@@ -82,8 +100,11 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
         }
+        div class="flex flex-row items-center justify-center mb-2" {
+            button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/-1", event_id)) {"Add Meal"}
+        }
         table class="w-full text-inherit table-auto object-center mb-2 table-fixed" {
-            thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} }  }
+            thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} }  }
             tbody {
                 @for meal in meals {
                     (format_event_meal(event_id, &meal))
@@ -109,6 +130,7 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
         }
     })
 }
+
 fn format_event_source_override(source_override: &SourceOverrideView, stores: &[Store]) -> Markup {
     let option = |store: &Store, source_store| match store.store_id == source_store {
         false => html! {
@@ -248,8 +270,9 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
             (format(event_meal.energy.to_f64().unwrap_or_default(), "kj"))
             (format(event_meal.weight.to_f64().unwrap_or_default() /  event_meal.servings as f64 * 1000., "g"))
             (format(event_meal.price.0 as f64 / 100. / event_meal.servings as f64, "€"))
-            td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
             td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ingredients per serving"} }
+            td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
+            td { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/edit/delete/{}/{}", event_id, event_meal.meal_id)) {"Delete"} }
         }
     }
 }

@@ -3,17 +3,18 @@ use axum::{
     extract::{Form, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use bigdecimal::BigDecimal;
 use chrono::DateTime;
 use maud::{html, Markup};
-use serde::Deserialize;
+use serde::{de, Deserialize};
 
 pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/:event_id/:meal_id", post(update_meal))
         .route("/:event_id/:meal_id", get(meal_form))
+        .route("/:event_id/:meal_id", delete(delete_meal))
 }
 
 #[derive(Clone, PartialEq, Deserialize)]
@@ -25,6 +26,18 @@ pub struct MealForm {
     pub energy: BigDecimal,
     pub servings: i32,
     pub comment: Option<String>,
+}
+
+pub async fn delete_meal(
+    state: State<MyAppState>,
+    Path((event_id, meal_id)): Path<(i32, i32)>,
+) -> impl IntoResponse {
+    match state.remove_meal(meal_id).await {
+        Ok(_) => Ok(event_detail_tab::event_form(state, Path(event_id))
+            .await
+            .unwrap_or_else(|e| e)),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
 }
 
 pub async fn update_meal(
@@ -40,9 +53,11 @@ pub async fn update_meal(
     let end_time = DateTime::parse_from_rfc3339(&append_end)
         .map_err(|_| StatusCode::BAD_REQUEST)?
         .naive_utc();
-    match state.remove_meal(meal_id).await {
-        Ok(_) => (),
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    if meal_id != -1 {
+        match state.remove_meal(meal_id).await {
+            Ok(_) => (),
+            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        }
     }
     match state
         .add_meal(
@@ -68,10 +83,15 @@ async fn meal_form(
     state: State<MyAppState>,
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> Result<Markup, Markup> {
-    let meal = state
-        .get_event_meal(dbg!(meal_id))
-        .await
-        .map_err(|e| html_error(&format!("Failed to fetch meal {e}"), "/events"))?;
+    let mut meal = foodlib::Meal::default();
+    meal.name = "Select Recipe".to_string();
+    meal.place = "Select Place".to_string();
+    if meal_id != -1 {
+        meal = state
+            .get_event_meal(dbg!(meal_id))
+            .await
+            .map_err(|e| html_error(&format!("Failed to fetch meal {e}"), "/events"))?;
+    }
     let mut recipes = state
         .get_recipes()
         .await
@@ -96,7 +116,7 @@ async fn meal_form(
             tbody {
                 tr {
                     td { "Recipe" }
-                    td { select name="recipe_id" class="text" {
+                    td { select name="recipe_id" class="text" required="required" {
                         @for recipe in recipes {
                             (html! {
                                 option value=(recipe.recipe_id) selected { (recipe.name) }
@@ -107,7 +127,7 @@ async fn meal_form(
                 }
                 tr {
                     td { "Place" }
-                    td { select name="place_id" class="text" {
+                    td { select name="place_id" class="text" required="required" {
                         @for place in places {
                             (html! {
                                 option value=(place.place_id) selected { (place.name) }
@@ -118,11 +138,11 @@ async fn meal_form(
                 }
                 tr {
                     td { "Start Time" }
-                    td { input class="text" type="datetime-local" name="start_time" value=(meal.start_time.format("%Y-%m-%dT%H:%M").to_string()); }
+                    td { input class="text" type="datetime-local" name="start_time" required="required" value=(meal.start_time.format("%Y-%m-%dT%H:%M").to_string()); }
                 }
                 tr {
                     td { "End Time" }
-                    td { input class="text" type="datetime-local" name="end_time" value=(meal.end_time.format("%Y-%m-%dT%H:%M").to_string()); }
+                    td { input class="text" type="datetime-local" name="end_time" required="required" value=(meal.end_time.format("%Y-%m-%dT%H:%M").to_string()); }
                 }
                 tr {
                     td { "Weight" }
@@ -134,7 +154,7 @@ async fn meal_form(
                         p { "Energy" }
                         span class="absolute z-50 hidden px-6 py-2 -mt-16 text-center text-white bg-blue-900 border border-grey-600 rounded tooltip-text group-hover:block" {"Size of 1 Serving"}
                     }}
-                    td { input class="text" type="text" name="energy" value=(meal.energy.to_string()); }
+                    td { input class="text" type="text" name="energy" required="required" value=(meal.energy.to_string()); }
                 }
                 tr {
                     td { "Price" }
@@ -142,7 +162,7 @@ async fn meal_form(
                 }
                 tr {
                     td { "Servings" }
-                    td { input class="text" type="text" name="servings" value=(meal.servings.to_string()); }
+                    td { input class="text" type="text" name="servings" required="required" value=(meal.servings.to_string()); }
                 }
                 tr {
                     td { "Comment" }
