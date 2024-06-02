@@ -12,6 +12,7 @@ use foodlib::{Event, EventRecipeIngredient, Meal, SourceOverrideView, Store, Use
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgMoney;
+use foodlib::typst::export_recipes;
 
 mod event_edit_meal_tab;
 
@@ -30,6 +31,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
             "/:event_id/overrides/:source_id/delete_dialog",
             get(delete_override_dialog),
         )
+        .route("/export_pdf/:meal_id", get(export_recipe_pdf))
         .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
             Arc::new(LOGIN_URL.into()),
             None,
@@ -108,7 +110,7 @@ pub async fn export_recipe_pdf(
         .fetch_meal_recipe(meal_id        )
         .await
     else {
-        return Err(html_error("Meal fetching failed"));
+        return Err(html_error("Meal fetching failed", "/events"));
     };
     let title = recipe_info.name.to_owned();
     let result = export_recipes(recipe_info).await;
@@ -129,7 +131,7 @@ pub async fn export_recipe_pdf(
         }
         Err(error) => {
             log::error!("Failed to save recipe export: {}", error);
-            Err(html_error("Failed to save recipe export"))
+            Err(html_error("Failed to save recipe export", "/events"))
         }
     }
 }
@@ -350,9 +352,10 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
             (format(event_meal.weight.to_f64().unwrap_or_default() /  event_meal.servings as f64 * 1000., "g"))
             (format(event_meal.price.0 as f64 / 100. / event_meal.servings as f64, "€"))
             td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ingredients per serving"} }
-            td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/evets/edit/export/pdf/{}", event_meal.meal_id)) {"Print"} }
+            td { form action=(format!("/events/edit/export_pdf/{}", event_meal.meal_id)) { button class="btn btn-primary" {"Print"} } }
             td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
             td { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/edit/delete/{}/{}", event_id, event_meal.meal_id)) {"Delete"} }
+            
         }
     }
 }
