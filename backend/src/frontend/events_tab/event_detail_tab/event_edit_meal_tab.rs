@@ -8,7 +8,7 @@ use axum::{
 use bigdecimal::BigDecimal;
 use chrono::DateTime;
 use maud::{html, Markup};
-use serde::{de, Deserialize};
+use serde::Deserialize;
 
 pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
     axum::Router::new()

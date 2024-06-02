@@ -505,6 +505,30 @@ impl FoodBase {
         Ok(overrides)
     }
 
+    pub async fn get_event_source_override(
+        &self,
+        event_id: i32,
+        ingredient_source_id: i32,
+    ) -> eyre::Result<SourceOverrideView> {
+        let ingr_override = sqlx::query_as!(
+            SourceOverrideView,
+            r#"
+                SELECT event_id, ingredient_id, ingredient_sources.ingredient_source_id, ingredients.name as ingredient, store_id, stores.name as store
+                FROM event_source_overrides
+                INNER JOIN ingredient_sources USING (ingredient_source_id)
+                INNER JOIN ingredients USING (ingredient_id)
+                INNER JOIN stores USING (store_id)
+                WHERE event_id = $1 AND ingredient_source_id = $2
+            "#,
+            event_id,
+            ingredient_source_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(ingr_override)
+    }
+
     pub async fn add_event_source_override(
         &self,
         event_id: i32,
@@ -551,6 +575,22 @@ impl FoodBase {
     pub async fn delete_event_source_override(&self, source_id: i32) -> eyre::Result<()> {
         let _ = sqlx::query!(
             "DELETE FROM event_source_overrides WHERE ingredient_source_id = $1",
+            source_id
+        )
+        .fetch_optional(&*self.pg_pool)
+        .await?;
+        Ok(())
+    }
+
+    //TODO: is the event_id needed? If not remove function and use above
+    pub async fn delete_event_source_override_with_event_id(
+        &self,
+        event_id: i32,
+        source_id: i32,
+    ) -> eyre::Result<()> {
+        let _ = sqlx::query!(
+            "DELETE FROM event_source_overrides WHERE event_id = $1 AND ingredient_source_id = $2",
+            event_id,
             source_id
         )
         .fetch_optional(&*self.pg_pool)

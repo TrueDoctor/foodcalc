@@ -4,7 +4,7 @@ use axum::{
     extract::{Form, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use axum_login::RequireAuthorizationLayer;
 use bigdecimal::ToPrimitive;
@@ -24,6 +24,11 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/:event_id", post(update_event))
         .route("/:event_id/overrides/:source_id", post(update_override))
+        .route("/:event_id/overrides/:source_id", delete(delete_override))
+        .route(
+            "/:event_id/overrides/:source_id/delete_dialog",
+            get(delete_override_dialog),
+        )
         .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
             Arc::new(LOGIN_URL.into()),
             None,
@@ -38,6 +43,40 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
             "/event_edit_meal",
             event_edit_meal_tab::event_edit_meal_router(),
         )
+}
+
+pub async fn delete_override_dialog(
+    state: State<MyAppState>,
+    Path((event_id, source_id)): Path<(i32, i32)>,
+) -> Markup {
+    let source = state
+        .get_event_source_override(event_id, source_id)
+        .await
+        .unwrap_or_default();
+    html! {
+        dialog open="true" class="dialog" id="delete" {
+            p class="text-2xl" { (format!("Do you really want to delete Source Override: {} from {}", source.ingredient, source.store)) }
+            div class="flex justify-between w-full m-2 gap-2" {
+                button class="btn btn-abort" hx-get=(format!("/events/edit/{}", event_id)) hx-target="#content" { "Abort" }
+                button class="btn btn-cancel mx-4" hx-target="#content" hx-delete=(format!("/events/edit/{}/overrides/{}", event_id, source_id)) { "Confirm Delete" }
+            }
+        }
+    }
+}
+
+pub async fn delete_override(
+    state: State<MyAppState>,
+    Path((event_id, source_id)): Path<(i32, i32)>,
+) -> Markup {
+    match state
+        .delete_event_source_override_with_event_id(event_id, source_id)
+        .await
+    {
+        Ok(_) => event_form(state, Path(event_id))
+            .await
+            .unwrap_or_else(|e| e),
+        Err(_) => html_error("Failed to delete source override", "/events"),
+    }
 }
 
 pub async fn delete_meal_dialog(
@@ -120,7 +159,7 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
             p class="text-2xl" { "Ingredient Sources Overrides" }
         }
         table class="w-full text-inherit table-auto object-center table-fixed" {
-            thead { tr { th { "Ingredient" } th {"Store"} th {} }  }
+            thead { tr { th class="w-1/3" { "Ingredient" } th class="w-1/3" {"Store"} th {} th {} }  }
             tbody {
                 (format_event_source_override(&dummy_source, &stores))
                 @for over in overrides {
@@ -167,6 +206,8 @@ fn format_event_source_override(source_override: &SourceOverrideView, stores: &[
                 }
             }
             td { (button) }
+            td { @if source_override.ingredient_id != -1 {
+                button class="btn btn-cancel" hx-get=(format!("/events/edit/{}/overrides/{}/delete_dialog", source_override.event_id, source_override.ingredient_source_id)) hx-target="this" hx-swap="outerHTML" { "Delete" } }}
         }
     }
 }
