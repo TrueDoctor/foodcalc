@@ -220,11 +220,8 @@ pub struct CalcRecipeCommand {
 
 #[derive(Debug, Args)]
 pub struct CalcShoppingList {
-    /// Event Reference
-    pub event_ref: String,
-
     /// Tour to calc
-    pub tour_id: u32,
+    pub tour_id: i32,
 }
 
 // ----- Add Commands -----
@@ -911,7 +908,7 @@ pub struct EditEventShoppingDeleteTour {
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingDeleteSourceOverride {
-    pub ingredient_id: i32,
+    pub ingredient_id: String,
 }
 
 #[derive(Debug, Args)]
@@ -928,6 +925,7 @@ pub struct EditEventShoppingEdit {
 #[derive(Debug, Subcommand)]
 pub enum EditEventShoppingEditType {
     Tour(EditEventShoppingEditTour),
+    /// Note: There is no check if the two Ingredient Sources are for the same Ingredient
     SourceOverride(EditEventShoppingEditSourceOverride),
     FoodPrep(EditEventShoppingEditFoodPrep),
 }
@@ -947,7 +945,10 @@ pub struct EditEventShoppingEditTour {
 
 #[derive(Debug, Args)]
 pub struct EditEventShoppingEditSourceOverride {
-    pub ingredient_id: i32,
+    /// The Source ID to override
+    pub old_source_id: i32,
+    /// The new Source ID used to Override
+    pub new_source_id: i32,
 }
 
 #[derive(Debug, Args)]
@@ -960,13 +961,13 @@ pub struct EditEventShoppingEditFoodPrep {
 
     #[clap(long, short)]
     /// New Reciep
-    pub prep_date: Option<String>,
+    pub prep_date: Option<NaiveDateTime>,
 
     #[clap(long, short)]
     /// New start
-    pub start: Option<String>,
+    pub start: Option<NaiveDateTime>,
 
     #[clap(long, short)]
     /// New end
-    pub end: Option<String>,
+    pub end: Option<NaiveDateTime>,
 }

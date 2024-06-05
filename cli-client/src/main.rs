@@ -444,7 +444,14 @@ async fn main() {
                     };
                     println!("{}", output);
                 }
-                CalcType::ShoppingList(_) => todo!(),
+                CalcType::ShoppingList(tour_id) => {
+                    let shopping_list = food_base.get_shopping_list(tour_id.tour_id).await;
+
+                    if let Ok(shopping_list) = shopping_list {
+                        let table = Table::new(shopping_list).with(table_config).to_string();
+                        println!("{}", table);
+                    }
+                }
             }
         }
         Commands::Add(add_data) => match &add_data.add_type {
@@ -1318,9 +1325,27 @@ async fn main() {
                         },
                         EditEventShoppingType::Delete(delete_data) => {
                             match &delete_data.edit_type {
-                                EditEventShoppingDeleteType::Tour(_) => todo!(),
-                                EditEventShoppingDeleteType::SourceOverride(_) => todo!(),
-                                EditEventShoppingDeleteType::FoodPrep(_) => todo!(),
+                                EditEventShoppingDeleteType::Tour(tour_id) => {
+                                    let _ =
+                                        food_base.delete_event_shopping_tour(tour_id.tour_id).await;
+                                }
+                                EditEventShoppingDeleteType::SourceOverride(source_id) => {
+                                    let ingredient = food_base
+                                        .get_ingredient_from_string_reference(
+                                            source_id.ingredient_id.clone(),
+                                        )
+                                        .await;
+                                    if ingredient.is_none() {
+                                        println!("Could not find Ingredient");
+                                        return;
+                                    }
+                                    let ingredient = ingredient.unwrap();
+                                    let _ = food_base
+                                        .delete_event_source_override(ingredient.ingredient_id);
+                                }
+                                EditEventShoppingDeleteType::FoodPrep(prep_id) => {
+                                    let _ = food_base.delete_event_food_prep(prep_id.prep_id).await;
+                                }
                             }
                         }
                         EditEventShoppingType::Edit(edit_data) => match &edit_data.edit_type {
@@ -1337,21 +1362,66 @@ async fn main() {
                                 if let Some(store) = &tour_data.store {
                                     let store =
                                         food_base.get_store_by_ref((&store).to_string()).await;
-                                    if store.is_err() {
+                                    if store.is_ok() {
+                                        let store = store.unwrap();
+
+                                        let _ = food_base
+                                            .update_event_shopping_tour_store(
+                                                tour_id,
+                                                store.store_id,
+                                            )
+                                            .await;
+
+                                        println!("Updated tour destination")
+                                    } else {
                                         println!("Could not find Store");
-                                        return;
                                     }
-                                    let store = store.unwrap();
-
-                                    let _ = food_base
-                                        .update_event_shopping_tour_store(tour_id, store.store_id)
-                                        .await;
-
-                                    println!("Updated tour destination")
                                 }
                             }
-                            EditEventShoppingEditType::SourceOverride(_) => todo!(),
-                            EditEventShoppingEditType::FoodPrep(_) => todo!(),
+                            EditEventShoppingEditType::SourceOverride(source_edit_data) => {
+                                let _ = food_base
+                                    .update_event_ingredient_source_override(
+                                        event_id.event_id,
+                                        source_edit_data.old_source_id,
+                                        source_edit_data.new_source_id,
+                                    )
+                                    .await;
+                            }
+                            EditEventShoppingEditType::FoodPrep(prep_edit_data) => {
+                                let prep_id = prep_edit_data.prep_id;
+
+                                if let Some(recipe_ref) = prep_edit_data.recipe.clone() {
+                                    let recipe_query = food_base
+                                        .get_recipe_from_string_reference(recipe_ref)
+                                        .await;
+                                    if let Some(recipe) = recipe_query {
+                                        let _ = food_base.update_event_food_prep_recipe_id(
+                                            prep_id,
+                                            recipe.recipe_id,
+                                        );
+                                    } else {
+                                        println!("Could not find Recipe")
+                                    }
+                                }
+
+                                if let Some(prep_date) = prep_edit_data.prep_date.clone() {
+                                    let _ = food_base
+                                        .update_event_food_prep_prep_date(prep_id, prep_date)
+                                        .await;
+                                }
+
+                                if let Some(use_from) = prep_edit_data.start {
+                                    let _ = food_base
+                                        .update_event_food_prep_use_from(prep_id, use_from)
+                                        .await;
+                                }
+
+                                if let Some(use_until) = prep_edit_data.end {
+                                    let _ = food_base
+                                        .update_event_food_prep_use_until(prep_id, use_until)
+                                        .await;
+                                }
+                            }
                         },
                     },
                 }

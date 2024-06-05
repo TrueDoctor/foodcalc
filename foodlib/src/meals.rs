@@ -69,7 +69,7 @@ impl FoodBase {
              place as "place!",
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
-             sum(weight) as "weight!",
+             round(sum(weight),2) as "weight!",
              (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
              sum(price) as "price!",
              event_meals.servings as "servings!"

@@ -168,7 +168,7 @@ pub async fn shopping_list(
     html! {
         div class="flex flex-col items-center justify-center" {
             h1 { "Shopping list" }
-            table class="w-full text-inherit table-auto object-center" {
+            table class="w-full text-inherit table-auto object-center table-fixed" {
                 thead { tr { th { "Ingredient" } th { "Amount" } th { "Unit" } } }
                 tbody {
                     @for (ingredient, amount) in shopping_list {
@@ -202,14 +202,12 @@ fn html_error(reason: &str) -> Markup {
 
 pub async fn delete_recipe(Path(recipe_id): Path<i32>) -> Markup {
     html! {
-        dialog class="dialog" open="open" {
+        dialog class="dialog" open="open" id="dialog" {
             div class="flex flex-col items-center justify-center" {
-                div class="flex flex-col items-center justify-center" {
-                    h1 { "Are you sure you want to delete this recipe?" }
-                    div class="flex flex-row items-center justify-center mt-6" {
-                        button class="btn btn-success mr-4" hx-target="#content" hx-delete=(format!("/recipes/delete_nqa/{}", recipe_id)) { "Yes" }
-                        button class="btn btn-cancel" hx-target="#content" hx-get="/recipes" { "No" }
-                    }
+                p { "Are you sure you want to delete this Recipe permanently?" }
+                div class="flex justify-between w-full m-2 gap-2" {
+                    button class="btn btn-abort" hx-on:click="document.getElementById('dialog').remove()" { "Abort" }
+                    button class="btn btn-cancel mx-4" hx-target="#content" hx-delete=(format!("/recipes/delete_nqa/{}",recipe_id)) { "Confirm Delete" }
                 }
             }
         }
@@ -222,7 +220,7 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
     };
 
     html! {
-        div id="recipes"  {
+        div id="recipes" class="w-full"  {
             div class="
                 flex flex-row items-center justify-stretch
                 mb-2 gap-5 h-10
@@ -233,9 +231,9 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
                     hx-target="#search-results" hx-indicator=".htmx-indicator";
 
             }
-            table class="w-full text-inherit table-auto object-center" {
+            table class="w-full text-inherit table-auto object-center table-fixed" {
                 // We add extra table headers to account for the buttons
-                thead { tr { th { "Name" } th { "Energy" } th { "Comment" }  th {} th {} th {} th {}} }
+                thead { tr { th { "ID" } th { "Name" } th { "Comment" }  th {} th {} th {}} }
                 form hx-post="/recipes" hx-target="#content"  class="w-full" {
                     tbody id="search-results"  {
                         (recipe_add_form())
@@ -255,8 +253,8 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
 fn recipe_add_form() -> Markup {
     html! {
         tr  { td {  }
-            td { input class="grow text" type="text" name="name";}
-            td { input class="grow text" type="text" name="comment";}
+            td { input class="grow text" type="text" name="name" placeholder="Recipe name" required="required"; }
+            td { input class="grow text" type="text" name="comment" placeholder="Comment"; }
             td { button class="btn btn-primary" type="submit"  { "Add" } }
             td {} td {} td { div id="dialog"; }
         }
@@ -288,7 +286,7 @@ fn format_recipe(recipe: &foodlib::Recipe) -> Markup {
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
             td { button class="btn btn-primary" type="button" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
-            td { button class="btn btn-cancel"  type="button" hx-target="next #dialog" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
+            td { button class="btn btn-cancel"  type="button" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
             td { button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.recipe_id)) hx-swap="afterend" { "Export" } }
             td { div id="dialog"; }
         }

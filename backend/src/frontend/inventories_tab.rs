@@ -410,7 +410,7 @@ pub async fn render_filtered_inventory_contents(
             div id=(SEARCH_RESULTS_DIV) class="w-full" {
                 datalist id=(INGREDIENTS_DATALIST) { @for ingredient in ingredient_list { (ingredient.format_for_datalist()) } }
                 span class="htmx-indicator" { "Searching..." }
-                table class="text-inherit table-auto object-center" padding="0 0.5em" display="block"
+                table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block"
                 max-height="60vh" overflow-y="scroll" {
                     thead { tr { th { "Name" } th { "Amount (kg)" } th { "Delete" } } }
                     tbody { @for item in contents { (item.format_for_ingredient_table( InventoryHeaderData { inventory_id, filter_text: filter.clone()})) } }

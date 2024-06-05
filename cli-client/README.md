@@ -139,20 +139,20 @@ This Project aims to creat a simple to use Commandline application that interfac
                 * [ ] start <start_time>
                 * [ ] end <end_time>
                 * [ ] comment <comment>
-        * [ ] shopping 
+        * [x] shopping 
             * [x] add
                 * [x] tour <date> <store>
                 * [x] source_override <source_id>
                 * [x] food_prep <recipe_id> <prep_date> <use_until> <use_from>
-            * [ ] delete
+            * [x] delete
                 * [x] tour (<tour_id>|<date> <store>)
-                * [ ] source_override <ingredient_id>
-                * [ ] food_prep (<prep_id>|<recipe_id> <prep_date>)
-            * [ ] edit
+                * [x] source_override <ingredient_id>
+                * [x] food_prep (<prep_id>|<recipe_id> <prep_date>)
+            * [x] edit
                 * [x] tour <tour_id> [--date <date>] [--store <store>]
-                * [ ] source_override <source_id>
-                * [ ] food_prep <prep_id>
-                    * [ ] [--recipe_id <new_recipe_id>
-                    * [ ] [--prep_date <new_date>
-                    * [ ] [--start <start_date>]
-                    * [ ] [--end <end_date>]
+                * [x] source_override <source_id>
+                * [x] food_prep <prep_id>
+                    * [x] [--recipe_id <new_recipe_id>
+                    * [x] [--prep_date <new_date>
+                    * [x] [--start <start_date>]
+                    * [x] [--end <end_date>]

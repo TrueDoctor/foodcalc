@@ -125,11 +125,33 @@ impl std::string::ToString for Unit {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ShoppingListItem {
     pub ingredient_id: i32,
     pub ingredient_name: String,
     pub price: PgMoney,
     pub weight: BigDecimal,
+}
+
+impl Tabled for ShoppingListItem {
+    const LENGTH: usize = 4;
+    fn headers() -> Vec<Cow<'static, str>> {
+        vec![
+            "ID".into(),
+            "Ingredient".into(),
+            "Price".into(),
+            "Weight".into(),
+        ]
+    }
+
+    fn fields(&self) -> Vec<Cow<'_, str>> {
+        vec![
+            self.ingredient_id.to_string().into(),
+            self.ingredient_name.clone().into(),
+            crate::util::format_pg_money(self.price).into(),
+            self.weight.to_string().into(),
+        ]
+    }
 }
 
 #[derive(Clone)]
@@ -245,17 +267,19 @@ impl FoodBase {
         weight: BigDecimal,
         price: PgMoney,
         url: Option<String>,
+        comment: Option<String>,
         unit_id: i32,
     ) -> eyre::Result<i32> {
         let ingredient = sqlx::query!(
             r#"
-                INSERT INTO ingredient_sources ( ingredient_id, store_id, url, package_size, price, unit_id)
-                VALUES ( $1, $2, $3, $4, $5, $6)
+                INSERT INTO ingredient_sources ( ingredient_id, store_id, url, comment, package_size, price, unit_id)
+                VALUES ( $1, $2, $3, $4, $5, $6, $7)
                 RETURNING ingredient_id
             "#,
             ingredient_id,
             store_id,
             url,
+            comment,
             weight,
             price,
             unit_id
@@ -270,13 +294,14 @@ impl FoodBase {
         let source = sqlx::query!(
             r#"
                 UPDATE ingredient_sources
-                SET ingredient_id = $1, store_id = $2, url = $3, package_size = $4, price = $5, unit_id = $6
-                WHERE ingredient_source_id = $7
+                SET ingredient_id = $1, store_id = $2, url = $3, comment = $4, package_size = $5, price = $6, unit_id = $7
+                WHERE ingredient_source_id = $8
                 RETURNING ingredient_source_id 
             "#,
             source.ingredient_id,
             source.store_id,
             source.url,
+            source.comment,
             source.package_size,
             source.price,
             source.unit_id,
@@ -286,6 +311,18 @@ impl FoodBase {
         .await?;
 
         Ok(source.ingredient_source_id)
+    }
+
+    pub async fn delete_ingredient_source(&self, source_id: i32) -> eyre::Result<()> {
+        sqlx::query!(
+            r#"
+                DELETE FROM ingredient_sources WHERE ingredient_source_id = $1
+            "#,
+            source_id
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn get_ingredients(&self) -> eyre::Result<Vec<Ingredient>> {
@@ -468,6 +505,10 @@ impl FoodBase {
                 .selling_price_info
                 .gross_price;
             let weight = &bundle.gross_weight;
+            let category = bundle
+                .categories
+                .iter()
+                .fold(String::new(), |acc, n| format!("{acc}/{}", n.name));
             println!(
                 "#{}: {}€ {}kg {} {:?}",
                 s.ingredient_id,
@@ -483,7 +524,7 @@ impl FoodBase {
                 2,
             )
             .map_err(|e| eyre::eyre!(e))?;
-            foodbase
+            let id = foodbase
                 .update_ingredient_source_price(
                     s.ingredient_id,
                     s.url,
@@ -491,6 +532,7 @@ impl FoodBase {
                     BigDecimal::from_str(weight)?,
                 )
                 .await?;
+            foodbase.set_metro_category(id, &category).await?;
             Ok(())
         }
         for source in urls.iter() {
@@ -566,21 +608,48 @@ impl FoodBase {
         url: Option<String>,
         price: PgMoney,
         weight: BigDecimal,
-    ) -> eyre::Result<u64> {
+    ) -> eyre::Result<i32> {
         sqlx::query!(
             r#"
                 UPDATE ingredient_sources
                 SET price = $3, package_size = $4, unit_id = 0
                 WHERE ingredient_id = $1 AND url = $2
+                RETURNING ingredient_source_id
             "#,
             ingredient_id,
             url,
             price,
             weight,
         )
+        .fetch_one(&*self.pg_pool)
+        .await
+        .map(|r| r.ingredient_source_id)
+        .map_err(|err| err.into())
+    }
+
+    pub async fn set_metro_category(
+        &self,
+        ingredient_source_id: i32,
+        category: &str,
+    ) -> eyre::Result<()> {
+        println!(
+            "Inserting into categories: {}{}",
+            ingredient_source_id, category
+        );
+        sqlx::query!(
+            r#"
+                INSERT INTO metro_categories (ingredient_source_id, category)
+                VALUES ($1, $2)
+                ON CONFLICT (ingredient_source_id) DO
+                UPDATE SET category = $2
+                WHERE metro_categories.ingredient_source_id = $1
+            "#,
+            ingredient_source_id,
+            category
+        )
         .execute(&*self.pg_pool)
         .await
-        .map(|result| result.rows_affected())
+        .map(|_r| ())
         .map_err(|err| err.into())
     }
 

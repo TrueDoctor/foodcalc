@@ -5,7 +5,7 @@ use sqlx::postgres::types::PgMoney;
 use std::borrow::Cow;
 use tabled::Tabled;
 
-use crate::{recipes::EventRecipeIngredient, FoodBase};
+use crate::{recipes::EventRecipeIngredient, FoodBase, ShoppingListItem};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Event {
@@ -238,6 +238,16 @@ impl FoodBase {
         Ok(event)
     }
 
+    pub async fn delete_event(&self, event_id: i32) -> eyre::Result<i32> {
+        let _ = sqlx::query!("DELETE FROM event_meals WHERE event_id = $1", event_id)
+            .fetch_optional(&*self.pg_pool)
+            .await?;
+        let _ = sqlx::query!("DELETE FROM events WHERE event_id = $1", event_id)
+            .fetch_optional(&*self.pg_pool)
+            .await?;
+        Ok(event_id)
+    }
+
     pub async fn get_places(&self) -> eyre::Result<Vec<Place>> {
         let records = sqlx::query_as!(
             Place,
@@ -280,6 +290,21 @@ impl FoodBase {
         .fetch_one(&*self.pg_pool)
         .await?;
         Ok(records.price.unwrap_or(PgMoney(0)))
+    }
+
+    pub async fn get_shopping_list(&self, tour_id: i32) -> eyre::Result<Vec<ShoppingListItem>> {
+        let shopping_list = sqlx::query_as!(
+            ShoppingListItem,
+            r#"
+                SELECT ingredient_id as "ingredient_id!", ingredient as "ingredient_name!", price as "price!", weight as "weight!"
+                FROM shopping_list 
+                WHERE tour_id = $1
+            "#,
+            tour_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+        Ok(shopping_list)
     }
 
     pub async fn get_event_shopping_tours(&self, event_id: i32) -> eyre::Result<Vec<ShoppingTour>> {
@@ -401,6 +426,109 @@ impl FoodBase {
         Ok(query)
     }
 
+    pub async fn delete_event_food_prep(&self, prep_id: i32) -> eyre::Result<()> {
+        let _ = sqlx::query!("DELETE FROM food_prep WHERE prep_id = $1", prep_id)
+            .fetch_optional(&*self.pg_pool)
+            .await?;
+        Ok(())
+    }
+    pub async fn set_default_event_source_override(
+        &self,
+        event_id: i32,
+        ingredient: String,
+        store_id: i32,
+    ) -> eyre::Result<SourceOverride> {
+        struct Id {
+            ingredient_source_id: i32,
+        }
+        let ingredient_source_id = sqlx::query_as!(
+            Id,
+            "
+                SELECT ingredient_source_id
+                FROM ingredient_sources
+                INNER JOIN ingredients USING (ingredient_id)
+                WHERE ingredients.name = $1 AND  store_id = $2
+            ",
+            ingredient,
+            store_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        let source_override = sqlx::query_as!(
+            SourceOverride,
+            r#"
+                INSERT INTO public.event_source_overrides (event_id, ingredient_source_id) 
+                VALUES ($1, $2)
+                ON CONFLICT (event_id, ingredient_source_id) DO UPDATE SET event_id = $1, ingredient_source_id = $2
+                RETURNING *
+            "#,
+            event_id,
+            ingredient_source_id.ingredient_source_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(source_override)
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
+pub struct SourceOverrideView {
+    pub event_id: i32,
+    pub ingredient_id: i32,
+    pub ingredient_source_id: i32,
+    pub ingredient: String,
+    pub store_id: i32,
+    pub store: String,
+}
+
+impl FoodBase {
+    pub async fn get_event_source_overrides(
+        &self,
+        event_id: i32,
+    ) -> eyre::Result<Vec<SourceOverrideView>> {
+        let overrides = sqlx::query_as!(
+            SourceOverrideView,
+            r#"
+                SELECT event_id, ingredient_id, ingredient_sources.ingredient_source_id, ingredients.name as ingredient, store_id, stores.name as store
+                FROM event_source_overrides
+                INNER JOIN ingredient_sources USING (ingredient_source_id)
+                INNER JOIN ingredients USING (ingredient_id)
+                INNER JOIN stores USING (store_id)
+                WHERE event_id = $1
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        Ok(overrides)
+    }
+
+    pub async fn get_event_source_override(
+        &self,
+        event_id: i32,
+        ingredient_source_id: i32,
+    ) -> eyre::Result<SourceOverrideView> {
+        let ingr_override = sqlx::query_as!(
+            SourceOverrideView,
+            r#"
+                SELECT event_id, ingredient_id, ingredient_sources.ingredient_source_id, ingredients.name as ingredient, store_id, stores.name as store
+                FROM event_source_overrides
+                INNER JOIN ingredient_sources USING (ingredient_source_id)
+                INNER JOIN ingredients USING (ingredient_id)
+                INNER JOIN stores USING (store_id)
+                WHERE event_id = $1 AND ingredient_source_id = $2
+            "#,
+            event_id,
+            ingredient_source_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(ingr_override)
+    }
+
     pub async fn add_event_source_override(
         &self,
         event_id: i32,
@@ -420,36 +548,137 @@ impl FoodBase {
         .await?;
         Ok(source_override)
     }
-}
 
-pub struct SourceOverrideView {
-    pub event_id: i32,
-    pub ingredient_id: i32,
-    pub ingredient: String,
-    pub store_id: i32,
-    pub store: String,
-}
-
-impl FoodBase {
-    pub async fn get_event_source_overrides(
+    pub async fn update_event_ingredient_source_override(
         &self,
         event_id: i32,
-    ) -> eyre::Result<Vec<SourceOverrideView>> {
-        let overrides = sqlx::query_as!(
-            SourceOverrideView,
+        old_source_id: i32,
+        new_source_id: i32,
+    ) -> eyre::Result<SourceOverride> {
+        let result = sqlx::query_as!(
+            SourceOverride,
             r#"
-                SELECT event_id, ingredient_id, ingredients.name as ingredient, store_id, stores.name as store
-                FROM event_source_overrides
-                INNER JOIN ingredient_sources USING (ingredient_source_id)
-                INNER JOIN ingredients USING (ingredient_id)
-                INNER JOIN stores USING (store_id)
-                WHERE event_id = $1
+                UPDATE event_source_overrides
+                SET ingredient_source_id = $3 
+                WHERE ingredient_source_id = $1 AND ingredient_source_id = $2
+                RETURNING *
             "#,
-            event_id
+            event_id,
+            old_source_id,
+            new_source_id,
         )
-        .fetch_all(&*self.pg_pool)
+        .fetch_one(&*self.pg_pool)
         .await?;
+        Ok(result)
+    }
 
-        Ok(overrides)
+    pub async fn delete_event_source_override(&self, source_id: i32) -> eyre::Result<()> {
+        let _ = sqlx::query!(
+            "DELETE FROM event_source_overrides WHERE ingredient_source_id = $1",
+            source_id
+        )
+        .fetch_optional(&*self.pg_pool)
+        .await?;
+        Ok(())
+    }
+
+    //TODO: is the event_id needed? If not remove function and use above
+    pub async fn delete_event_source_override_with_event_id(
+        &self,
+        event_id: i32,
+        source_id: i32,
+    ) -> eyre::Result<()> {
+        let _ = sqlx::query!(
+            "DELETE FROM event_source_overrides WHERE event_id = $1 AND ingredient_source_id = $2",
+            event_id,
+            source_id
+        )
+        .fetch_optional(&*self.pg_pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn update_event_food_prep_recipe_id(
+        &self,
+        prep_id: i32,
+        recipe_id: i32,
+    ) -> eyre::Result<FoodPrep> {
+        let result = sqlx::query_as!(
+            FoodPrep,
+            r#"
+                UPDATE food_prep
+                SET recipe_id = $2 
+                WHERE prep_id = $1
+                RETURNING *
+            "#,
+            prep_id,
+            recipe_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
+    }
+
+    pub async fn update_event_food_prep_prep_date(
+        &self,
+        prep_id: i32,
+        prep_date: NaiveDateTime,
+    ) -> eyre::Result<FoodPrep> {
+        let result = sqlx::query_as!(
+            FoodPrep,
+            r#"
+                UPDATE food_prep
+                SET prep_date = $2 
+                WHERE prep_id = $1
+                RETURNING *
+            "#,
+            prep_id,
+            prep_date
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
+    }
+
+    pub async fn update_event_food_prep_use_from(
+        &self,
+        prep_id: i32,
+        use_from: NaiveDateTime,
+    ) -> eyre::Result<FoodPrep> {
+        let result = sqlx::query_as!(
+            FoodPrep,
+            r#"
+                UPDATE food_prep
+                SET use_from = $2 
+                WHERE prep_id = $1
+                RETURNING *
+            "#,
+            prep_id,
+            use_from
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
+    }
+
+    pub async fn update_event_food_prep_use_until(
+        &self,
+        prep_id: i32,
+        use_until: NaiveDateTime,
+    ) -> eyre::Result<FoodPrep> {
+        let result = sqlx::query_as!(
+            FoodPrep,
+            r#"
+                UPDATE food_prep
+                SET use_until = $2 
+                WHERE prep_id = $1
+                RETURNING *
+            "#,
+            prep_id,
+            use_until
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(result)
     }
 }

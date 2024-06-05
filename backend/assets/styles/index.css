@@ -33,6 +33,7 @@ tr:nth-child(odd) {
   @apply dark:bg-gray-900 border-gray-500;
   @apply border-solid border-2 rounded-md;
   @apply p-2;
+  @apply w-full;
 }
 
 .dialog {
@@ -58,26 +59,37 @@ tr:nth-child(odd) {
 .btn-primary {
 	@apply bg-light-primary-normal text-white;
 	@apply dark:bg-dark-primary-normal;
+  @apply w-full;
 }
 .btn-primary:hover {
 	@apply bg-light-primary-hover;
 	@apply dark:bg-dark-primary-hover;
+  @apply w-full;
 }
 
 .btn-success {
 	@apply bg-btn-success-normal text-white;
+  @apply w-full;
 }
 
 .btn-success:hover {
 	@apply bg-btn-success-hover;
+  @apply w-full;
 }
 
 .btn-cancel {
 	@apply bg-btn-cancel-normal text-white;
+  @apply w-full;
+}
+
+.btn-abort {
+	@apply bg-gray-700 text-white;
+  @apply w-full;
 }
 
 .btn-cancel:hover {
 	@apply bg-btn-cancel-hover;
+  @apply w-full;
 }
 
 svg {

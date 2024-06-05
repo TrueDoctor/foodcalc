@@ -61,6 +61,7 @@ pub async fn fetch_articles_from_urls<S: AsRef<str> + Hash>(
 ) -> Result<Vec<(i32, Article)>, eyre::Error> {
     let article_identifiers = urls
         .into_iter()
+        .filter(|(_, url)| !url.as_ref().is_empty())
         .map(|(id, url)| {
             let ident = extract_betty_identifier_from_url(url.as_ref())
                 .unwrap_or_else(|| panic!("invalid url {}", url.as_ref()));

@@ -1,4 +1,4 @@
-export const content = ["./src/frontend/*.rs"]
+export const content = ["./src/frontend/**/*.rs"]
 
 const colors = require('tailwindcss/colors')
 
