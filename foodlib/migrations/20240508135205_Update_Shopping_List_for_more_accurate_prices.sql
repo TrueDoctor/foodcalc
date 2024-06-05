@@ -6,7 +6,7 @@ SELECT full_weight.event_id,
        full_weight.weight,
        round(full_weight.weight * ingredients.energy * 1000::numeric, 2) AS energy,
        (full_weight.weight / price_per_ingredient_weight.weight)::double precision *
-       COALESCE(price_per_ingredient_weight.price, '-1,00 €'::money)     AS price
+       COALESCE(price_per_ingredient_weight.price, '-1.00'::float8::numeric::money)     AS price
 FROM (SELECT prefetch.event_id,
              prefetch.event_name,
              prefetch.ingredient_id,
