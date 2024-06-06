@@ -33,10 +33,9 @@ CREATE OR REPLACE VIEW public.event_ingredients AS
     event_ingredients_before_prep_time_resolve.meal_id,
     event_ingredients_before_prep_time_resolve.subrecipe_hierarchy,
     COALESCE(prep_ingredients.prep_date, event_ingredients_before_prep_time_resolve.buy_by) AS buy_by,
-    event_ingredients_before_prep_time_resolve.store_id,
+    event_ingredients_before_prep_time_resolve.store_id
    FROM event_ingredients_before_prep_time_resolve
      LEFT JOIN prep_ingredients USING (event_id, ingredient_id)
-  WHERE event_ingredients_before_prep_time_resolve.subrecipe_hierarchy ~ (('^(.*[.])?'::text || prep_ingredients.recipe_id) || '([.].*)?$'::text)
 
 CREATE OR REPLACE VIEW public.prep_ingredients_with_duplicates AS
  SELECT resolved_prep_starts.event_id,
@@ -52,4 +51,3 @@ CREATE OR REPLACE VIEW public.prep_ingredients_with_duplicates AS
    FROM resolved_prep_starts
      LEFT JOIN event_ingredients_before_prep_time_resolve USING (event_id)
   WHERE event_ingredients_before_prep_time_resolve.subrecipe_hierarchy ~ concat('^(.*\.)?', resolved_prep_starts.recipe_id, '(\..*)?$') AND event_ingredients_before_prep_time_resolve.start_time >= resolved_prep_starts.use_from AND event_ingredients_before_prep_time_resolve.start_time <= resolved_prep_starts.use_until
-
