@@ -163,7 +163,31 @@ impl MealDetail {
                     return Command::perform(
                         async move {
                             log::trace!("Saving meal: {:?}", meal);
-                            move_database.update_single_meal(old_meal, Some(meal)).await?;
+                            if let Some(old) = old_meal {
+                                move_database.update_single_meal(
+                                    old.meal_id,
+                                    meal.recipe_id,
+                                    meal.place_id,
+                                    meal.start_time,
+                                    meal.end_time,
+                                    meal.energy,
+                                    meal.servings,
+                                    meal.comment,
+                                );
+                            } else {
+                                move_database
+                                    .add_meal(
+                                        meal.event_id,
+                                        meal.recipe_id,
+                                        meal.place_id,
+                                        meal.start_time,
+                                        meal.end_time,
+                                        meal.energy,
+                                        meal.servings,
+                                        meal.comment,
+                                    )
+                                    .await?;
+                            }
                             Ok(())
                         },
                         EventDetailMessage::CloseModal,
