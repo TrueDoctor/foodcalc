@@ -53,25 +53,34 @@ pub async fn update_meal(
     let end_time = DateTime::parse_from_rfc3339(&append_end)
         .map_err(|_| StatusCode::BAD_REQUEST)?
         .naive_utc();
-    if meal_id != -1 {
-        match state.remove_meal(meal_id).await {
-            Ok(_) => (),
-            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-        }
-    }
-    match state
-        .add_meal(
-            event_id,
-            meal.recipe_id,
-            meal.place_id,
-            start_time,
-            end_time,
-            meal.energy,
-            meal.servings,
-            meal.comment,
-        )
-        .await
-    {
+    let result = if meal_id != -1 {
+        state
+            .update_single_meal(
+                meal_id,
+                meal.recipe_id,
+                meal.place_id,
+                start_time,
+                end_time,
+                meal.energy,
+                meal.servings,
+                meal.comment,
+            )
+            .await
+    } else {
+        state
+            .add_meal(
+                event_id,
+                meal.recipe_id,
+                meal.place_id,
+                start_time,
+                end_time,
+                meal.energy,
+                meal.servings,
+                meal.comment,
+            )
+            .await
+    };
+    match result {
         Ok(_) => Ok(event_detail_tab::event_form(state, Path(event_id))
             .await
             .unwrap_or_else(|e| e)),

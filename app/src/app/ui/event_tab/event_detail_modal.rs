@@ -99,7 +99,9 @@ impl EventDetail {
                 let move_database = self.database.clone();
                 return Command::perform(
                     async move {
-                        move_database.update_single_meal(remove, None).await?;
+                        if let Some(remove) = remove {
+                            move_database.remove_meal(remove.meal_id).await?;
+                        }
                         Ok(())
                     },
                     |_: Result<(), Error>| EventTabMessage::EventDetailMessage(EventDetailMessage::CloseModal(Ok(()))),

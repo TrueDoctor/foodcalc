@@ -150,95 +150,44 @@ impl FoodBase {
         Ok(records)
     }
 
-    // Why is this not 2/3 functions?
-    // Why does the 'app' module have a copy of this function?
-    // WHY???
-    // I've added a functions for adding and deleting meals, so use those if you are not trying to
-    // update a single meal, this should probably be removed with the next refactor.
     pub async fn update_single_meal(
         &self,
-        old_meal: Option<Meal>,
-        new_meal: Option<Meal>,
+        meal_id: i32,
+        recipe_id: i32,
+        place_id: i32,
+        start_time: NaiveDateTime,
+        end_time: NaiveDateTime,
+        energy: BigDecimal,
+        servings: i32,
+        comment: Option<String>,
     ) -> eyre::Result<()> {
-        if let Some(old) = old_meal {
-            if let Some(new) = new_meal {
-                let count = sqlx::query!(
-                    r#"
-                    UPDATE event_meals
-                    SET event_id = $1,
-                        recipe_id = $2,
-                        place_id = $3,
-                        start_time = $4,
-                        end_time = $5,
-                        energy_per_serving = $6,
-                        servings = $7,
-                        comment = $8
-                    WHERE
-                        event_id = $9 AND
-                        recipe_id = $10 AND
-                        place_id = $11 AND
-                        start_time = $12
-                    "#,
-                    new.event_id,
-                    new.recipe_id,
-                    new.place_id,
-                    new.start_time,
-                    new.end_time,
-                    new.energy,
-                    new.servings,
-                    new.comment,
-                    old.event_id,
-                    old.recipe_id,
-                    old.place_id,
-                    old.start_time,
-                )
-                .execute(&*self.pg_pool)
-                .await?
-                .rows_affected();
-
-                assert_eq!(count, 1);
-            } else {
-                let count = sqlx::query!(
-                    r#"
-                    DELETE FROM event_meals
-                    WHERE
-                        event_id = $1 AND
-                        recipe_id = $2 AND
-                        place_id = $3 AND
-                        start_time = $4
-                    "#,
-                    old.event_id,
-                    old.recipe_id,
-                    old.place_id,
-                    old.start_time,
-                )
-                .execute(&*self.pg_pool)
-                .await?
-                .rows_affected();
-
-                assert_eq!(count, 1);
-            }
-        } else if let Some(new) = new_meal {
-            let count = sqlx::query!(
+        let count = sqlx::query!(
             r#"
-            INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            "#,
-            new.event_id,
-            new.recipe_id,
-            new.place_id,
-            new.start_time,
-            new.end_time,
-            new.energy,
-            new.servings,
-            new.comment,
+                    UPDATE event_meals
+                    SET recipe_id = $1,
+                        place_id = $2,
+                        start_time = $3,
+                        end_time = $4,
+                        energy_per_serving = $5,
+                        servings = $6,
+                        comment = $7
+                    WHERE
+                        meal_id = $8
+                    "#,
+            recipe_id,
+            place_id,
+            start_time,
+            end_time,
+            energy,
+            servings,
+            comment,
+            meal_id
         )
         .execute(&*self.pg_pool)
         .await?
         .rows_affected();
 
-            assert_eq!(count, 1);
-        }
+        assert_eq!(count, 1);
         Ok(())
     }
 
