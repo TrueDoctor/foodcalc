@@ -16,7 +16,10 @@ use tower_http::trace::TraceLayer;
 
 #[derive(Clone, Deserialize, Serialize)]
 struct MealStatus {
+    start: i64,
+    end: i64,
     eta: i64,
+    last_modified: u64,
     msg: Option<String>,
     recipe: String,
 }
@@ -28,6 +31,13 @@ struct ApiState {
 }
 
 type AppState = Arc<Mutex<ApiState>>;
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
 
 #[tokio::main]
 async fn main() {
@@ -52,59 +62,25 @@ async fn main() {
 
     let mut meal_states = HashMap::new();
 
-    let event_meals = food_base.get_event_meals(38).await.unwrap();
-    let current_time = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
-    const HOUR: i64 = 3600;
-    let todays_meals = event_meals.iter().filter(|x| {
-        (current_time - HOUR * 3..current_time + HOUR * 120).contains(&x.start_time.timestamp())
-    });
+    let current_time = now();
 
-    for meal in todays_meals {
+    let event_meals = food_base.get_event_meals(38).await.unwrap();
+
+    for meal in event_meals {
         println!("Adding Meal {:?}", meal);
         let recipe = food_base.get_recipe(meal.recipe_id).await.unwrap();
         meal_states.insert(
             meal.meal_id,
             MealStatus {
-                eta: meal.start_time.timestamp(),
+                start: meal.start_time.timestamp(),
+                end: meal.start_time.timestamp(),
+                last_modified: current_time,
+                eta: 0,
                 msg: None,
                 recipe: recipe.name.clone(),
             },
         );
     }
-
-    let meal_id = 136;
-    println!("Adding Meal {meal_id}");
-    meal_states.insert(
-        meal_id,
-        MealStatus {
-            eta: 10,
-            msg: None,
-            recipe: "Lots of Love".to_string(),
-        },
-    );
-    let meal_id = 137;
-    println!("Adding Meal {meal_id}");
-    meal_states.insert(
-        meal_id,
-        MealStatus {
-            eta: 0,
-            msg: Some("This is an optional custom Status".to_string()),
-            recipe: "Pures MSG".to_string(),
-        },
-    );
-    let meal_id = 138;
-    println!("Adding Meal {meal_id}");
-    meal_states.insert(
-        meal_id,
-        MealStatus {
-            eta: 0,
-            msg: None,
-            recipe: "Pizza".to_string(),
-        },
-    );
 
     println!("Loading Routes");
     let app = Router::<AppState>::new()
@@ -150,9 +126,12 @@ async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
 async fn update_status(
     State(state): State<AppState>,
     Path(meal_id): Path<i32>,
-    Json(status): Json<MealStatus>,
+    Json(mut status): Json<MealStatus>,
 ) -> impl IntoResponse {
     let mut state = state.lock().unwrap();
+    status.last_modified = now();
     state.meal_states.insert(meal_id, status);
-    (StatusCode::OK, Json(state.meal_states.clone()))
+    let mut meals: Vec<_> = state.meal_states.values().cloned().collect();
+    meals.sort_unstable_by_key(|m| m.start);
+    (StatusCode::OK, Json(meals))
 }
