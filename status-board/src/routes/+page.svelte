@@ -1,22 +1,35 @@
 <script>
     import { page } from '$app/stores'
     import Meal from '$lib/Meal.svelte'
+    import { onMount } from 'svelte';
+
+    let days = [];
+    onMount(() => {
+      async function fetchData() {
+        let data = await fetch('https://essen.campus-kit.de/api/');
+        days = await data.json();
+      }
+    
+      const interval = setInterval(fetchData, 1000);
+      fetchData();
+
+      return () => clearInterval(interval);
+    });
+    
     const adminPassword = $page.url.searchParams.get('admin')
     let isAdmin =  adminPassword == "TEST";
 
     let status = { }
-    let promise = fetch('https://essen.campus-kit.de/api/').then((x) => x.json());
-    setInterval(() => promise = fetch('https://essen.campus-kit.de/api/').then((x) => x.json()), 1000*60*0.5);
 </script>
 
 {#if isAdmin} 
   <h1>ADMIN MODE</h1>
 {/if}
 
-{#await promise}
+{#if !days}
   Loading...
   (If you see this for more than a second, there is probably something wrong :0)
-{:then days}
+{:else }
     {#each days as day}
       <h1> {new Date(day[0].status.start*1000).toLocaleDateString('de-DE', {
         weekday: 'long',
@@ -31,8 +44,5 @@
         {/each}
       </div>
     {/each}
-{:catch error}
-   Sorry, there was an error :(
-   <script> console.log(error) </script>
-{/await}
+{/if}
 
