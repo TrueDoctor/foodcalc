@@ -10,12 +10,13 @@ use tokio::net::TcpListener;
 use foodlib::*;
 use std::collections::HashMap;
 use std::env;
+use std::sync::{Arc, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 #[derive(Clone, Deserialize, Serialize)]
 struct MealStatus {
-    eta: u32,
+    eta: i64,
     msg: Option<String>,
     recipe: String,
 }
@@ -25,6 +26,8 @@ struct ApiState {
     food_base: FoodBase,
     meal_states: HashMap<i32, MealStatus>,
 }
+
+type AppState = Arc<Mutex<ApiState>>;
 
 #[tokio::main]
 async fn main() {
@@ -48,6 +51,29 @@ async fn main() {
         .allow_headers([CONTENT_TYPE]);
 
     let mut meal_states = HashMap::new();
+
+    let event_meals = food_base.get_event_meals(38).await.unwrap();
+    let current_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    const HOUR: i64 = 3600;
+    let todays_meals = event_meals.iter().filter(|x| {
+        (current_time - HOUR * 3..current_time + HOUR * 120).contains(&x.start_time.timestamp())
+    });
+
+    for meal in todays_meals {
+        println!("Adding Meal {:?}", meal);
+        let recipe = food_base.get_recipe(meal.recipe_id).await.unwrap();
+        meal_states.insert(
+            meal.meal_id,
+            MealStatus {
+                eta: meal.start_time.timestamp(),
+                msg: None,
+                recipe: recipe.name.clone(),
+            },
+        );
+    }
 
     let meal_id = 136;
     println!("Adding Meal {meal_id}");
@@ -81,13 +107,13 @@ async fn main() {
     );
 
     println!("Loading Routes");
-    let app = Router::<ApiState>::new()
+    let app = Router::<AppState>::new()
         .route("/", get(get_status))
         .route("/:meal_id", post(update_status))
-        .with_state(ApiState {
+        .with_state(Arc::new(Mutex::new(ApiState {
             food_base,
             meal_states,
-        })
+        })))
         .layer(TraceLayer::new_for_http())
         .layer(cors);
 
@@ -105,21 +131,28 @@ async fn main() {
 #[derive(Clone, Deserialize, Serialize)]
 struct FullMealStatus {
     meal_id: i32,
-    status: MealStatus
+    status: MealStatus,
 }
-async fn get_status(State(state): State<ApiState>) -> impl IntoResponse {
-    let data = state.meal_states.iter().map(|(meal_id, status)| FullMealStatus {
-        meal_id: *meal_id,
-        status: status.clone()
-    }).collect::<Vec<FullMealStatus>>();
+async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
+    let data = state
+        .lock()
+        .unwrap()
+        .meal_states
+        .iter()
+        .map(|(meal_id, status)| FullMealStatus {
+            meal_id: *meal_id,
+            status: status.clone(),
+        })
+        .collect::<Vec<FullMealStatus>>();
     (StatusCode::OK, Json(data))
 }
 
 async fn update_status(
-    State(mut state): State<ApiState>,
+    State(state): State<AppState>,
     Path(meal_id): Path<i32>,
     Json(status): Json<MealStatus>,
 ) -> impl IntoResponse {
+    let mut state = state.lock().unwrap();
     state.meal_states.insert(meal_id, status);
-    (StatusCode::OK, Json(state.meal_states))
+    (StatusCode::OK, Json(state.meal_states.clone()))
 }
