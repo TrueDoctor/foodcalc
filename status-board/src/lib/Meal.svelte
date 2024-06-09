@@ -47,7 +47,7 @@
   </p>
   {#if !isAdmin}
     <p> Status: 
-      {#if meal.status.start > Date.now()}
+      {#if meal.status.start < Date.now()}
         🕒 Upcoming 
         {#if min_til_food < 5}
           (Starting in {Math.floor(min_til_food)} min {Math.floor((min_til_food % 1) * 60)} sec )
