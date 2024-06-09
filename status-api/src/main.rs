@@ -2,6 +2,7 @@ use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use chrono::prelude::*;
 use http::header::CONTENT_TYPE;
 use http::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -120,15 +121,28 @@ async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
             status: status.clone(),
         })
         .collect::<Vec<FullMealStatus>>();
+
     // create vec of days with meals
-    let mut day = data[0].status.start;
+    let hour = 3600;
+    let day = |time| {
+        Local
+            .timestamp_opt(time - 3 * hour, 0)
+            .unwrap()
+            .date_naive()
+            .day()
+    };
+    let Some(first) = data.get(0) else {
+        return (StatusCode::OK, Json(vec![]));
+    };
+    let mut current_day = day(first.status.start);
     let mut days = vec![vec![]];
     for meal in data {
-        if meal.status.start == day {
+        let new_day = day(meal.status.start);
+        if new_day == current_day {
             days.last_mut().unwrap().push(meal);
         } else {
-            days.push(vec![meal.clone()]); // Clone the meal variable
-            day = meal.status.start;
+            days.push(vec![meal]); // Clone the meal variable
+            current_day = new_day;
         }
     }
     (StatusCode::OK, Json(days))
