@@ -111,7 +111,7 @@ struct FullMealStatus {
     status: MealStatus,
 }
 async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
-    let data = state
+    let mut data = state
         .lock()
         .unwrap()
         .meal_states
@@ -121,6 +121,7 @@ async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
             status: status.clone(),
         })
         .collect::<Vec<FullMealStatus>>();
+    data.sort_unstable_by_key(|m| m.status.start);
 
     // create vec of days with meals
     let hour = 3600;
