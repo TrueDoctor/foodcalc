@@ -120,7 +120,18 @@ async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
             status: status.clone(),
         })
         .collect::<Vec<FullMealStatus>>();
-    (StatusCode::OK, Json(data))
+    // create vec of days with meals
+    let mut day = data[0].status.start;
+    let mut days = vec![vec![]];
+    for meal in data {
+        if meal.status.start == day {
+            days.last_mut().unwrap().push(meal);
+        } else {
+            days.push(vec![meal.clone()]); // Clone the meal variable
+            day = meal.status.start;
+        }
+    }
+    (StatusCode::OK, Json(days))
 }
 
 async fn update_status(
