@@ -15,12 +15,21 @@
 {#await fetch('https://essen.campus-kit.de/api/').then((x) => x.json())}
   Loading...
   (If you see this for more than a second, there is probably something wrong :0)
-{:then meals.sort((/** @type {{ name: string; }} */ a, /** @type {{ name: any; }} */ b) => a.name.localeCompare(b.name)) as meal}
-  <div class="grid grid-flow-row grid-cols-4">
-    {#each meals as meal}
-      <Meal meal={meal}/>
+{:then days}
+    {#each days as day}
+      <h1> {new Date(day[0].status.start*1000).toLocaleDateString('de-DE', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      })} </h1>
+      <div class="grid grid-flow-row grid-cols-4">
+        {#each day as meal}
+          {#if meal.status.end >= Date.now || meal.status.eta >= 0}
+            <Meal meal={meal}/>
+          {/if}
+        {/each}
+      </div>
     {/each}
-  </div>
 {:catch error}
    Sorry, there was an error :(
    <script> console.log(error) </script>
