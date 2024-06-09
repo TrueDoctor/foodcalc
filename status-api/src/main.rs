@@ -73,7 +73,7 @@ async fn main() {
             meal.meal_id,
             MealStatus {
                 start: meal.start_time.timestamp(),
-                end: meal.start_time.timestamp(),
+                end: meal.end_time.timestamp(),
                 last_modified: current_time,
                 eta: 0,
                 msg: None,
