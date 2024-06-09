@@ -36,29 +36,30 @@
   let absolute_eta = (meal.status.last_modified + meal.status.eta * 60)*1000;
   let start_date = new Date(meal.status.start*1000);
   let end_date = new Date(meal.status.end*1000);
-  let min_til_food = (meal.status.start * 1000 - Date.now())/100/60;
-  setTimeout(() => min_til_food = (meal.status.start * 1000 - Date.now())/100/60, 500)
+  let min_til_food = (meal.status.start - Date.now()/1000)/60;
+  setInterval(() => min_til_food = (meal.status.start - Date.now()/1000)/60, 1)
+  console.log(meal.status.end)
 </script>
-<div class="bg-unifest-green m-5 p-3 rounded-md">
-  <p> "{meal.status.recipe}" ({meal.meal_id}) </p>
-  <!-- <p> {start_date.toLocaleString('de-DE', optionsTime)}
-    - {end_date.toLocaleString('de-DE', optionsTime)} </p> -->
+<div class="bg-unifest-green p-3 rounded-md">
+  <p> "{meal.status.recipe}" ({meal.meal_id}) 
+    <!-- <p> {start_date.toLocaleString('de-DE', optionsTime)}
+      - {end_date.toLocaleString('de-DE', optionsTime)} </p> -->
+  </p>
   {#if !isAdmin}
     <p> Status: 
-      {#if meal.status.start < Date.now()}
+      {#if meal.status.start > Date.now()}
         🕒 Upcoming 
         {#if min_til_food < 5}
-          (Starting soon)
+          (Starting in {Math.floor(min_til_food)} min {Math.floor((min_til_food % 1) * 60)} sec )
         {:else if min_til_food < 60}
-          (Starting in {Math.ceil((meal.status.start * 1000 - Date.now())/100/60)}min )
+          (Starting in {Math.floor(min_til_food)} min )
         {:else}
           (Starting at {start_date.toLocaleString('de-DE', optionsTime)})
         {/if}
       {:else if meal.status.eta == 0 || (absolute_eta < Date.now() && meal.status.eta >= 0)}
         ✅ Serving 
       {:else if meal.status.eta > 0} 
-        <p>⚠️ More is on the way, comming in about {Math.ceil((absolute_eta - Date.now())/1000/60)}min </p>
-        <p> {new Date(absolute_eta).toLocaleString('de-DE', optionsDate)} </p>
+        <p>⚠️ More is on the way, comming in about {Math.floor(absolute_eta/60)} min {Math.floor((absolute_eta/60 % 1) * 60)} sec </p>
       {:else if meal.status.eta < 0} 
         ❌ Sorry, this meal has finished serving :/
       {/if}
@@ -70,7 +71,9 @@
       {/each}
       <button on:click={() => {setETA(-1)}}>Meal is over</button>
       <button on:click={() => {setETA(0)}}>Now Serving</button>
-    <p> Custom Message: <p> <input type="text" bind:value={meal.status.msg}>
-    <button on:click={updateMeal}> UPDATE! </button>
+    <p> Custom Message:  
+      <input type="text" bind:value={meal.status.msg}>
+      <button on:click={updateMeal}> UPDATE! </button>
+    <p>
   {/if}
 </div>

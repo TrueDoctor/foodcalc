@@ -5,14 +5,15 @@
     let isAdmin =  adminPassword == "TEST";
 
     let status = { }
+    let promise = fetch('https://essen.campus-kit.de/api/').then((x) => x.json());
+    setInterval(() => promise = fetch('https://essen.campus-kit.de/api/').then((x) => x.json()), 1000*60*0.5);
 </script>
 
 {#if isAdmin} 
   <h1>ADMIN MODE</h1>
-  <p> Falls du hier ausversehen 
 {/if}
 
-{#await fetch('https://essen.campus-kit.de/api/').then((x) => x.json())}
+{#await promise}
   Loading...
   (If you see this for more than a second, there is probably something wrong :0)
 {:then days}
@@ -22,9 +23,9 @@
         month: 'long',
         day: 'numeric',
       })} </h1>
-      <div class="grid grid-flow-row grid-cols-4">
+      <div class="flex flex-col gap-2 p-2">
         {#each day as meal}
-          {#if meal.status.end >= Date.now || meal.status.eta >= 0}
+          {#if ((meal.status.end - Date.now()/1000)/60) > (-3*60)}
             <Meal meal={meal}/>
           {/if}
         {/each}
