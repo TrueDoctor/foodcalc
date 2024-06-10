@@ -40,7 +40,7 @@ jobs:
         uses: easingthemes/ssh-deploy@main
         with:
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
-          SOURCE: status-board/build/
+          SOURCE: ./status-board/build/
           REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
           REMOTE_USER: ${{ secrets.DEPLOY_USER }}
           TARGET: /srv/foodcalc_status/build/
