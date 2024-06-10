@@ -41,10 +41,7 @@
   console.log(meal.status.end)
 </script>
 <div class="bg-unifest-green p-3 rounded-md">
-  <p> "{meal.status.recipe}" ({meal.meal_id}) 
-    <!-- <p> {start_date.toLocaleString('de-DE', optionsTime)}
-      - {end_date.toLocaleString('de-DE', optionsTime)} </p> -->
-  </p>
+  <p> "{meal.status.recipe}" {#if isAdmin} ({meal.meal_id}) {/if} </p>
   {#if !isAdmin}
     <p> Status: 
       {#if meal.status.start < Date.now()}
