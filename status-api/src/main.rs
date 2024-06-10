@@ -6,6 +6,7 @@ use chrono::prelude::*;
 use http::header::CONTENT_TYPE;
 use http::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
+use sqlx::types::chrono::NaiveDateTime;
 use tokio::net::TcpListener;
 
 use foodlib::*;
@@ -65,20 +66,19 @@ async fn main() {
 
     let current_time = now();
 
-    let event_meals = food_base.get_event_meals(38).await.unwrap();
+    let event_meals = get_event_meals(&food_base, 38).await;
 
     for meal in event_meals {
         println!("Adding Meal {:?}", meal);
-        let recipe = food_base.get_recipe(meal.recipe_id).await.unwrap();
         meal_states.insert(
             meal.meal_id,
             MealStatus {
-                start: meal.start_time.timestamp(),
-                end: meal.end_time.timestamp(),
+                start: meal.start.timestamp(),
+                end: meal.end.timestamp(),
                 last_modified: current_time,
                 eta: 0,
                 msg: None,
-                recipe: recipe.name.clone(),
+                recipe: meal.recipe,
             },
         );
     }
@@ -160,4 +160,38 @@ async fn update_status(
     let mut meals: Vec<_> = state.meal_states.values().cloned().collect();
     meals.sort_unstable_by_key(|m| m.start);
     (StatusCode::OK, Json(meals))
+}
+
+#[derive(Debug)]
+struct EventMeal {
+    meal_id: i32,
+    event_id: i32,
+    recipe_id: i32,
+    start: NaiveDateTime,
+    end: NaiveDateTime,
+    recipe: String,
+}
+
+async fn get_event_meals(database: &FoodBase, event_id: i32) -> Vec<EventMeal> {
+    let records = sqlx::query_as!(
+        EventMeal,
+        r#" SELECT
+            event_id,
+            meal_id,
+            recipe_id,
+            name as "recipe!",
+            start_time as start,
+            end_time as end
+
+            FROM event_meals
+            INNER JOIN recipes USING(recipe_id)
+
+            WHERE event_meals.event_id = $1
+            ORDER BY event_meals.start_time 
+        "#,
+        event_id
+    )
+    .fetch_all(database.pool())
+    .await;
+    records.unwrap()
 }
