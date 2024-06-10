@@ -1,0 +1,49 @@
+name: Deployment
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: s1-deployment
+    steps:
+      - name: "Checkout Repo"
+        uses: actions/checkout@master
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: cd status-board && npm install
+
+      - name: build
+        env:
+          BASE_PATH: '/${{ github.event.repository.name }}'
+        run: |
+          cd status-board && npm run build
+
+      - name: Upload Artifacts
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # this should match the `pages` option in your adapter-static options
+          path: 'status-board/build/'
+        
+      - name: Deploy to Server
+        uses: easingthemes/ssh-deploy@main
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
+          SOURCE: status-board/build/
+          REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
+          REMOTE_USER: ${{ secrets.DEPLOY_USER }}
+          TARGET: /srv/foodcalc_status/build/
+          SCRIPT_AFTER: echo $RSYNC_STDOUT
+          REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
+
+
