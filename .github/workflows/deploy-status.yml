@@ -43,7 +43,7 @@ jobs:
           SOURCE: ./status-board/build/
           REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
           REMOTE_USER: ${{ secrets.DEPLOY_USER }}
-          TARGET: /srv/foodcalc_status/build/
+          TARGET: /srv/food_calc_status_api/status-board/build/
           SCRIPT_AFTER: echo $RSYNC_STDOUT
           REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
 
