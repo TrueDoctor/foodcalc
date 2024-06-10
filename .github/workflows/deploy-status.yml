@@ -9,7 +9,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: s1-deployment
+    environment: ssh
     steps:
       - name: "Checkout Repo"
         uses: actions/checkout@master
