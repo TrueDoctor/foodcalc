@@ -39,7 +39,7 @@
       <div class="flex flex-col gap-2 p-2">
         {#each day as meal}
           {#if ((meal.status.end - Date.now()/1000)/60) > (-3*60)}
-            <Meal meal={meal}/>
+            <Meal meal={meal.status}/>
           {/if}
         {/each}
       </div>
