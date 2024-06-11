@@ -70,11 +70,17 @@ async fn main() {
 
     for meal in event_meals {
         println!("Adding Meal {:?}", meal);
+        let to_utc = |time: NaiveDateTime| {
+            time.and_local_timezone(FixedOffset::east_opt(2 * 3600).unwrap())
+                .unwrap()
+                .timestamp()
+        };
+        println!("{}", to_utc(meal.start));
         meal_states.insert(
             meal.meal_id,
             MealStatus {
-                start: meal.start.timestamp(),
-                end: meal.end.timestamp(),
+                start: to_utc(meal.start),
+                end: to_utc(meal.end),
                 last_modified: current_time,
                 eta: 0,
                 msg: None,
