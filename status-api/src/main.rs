@@ -24,6 +24,7 @@ struct MealStatus {
     last_modified: u64,
     msg: Option<String>,
     recipe: String,
+    place: String,
 }
 
 #[derive(Clone)]
@@ -85,6 +86,7 @@ async fn main() {
                 eta: 0,
                 msg: None,
                 recipe: meal.recipe,
+                place: meal.place,
             },
         );
     }
@@ -176,6 +178,7 @@ struct EventMeal {
     start: NaiveDateTime,
     end: NaiveDateTime,
     recipe: String,
+    place: String,
 }
 
 async fn get_event_meals(database: &FoodBase, event_id: i32) -> Vec<EventMeal> {
@@ -185,12 +188,14 @@ async fn get_event_meals(database: &FoodBase, event_id: i32) -> Vec<EventMeal> {
             event_id,
             meal_id,
             recipe_id,
-            name as "recipe!",
+            recipes.name as "recipe",
+            places.name as "place",
             start_time as start,
             end_time as end
 
             FROM event_meals
             INNER JOIN recipes USING(recipe_id)
+            INNER JOIN places USING(place_id)
 
             WHERE event_meals.event_id = $1
             ORDER BY event_meals.start_time 
