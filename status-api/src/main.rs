@@ -25,6 +25,7 @@ struct MealStatus {
     msg: Option<String>,
     recipe: String,
     place: String,
+    meal_id: i32,
 }
 
 #[derive(Clone)]
@@ -87,6 +88,7 @@ async fn main() {
                 msg: None,
                 recipe: meal.recipe,
                 place: meal.place,
+                meal_id: meal.meal_id,
             },
         );
     }
