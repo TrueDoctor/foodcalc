@@ -39,6 +39,7 @@
   function endMeal(){
 
     meal.end = Math.ceil(Date.now() / 1000);
+    meal.eta = Math.ceil(Date.now() / 1000);
     updateMeal()
   }
 
@@ -65,11 +66,11 @@
         {:else}
           (Starting at {start_date.toLocaleString('de-DE', optionsTime)})
         {/if}
-      {:else if absolute_eta <= Date.now() / 1000 }
+      {:else if absolute_eta <= Date.now() / 1000 && meal.end >= current_time }
         ✅ Serving 
       {:else if absolute_eta > Date.now() / 1000  && meal.eta >= 0} 
         <p>⚠️ More is on the way, comming in about {Math.floor((absolute_eta - current_time) /60)} min {Math.floor(((absolute_eta - current_time)/60 % 1) * 60)} sec </p>
-      {:else if meal.eta < 0} 
+      {:else if meal.end < current_time} 
         ❌ Sorry, this meal has finished serving :/
       {/if}
     </p>
