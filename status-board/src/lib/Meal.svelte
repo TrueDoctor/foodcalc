@@ -18,7 +18,8 @@
   import { page } from '$app/stores'
   const adminPassword = $page.url.searchParams.get('admin')
   let isAdmin =  adminPassword == "TEST";
-  let new_label = 0;
+  let etaInput = 0;
+  let customMessageInput = '';
 
   function updateMeal() {
     fetch(`https://essen.campus-kit.de/api/${meal.meal_id}`, {
@@ -31,9 +32,14 @@
   }
 
   function setETA(minutes){
-    new_label = minutes;
+    etaInput = minutes;
 
+    meal.msg = customMessageInput; 
     meal.eta = Math.ceil(minutes * 60 + Date.now() / 1000);
+    updateMeal()
+  }
+  function addETA(minutes){
+    meal.eta = Math.ceil(Math.max(meal.eta, Date.now() / 1000) +  minutes * 60);
     updateMeal()
   }
   
@@ -44,21 +50,17 @@
     updateMeal()
   }
 
-  let absolute_eta = meal.eta;
   let start_date = new Date(meal.start*1000);
   let end_date = new Date(meal.end*1000);
-  let min_til_food = (meal.start - Date.now()/1000)/60;
   let current_time = Date.now()/1000;
-  setInterval(() => min_til_food = (meal.start - Date.now()/1000)/60, 1)
+  let min_til_food = (meal.start - current_time)/60;
+  setInterval(() => min_til_food = (Math.max(meal.start, meal.eta) - Date.now()/1000)/60, 1)
   setInterval(() => current_time = Date.now()/1000, 1)
-  console.log(meal.end)
-  console.log(meal);
 </script>
 <div class="bg-unifest-green p-3 rounded-md">
   <p> {meal.recipe} {#if isAdmin} ({meal.meal_id}) {/if} ({meal.place}) </p>
-  {#if !isAdmin}
-    <p> Status: 
-      {#if meal.start > Date.now() / 1000}
+  <p> {#if isAdmin} Public: {/if} Status: 
+      {#if meal.start > current_time}
         🕒 Upcoming 
         {#if min_til_food < 5 && min_til_food > 0}
           (Starting in {Math.floor(min_til_food)} min {Math.floor((min_til_food % 1) * 60)} sec )
@@ -67,30 +69,31 @@
         {:else}
           (Starting at {start_date.toLocaleString('de-DE', optionsTime)})
         {/if}
-      {:else if absolute_eta <= Date.now() / 1000 && meal.end >= current_time }
+      {:else if meal.eta <= current_time && meal.end >= current_time }
         ✅ Serving 
-      {:else if absolute_eta > Date.now() / 1000  && meal.eta >= 0} 
-        <p>⚠️ More is on the way, comming in about {Math.floor((absolute_eta - current_time) /60)} min {Math.floor(((absolute_eta - current_time)/60 % 1) * 60)} sec </p>
+      {:else if meal.eta > current_time  && meal.eta >= 0} 
+        <p>⚠️ More is on the way, comming in about {Math.floor((meal.eta - current_time) /60)} min {Math.floor(((meal.eta - current_time)/60 % 1) * 60)} sec </p>
       {:else if meal.end < current_time} 
         ❌ Sorry, this meal has finished serving :/
       {/if}
-    </p>
     {#if meal.msg != null }
       <p> {meal.msg} </p>
     {/if}
-  {:else}
+    </p>
+  {#if isAdmin}
+    <hr style="padding:3px" />
     <p> ETA:
-      <input type="number" bind:value={new_label}> <br>
+      <input type="number" bind:value={etaInput}> <br>
       {#each eta_update_variants as label}
         <button on:click={() => {setETA(label)}}>{label}min </button>
       {/each}
       {#each eta_add_variants as label}
-        <button on:click={() => {setETA(label + new_label)}}>+ {label}min</button>
+        <button on:click={() => {addETA(label)}}>+ {label}min</button>
       {/each} <br>
       <button on:click={() => {endMeal()}}>Meal is over</button> <br>
       <button on:click={() => {setETA(0)}}>Now Serving</button> <br>
     <p> Custom Message:  
-      <input type="text" bind:value={meal.msg}>
+      <input type="text" bind:value={customMessageInput}>
       <button on:click={updateMeal}> UPDATE! </button>
     <p>
   {/if}

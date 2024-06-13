@@ -8,6 +8,7 @@
       async function fetchData() {
         let data = await fetch('https://essen.campus-kit.de/api/');
         days = await data.json();
+        console.log(days);
       }
     
       const interval = setInterval(fetchData, 1000*10);
@@ -21,7 +22,7 @@
 
     let status = { }
 
-    let meal_filter = (meal) => {return ((meal.status.end - Date.now()/1000)/60) > (-3*60)}
+    let meal_filter = (meal) => {return (meal.status.end + 3 * 3600 > Date.now()/1000)}
     $: if (days.length > 0) console.log(days[1].filter(meal_filter))
 </script>
 
