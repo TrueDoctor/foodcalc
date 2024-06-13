@@ -84,7 +84,7 @@ async fn main() {
                 start: to_utc(meal.start),
                 end: to_utc(meal.end),
                 last_modified: current_time,
-                eta: 0,
+                eta: to_utc(meal.start),
                 msg: None,
                 recipe: meal.recipe,
                 place: meal.place,
