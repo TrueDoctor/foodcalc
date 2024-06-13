@@ -71,7 +71,9 @@
 <div class="bg-unifest-green p-3 rounded-md">
   <p> {meal.recipe} {#if isAdmin} ({meal.meal_id}) {/if} ({meal.place}) </p>
   <p> {#if isAdmin} Public: {/if} Status: 
-      {#if meal.start > current_time}
+      {#if meal.over || meal.end < current_time}
+        ❌ Sorry, this meal has finished serving :/
+      {:else if meal.start > current_time}
         🕒 Upcoming 
         {#if min_til_food < 5 && min_til_food > 0}
           (Starting in {Math.floor(min_til_food)} min {Math.floor((min_til_food % 1) * 60)} sec )
@@ -84,8 +86,6 @@
         ✅ Serving 
       {:else if meal.eta > current_time  && meal.eta >= 0} 
         <p>⚠️ More is on the way, comming in about {Math.floor((meal.eta - current_time) /60)} min {Math.floor(((meal.eta - current_time)/60 % 1) * 60)} sec </p>
-      {:else if meal.end < current_time} 
-        ❌ Sorry, this meal has finished serving :/
       {/if}
     {#if meal.msg != null }
       <p> {meal.msg} </p>
