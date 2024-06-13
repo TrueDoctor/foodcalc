@@ -22,6 +22,7 @@ struct MealStatus {
     end: i64,
     eta: i64,
     last_modified: u64,
+    over: bool,
     msg: Option<String>,
     recipe: String,
     place: String,
@@ -30,7 +31,6 @@ struct MealStatus {
 
 #[derive(Clone)]
 struct ApiState {
-    food_base: FoodBase,
     meal_states: HashMap<i32, MealStatus>,
 }
 
@@ -86,6 +86,7 @@ async fn main() {
                 last_modified: current_time,
                 eta: to_utc(meal.start),
                 msg: None,
+                over: false,
                 recipe: meal.recipe,
                 place: meal.place,
                 meal_id: meal.meal_id,
@@ -97,10 +98,7 @@ async fn main() {
     let app = Router::<AppState>::new()
         .route("/", get(get_status))
         .route("/:meal_id", post(update_status))
-        .with_state(Arc::new(Mutex::new(ApiState {
-            food_base,
-            meal_states,
-        })))
+        .with_state(Arc::new(Mutex::new(ApiState { meal_states })))
         .layer(TraceLayer::new_for_http())
         .layer(cors);
 
