@@ -20,6 +20,9 @@
     let isAdmin =  adminPassword == "TEST";
 
     let status = { }
+
+    let meal_filter = (meal) => {return ((meal.status.end - Date.now()/1000)/60) > (-3*60)}
+    $: if (days.length > 0) console.log(days[1].filter(meal_filter))
 </script>
 
 {#if isAdmin} 
@@ -31,18 +34,20 @@
   (If you see this for more than a second, there is probably something wrong :0)
 {:else }
     {#each days as day}
-      <h1> {new Date(day[0].status.start*1000).toLocaleDateString('de-DE', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-      })} </h1>
-      <div class="flex flex-col gap-2 p-2">
-        {#each day as meal}
-          {#if ((meal.status.end - Date.now()/1000)/60) > (-3*60)}
-            <Meal meal={meal.status}/>
-          {/if}
-        {/each}
-      </div>
+      {#if day.filter(meal_filter).length > 0}
+        <h1> {new Date(day[0].status.start*1000).toLocaleDateString('de-DE', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+        })} </h1>
+        <div class="flex flex-col gap-2 p-2">
+          {#each day as meal}
+            {#if meal_filter(meal)}
+              <Meal meal={meal.status}/>
+            {/if}
+          {/each}
+        </div>
+      {/if}
     {/each}
 {/if}
 
