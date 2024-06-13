@@ -2,6 +2,7 @@
   export let meal;
 
   let eta_update_variants = [5, 10];
+  let eta_add_variants = [1, 5, 10];
   const optionsTime = {
     hour: 'numeric',
     minute: 'numeric'
@@ -74,13 +75,20 @@
         ❌ Sorry, this meal has finished serving :/
       {/if}
     </p>
+    {#if meal.msg != null }
+      <p> {meal.msg} </p>
+    {/if}
   {:else}
-    <p> ETA: <p> <input type="number" bind:value={new_label}>
+    <p> ETA:
+      <input type="number" bind:value={new_label}> <br>
       {#each eta_update_variants as label}
         <button on:click={() => {setETA(label)}}>Set ETA to {label}min </button>
-      {/each}
-      <button on:click={() => {endMeal()}}>Meal is over</button>
-      <button on:click={() => {setETA(0)}}>Now Serving</button>
+      {/each} <br>
+      {#each eta_add_variants as label}
+        <button on:click={() => {setETA(label + new_label)}}>Add {label}min to ETA </button>
+      {/each} <br>
+      <button on:click={() => {endMeal()}}>Meal is over</button> <br>
+      <button on:click={() => {setETA(0)}}>Now Serving</button> <br>
     <p> Custom Message:  
       <input type="text" bind:value={meal.msg}>
       <button on:click={updateMeal}> UPDATE! </button>
