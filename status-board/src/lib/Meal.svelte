@@ -23,6 +23,7 @@
   let customMessageInput = '';
 
   function updateMeal() {
+    meal.msg = customMessageInput; 
     fetch(`https://essen.campus-kit.de/api/${meal.meal_id}`, {
     		method: 'POST',
         headers: {
