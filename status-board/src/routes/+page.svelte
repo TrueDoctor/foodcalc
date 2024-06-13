@@ -20,8 +20,6 @@
     const adminPassword = $page.url.searchParams.get('admin')
     let isAdmin =  adminPassword == "TEST";
 
-    let status = { }
-
     let meal_filter = (meal) => {return (meal.status.end + 3 * 3600 > Date.now()/1000)}
     $: if (days.length > 0) console.log(days[1].filter(meal_filter))
 </script>

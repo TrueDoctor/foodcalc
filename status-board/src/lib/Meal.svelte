@@ -18,6 +18,7 @@
   import { page } from '$app/stores'
   const adminPassword = $page.url.searchParams.get('admin')
   let isAdmin =  adminPassword == "TEST";
+
   let etaInput = 0;
   let customMessageInput = '';
 
@@ -36,18 +37,27 @@
 
     meal.msg = customMessageInput; 
     meal.eta = Math.ceil(minutes * 60 + Date.now() / 1000);
+    meal.over = false;
     updateMeal()
   }
   function addETA(minutes){
+    meal.msg = customMessageInput; 
     meal.eta = Math.ceil(Math.max(meal.eta, Date.now() / 1000) +  minutes * 60);
+    meal.over = false;
     updateMeal()
   }
   
   function endMeal(){
 
-    meal.end = Math.ceil(Date.now() / 1000);
-    meal.eta = Math.ceil(Date.now() / 1000);
+    //meal.end = Math.ceil(Date.now() / 1000);
+    meal.eta = 0;
+    meal.over = true;
     updateMeal()
+  }
+
+  function nowServing(){
+    meal.over = false;
+    setETA(0);
   }
 
   let start_date = new Date(meal.start*1000);
