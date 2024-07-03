@@ -613,9 +613,13 @@ async fn main() {
                     .get_event_from_string_reference(_event_ref.to_string())
                     .await;
 
-                if let Some(_event) = event {
+                if let Some(event) = event {
                     // There currently isn't a method for deleting an event
-                    todo!();
+                    let query = food_base.delete_event(event.event_id).await;
+                    match query {
+                        Ok(_) => {}
+                        Err(error) => println!("Error: {}", error),
+                    }
                 } else {
                     println!("Event not found");
                 }
