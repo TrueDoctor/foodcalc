@@ -28,9 +28,11 @@ pub struct Event {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Place {
+    #[tabled(rename = "ID")]
     pub place_id: i32,
+    #[tabled(rename = "Name")]
     pub name: String,
-    #[tabled(display_with = "crate::util::display_optional")]
+    #[tabled(rename = "Comment", display_with = "crate::util::display_optional")]
     pub comment: Option<String>,
 }
 
@@ -42,20 +44,29 @@ impl Display for Place {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct FoodPrep {
+    #[tabled(rename = "ID")]
     pub prep_id: i32,
+    #[tabled(skip)]
     pub event_id: i32,
+    #[tabled(rename = "Recipe ID")]
     pub recipe_id: i32,
+    #[tabled(rename = "Prep Date")]
     pub prep_date: NaiveDateTime,
-    #[tabled(display_with = "crate::util::display_optional")]
+    #[tabled(display_with = "crate::util::display_optional", rename = "Prep Date")]
     pub use_from: Option<NaiveDateTime>,
+    #[tabled(rename = "Use Date")]
     pub use_until: NaiveDateTime,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct ShoppingTour {
+    #[tabled(rename = "ID")]
     pub tour_id: i32,
+    #[tabled(skip)]
     pub event_id: i32,
+    #[tabled(rename = "Date")]
     pub tour_date: NaiveDateTime,
+    #[tabled(rename = "Store ID")]
     pub store_id: i32,
 }
 
@@ -258,10 +269,7 @@ impl FoodBase {
     pub async fn get_event_cost(&self, event_id: i32) -> eyre::Result<PgMoney> {
         let records = sqlx::query!(
             r#"
-                SELECT
-                    SUM(price) as price
-                FROM shopping_list
-                WHERE event_id = $1
+                SELECT SUM(price) as price FROM event_ingredients WHERE event_id = $1
             "#,
             event_id
         )

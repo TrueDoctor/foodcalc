@@ -8,26 +8,34 @@ use crate::FoodBase;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Meal {
+    #[tabled(rename = "ID")]
     pub meal_id: i32,
+    #[tabled(skip)]
     pub event_id: i32,
     #[tabled(skip)]
     pub recipe_id: i32,
+    #[tabled(rename = "Recipe")]
     pub name: String,
     #[tabled(skip)]
     pub place_id: i32,
     pub place: String,
+    #[tabled(rename = "Start")]
     pub start_time: NaiveDateTime,
+    #[tabled(rename = "End")]
     pub end_time: NaiveDateTime,
+    #[tabled(rename = "Weight")]
     pub weight: BigDecimal,
+    #[tabled(rename = "Energy")]
     pub energy: BigDecimal,
     #[serde(
         serialize_with = "crate::util::serialize_money",
         deserialize_with = "crate::util::deserialize_money"
     )]
-    #[tabled(display_with = "crate::util::format_pg_money")]
+    #[tabled(rename = "Price", display_with = "crate::util::format_pg_money")]
     pub price: PgMoney,
+    #[tabled(rename = "Servings")]
     pub servings: i32,
-    #[tabled(display_with = "crate::util::display_optional")]
+    #[tabled(rename = "Comment", display_with = "crate::util::display_optional")]
     pub comment: Option<String>,
 }
 
