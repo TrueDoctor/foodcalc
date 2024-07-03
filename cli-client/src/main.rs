@@ -171,8 +171,12 @@ async fn main() {
                     }
                     let shopping_tours = shopping_tours.unwrap();
 
-                    let table = Table::new(shopping_tours).with(table_config).to_string();
-                    println!("{}", table);
+                    if shopping_tours.len() == 0 {
+                        println!("No Shopping Tours planned");
+                    } else {
+                        let table = (Table::new(shopping_tours).with(table_config)).to_string();
+                        println!("{}", table);
+                    }
                 }
                 ListType::SourceOverrides(override_data) => {
                     let event = food_base

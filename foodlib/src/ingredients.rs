@@ -125,33 +125,16 @@ impl std::string::ToString for Unit {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Tabled)]
 pub struct ShoppingListItem {
+    #[tabled(rename = "ID")]
     pub ingredient_id: i32,
+    #[tabled(rename = "Name")]
     pub ingredient_name: String,
+    #[tabled(rename = "Price", display_with = "crate::util::format_pg_money")]
     pub price: PgMoney,
+    #[tabled(rename = "Weight")]
     pub weight: BigDecimal,
-}
-
-impl Tabled for ShoppingListItem {
-    const LENGTH: usize = 4;
-    fn headers() -> Vec<Cow<'static, str>> {
-        vec![
-            "ID".into(),
-            "Ingredient".into(),
-            "Price".into(),
-            "Weight".into(),
-        ]
-    }
-
-    fn fields(&self) -> Vec<Cow<'_, str>> {
-        vec![
-            self.ingredient_id.to_string().into(),
-            self.ingredient_name.clone().into(),
-            crate::util::format_pg_money(self.price).into(),
-            self.weight.to_string().into(),
-        ]
-    }
 }
 
 #[derive(Clone)]
