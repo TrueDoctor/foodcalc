@@ -79,6 +79,13 @@ pub(crate) fn display_optional<T: Display>(value: &Option<T>) -> String {
     }
 }
 
+pub(crate) fn display_optional_money(value: &Option<PgMoney>) -> String {
+    match value {
+        Some(value) => crate::util::format_pg_money(value),
+        None => "".to_string(),
+    }
+}
+
 pub(crate) fn format_pg_money(money: impl Borrow<PgMoney>) -> String {
     format!("{} €", money.borrow().to_bigdecimal(2))
 }

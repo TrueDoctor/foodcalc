@@ -38,4 +38,8 @@ impl FoodBase {
     pub async fn acquire(&self) -> sqlx::pool::PoolConnection<sqlx::Postgres> {
         self.pg_pool.acquire().await.unwrap()
     }
+
+    pub fn pool(&self) -> &PgPool {
+        &*self.pg_pool
+    }
 }

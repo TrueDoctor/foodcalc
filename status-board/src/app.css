@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+h1 {
+  @apply text-xl
+}
+
+button {
+  @apply bg-unifest-green-dark text-white;
+  @apply m-1 p-1 rounded
+}

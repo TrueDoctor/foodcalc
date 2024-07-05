@@ -97,7 +97,7 @@ This Project aims to creat a simple to use Commandline application that interfac
     * [ ] ingredient <ingredient_ref>
     * [x] reciepe <reciepe_ref>
     * [x] user <user_ref>
-    * [ ] event <event_ref>
+    * [x] event <event_ref>
 * [ ] edit
     * [ ] ingredient <ingredient_ref>
         * [x] name <name>
@@ -128,17 +128,17 @@ This Project aims to creat a simple to use Commandline application that interfac
         * [x] name <name>
         * [x] budget <budget>
         * [x] comment <comment>
-        * [ ] meals
+        * [ ] meals 
             * [x] add <recipe_ref> <servings> <calories> <start_time> <end_time> [<comment>] [<location_ref>]
             * [ ] remove <reciepe_ref> [<start_time>]
-            * [ ] edit <reciepe_ref> [<start_time>]
-                * [ ] recipe <recipe_ref>
-                * [ ] location <location_ref>
-                * [ ] servings <servings>
-                * [ ] calories <calories>
-                * [ ] start <start_time>
-                * [ ] end <end_time>
-                * [ ] comment <comment>
+            * [ ] edit <meal_id>
+                * [ ] [--recipe <recipe_ref>]
+                * [ ] [--location <location_ref>]
+                * [ ] [--servings <servings>]
+                * [ ] [--calories <calories>]
+                * [ ] [--start <start_time>]
+                * [ ] [--end <end_time>]
+                * [ ] [--comment <comment>]
         * [x] shopping 
             * [x] add
                 * [x] tour <date> <store>

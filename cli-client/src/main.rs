@@ -171,8 +171,12 @@ async fn main() {
                     }
                     let shopping_tours = shopping_tours.unwrap();
 
-                    let table = Table::new(shopping_tours).with(table_config).to_string();
-                    println!("{}", table);
+                    if shopping_tours.len() == 0 {
+                        println!("No Shopping Tours planned");
+                    } else {
+                        let table = (Table::new(shopping_tours).with(table_config)).to_string();
+                        println!("{}", table);
+                    }
                 }
                 ListType::SourceOverrides(override_data) => {
                     let event = food_base
@@ -609,9 +613,13 @@ async fn main() {
                     .get_event_from_string_reference(_event_ref.to_string())
                     .await;
 
-                if let Some(_event) = event {
+                if let Some(event) = event {
                     // There currently isn't a method for deleting an event
-                    todo!();
+                    let query = food_base.delete_event(event.event_id).await;
+                    match query {
+                        Ok(_) => {}
+                        Err(error) => println!("Error: {}", error),
+                    }
                 } else {
                     println!("Event not found");
                 }
@@ -1148,7 +1156,7 @@ async fn main() {
                     .get_event_from_string_reference(_event_ref.to_string())
                     .await;
 
-                let event_id = if let Some(event) = event_id {
+                let event = if let Some(event) = event_id {
                     event
                 } else {
                     println!("Event not found");
@@ -1158,7 +1166,7 @@ async fn main() {
                     EditEventType::Name(name) => {
                         let event = Event {
                             event_name: name.name.clone(),
-                            ..event_id
+                            ..event
                         };
                         let query = food_base.update_event(&event).await;
                         match query {
@@ -1186,7 +1194,7 @@ async fn main() {
                         };
                         let event = Event {
                             budget: budget.clone(),
-                            ..event_id
+                            ..event
                         };
 
                         let query = food_base.update_event(&event).await;
@@ -1207,7 +1215,7 @@ async fn main() {
                     EditEventType::Comment(comment) => {
                         let event = Event {
                             comment: comment.comment.clone(),
-                            ..event_id
+                            ..event
                         };
                         let query = food_base.update_event(&event).await;
                         match query {
@@ -1240,18 +1248,16 @@ async fn main() {
 
                             let servings = meal.servings;
                             let calories = meal.calories;
-                            let start_time = meal.start_time.as_str();
-                            let end_time = meal.end_time.as_str();
-                            let start_time = dateparser::parse(start_time).unwrap();
-                            let end_time = dateparser::parse(end_time).unwrap();
+                            let start_time = meal.start_time;
+                            let end_time = meal.end_time;
                             let place_id = meal.location;
 
                             let query = food_base.add_meal(
-                                event_id.event_id,
+                                event.event_id,
                                 recipe.recipe_id,
                                 place_id,
-                                start_time.naive_local(),
-                                end_time.naive_local(),
+                                start_time,
+                                end_time,
                                 calories.into(),
                                 servings,
                                 meal.comment.clone(),
@@ -1281,14 +1287,25 @@ async fn main() {
                                 }
                             }
                         }
-                        EditEventMealsType::Edit(_meal) => todo!(),
+                        EditEventMealsType::Edit(meal) => {
+                            let meal_id = meal.meal_id;
+
+                            // Check if Meal exists
+                            if let Ok(meal) = food_base.get_event_meal(meal_id).await {
+                                println!("Current State: \n");
+                                if meal.event_id != event.event_id {
+                                    println!("The meal you are trying to edit does not belong to the event you ame editing. Maby check the given meal/event ID");
+                                    return;
+                                }
+                            }
+                        }
                     },
                     EditEventType::Shopping(shopping_data) => match &shopping_data.edit_type {
                         EditEventShoppingType::Add(add_data) => match &add_data.edit_type {
                             EditEventShoppingAddType::Tour(tour_data) => {
                                 let _ = food_base
                                     .add_event_shopping_tour(
-                                        event_id.event_id,
+                                        event.event_id,
                                         tour_data.store,
                                         tour_data.date,
                                     )
@@ -1297,7 +1314,7 @@ async fn main() {
                             EditEventShoppingAddType::SourceOverride(override_data) => {
                                 let _ = food_base
                                     .add_event_source_override(
-                                        event_id.event_id,
+                                        event.event_id,
                                         override_data.source_id,
                                     )
                                     .await;
@@ -1314,7 +1331,7 @@ async fn main() {
 
                                 let _ = food_base
                                     .add_event_food_prep(
-                                        event_id.event_id,
+                                        event.event_id,
                                         recipe.recipe_id.clone(),
                                         prep_data.prep_date,
                                         prep_data.use_start_date,
@@ -1381,7 +1398,7 @@ async fn main() {
                             EditEventShoppingEditType::SourceOverride(source_edit_data) => {
                                 let _ = food_base
                                     .update_event_ingredient_source_override(
-                                        event_id.event_id,
+                                        event.event_id,
                                         source_edit_data.old_source_id,
                                         source_edit_data.new_source_id,
                                     )

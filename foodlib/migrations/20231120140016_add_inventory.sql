@@ -34,7 +34,7 @@ CREATE OR REPLACE VIEW public.shopping_list AS
     full_weight.ingredient,
     full_weight.weight,
     round(full_weight.weight * ingredients.energy * 1000::numeric, 2) AS energy,
-    ceil(full_weight.weight / price_per_ingredient_weight.weight)::double precision * COALESCE(price_per_ingredient_weight.price, '-1,00 €'::money) AS price
+    ceil(full_weight.weight / price_per_ingredient_weight.weight)::double precision * COALESCE(price_per_ingredient_weight.price, '-1.00'::float8::numeric::money) AS price
    FROM ( SELECT prefetch.event_id,
             prefetch.event_name,
             prefetch.ingredient_id,
@@ -69,4 +69,4 @@ CREATE OR REPLACE VIEW public.shopping_list_assumptions AS
             sum(event_ingredients.weight) AS weight
            FROM public.event_ingredients
           GROUP BY event_ingredients.event_id, event_ingredients.event, event_ingredients.ingredient_id, event_ingredients.ingredient) prefetch
-     JOIN public.event_storage USING (event_id, ingredient_id));
+        JOIN public.event_storage USING (event_id, ingredient_id));

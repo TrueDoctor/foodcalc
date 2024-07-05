@@ -230,7 +230,7 @@ CREATE OR REPLACE VIEW public.shopping_list AS
         full_weight.ingredient,
         SUM(full_weight.weight) AS weight,
         ROUND(SUM(full_weight.weight) * ingredients.energy * 1000::numeric, 2) AS energy,
-        (SUM(full_weight.weight) / price_per_ingredient_weight.weight)::double precision * COALESCE(price_per_ingredient_weight.price, '-1,00 €'::money) AS price,
+        (SUM(full_weight.weight) / price_per_ingredient_weight.weight)::double precision * COALESCE(price_per_ingredient_weight.price, '-1.00'::float8::numeric::money) AS price,
         full_weight.tour_id
     FROM ( 
         SELECT prefetch.event_id,

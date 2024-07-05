@@ -724,10 +724,10 @@ pub struct EditEventMealsAddCommand {
     pub calories: i32,
 
     /// Start time of the meal
-    pub start_time: String,
+    pub start_time: NaiveDateTime,
 
     /// End time of the meal
-    pub end_time: String,
+    pub end_time: NaiveDateTime,
 
     /// Location for giving out the meal
     pub location: i32,
@@ -747,31 +747,31 @@ pub struct EditEventMealsEditCommand {
     /// Meal ID
     pub meal_id: i32,
 
-    #[clap(long, short)]
+    #[clap(long = "recipe", short = 'r')]
     /// New recipe of the meal
     pub new_recipe: Option<String>,
 
-    #[clap(long, short)]
+    #[clap(long = "location", short = 'l')]
     /// New location of the meal
     pub new_location: Option<String>,
 
-    #[clap(long, short)]
+    #[clap(long = "servings", short = 's')]
     /// New servings of the meal
     pub new_servings: Option<i32>,
 
-    #[clap(long, short)]
+    #[clap(long = "energy", short = 'e')]
     /// New calories of the meal
     pub new_calories: Option<i32>,
 
-    #[clap(long, short)]
+    #[clap(long = "start")]
     /// New start time of the meal
     pub new_start_time: Option<String>,
 
-    #[clap(long, short)]
+    #[clap(long = "end")]
     /// New end time of the meal
     pub new_end_time: Option<String>,
 
-    #[clap(long, short)]
+    #[clap(long = "comment")]
     /// New comment of the meal
     pub new_comment: Option<String>,
 }

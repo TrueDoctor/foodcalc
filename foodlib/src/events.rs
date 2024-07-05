@@ -7,45 +7,23 @@ use tabled::Tabled;
 
 use crate::{recipes::EventRecipeIngredient, FoodBase, ShoppingListItem};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Event {
+    #[tabled(rename = "ID")]
     pub event_id: i32,
+    #[tabled(rename = "Name")]
     pub event_name: String,
+    #[tabled(rename = "Comment", display_with = "crate::util::display_optional")]
     pub comment: Option<String>,
     #[serde(
         serialize_with = "crate::util::serialize_optional_money",
         deserialize_with = "crate::util::deserialize_optional_money"
     )]
+    #[tabled(
+        rename = "Budget",
+        display_with = "crate::util::display_optional_money"
+    )]
     pub budget: Option<PgMoney>,
-}
-impl Display for Event {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.event_name.as_str())
-    }
-}
-
-impl Tabled for Event {
-    const LENGTH: usize = 4;
-    fn headers() -> Vec<Cow<'static, str>> {
-        vec![
-            "ID".into(),
-            "Name".into(),
-            "Comment".into(),
-            "Budget".into(),
-        ]
-    }
-
-    fn fields(&self) -> Vec<Cow<'_, str>> {
-        vec![
-            self.event_id.to_string().into(),
-            self.event_name.clone().into(),
-            self.comment.clone().unwrap_or_default().into(),
-            self.budget
-                .map(crate::util::format_pg_money)
-                .unwrap_or_default()
-                .into(),
-        ]
-    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
