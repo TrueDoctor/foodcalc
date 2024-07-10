@@ -170,6 +170,8 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
             }
             (add_ingredient_button())
 
+            span class="htmx-indicator" { "Searching..." }
+
             table class="table-fixed"{
                 thead { tr class="p-2" {
                     th class="w-1/4" { "Name" }
