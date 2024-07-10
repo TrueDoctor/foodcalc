@@ -17,7 +17,8 @@ use crate::ApiState;
 pub fn router() -> Router<crate::ApiState> {
     println!("Loading Event Router");
     Router::new()
-        .route("/", get(list))
+        .route("/", get(list_events))
+        .route("/", put(add_event))
         .route("/:event_id/", get(show_event))
         .route("/:event_id/", delete(delete_event))
         .route("/:event_id/", post(update_event))
@@ -28,11 +29,31 @@ pub fn router() -> Router<crate::ApiState> {
         .route("/meals/:meal_id", post(meal_update))
 }
 
-async fn list(State(state): State<ApiState>) -> impl IntoResponse {
+async fn list_events(State(state): State<ApiState>) -> impl IntoResponse {
     if let Ok(event_list) = state.food_base.get_events().await {
         (StatusCode::OK, Json(event_list)).into_response()
     } else {
         StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+struct EventBody {
+    name: String,
+    comment: Option<String>,
+    budget: Option<i64>,
+}
+
+async fn add_event(
+    State(state): State<ApiState>,
+    Json(body): Json<EventBody>,
+) -> impl IntoResponse {
+    let budget = body.budget.map(|budget| PgMoney(budget));
+
+    let query = state.food_base.add_event(body.name, budget, body.comment);
+    match query.await {
+        Ok(event) => (StatusCode::CREATED, Json(event)).into_response(),
+        Err(_) => StatusCode::CONFLICT.into_response(),
     }
 }
 
@@ -46,30 +67,26 @@ async fn show_event(State(state): State<ApiState>, Path(event_id): Path<i32>) ->
 }
 
 async fn delete_event(
-    State(_state): State<ApiState>,
-    Path(_event_id): Path<i32>,
+    State(state): State<ApiState>,
+    Path(event_id): Path<i32>,
 ) -> impl IntoResponse {
-    todo!()
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-struct UpdateEventBody {
-    event_name: String,
-    comment: Option<String>,
-    budget: Option<i64>,
+    match state.food_base.delete_event(event_id).await {
+        Ok(_) => StatusCode::NO_CONTENT,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
 }
 
 async fn update_event(
     State(state): State<ApiState>,
     Path(event_id): Path<i32>,
-    Json(body): Json<UpdateEventBody>,
+    Json(body): Json<EventBody>,
 ) -> impl IntoResponse {
     let budget = body.budget.map(|budget| PgMoney(budget));
 
     dbg!(budget);
     let event = Event {
         event_id: event_id.clone(),
-        event_name: body.event_name.clone(),
+        event_name: body.name.clone(),
         comment: body.comment.clone(),
         budget: budget,
     };
