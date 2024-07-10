@@ -360,12 +360,12 @@ pub async fn manage_inventory_form(
         div class="flex flex-col items-center justify-center gap-5" id=(INVENTORIES_DIV) {
             div class="flex flex-col items-center justify-center gap-5" id=(INVENTORIES_DIV) {
                 div class="flex flex-col items-center justify-center" id=(INVENTORIES_DIV) {
-                    form class="w-full" hx-put="/inventories/manage" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-trigger="keyup change" {
+                    form class="w-full" hx-put="/inventories/manage" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-trigger="keyup" {
                         div class="flex flex-row items-center justify-between mb-2 h-10 w-full gap-5" {
                             button hx-get="/inventories/add-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Add Inventory (+)" };
                             div class="flex flex-row items-center gap-5" {
                                 "Select Inventory:"
-                                select class="fc-select" name=(INVENTORY_ID) hx-indicator=".htmx-indicator" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) {
+                                select class="fc-select" name=(INVENTORY_ID) hx-indicator=".htmx-indicator" hx-target=("#content") hx-trigger="change" hx-put="/inventories/select" {
                                     @for inventory in inventories.iter() { (inventory.format_for_select(selected_inventory_id)) }
                                 }
                             }
@@ -374,9 +374,7 @@ pub async fn manage_inventory_form(
                         }
                         div class="h-10" {}
                         div class="flex flex-row items-center justify-stretch gap-5 h-10 w-full" {
-                            input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name=(FILTER_TEXT) autocomplete="off"
-                                autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
-                                hx-target="#search-results" hx-indicator=".htmx-indicator";
+                            input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name=(FILTER_TEXT);
 
                         }
                     }
