@@ -494,7 +494,7 @@ impl IngredientTableFormattable for IngredientWithWeight {
                     div class=(format!("w-full {}",form_id)) name=(INGREDIENT_NAME) { (self.name) }
                 }
                 td {
-                    input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="inventories/change-ingredient-amount" hx-target=(format!("#ingredient-{}", self.ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]";
+                    input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="inventories/change-ingredient-amount" hx-target=(format!("#ingredient-{}", self.ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML";
                 }
                 td { button hx-include=(format!(".{}", form_id)) class="btn btn-cancel" hx-put="inventories/delete-ingredient" type="submit" hx-target=(format!("#{}", INVENTORY_CONTENTS_DIV)) hx-swap="innerHTML" { "X" } }
             }
