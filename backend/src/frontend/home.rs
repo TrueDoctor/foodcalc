@@ -3,7 +3,7 @@ use foodlib::{AuthContext, User};
 use maud::{html, Markup};
 
 use crate::{
-    frontend::{ingredients_tab::ingredients_view, CSS_HASH},
+    frontend::{ingredients_tab::ingredients_view, CSS_HASH, LOGIN_URL},
     MyAppState,
 };
 
@@ -94,7 +94,7 @@ pub fn navbar() -> Markup {
             (navbutton("Events", "/events"))
             (navbutton("Inventories", "/inventories"))
             (navbutton("Stores", "/stores"))
-            a hx-get=("/auth/login") hx-target="#content" class="flex flex-col items-center
+            a hx-get=(LOGIN_URL) hx-target="#content" class="flex flex-col items-center
                 transition ease-in-out transition duration-200 
                 rounded-xl p-6
                 hover:shadow-inner hover:bg-blue-800" {

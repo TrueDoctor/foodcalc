@@ -23,17 +23,17 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
             axum::routing::post(update_source),
         )
         .route("/:id", axum::routing::delete(delete))
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
-            Arc::new(LOGIN_URL.into()),
-            None,
-        ))
         .route("/edit", axum::routing::get(edit_ingredient_form))
         .route("/delete/:id", axum::routing::get(delete_ingredient_form))
-        .route("/sources/:id", axum::routing::get(sources_table))
         .route(
             "/sources/delete/:ingredient_id/:source_id",
             axum::routing::get(delete_source),
         )
+        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
+            Arc::new(LOGIN_URL.into()),
+            None,
+        ))
+        .route("/sources/:id", axum::routing::get(sources_table))
         .route("/search", axum::routing::post(search))
         .route("/", axum::routing::get(ingredients_view))
 }
@@ -211,7 +211,7 @@ pub async fn edit_ingredient_form(old: Option<Form<Ingredient>>) -> Markup {
     }));
     let id = ingredient.ingredient_id;
     html! {
-        td colspan="5" {
+        td colspan="6" {
             div class="flex flex-col items-center justify-center w-full" {
                 div class="flex gap-2 w-full" {
                     input class="text" type="text" name="name" placeholder="Name" value=(ingredient.name) required="required";

@@ -24,12 +24,17 @@ pub struct RedirectUrl {
 
 pub async fn login_view(Form(redirect): Form<RedirectUrl>) -> impl IntoResponse {
     let html = html! {
-        dialog class="dialog" open="open" id="login-dialog" {
-            div class="flex items-center justify-center" {
-                form method="post" action=(format!("/auth/login?protected={}", redirect.protected.unwrap_or("/".to_string()))) class="flex flex-col gap-1 justify-items-center justify-center h-full w-full" {
-                    input class="text" type="text" name="username" placeholder="Username" id="username" {}
-                    input class="text" type="password" placeholder="Password" name="password" id="password" {}
-                    input class="btn btn-success" hx-swap="delete" hx-target="#login-dialog" type="submit" value="Login" {}
+        div id="login-dialog" {
+            dialog class="dialog" open="open" id="login-dialog" {
+                div class="flex items-center justify-center" {
+                    form method="post" action=(format!("/auth/login?protected={}", redirect.protected.unwrap_or("/".to_string()))) class="flex flex-col gap-1 justify-items-center justify-center h-full w-full" {
+                        input class="text" type="text" name="username" placeholder="Username" id="username" {}
+                        input class="text" type="password" placeholder="Password" name="password" id="password" {}
+                        input class="btn btn-success" hx-swap="delete" hx-target="#login-dialog" type="submit" value="Login" {}
+                        button class="btn btn-cancel" hx-on:click="document.getElementById('login-dialog').remove()" type="button" {
+                            "Cancel"
+                        }
+                    }
                 }
             }
         }
