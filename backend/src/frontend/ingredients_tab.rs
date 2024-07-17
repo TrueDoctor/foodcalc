@@ -174,9 +174,10 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
 
             table class="table-fixed"{
                 thead { tr class="p-2" {
+                    th class="w-1/12" { "ID" }
                     th class="w-1/4" { "Name" }
                     th class="w-1/8" { "Energy" }
-                    th class="w-1/4" { "Comment" }
+                    th class="w-1/8" { "Comment" }
                     th {}
                     th {}
                     th class="w-1/6" {}
@@ -359,8 +360,9 @@ fn format_ingredient_source(
 fn format_ingredient(ingredient: &Ingredient) -> Markup {
     html! {
         tr id=(format!("ingredient-{}", ingredient.ingredient_id)) {
-            td { (ingredient.name) }
-            td { (ingredient.energy) }
+            td class="text-center opacity-70" { (ingredient.ingredient_id) }
+            td class="text-center" { (ingredient.name) }
+            td class="text-center" { (ingredient.energy) }
             td class="text-center" { (ingredient.comment.as_ref().unwrap_or(&String::new())) }
             td {
                 button class="btn btn-primary"
