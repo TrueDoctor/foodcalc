@@ -1,5 +1,6 @@
 use num::FromPrimitive;
 use num::Num;
+use sqlx::Error;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -206,31 +207,31 @@ impl FoodBase {
         name: String,
         energy: BigDecimal,
         comment: Option<String>,
-    ) -> eyre::Result<i32> {
+    ) -> eyre::Result<Ingredient, Error> {
         log::debug!("add_ingredient({:?}, {:?}, {:?})", name, energy, comment);
-        let ingredient = sqlx::query!(
+        sqlx::query_as!(
+            Ingredient,
             r#"
                 INSERT INTO ingredients ( name, energy, comment )
                 VALUES ( $1, $2, $3 )
-                RETURNING ingredient_id
+                RETURNING *
             "#,
             name,
             energy,
             comment
         )
         .fetch_one(&*self.pg_pool)
-        .await?;
-
-        Ok(ingredient.ingredient_id)
+        .await
     }
 
-    pub async fn update_ingredient(&self, ingredient: &Ingredient) -> eyre::Result<i32> {
-        let ingredient = sqlx::query!(
+    pub async fn update_ingredient(&self, ingredient: &Ingredient) -> eyre::Result<Ingredient> {
+        let ingredient = sqlx::query_as!(
+            Ingredient,
             r#"
                 UPDATE ingredients
                 SET name = $1, energy = $2, comment = $3
                 WHERE ingredient_id = $4
-                RETURNING ingredient_id
+                RETURNING *
             "#,
             ingredient.name,
             ingredient.energy,
@@ -240,7 +241,7 @@ impl FoodBase {
         .fetch_one(&*self.pg_pool)
         .await?;
 
-        Ok(ingredient.ingredient_id)
+        Ok(ingredient)
     }
 
     pub async fn add_ingredient_source(

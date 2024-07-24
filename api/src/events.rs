@@ -44,6 +44,7 @@ struct EventBody {
     budget: Option<i64>,
 }
 
+// TODO Add Error Handling
 async fn add_event(
     State(state): State<ApiState>,
     Json(body): Json<EventBody>,
@@ -88,7 +89,7 @@ async fn update_event(
         event_id: event_id.clone(),
         event_name: body.name.clone(),
         comment: body.comment.clone(),
-        budget: budget,
+        budget,
     };
 
     if let Ok(result) = state.food_base.update_event(&event).await {
@@ -105,7 +106,7 @@ struct MealBody {
     place: i32,
     start: i64,
     end: i64,
-    energy: u32,
+    energy: BigDecimal,
     servings: i32,
     comment: Option<String>,
 }
@@ -123,7 +124,7 @@ async fn meal_add(
             body.place,
             NaiveDateTime::from_timestamp_millis(body.start).unwrap(),
             NaiveDateTime::from_timestamp_millis(body.end).unwrap(),
-            BigDecimal::from(body.energy),
+            body.energy,
             body.servings,
             body.comment,
         )
@@ -140,7 +141,7 @@ struct MealSelectorBody {
 
 async fn meal_delete(State(state): State<ApiState>, Path(meal_id): Path<i32>) -> impl IntoResponse {
     if let Ok(_) = state.food_base.remove_meal(meal_id).await {
-        StatusCode::OK
+        StatusCode::NO_CONTENT
     } else {
         StatusCode::NOT_FOUND
     }
@@ -202,6 +203,7 @@ struct MealReturn {
     servings: i32,
     comment: Option<String>,
 }
+// TODO Add Error Handling
 async fn meal_list(State(state): State<ApiState>, Path(event_id): Path<i32>) -> impl IntoResponse {
     let query = state.food_base.get_event_meals(event_id).await;
     match query {
@@ -211,7 +213,7 @@ async fn meal_list(State(state): State<ApiState>, Path(event_id): Path<i32>) -> 
                 .map(|meal| {
                     return MealReturn {
                         meal_id: meal.meal_id,
-                        event_id: event_id,
+                        event_id,
                         recipe: IdAndName {
                             id: meal.recipe_id,
                             name: meal.name,
@@ -241,6 +243,7 @@ async fn meal_list(State(state): State<ApiState>, Path(event_id): Path<i32>) -> 
     }
 }
 
+// TODO Add Error Handling
 async fn get_meal(State(state): State<ApiState>, Path(meal_id): Path<i32>) -> impl IntoResponse {
     let query = state.food_base.get_event_meal(meal_id).await;
     match query {
