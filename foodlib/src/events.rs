@@ -237,6 +237,37 @@ impl FoodBase {
         Ok(event_id)
     }
 
+    pub async fn get_place(&self, place_id: i32) -> eyre::Result<Place> {
+        let records = sqlx::query_as!(
+            Place,
+            r#" SELECT *
+                FROM places
+                WHERE place_id = $1
+            "#,
+            place_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
+    pub async fn update_place(&self, place: &Place) -> eyre::Result<Place> {
+        let records = sqlx::query_as!(
+            Place,
+            r#" Update places
+                SET name = $2, comment = $3
+                WHERE place_id = $1
+                RETURNING *
+            "#,
+            place.place_id,
+            place.name,
+            place.comment,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
     pub async fn get_places(&self) -> eyre::Result<Vec<Place>> {
         let records = sqlx::query_as!(
             Place,
