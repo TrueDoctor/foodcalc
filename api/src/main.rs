@@ -45,7 +45,7 @@ async fn main() {
         .nest("/events", events::router())
         .nest("/ingredients", ingredients::router())
         .nest("/places", places::router())
-        .nest("/reciepes", reciepes::router())
+        .nest("/recipes", reciepes::router())
         .nest("/calc", mealcalc::router())
         .with_state(ApiState { food_base })
         .layer(TraceLayer::new_for_http())

@@ -491,7 +491,11 @@ impl FoodBase {
         Ok(recipe)
     }
 
-    pub async fn insert_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
+    pub async fn add_recipe(
+        &self,
+        name: &String,
+        comment: &Option<String>,
+    ) -> eyre::Result<Recipe> {
         let recipe = sqlx::query_as!(
             Recipe,
             r#"
@@ -499,12 +503,16 @@ impl FoodBase {
                 VALUES ($1, $2)
                 RETURNING *
             "#,
-            recipe.name,
-            recipe.comment,
+            name.clone(),
+            comment.clone(),
         )
         .fetch_one(&*self.pg_pool)
         .await?;
         Ok(recipe)
+    }
+
+    pub async fn insert_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
+        self.add_recipe(&recipe.name, &recipe.comment).await
     }
 
     // TODO: Human race condition, add proper locking / edit notifications
