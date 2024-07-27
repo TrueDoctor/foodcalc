@@ -40,7 +40,16 @@ pub fn router() -> Router<crate::ApiState> {
 
 async fn list_events(State(state): State<ApiState>) -> impl IntoResponse {
     if let Ok(event_list) = state.food_base.get_events().await {
-        (StatusCode::OK, Json(event_list)).into_response()
+        (
+            StatusCode::OK,
+            Json(
+                event_list
+                    .into_iter()
+                    .map(event_to_body)
+                    .collect::<Vec<EventBody>>(),
+            ),
+        )
+            .into_response()
     } else {
         StatusCode::INTERNAL_SERVER_ERROR.into_response()
     }
