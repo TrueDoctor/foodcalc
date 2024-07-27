@@ -14,6 +14,15 @@ use sqlx::{
 
 use crate::ApiState;
 
+fn event_to_body(event: Event) -> EventBody {
+    EventBody {
+        id: Some(event.event_id),
+        name: event.event_name,
+        comment: event.comment,
+        budget: event.budget.map(|b| b.0 as f64 / 100.),
+    }
+}
+
 pub fn router() -> Router<crate::ApiState> {
     println!("Loading Event Router");
     Router::new()
@@ -39,9 +48,10 @@ async fn list_events(State(state): State<ApiState>) -> impl IntoResponse {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 struct EventBody {
+    id: Option<i32>,
     name: String,
     comment: Option<String>,
-    budget: Option<i64>,
+    budget: Option<f64>,
 }
 
 // TODO Add Error Handling
@@ -49,11 +59,11 @@ async fn add_event(
     State(state): State<ApiState>,
     Json(body): Json<EventBody>,
 ) -> impl IntoResponse {
-    let budget = body.budget.map(|budget| PgMoney(budget));
+    let budget = body.budget.map(|budget| PgMoney((budget * 100.) as i64));
 
     let query = state.food_base.add_event(body.name, budget, body.comment);
     match query.await {
-        Ok(event) => (StatusCode::CREATED, Json(event)).into_response(),
+        Ok(event) => (StatusCode::CREATED, Json(event_to_body(event))).into_response(),
         Err(_) => StatusCode::CONFLICT.into_response(),
     }
 }
@@ -61,7 +71,7 @@ async fn add_event(
 // TODO: Also show Meals
 async fn show_event(State(state): State<ApiState>, Path(event_id): Path<i32>) -> impl IntoResponse {
     if let Some(event) = state.food_base.get_event(event_id).await {
-        (StatusCode::OK, Json(event)).into_response()
+        (StatusCode::OK, Json(event_to_body(event))).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
     }
@@ -82,7 +92,7 @@ async fn update_event(
     Path(event_id): Path<i32>,
     Json(body): Json<EventBody>,
 ) -> impl IntoResponse {
-    let budget = body.budget.map(|budget| PgMoney(budget));
+    let budget = body.budget.map(|budget| PgMoney((budget * 100.) as i64));
 
     dbg!(budget);
     let event = Event {
@@ -92,8 +102,8 @@ async fn update_event(
         budget,
     };
 
-    if let Ok(result) = state.food_base.update_event(&event).await {
-        (StatusCode::OK, Json(result)).into_response()
+    if let Ok(event) = state.food_base.update_event(&event).await {
+        (StatusCode::OK, Json(event_to_body(event))).into_response()
     } else {
         StatusCode::INTERNAL_SERVER_ERROR.into_response()
     }
