@@ -1,6 +1,9 @@
-use axum::Router;
+use axum::extract::State;
+use axum::response::IntoResponse;
+use axum::routing::get;
+use axum::{Json, Router};
 use http::header::CONTENT_TYPE;
-use http::Method;
+use http::{Method, StatusCode};
 use tokio::net::TcpListener;
 
 use foodlib::*;
@@ -42,6 +45,7 @@ async fn main() {
 
     println!("Loading Routes");
     let app = Router::<ApiState>::new()
+        .route("/units/", get(get_units))
         .nest("/events", events::router())
         .nest("/ingredients", ingredients::router())
         .nest("/places", places::router())
@@ -60,4 +64,11 @@ async fn main() {
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();
+}
+
+async fn get_units(State(state): State<ApiState>) -> impl IntoResponse {
+    match state.food_base.get_units().await {
+        Ok(units) => (StatusCode::OK, Json(units)).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }

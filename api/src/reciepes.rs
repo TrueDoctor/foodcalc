@@ -16,11 +16,11 @@ pub fn router() -> Router<crate::ApiState> {
         .route("/", put(add_reciepe))
         .route("/:recipe_id/", get(get_recipe))
         .route("/:recipe_id/", post(update_reciepe))
-        .route("/:recipe_id/", delete(update_reciepe))
-        .route("/:recipe_id/steps/", get(update_reciepe))
-        .route("/:recipe_id/steps/", post(update_reciepe))
-        .route("/:recipe_id/ingredients/", get(calc_reciepe))
-        .route("/:recipe_id/ingredients/", post(calc_reciepe))
+        .route("/:recipe_id/", delete(delete_reciepe))
+        .route("/:recipe_id/steps/", get(not_implemented))
+        .route("/:recipe_id/steps/", post(not_implemented))
+        .route("/:recipe_id/ingredients/", get(update_reciepe))
+        .route("/:recipe_id/ingredients/", post(update_reciepe))
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -69,7 +69,7 @@ async fn get_recipe(
     }
 }
 
-async fn update_recipe(
+async fn update_reciepe(
     State(state): State<ApiState>,
     Path(recipe_id): Path<i32>,
     Json(body): Json<RecipeBody>,
@@ -88,10 +88,16 @@ async fn update_recipe(
     }
 }
 
-async fn calc_reciepe() -> impl IntoResponse {
-    StatusCode::NOT_IMPLEMENTED
+async fn delete_reciepe(
+    State(state): State<ApiState>,
+    Path(recipe_id): Path<i32>,
+) -> impl IntoResponse {
+    match state.food_base.delete_recipe(recipe_id).await {
+        Ok(_) => StatusCode::NO_CONTENT,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
 }
 
-async fn update_reciepe() -> impl IntoResponse {
+async fn not_implemented() -> impl IntoResponse {
     StatusCode::NOT_IMPLEMENTED
 }
