@@ -1,5 +1,3 @@
-use std::{any::Any, borrow::BorrowMut};
-
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -10,7 +8,6 @@ use axum::{
 use foodlib::Ingredient;
 use serde::{Deserialize, Serialize};
 use sqlx::types::BigDecimal;
-use tracing::Instrument;
 
 use crate::ApiState;
 
