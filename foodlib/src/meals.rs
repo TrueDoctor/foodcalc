@@ -77,9 +77,9 @@ impl FoodBase {
              place as "place!",
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
-             round(sum(weight),2) as "weight!",
-             (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
-             sum(price) as "price!",
+             COALESCE(round(sum(weight),2),0) as "weight!",
+             COALESCE((CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END),0) as "energy!",
+             COALESCE(sum(price),'0'::float8::numeric::money) as "price!",
              event_meals.servings as "servings!"
 
             FROM event_ingredients
@@ -109,9 +109,9 @@ impl FoodBase {
              place as "place!",
              event_meals.start_time as "start_time!",
              event_meals.end_time as "end_time!",
-             round(sum(weight),2) as "weight!",
-             (CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END) as "energy!",
-             sum(price) as "price!",
+             COALESCE(round(sum(weight),2),0) as "weight!",
+             COALESCE((CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END),0) as "energy!",
+             COALESCE(sum(price),'0'::float8::numeric::money) as "price!",
              event_meals.servings as "servings!"
 
             FROM event_ingredients
