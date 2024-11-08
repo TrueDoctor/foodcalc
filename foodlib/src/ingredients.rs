@@ -685,6 +685,7 @@ pub struct Store {
 }
 
 mod tests {
+    use crate::*;
     #[test]
     fn test_unit_parsing() {
         use super::*;
@@ -701,5 +702,18 @@ mod tests {
             parse_package_size("1Pkg")
         );
         assert_eq!(None, parse_package_size("1"));
+    }
+
+    #[sqlx::test(fixtures("24_07"))]
+    async fn test_conversions_exist(pool: PgPool) -> sqlx::Result<()> {
+        sqlx::query!("REFRESH MATERIALIZED VIEW conversions")
+            .execute(&pool)
+            .await?;
+        let data = sqlx::query!("SELECT * FROM conversions")
+            .fetch_all(&pool)
+            .await?;
+        assert!(!data.is_empty());
+
+        Ok(())
     }
 }
