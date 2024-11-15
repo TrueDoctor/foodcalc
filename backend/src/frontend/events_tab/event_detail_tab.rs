@@ -161,14 +161,17 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
         .ok_or(html_error(&format!("Failed to fetch event"), "/events"))?;
 
     Ok(html! {
-        form class="flex flex-row items-center justify-center gap-4" action=(format!("/{}", event_id)) {
+        div class="flex flex-row items-center justify-center gap-4" id="event_form" {
             label for="name" { "Name:" };
             input name="name" class="text" type="text" value=(&event.event_name);
             label for="comment" { "Comment:" };
             input name="comment" class="text" type="text" value=(&event.comment.unwrap_or_default());
             label for="budget" { "Budget:" };
             input name="budget" class="text" type="text" value=(&(event.budget.map(|x|x.0).unwrap_or(0) as f64 / 100.));
-            button class="btn btn-primary" type="submit" {"Submit"}
+            div class="flex flex-row items-center justify-center gap-4" {
+                button class="btn btn-primary" hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
+                span class="htmx-indicator" { "Saving\u{a0}…" }
+            }
         }
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
