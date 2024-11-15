@@ -1,5 +1,8 @@
 export const content = ["./src/frontend/**/*.rs"]
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
 const colors = require('tailwindcss/colors')
 
 export const theme = {
