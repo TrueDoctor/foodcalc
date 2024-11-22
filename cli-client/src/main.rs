@@ -551,6 +551,24 @@ async fn main() {
                     }
                 }
             }
+            AddType::Place(place) => {
+                let place = Place {
+                    place_id: -1,
+                    name: place.name.clone(),
+                    comment: place.comment.clone(),
+                };
+
+                match food_base.add_place(&place).await {
+                    Ok(result) => {
+                        if cli.debug {
+                            println!("Created Place '{}'", result.name)
+                        }
+                    }
+                    Err(error) => {
+                        println!("Error: {}", error)
+                    }
+                }
+            }
         },
         Commands::Delete(delete_data) => match &delete_data.delete_type {
             DeleteType::Ingredient(ingredient) => {

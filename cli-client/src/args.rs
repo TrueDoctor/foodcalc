@@ -244,6 +244,9 @@ pub enum AddType {
 
     /// Add a new Event
     Event(AddEventCommand),
+
+    /// Add a new Event
+    Place(AddPlaceCommand),
 }
 
 #[derive(Debug, Args)]
@@ -292,6 +295,15 @@ pub struct AddEventCommand {
 
     /// Buget for the event
     pub budget: Option<BigDecimal>,
+
+    /// Add comments
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct AddPlaceCommand {
+    /// Name of the new place
+    pub name: String,
 
     /// Add comments
     pub comment: Option<String>,

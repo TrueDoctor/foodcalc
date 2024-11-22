@@ -251,6 +251,20 @@ impl FoodBase {
         Ok(records)
     }
 
+    pub async fn add_place(&self, place: &Place) -> eyre::Result<Place> {
+        let records = sqlx::query_as!(
+            Place,
+            r#"INSERT INTO public.places (name, comment)
+            VALUES ($1, $2)
+            RETURNING *"#,
+            place.name,
+            place.comment
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(records)
+    }
+
     pub async fn update_place(&self, place: &Place) -> eyre::Result<Place> {
         let records = sqlx::query_as!(
             Place,
