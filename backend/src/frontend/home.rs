@@ -32,6 +32,7 @@ pub async fn home_view(mut auth: AuthContext, host: Host, state: State<MyAppStat
             link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x))) {}
             script src="https://unpkg.com/htmx.org@1.9.6" {}
             script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/debug.js" {}
+            meta name="viewport" content="width=800, initial-scale=1";
         }
         body class="
             bg-light-bg-light text-gray-800
