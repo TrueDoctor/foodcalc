@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["app", "metro-scrape", "backend", "foodlib", "cli-client", "api" , "status-api"]
-default-members = ["app", "backend", "foodlib"]
+members = ["metro-scrape", "server", "foodlib", "cli-client", "api" , "status-api"]
+default-members = ["server", "foodlib"]
 
 [workspace.dependencies]
 sqlx = { version = "0.7", features = [
