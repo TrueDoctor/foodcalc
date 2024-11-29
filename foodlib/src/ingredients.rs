@@ -685,7 +685,6 @@ pub struct Store {
 }
 
 mod tests {
-    use crate::*;
     #[test]
     fn test_unit_parsing() {
         use super::*;

@@ -2,7 +2,6 @@ use chrono::NaiveDateTime;
 use core::fmt::Display;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgMoney;
-use std::borrow::Cow;
 use tabled::Tabled;
 
 use crate::{recipes::EventRecipeIngredient, FoodBase, ShoppingListItem};

@@ -81,9 +81,9 @@ async fn main() {
         .nest("/", frontend::frontend_router())
         .layer(auth_layer)
         .layer(session_layer)
-        .with_state(state)
-        .layer(CorsLayer::very_permissive())
-        .layer(TraceLayer::new_for_http());
+        .with_state(state);
+    // .layer(CorsLayer::very_permissive())
+    // .layer(TraceLayer::new_for_http());
 
     println!("Listening on http://localhost:{port}");
 

@@ -2,16 +2,31 @@ use crate::export::RecipeInfo;
 use crate::{recipes::SubRecipe, RecipeStep};
 use bigdecimal::{BigDecimal, ToPrimitive};
 use sqlx::postgres::types::PgInterval;
-use typst::{eval::Tracer, foundations::Smart};
-use typst_as_library::TypstWrapperWorld;
+use typst::foundations::Bytes;
+use typst::text::Font;
+use typst_as_lib::TypstTemplate;
+
+static TEMPLATE_FILE: &str = include_str!("../templates/recipe.typ");
+static FONT: &[u8] = include_bytes!("../fonts/LinLibertine_R.ttf");
 
 fn create_pdf(text: String) -> eyre::Result<Vec<u8>> {
-    let world = TypstWrapperWorld::new("./".to_owned(), text.clone());
+    let font = Font::new(Bytes::from(FONT), 0).expect("Could not parse font!");
 
-    let mut tracer = Tracer::default();
-    let document = typst::compile(&world, &mut tracer)
-        .map_err(|e| eyre::eyre!("encountered error: {} in:\n{}", e[0].message, text))?;
-    Ok(typst_pdf::pdf(&document, Smart::Auto, None))
+    // Read in fonts and the main source file.
+    // We can use this template more than once, if needed (Possibly
+    // with different input each time).
+    let template = TypstTemplate::new(vec![font], format!("{TEMPLATE_FILE}\n{text}"));
+
+    // Run it
+    let doc = template
+        .compile()
+        .output
+        .expect("typst::compile() returned an error!");
+
+    // Create pdf
+    let options = Default::default();
+    let pdf = typst_pdf::pdf(&doc, &options).expect("Could not generate pdf.");
+    Ok(pdf)
 }
 
 /* #recipe("Rezeptname", "22.04.2024 11:00",
