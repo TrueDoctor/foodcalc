@@ -467,13 +467,13 @@ pub async fn add_subrecipe_form(
 
 pub async fn add_step_form(State(_): State<MyAppState>, Path(recipe_id): Path<i32>) -> Markup {
     html! {
-        form hx-put="recipes/edit/commit-step" hx-swap="outerHTML" hx-target="#contents" {
+        form id="test5" hx-put="recipes/edit/commit-step" hx-swap="outerHTML" hx-target="#contents" {
             div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
                 h1 { "Add Step" }
                 input type="hidden" name=("recipe_id") value=(recipe_id);
                 input type="hidden" name=("step_id") value=(-1);
-                input class="text" type="text" name=("step_name") placeholder="Name" value="" required="required";
                 input class="text" type="text" name=("step_order") placeholder="Order" value="" required="required";
+                input class="text" type="text" name=("step_name") placeholder="Name" value="" required="required";
                 input class="text" type="text" name=("step_description") placeholder="Description" value="";
                 input class="text" type="text" name=("fixed_duration_minutes") placeholder="Fixed Duration in Minutes" value="" required="required";
                 input class="text" type="text" name=("duration_per_kg_minutes") placeholder="Duration per kg in Minutes" value="" required="required";
