@@ -1,7 +1,6 @@
 use axum::{
     extract::State,
-    http::StatusCode,
-    response::{IntoResponse, Redirect},
+    response::IntoResponse,
     routing::{get, post},
     Form,
 };
