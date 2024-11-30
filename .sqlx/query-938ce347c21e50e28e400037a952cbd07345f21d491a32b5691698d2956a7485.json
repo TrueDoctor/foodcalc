@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT event_id as \"event_id!\",\n                    event_name as \"event_name!\",\n                    events.comment as \"comment\",\n                    budget as \"budget\"\n                FROM events LEFT JOIN event_meals USING (event_id)\n                WHERE event_id = $1 OR event_name = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_name!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "budget",
+        "type_info": "Money"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "938ce347c21e50e28e400037a952cbd07345f21d491a32b5691698d2956a7485"
+}

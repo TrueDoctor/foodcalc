@@ -4,7 +4,7 @@ use axum::{
     routing::{get, post},
     Form,
 };
-use foodlib::{AuthContext, Credenitals};
+use foodlib::{AuthSession, Credenitals};
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -61,7 +61,7 @@ fn wrong_credentials(hidden: bool) -> Markup {
 }
 
 async fn login_handler(
-    mut auth: AuthContext,
+    mut auth: AuthSession,
     State(state): State<MyAppState>,
     Form(data): Form<LoginData>,
 ) -> impl IntoResponse {
@@ -85,7 +85,7 @@ async fn login_handler(
         .into_response()
 }
 
-async fn logout_handler(mut auth: AuthContext) {
-    dbg!("Logging out user: {}", &auth.current_user);
+async fn logout_handler(mut auth: AuthSession) {
+    dbg!("Logging out user: {}", &auth.user);
     auth.logout().await;
 }

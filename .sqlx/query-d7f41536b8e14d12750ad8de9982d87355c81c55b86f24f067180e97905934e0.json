@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE meta_recipes\n                SET weight = $3\n                WHERE parent_id = $1 AND child_id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d7f41536b8e14d12750ad8de9982d87355c81c55b86f24f067180e97905934e0"
+}

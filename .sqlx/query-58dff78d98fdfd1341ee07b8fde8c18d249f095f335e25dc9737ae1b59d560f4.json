@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                DELETE FROM inventories\n                WHERE inventory_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "58dff78d98fdfd1341ee07b8fde8c18d249f095f335e25dc9737ae1b59d560f4"
+}

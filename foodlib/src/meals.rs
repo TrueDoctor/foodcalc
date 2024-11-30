@@ -1,8 +1,11 @@
+#![allow(clippy::too_many_arguments)]
 use bigdecimal::BigDecimal;
+use time::{macros::time, OffsetDateTime};
 
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::types::PgMoney, types::chrono::NaiveDateTime};
+use sqlx::postgres::types::PgMoney;
 use tabled::Tabled;
+use time::PrimitiveDateTime;
 
 use crate::FoodBase;
 
@@ -20,9 +23,9 @@ pub struct Meal {
     pub place_id: i32,
     pub place: String,
     #[tabled(rename = "Start")]
-    pub start_time: NaiveDateTime,
+    pub start_time: PrimitiveDateTime,
     #[tabled(rename = "End")]
-    pub end_time: NaiveDateTime,
+    pub end_time: PrimitiveDateTime,
     #[tabled(rename = "Weight")]
     pub weight: BigDecimal,
     #[tabled(rename = "Energy")]
@@ -41,10 +44,10 @@ pub struct Meal {
 
 impl Default for Meal {
     fn default() -> Self {
-        let time = chrono::Local::now();
-        let date = time.date_naive();
-        let time = chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap();
-        let start_time = NaiveDateTime::new(date, time);
+        let now = OffsetDateTime::now_utc();
+        let date = now.date();
+        let noon = time!(12:00:00);
+        let start_time = date.with_time(noon);
         Self {
             meal_id: Default::default(),
             event_id: Default::default(),
@@ -163,8 +166,8 @@ impl FoodBase {
         meal_id: i32,
         recipe_id: i32,
         place_id: i32,
-        start_time: NaiveDateTime,
-        end_time: NaiveDateTime,
+        start_time: PrimitiveDateTime,
+        end_time: PrimitiveDateTime,
         energy: BigDecimal,
         servings: i32,
         comment: Option<String>,
@@ -204,8 +207,8 @@ impl FoodBase {
         event_id: i32,
         recipe_id: i32,
         place_id: i32,
-        start_time: NaiveDateTime,
-        end_time: NaiveDateTime,
+        start_time: PrimitiveDateTime,
+        end_time: PrimitiveDateTime,
         energy: BigDecimal,
         servings: i32,
         comment: Option<String>,
@@ -254,7 +257,7 @@ impl FoodBase {
         event_id: i32,
         recipe_id: i32,
         place_id: i32,
-        start_time: NaiveDateTime,
+        start_time: PrimitiveDateTime,
     ) -> eyre::Result<()> {
         let count = sqlx::query!(
             r#"

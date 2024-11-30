@@ -5,6 +5,7 @@ use bigdecimal::ToPrimitive;
 use sqlx::postgres::types::PgInterval;
 
 use sqlx;
+use time::format_description;
 
 use super::SubRecipe;
 
@@ -109,7 +110,8 @@ impl FoodBase {
         let meal = self.get_event_meal(meal_id).await?;
         let recipe_id = meal.recipe_id;
         let weight = meal.weight;
-        let date = meal.start_time.format("%d.%m.%Y %H:%M").to_string();
+        let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
+        let date = meal.start_time.format(&format).unwrap();
         self.fetch_recipes_infos(recipe_id, weight, date).await
     }
 

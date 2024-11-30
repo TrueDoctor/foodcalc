@@ -6,10 +6,11 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use axum_login::RequireAuthorizationLayer;
+use axum_login::login_required;
 use bigdecimal::ToPrimitive;
+#[cfg(feature = "typst")]
 use foodlib::typst::export_recipes;
-use foodlib::{Event, EventRecipeIngredient, Meal, SourceOverrideView, Store, User};
+use foodlib::{Backend, Event, EventRecipeIngredient, Meal, SourceOverrideView, Store, User};
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgMoney;
@@ -32,10 +33,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
             get(delete_override_dialog),
         )
         .route("/export_pdf/:meal_id", get(export_recipe_pdf))
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
-            Arc::new(LOGIN_URL.into()),
-            None,
-        ))
+        .route_layer(login_required!(Backend, login_url = LOGIN_URL))
         .route("/:event_id", get(event_form))
         .route(
             "/ingredients-per-serving/:meal_id",
@@ -107,7 +105,11 @@ pub async fn export_recipe_pdf(
         return Err(html_error("Meal fetching failed", "/events"));
     };
     let title = recipe_info.name.to_owned();
+
+    #[cfg(feature = "typst")]
     let result = export_recipes(recipe_info).await;
+    #[cfg(not(feature = "typst"))]
+    let result = Err("Server not compiled with typst support.");
 
     match result {
         Ok(recipe) => {

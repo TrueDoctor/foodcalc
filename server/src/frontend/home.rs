@@ -1,5 +1,5 @@
 use axum::extract::{Host, State};
-use foodlib::{AuthContext, User};
+use foodlib::{AuthSession, User};
 use maud::{html, Markup};
 
 use crate::{
@@ -11,7 +11,7 @@ pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
     axum::Router::new().route("/", axum::routing::get(home_view))
 }
 
-pub async fn home_view(mut auth: AuthContext, host: Host, state: State<MyAppState>) -> Markup {
+pub async fn home_view(mut auth: AuthSession, host: Host, state: State<MyAppState>) -> Markup {
     let (host, _) = host.0.split_once(':').unwrap_or_default();
     #[cfg(debug_assertions)]
     if host == "127.0.0.1" || host == "localhost" {

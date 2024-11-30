@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT ingredient_id as \"ingredient_id!\", ingredient as \"ingredient_name!\", price as \"price!\", weight as \"weight!\"\n                FROM shopping_list \n                WHERE tour_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient_name!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "price!",
+        "type_info": "Money"
+      },
+      {
+        "ordinal": 3,
+        "name": "weight!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "47b023e99f57b41a12aded2c68d5e0f005da656a15b0e6110c899c018cc48572"
+}

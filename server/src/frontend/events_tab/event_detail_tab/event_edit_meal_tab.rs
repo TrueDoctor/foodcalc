@@ -6,9 +6,9 @@ use axum::{
     routing::{delete, get, post},
 };
 use bigdecimal::BigDecimal;
-use chrono::DateTime;
 use maud::{html, Markup};
 use serde::Deserialize;
+use time::{macros::format_description, OffsetDateTime, PrimitiveDateTime};
 
 pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -45,14 +45,18 @@ pub async fn update_meal(
     Path((event_id, meal_id)): Path<(i32, i32)>,
     Form(meal): Form<MealForm>,
 ) -> impl IntoResponse {
-    let append_start = meal.start_time + ":00-00:00";
-    let start_time = DateTime::parse_from_rfc3339(&append_start)
-        .map_err(|_| StatusCode::BAD_REQUEST)?
-        .naive_utc();
-    let append_end = meal.end_time + ":00-00:00";
-    let end_time = DateTime::parse_from_rfc3339(&append_end)
-        .map_err(|_| StatusCode::BAD_REQUEST)?
-        .naive_utc();
+    let append_start = format!("{}:00-00:00", meal.start_time);
+    let start_time = PrimitiveDateTime::parse(
+        &append_start,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Parse end time
+    let append_end = format!("{}:00-00:00", meal.end_time);
+    let end_time =
+        PrimitiveDateTime::parse(&append_end, &time::format_description::well_known::Rfc3339)
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
     let result = if meal_id != -1 {
         state
             .update_single_meal(
@@ -111,6 +115,9 @@ async fn meal_form(
         .await
         .map_err(|e| html_error(&format!("Failed to fetch places {e}"), "/events"))?;
     places.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let time_format = format_description!("[day]-[month]-[year][hour]:[minute]");
+
     Ok(html! {
         div class="flex justify-center w-full mb-4" {
             p class="text-3xl" { "Edit Meal" }
@@ -147,11 +154,11 @@ async fn meal_form(
                 }
                 tr {
                     td { "Start Time" }
-                    td { input class="text" type="datetime-local" name="start_time" required="required" value=(meal.start_time.format("%Y-%m-%dT%H:%M").to_string()); }
+                    td { input class="text" type="datetime-local" name="start_time" required="required" value=(meal.start_time.format(&time_format).unwrap()); }
                 }
                 tr {
                     td { "End Time" }
-                    td { input class="text" type="datetime-local" name="end_time" required="required" value=(meal.end_time.format("%Y-%m-%dT%H:%M").to_string()); }
+                    td { input class="text" type="datetime-local" name="end_time" required="required" value=(meal.end_time.format(&time_format).unwrap()); }
                 }
                 tr {
                     td { "Weight" }

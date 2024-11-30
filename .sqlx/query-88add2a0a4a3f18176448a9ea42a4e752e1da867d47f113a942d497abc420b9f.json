@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT * FROM ingredient_sources ORDER BY ingredient_id ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "store_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "package_size",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "unit_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "price",
+        "type_info": "Money"
+      },
+      {
+        "ordinal": 5,
+        "name": "url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "ingredient_source_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "88add2a0a4a3f18176448a9ea42a4e752e1da867d47f113a942d497abc420b9f"
+}

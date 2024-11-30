@@ -7,10 +7,7 @@ use axum::{
 };
 use foodlib::Event;
 use serde::{Deserialize, Serialize};
-use sqlx::{
-    postgres::types::PgMoney,
-    types::{chrono::NaiveDateTime, BigDecimal},
-};
+use sqlx::{postgres::types::PgMoney, types::BigDecimal};
 
 use crate::ApiState;
 

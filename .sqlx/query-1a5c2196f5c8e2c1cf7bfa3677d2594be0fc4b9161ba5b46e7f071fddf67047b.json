@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM event_source_overrides WHERE event_id = $1 AND ingredient_source_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1a5c2196f5c8e2c1cf7bfa3677d2594be0fc4b9161ba5b46e7f071fddf67047b"
+}

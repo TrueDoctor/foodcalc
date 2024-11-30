@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT event_id as \"event_id!\",\n                    event_name as \"event_name!\",\n                    events.comment as \"comment\",\n                    budget as \"budget\"\n                FROM events\n                WHERE event_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_name!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "budget",
+        "type_info": "Money"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "94e8cec7c268cdb716cae8c2f3b1628373e6e0b5e46e94a34b16758b99bd6de0"
+}

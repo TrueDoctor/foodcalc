@@ -1,9 +1,75 @@
-use axum_login::secrecy::SecretVec;
-use axum_login::AuthUser;
-use axum_login::PostgresStore;
-use chrono::NaiveDateTime;
-
+use async_trait::async_trait;
+use axum_login::{AuthUser, AuthnBackend, UserId};
 use serde::{Deserialize, Serialize};
+use sqlx::postgres::PgPool;
+use time::macros::datetime;
+
+impl AuthUser for User {
+    type Id = i64;
+
+    fn id(&self) -> Self::Id {
+        self.id
+    }
+
+    fn session_auth_hash(&self) -> &[u8] {
+        self.password_hash.as_bytes()
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Credentials {
+    pub username: String,
+    pub password: String,
+    pub next: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Backend {
+    db: PgPool,
+}
+
+impl Backend {
+    pub fn new(db: PgPool) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl AuthnBackend for Backend {
+    type User = User;
+    type Credentials = Credentials;
+    type Error = sqlx::Error;
+
+    async fn authenticate(
+        &self,
+        creds: Self::Credentials,
+    ) -> Result<Option<Self::User>, Self::Error> {
+        let user: Option<Self::User> = sqlx::query_as("SELECT * FROM users WHERE username = $1")
+            .bind(creds.username)
+            .fetch_optional(&self.db)
+            .await?;
+
+        // Verify password in a blocking task since bcrypt is CPU intensive
+        Ok(
+            user.filter(|user| {
+                bcrypt::verify(creds.password, &user.password_hash).unwrap_or(false)
+            }),
+        )
+    }
+
+    async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<Self::User>, Self::Error> {
+        let user = sqlx::query_as("SELECT * FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.db)
+            .await?;
+        Ok(user)
+    }
+}
+
+// Type alias for convenience
+pub type AuthSession = axum_login::AuthSession<Backend>;
+
+use crate::PrimitiveDateTime;
 
 use crate::FoodBase;
 
@@ -13,27 +79,28 @@ pub struct Credenitals {
     pub password: String,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
     pub id: i64,
     pub username: String,
     pub email: String,
     pub password_hash: String,
     pub is_admin: bool,
-    pub created_at: NaiveDateTime,
+    pub created_at: PrimitiveDateTime,
 }
 
-impl AuthUser<i64> for User {
-    fn get_id(&self) -> i64 {
-        self.id
-    }
-
-    fn get_password_hash(&self) -> SecretVec<u8> {
-        SecretVec::new(self.password_hash.clone().into())
+impl Default for User {
+    fn default() -> Self {
+        User {
+            id: 0,
+            username: "test".to_string(),
+            email: "".to_string(),
+            password_hash: "password".to_string(),
+            is_admin: true,
+            created_at: datetime!(1970-1-1 00:00),
+        }
     }
 }
-
-pub type AuthContext = axum_login::extractors::AuthContext<i64, User, PostgresStore<User>>;
 
 pub enum UserError {
     UsernameNotFound,

@@ -1,11 +1,10 @@
-use std::sync::Arc;
-
 use crate::MyAppState;
 use axum::extract::{Form, Path, State};
 use axum::routing::{get, post};
-use axum_login::RequireAuthorizationLayer;
+use axum_login::login_required;
+#[cfg(feature = "typst")]
 use foodlib::typst::export_recipes;
-use foodlib::{Recipe, User};
+use foodlib::{Backend, Recipe};
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -21,9 +20,10 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
             axum::routing::delete(delete_recipe_nqa),
         )
         .nest("/edit/", recipes_edit_tab::recipes_edit_router())
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
-            Arc::new(LOGIN_URL.into()),
-            Some(Arc::new("protected".into())),
+        .route_layer(login_required!(
+            Backend,
+            login_url = LOGIN_URL,
+            redirect_field = "protected"
         ))
         .route("/search", post(search))
         .route("/shopping-list/:recipe_id", post(shopping_list))
@@ -105,7 +105,10 @@ pub async fn export_recipe_pdf(
         return Err(html_error("Meal fetching failed"));
     };
     let title = recipe_info.name.to_owned();
+    #[cfg(feature = "typst")]
     let result = export_recipes(recipe_info).await;
+    #[cfg(not(feature = "typst"))]
+    let result = Err("Compiled without typst support");
 
     match result {
         Ok(recipe) => {

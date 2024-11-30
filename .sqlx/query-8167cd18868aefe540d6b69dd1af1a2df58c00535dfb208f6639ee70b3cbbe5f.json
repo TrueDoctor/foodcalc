@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO public.event_source_overrides (event_id, ingredient_source_id) \n                VALUES ($1, $2)\n                ON CONFLICT (event_id, ingredient_source_id) DO UPDATE SET event_id = $1, ingredient_source_id = $2\n                RETURNING *\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient_source_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8167cd18868aefe540d6b69dd1af1a2df58c00535dfb208f6639ee70b3cbbe5f"
+}

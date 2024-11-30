@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT * FROM recipes WHERE recipe_id = $1 ORDER BY recipe_id ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recipe_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "805d329a7f4e1b46efe5adb468c911266e907f378f701443bd85208231784b43"
+}

@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " Update places\n                SET name = $2, comment = $3\n                WHERE place_id = $1\n                RETURNING *\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "place_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "4befe5c36bcd024b91aab37a8239a764b13c5ccba128157979d2fe09c0427749"
+}

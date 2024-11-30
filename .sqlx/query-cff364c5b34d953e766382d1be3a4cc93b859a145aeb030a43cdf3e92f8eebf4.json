@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT event_id, ingredient_id, ingredient_sources.ingredient_source_id, ingredients.name as ingredient, store_id, stores.name as store\n                FROM event_source_overrides\n                INNER JOIN ingredient_sources USING (ingredient_source_id)\n                INNER JOIN ingredients USING (ingredient_id)\n                INNER JOIN stores USING (store_id)\n                WHERE event_id = $1 AND ingredient_source_id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "ingredient_source_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "ingredient",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "store_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "store",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "cff364c5b34d953e766382d1be3a4cc93b859a145aeb030a43cdf3e92f8eebf4"
+}

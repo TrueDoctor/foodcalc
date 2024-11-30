@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM food_prep WHERE prep_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6c392adaed6c7959f3c56979fdc055f229ab5458ad8945f4aed3df0dc53dfa21"
+}

@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT\n            event_meals.meal_id,\n            event_meals.event_id as \"event_id!\",\n            event_meals.recipe_id as \"recipe_id!\",\n             recipe as \"name!\",\n             comment,\n             event_meals.place_id as \"place_id!\",\n             place as \"place!\",\n             event_meals.start_time as \"start_time!\",\n             event_meals.end_time as \"end_time!\",\n             COALESCE(round(sum(weight),2),0) as \"weight!\",\n             COALESCE((CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END),0) as \"energy!\",\n             COALESCE(sum(price),'0'::float8::numeric::money) as \"price!\",\n             event_meals.servings as \"servings!\"\n\n            FROM event_ingredients\n            INNER JOIN event_meals\n            ON event_ingredients.meal_id=event_meals.meal_id\n\n            WHERE event_meals.meal_id = $1\n            GROUP BY recipe, place, event_meals.servings, event_meals.meal_id\n            ORDER BY event_meals.start_time ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "meal_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "recipe_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "name!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "place_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "place!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "start_time!",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 8,
+        "name": "end_time!",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 9,
+        "name": "weight!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 10,
+        "name": "energy!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "price!",
+        "type_info": "Money"
+      },
+      {
+        "ordinal": 12,
+        "name": "servings!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      null,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "8221797b9bf88e7f3fead2c4fcace0de9c62640545784a2c45c9daee7cce7f64"
+}

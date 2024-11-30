@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use axum::extract::{Form, Path, State};
 use axum::response::{IntoResponse, Response};
-use axum_login::RequireAuthorizationLayer;
+use axum_login::login_required;
 use bigdecimal::BigDecimal;
-use foodlib::{Ingredient, IngredientSource, Store, User};
+use foodlib::{Backend, Ingredient, IngredientSource, Store, User};
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgMoney;
@@ -29,10 +29,7 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
             "/sources/delete/:ingredient_id/:source_id",
             axum::routing::get(delete_source),
         )
-        .route_layer(RequireAuthorizationLayer::<i64, User>::login_or_redirect(
-            Arc::new(LOGIN_URL.into()),
-            None,
-        ))
+        .route_layer(login_required!(Backend, login_url = LOGIN_URL))
         .route("/sources/:id", axum::routing::get(sources_table))
         .route("/search", axum::routing::post(search))
         .route("/", axum::routing::get(ingredients_view))

@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use crate::PrimitiveDateTime;
 use core::fmt::Display;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgMoney;
@@ -41,7 +41,7 @@ impl Display for Place {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct FoodPrep {
     #[tabled(rename = "ID")]
     pub prep_id: i32,
@@ -50,21 +50,21 @@ pub struct FoodPrep {
     #[tabled(rename = "Recipe ID")]
     pub recipe_id: i32,
     #[tabled(rename = "Prep Date")]
-    pub prep_date: NaiveDateTime,
+    pub prep_date: PrimitiveDateTime,
     #[tabled(display_with = "crate::util::display_optional", rename = "Prep Date")]
-    pub use_from: Option<NaiveDateTime>,
+    pub use_from: Option<PrimitiveDateTime>,
     #[tabled(rename = "Use Date")]
-    pub use_until: NaiveDateTime,
+    pub use_until: PrimitiveDateTime,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct ShoppingTour {
     #[tabled(rename = "ID")]
     pub tour_id: i32,
     #[tabled(skip)]
     pub event_id: i32,
     #[tabled(rename = "Date")]
-    pub tour_date: NaiveDateTime,
+    pub tour_date: PrimitiveDateTime,
     #[tabled(rename = "Store ID")]
     pub store_id: i32,
 }
@@ -352,7 +352,7 @@ impl FoodBase {
         &self,
         event_id: i32,
         store_id: i32,
-        date: NaiveDateTime,
+        date: PrimitiveDateTime,
     ) -> eyre::Result<ShoppingTour> {
         let tour = sqlx::query_as!(
             ShoppingTour,
@@ -380,7 +380,7 @@ impl FoodBase {
     pub async fn update_event_shopping_tour_date(
         &self,
         tour_id: i32,
-        date: NaiveDateTime,
+        date: PrimitiveDateTime,
     ) -> eyre::Result<ShoppingTour> {
         let result = sqlx::query_as!(
             ShoppingTour,
@@ -434,9 +434,9 @@ impl FoodBase {
         &self,
         event_id: i32,
         recipe_id: i32,
-        prep_date: NaiveDateTime,
-        use_from: Option<NaiveDateTime>,
-        use_til: NaiveDateTime,
+        prep_date: PrimitiveDateTime,
+        use_from: Option<PrimitiveDateTime>,
+        use_til: PrimitiveDateTime,
     ) -> eyre::Result<FoodPrep> {
         let query = sqlx::query_as!(
             FoodPrep,
@@ -652,7 +652,7 @@ impl FoodBase {
     pub async fn update_event_food_prep_prep_date(
         &self,
         prep_id: i32,
-        prep_date: NaiveDateTime,
+        prep_date: PrimitiveDateTime,
     ) -> eyre::Result<FoodPrep> {
         let result = sqlx::query_as!(
             FoodPrep,
@@ -673,7 +673,7 @@ impl FoodBase {
     pub async fn update_event_food_prep_use_from(
         &self,
         prep_id: i32,
-        use_from: NaiveDateTime,
+        use_from: PrimitiveDateTime,
     ) -> eyre::Result<FoodPrep> {
         let result = sqlx::query_as!(
             FoodPrep,
@@ -694,7 +694,7 @@ impl FoodBase {
     pub async fn update_event_food_prep_use_until(
         &self,
         prep_id: i32,
-        use_until: NaiveDateTime,
+        use_until: PrimitiveDateTime,
     ) -> eyre::Result<FoodPrep> {
         let result = sqlx::query_as!(
             FoodPrep,
