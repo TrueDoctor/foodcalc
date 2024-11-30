@@ -65,7 +65,7 @@ jobs:
           echo $RSYNC_STDOUT 
           cd /srv/foodcalc/build/server && npm install
           cd /srv/foodcalc/build/
-          cargo build --release --bin ${{ env.BIN_NAME }} --features tectonic
+          cargo build --release --bin ${{ env.BIN_NAME }} --features typst
           sudo /bin/systemctl stop foodcalc 
           cp /srv/foodcalc/build/target/release/${{ env.BIN_NAME }} /srv/foodcalc/${{ env.BIN_NAME }}
           sudo /bin/systemctl start foodcalc
