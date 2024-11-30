@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 axum = "0.7.5"
-chrono.workspace = true
+time.workspace = true
 dotenv.workspace = true
 foodlib = { version = "0.1.0", path = "../foodlib", features = ["tokio"] }
 http = "1.1.0"

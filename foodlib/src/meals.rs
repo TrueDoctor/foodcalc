@@ -2,10 +2,9 @@
 use bigdecimal::BigDecimal;
 use time::{macros::time, OffsetDateTime};
 
+use crate::PrimitiveDateTime;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::types::PgMoney;
 use tabled::Tabled;
-use time::PrimitiveDateTime;
 
 use crate::FoodBase;
 
@@ -30,12 +29,8 @@ pub struct Meal {
     pub weight: BigDecimal,
     #[tabled(rename = "Energy")]
     pub energy: BigDecimal,
-    #[serde(
-        serialize_with = "crate::util::serialize_money",
-        deserialize_with = "crate::util::deserialize_money"
-    )]
     #[tabled(rename = "Price", display_with = "crate::util::format_pg_money")]
-    pub price: PgMoney,
+    pub price: BigDecimal,
     #[tabled(rename = "Servings")]
     pub servings: i32,
     #[tabled(rename = "Comment", display_with = "crate::util::display_optional")]
@@ -45,9 +40,8 @@ pub struct Meal {
 impl Default for Meal {
     fn default() -> Self {
         let now = OffsetDateTime::now_utc();
-        let date = now.date();
         let noon = time!(12:00:00);
-        let start_time = date.with_time(noon);
+        let start_time = now.replace_time(noon);
         Self {
             meal_id: Default::default(),
             event_id: Default::default(),
@@ -60,7 +54,7 @@ impl Default for Meal {
             end_time: start_time,
             weight: Default::default(),
             energy: BigDecimal::from(2400),
-            price: PgMoney::from(0),
+            price: BigDecimal::from(0),
             servings: 1,
         }
     }
@@ -82,7 +76,7 @@ impl FoodBase {
              event_meals.end_time as "end_time!",
              COALESCE(round(sum(weight),2),0) as "weight!",
              COALESCE((CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END),0) as "energy!",
-             COALESCE(sum(price),'0'::float8::numeric::money) as "price!",
+             COALESCE(sum(price),0) as "price!",
              event_meals.servings as "servings!"
 
             FROM event_ingredients
@@ -114,7 +108,7 @@ impl FoodBase {
              event_meals.end_time as "end_time!",
              COALESCE(round(sum(weight),2),0) as "weight!",
              COALESCE((CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END),0) as "energy!",
-             COALESCE(sum(price),'0'::float8::numeric::money) as "price!",
+             COALESCE(sum(price), 0) as "price!",
              event_meals.servings as "servings!"
 
             FROM event_ingredients

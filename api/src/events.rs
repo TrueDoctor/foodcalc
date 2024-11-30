@@ -7,7 +7,13 @@ use axum::{
 };
 use foodlib::Event;
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::types::PgMoney, types::BigDecimal};
+use sqlx::{
+    postgres::types::PgMoney,
+    types::{
+        time::{OffsetDateTime, PrimitiveDateTime},
+        BigDecimal,
+    },
+};
 
 use crate::ApiState;
 
@@ -138,8 +144,12 @@ async fn meal_add(
             event_id,
             body.recipe,
             body.place,
-            NaiveDateTime::from_timestamp_millis(body.start).unwrap(),
-            NaiveDateTime::from_timestamp_millis(body.end).unwrap(),
+            OffsetDateTime::from_unix_timestamp_nanos(body.start as i128 * 1_000_000)
+                .unwrap()
+                .date_time(),
+            OffsetDateTime::from_unix_timestamp_nanos(body.end as i128 * 1_000_000)
+                .unwrap()
+                .into(),
             body.energy,
             body.servings,
             body.comment,

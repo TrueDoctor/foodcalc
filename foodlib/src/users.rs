@@ -3,6 +3,8 @@ use axum_login::{AuthUser, AuthnBackend, UserId};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use time::macros::datetime;
+use time::macros::time;
+use time::OffsetDateTime;
 
 impl AuthUser for User {
     type Id = i64;
@@ -69,8 +71,6 @@ impl AuthnBackend for Backend {
 // Type alias for convenience
 pub type AuthSession = axum_login::AuthSession<Backend>;
 
-use crate::PrimitiveDateTime;
-
 use crate::FoodBase;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,7 +86,7 @@ pub struct User {
     pub email: String,
     pub password_hash: String,
     pub is_admin: bool,
-    pub created_at: PrimitiveDateTime,
+    pub created_at: OffsetDateTime,
 }
 
 impl Default for User {
@@ -97,7 +97,7 @@ impl Default for User {
             email: "".to_string(),
             password_hash: "password".to_string(),
             is_admin: true,
-            created_at: datetime!(1970-1-1 00:00),
+            created_at: OffsetDateTime::now_utc(),
         }
     }
 }

@@ -1,40 +1,42 @@
 use std::{borrow::Borrow, fmt::Display, str::FromStr};
 
+use bigdecimal::BigDecimal;
+use num::{FromPrimitive, ToPrimitive};
 use serde::Deserialize;
-use sqlx::postgres::types::{PgInterval, PgMoney};
+use sqlx::postgres::types::PgInterval;
 
-pub(crate) fn serialize_money<S>(money: &PgMoney, serializer: S) -> Result<S::Ok, S::Error>
+pub(crate) fn serialize_money<S>(money: &BigDecimal, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
-    serializer.serialize_str(&money.0.to_string())
+    serializer.serialize_str(&money.to_string())
 }
 
-pub(crate) fn deserialize_money<'de, D>(deserializer: D) -> Result<PgMoney, D::Error>
+pub(crate) fn deserialize_money<'de, D>(deserializer: D) -> Result<BigDecimal, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
-    let money = PgMoney::from_bigdecimal(FromStr::from_str(&s).unwrap(), 2);
-    Ok(money.unwrap())
+    let money = FromStr::from_str(&s).unwrap();
+    Ok(money)
 }
 
 pub(crate) fn serialize_optional_money<S>(
-    money: &Option<PgMoney>,
+    money: &Option<BigDecimal>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
     match money {
-        Some(money) => serializer.serialize_i64(money.0),
+        Some(money) => serializer.serialize_f64(money.to_f64().unwrap()),
         None => serializer.serialize_none(),
     }
 }
 
 pub(crate) fn deserialize_optional_money<'de, D>(
     deserializer: D,
-) -> Result<Option<PgMoney>, D::Error>
+) -> Result<Option<BigDecimal>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -42,9 +44,8 @@ where
     if s.is_empty() {
         Ok(None)
     } else {
-        let money: i64 = i64::from_str(&s).map_err(serde::de::Error::custom)?;
-        let money = PgMoney(money);
-        Ok(Some(money))
+        let money: f64 = f64::from_str(&s).map_err(serde::de::Error::custom)?;
+        Ok(BigDecimal::from_f64(money))
     }
 }
 
@@ -79,13 +80,13 @@ pub(crate) fn display_optional<T: Display>(value: &Option<T>) -> String {
     }
 }
 
-pub(crate) fn display_optional_money(value: &Option<PgMoney>) -> String {
+pub(crate) fn display_optional_money(value: &Option<BigDecimal>) -> String {
     match value {
         Some(value) => crate::util::format_pg_money(value),
         None => "".to_string(),
     }
 }
 
-pub(crate) fn format_pg_money(money: impl Borrow<PgMoney>) -> String {
-    format!("{} €", money.borrow().to_bigdecimal(2))
+pub(crate) fn format_pg_money(money: impl Borrow<BigDecimal>) -> String {
+    format!("{} €", money.borrow())
 }

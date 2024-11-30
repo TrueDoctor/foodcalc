@@ -532,7 +532,6 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
- "serde",
  "wasm-bindgen",
  "windows-targets 0.52.6",
 ]
@@ -3805,7 +3804,6 @@ name = "status-api"
 version = "0.1.0"
 dependencies = [
  "axum",
- "chrono",
  "dotenv",
  "foodlib",
  "http 1.1.0",
@@ -3813,6 +3811,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "time",
  "tokio",
  "tower-http 0.5.2",
  "tracing",

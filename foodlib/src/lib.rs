@@ -19,7 +19,7 @@ pub use meals::*;
 pub use recipes::*;
 pub use users::*;
 
-type PrimitiveDateTime = time::PrimitiveDateTime;
+type PrimitiveDateTime = time::OffsetDateTime;
 
 #[derive(Debug, Clone)]
 pub struct FoodBase {

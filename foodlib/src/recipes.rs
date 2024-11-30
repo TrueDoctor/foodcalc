@@ -1,10 +1,7 @@
 use std::{borrow::Cow, fmt::Display};
 
 use serde::{Deserialize, Serialize};
-use sqlx::{
-    postgres::types::{PgInterval, PgMoney},
-    types::BigDecimal,
-};
+use sqlx::{postgres::types::PgInterval, types::BigDecimal};
 use tabled::Tabled;
 
 pub mod export;
@@ -34,11 +31,7 @@ pub struct EventRecipeIngredient {
     pub name: String,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
-    #[serde(
-        serialize_with = "crate::util::serialize_money",
-        deserialize_with = "crate::util::deserialize_money"
-    )]
-    pub price: PgMoney,
+    pub price: BigDecimal,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
