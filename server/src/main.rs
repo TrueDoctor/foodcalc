@@ -1,13 +1,12 @@
 use std::{env, net::SocketAddr, ops::Deref, time::Duration};
 
-use axum::{routing::get, Router};
+use axum::Router;
 use axum_login::{
-    login_required,
     tower_sessions::{ExpiredDeletion, Expiry, SessionManagerLayer},
     AuthManagerLayerBuilder,
 };
 use fern::colors::{Color, ColoredLevelConfig};
-use foodlib::{FoodBase, User};
+use foodlib::FoodBase;
 use sqlx::postgres::PgPool;
 use time::format_description;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};

@@ -1,10 +1,9 @@
-use std::sync::Arc;
 
 use axum::extract::{Form, Path, State};
 use axum::response::{IntoResponse, Response};
 use axum_login::login_required;
 use bigdecimal::BigDecimal;
-use foodlib::{Backend, Ingredient, IngredientSource, Store, User};
+use foodlib::{Backend, Ingredient, IngredientSource, Store};
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgMoney;

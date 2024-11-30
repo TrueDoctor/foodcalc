@@ -1,10 +1,9 @@
 use std::hash::Hasher;
-use std::sync::Arc;
 
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum_login::login_required;
-use foodlib::{Backend, User};
+use foodlib::Backend;
 use maud::{html, Markup};
 
 use crate::MyAppState;

@@ -684,7 +684,9 @@ pub struct Store {
     pub name: String,
 }
 
+#[cfg(test)]
 mod tests {
+    use crate::PgPool;
     #[test]
     fn test_unit_parsing() {
         use super::*;

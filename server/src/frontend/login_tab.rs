@@ -48,7 +48,7 @@ pub async fn login_view(Form(redirect): Form<RedirectUrl>) -> impl IntoResponse 
 
 #[derive(Deserialize)]
 pub struct LoginData {
-    protected: Option<String>,
+    _protected: Option<String>,
     username: String,
     password: String,
 }
@@ -87,5 +87,7 @@ async fn login_handler(
 
 async fn logout_handler(mut auth: AuthSession) {
     dbg!("Logging out user: {}", &auth.user);
-    auth.logout().await;
+    if let Err(e) = auth.logout().await {
+        log::error!("failed to log out {:?}: {e}", auth.user);
+    }
 }

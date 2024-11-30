@@ -1,4 +1,3 @@
-use std::sync::Arc;
 
 use axum::{
     extract::{Form, Path, State},
@@ -10,7 +9,7 @@ use axum_login::login_required;
 use bigdecimal::ToPrimitive;
 #[cfg(feature = "typst")]
 use foodlib::typst::export_recipes;
-use foodlib::{Backend, Event, EventRecipeIngredient, Meal, SourceOverrideView, Store, User};
+use foodlib::{Backend, Event, EventRecipeIngredient, Meal, SourceOverrideView, Store};
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgMoney;
