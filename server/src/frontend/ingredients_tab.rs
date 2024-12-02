@@ -1,12 +1,11 @@
-
 use axum::extract::{Form, Path, State};
 use axum::response::{IntoResponse, Response};
 use axum_login::login_required;
 use bigdecimal::BigDecimal;
 use foodlib::{Backend, Ingredient, IngredientSource, Store};
 use maud::{html, Markup};
+use num::{FromPrimitive, ToPrimitive};
 use serde::Deserialize;
-use sqlx::postgres::types::PgMoney;
 
 use crate::MyAppState;
 
@@ -107,7 +106,7 @@ async fn update_source(
                 ingredient_id,
                 ingredient.store_id,
                 ingredient.weight,
-                PgMoney((ingredient.price * 100.) as i64),
+                BigDecimal::from_f64(ingredient.price).unwrap(),
                 ingredient.url,
                 ingredient.comment,
                 0,
@@ -123,7 +122,7 @@ async fn update_source(
             ingredient_id,
             store_id: ingredient.store_id,
             package_size: ingredient.weight,
-            price: PgMoney((ingredient.price * 100.) as i64),
+            price: BigDecimal::from_f64(ingredient.price).unwrap(),
             unit_id: 0,
             url: ingredient.url,
             comment: ingredient.comment,
@@ -345,7 +344,7 @@ fn format_ingredient_source(
                 }
             }
             td {input class="text" name="weight" value=(source.package_size);}
-            td {input class="text" name="price" value=(&(source.price.0 as f64 / 100.));}
+            td {input class="text" name="price" value=(source.price.to_f64().unwrap());}
             td {input class="text" name="url" value=(source.url.clone().unwrap_or_default());}
             td {button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/{}", ingredient_id, source.ingredient_source_id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Update" }}
             td {button class="btn btn-cancel" hx-get=(format!("/ingredients/sources/delete/{}/{}", ingredient_id, source.ingredient_source_id)) hx-target="#popup" hx-swap="outerHTML" { "Delete" }}

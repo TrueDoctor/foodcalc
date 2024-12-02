@@ -553,7 +553,7 @@ pub async fn recipe_edit_view(
                 button type="submit" class="btn btn-primary"  { "Add Step (+)" }
             }
 
-            @if steps.len() > 0 {
+            @if !steps.is_empty() {
                 div id=("steps") class="w-3/4" {
                     table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
                         thead { tr { th { "Order" } th { "Name" } th { "Description" } th { "Duration"} th { "Duration per kg" } th { "Delete" } } }

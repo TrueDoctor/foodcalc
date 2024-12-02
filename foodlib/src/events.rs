@@ -1,7 +1,6 @@
 use crate::PrimitiveDateTime;
 use bigdecimal::BigDecimal;
 use core::fmt::Display;
-use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use tabled::Tabled;
 use time::OffsetDateTime;

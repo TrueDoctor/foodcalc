@@ -1,4 +1,3 @@
-
 use axum::{
     extract::{Form, Path, State},
     http::StatusCode,
@@ -11,8 +10,8 @@ use bigdecimal::ToPrimitive;
 use foodlib::typst::export_recipes;
 use foodlib::{Backend, Event, EventRecipeIngredient, Meal, SourceOverrideView, Store};
 use maud::{html, Markup};
+use num::FromPrimitive;
 use serde::Deserialize;
-use sqlx::postgres::types::PgMoney;
 
 mod event_edit_meal_tab;
 
@@ -159,7 +158,7 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
     let event = state
         .get_event(event_id)
         .await
-        .ok_or(html_error(&format!("Failed to fetch event"), "/events"))?;
+        .ok_or(html_error("Failed to fetch event", "/events"))?;
 
     Ok(html! {
         div class="flex flex-row items-center justify-center gap-4" id="event_form" {
@@ -168,7 +167,7 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
             label for="comment" { "Comment:" };
             input name="comment" class="text" type="text" value=(&event.comment.unwrap_or_default());
             label for="budget" { "Budget:" };
-            input name="budget" class="text" type="text" value=(&(event.budget.map(|x|x.0).unwrap_or(0) as f64 / 100.));
+            input name="budget" class="text" type="text" value=(event.budget.and_then(|x|x.to_f64()).unwrap_or(0.) / 100.);
             div class="flex flex-row items-center justify-center gap-4" {
                 button class="btn btn-primary" hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
                 span class="htmx-indicator" { "Saving\u{a0}…" }
@@ -281,7 +280,7 @@ fn format_event_meal_ingredient(event_meal_ingredint: &EventRecipeIngredient) ->
             td { (event_meal_ingredint.name) }
             (format(event_meal_ingredint.weight.to_f64().unwrap_or_default() * 1000., "g"))
             (format(event_meal_ingredint.energy.to_f64().unwrap_or_default() / 100. , "kj"))
-            (format(event_meal_ingredint.price.0 as f64 / 100., "€"))
+            (format(event_meal_ingredint.price.to_f64().unwrap(), "€"))
         }
     }
 }
@@ -298,19 +297,16 @@ async fn update_event(
     event_id: Path<i32>,
     event_data: Form<EventForm>,
 ) -> impl IntoResponse {
-    let budget = event_data
-        .budget
-        .map(|budget| PgMoney((budget * 100.) as i64));
+    let budget = event_data.budget.and_then(FromPrimitive::from_f64);
 
-    dbg!(budget);
     let event = Event {
-        event_id: event_id.clone(),
+        event_id: *event_id,
         event_name: event_data.name.clone(),
         comment: (!event_data.comment.is_empty()).then(|| event_data.comment.clone()),
         budget,
     };
 
-    if let Ok(_) = state.update_event(&event).await {
+    if (state.update_event(&event).await).is_ok() {
         (StatusCode::OK, event_form(state, event_id).await).into_response()
     } else {
         StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -348,7 +344,7 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
             td { (event_meal.servings) }
             (format(event_meal.energy.to_f64().unwrap_or_default(), "kj"))
             (format(event_meal.weight.to_f64().unwrap_or_default() /  event_meal.servings as f64 * 1000., "g"))
-            (format(event_meal.price.0 as f64 / 100. / event_meal.servings as f64, "€"))
+            (format(event_meal.price.to_f64().unwrap() / event_meal.servings as f64, "€"))
             td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ingredients per serving"} }
             td { form class="m-0" action=(format!("/events/edit/export_pdf/{}", event_meal.meal_id)) { button class="btn btn-primary" {"Print"} } }
             td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }

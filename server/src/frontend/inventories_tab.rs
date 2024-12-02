@@ -59,6 +59,8 @@ pub struct InventoryHeaderData {
 pub struct InventoryItemData {
     pub inventory_id: i32,
     pub filter_text: Option<String>,
+    // We get this from the deserialization
+    #[allow(unused)]
     pub ingredient_id: i32,
     pub ingredient_name: String,
     pub ingredient_amount: BigDecimal,
@@ -404,7 +406,7 @@ pub async fn render_filtered_inventory_contents(
 
     html! {
         div id=(INVENTORY_CONTENTS_DIV) class="flex flex-col items-center justify-center mb-16 w-full"{
-            (add_ingredient_button(inventory_id.clone(), filter.clone()))
+            (add_ingredient_button(inventory_id, filter.clone()))
             div id=(SEARCH_RESULTS_DIV) class="w-full" {
                 datalist id=(INGREDIENTS_DATALIST) { @for ingredient in ingredient_list { (ingredient.format_for_datalist()) } }
                 span class="htmx-indicator" { "Searching..." }

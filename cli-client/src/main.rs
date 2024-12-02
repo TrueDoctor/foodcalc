@@ -2,10 +2,12 @@ mod args;
 
 use foodlib::*;
 use humantime::parse_duration;
-use sqlx::postgres::types::{PgInterval, PgMoney};
+use sqlx::postgres::types::PgInterval;
 use std::env;
+use time::OffsetDateTime;
 
 use args::*;
+use chrono::{DateTime, NaiveDateTime};
 use clap::Parser;
 use tabled::{
     builder::Builder,
@@ -14,6 +16,24 @@ use tabled::{
     },
     Table,
 };
+
+fn to_chrono(time: OffsetDateTime) -> NaiveDateTime {
+    let timestamp = time.unix_timestamp();
+    // Since input is UTC, add local offset to get local time
+    DateTime::from_timestamp(timestamp, 0)
+        .unwrap_or_else(|| panic!("Invalid timestamp: {}", timestamp))
+        .naive_local()
+}
+
+fn to_time(chrono: NaiveDateTime) -> OffsetDateTime {
+    // Since input is in local time, subtract local offset to get UTC
+    let utc_timestamp = match time::UtcOffset::current_local_offset() {
+        Ok(offset) => chrono.and_utc().timestamp() - offset.whole_seconds() as i64,
+        Err(_) => chrono.and_utc().timestamp(), // Fallback to UTC if we can't get local offset
+    };
+    OffsetDateTime::from_unix_timestamp(utc_timestamp)
+        .unwrap_or_else(|_| panic!("Invalid timestamp: {}", utc_timestamp))
+}
 
 #[tokio::main]
 async fn main() {
@@ -254,11 +274,11 @@ async fn main() {
                         }
                         println!();
                         if let Some(budget) = &event.budget {
-                            println!("Budget: {}€", budget.to_bigdecimal(2));
+                            println!("Budget: {}€", budget);
                         }
 
                         let _ = food_base.get_event_cost(event.event_id).await.map(|cost| {
-                            println!("Cost: {}€", cost.to_bigdecimal(2));
+                            println!("Cost: {}€", cost);
                         });
 
                         let meals = food_base
@@ -340,8 +360,10 @@ async fn main() {
                                 food_base.get_event_meals(event.event_id).await.unwrap();
                             meals.sort_by(|a, b| a.start_time.cmp(&b.start_time));
 
-                            let mut days: Vec<_> =
-                                meals.iter().map(|meal| meal.start_time.date()).collect();
+                            let mut days: Vec<_> = meals
+                                .iter()
+                                .map(|meal| to_chrono(meal.start_time).date())
+                                .collect();
                             days.dedup();
 
                             let mut tables: Vec<(String, Table)> = Vec::new();
@@ -361,15 +383,15 @@ async fn main() {
                                 ]);
                                 let meals = meals
                                     .iter()
-                                    .filter(|meal| meal.start_time.date() == *day)
+                                    .filter(|meal| to_chrono(meal.start_time).date() == *day)
                                     .collect::<Vec<_>>();
 
                                 for meal in meals.iter() {
                                     builder.push_record(vec![
                                         meal.name.clone(),
                                         meal.place.clone(),
-                                        meal.start_time.format("%H:%M").to_string(),
-                                        meal.end_time.format("%H:%M").to_string(),
+                                        to_chrono(meal.start_time).format("%H:%M").to_string(),
+                                        to_chrono(meal.end_time).format("%H:%M").to_string(),
                                         meal.servings.to_string(),
                                         meal.comment.clone().unwrap_or_default(),
                                     ]);
@@ -528,17 +550,9 @@ async fn main() {
             AddType::Event(event) => {
                 let name = event.name.as_str();
                 let comment = &event.comment;
-                let budget = if let Some(budget) = &event.budget {
-                    Some(
-                        PgMoney::from_bigdecimal(budget.clone(), 2)
-                            .expect("Failed to convert budget to money"),
-                    )
-                } else {
-                    None
-                };
 
                 match food_base
-                    .add_event(name.to_string(), budget, comment.clone())
+                    .add_event(name.to_string(), event.budget.clone(), comment.clone())
                     .await
                 {
                     Ok(_) => {
@@ -1202,16 +1216,8 @@ async fn main() {
                         }
                     }
                     EditEventType::Budget(budget) => {
-                        let budget = if let Some(budget) = &budget.budget {
-                            Some(
-                                PgMoney::from_bigdecimal(budget.clone(), 2)
-                                    .expect("Failed to convert budget to money"),
-                            )
-                        } else {
-                            None
-                        };
                         let event = Event {
-                            budget: budget.clone(),
+                            budget: budget.budget.clone(),
                             ..event
                         };
 
@@ -1266,8 +1272,8 @@ async fn main() {
 
                             let servings = meal.servings;
                             let calories = meal.calories;
-                            let start_time = meal.start_time;
-                            let end_time = meal.end_time;
+                            let start_time = to_time(meal.start_time);
+                            let end_time = to_time(meal.end_time);
                             let place_id = meal.location;
 
                             let query = food_base.add_meal(
@@ -1325,7 +1331,7 @@ async fn main() {
                                     .add_event_shopping_tour(
                                         event.event_id,
                                         tour_data.store,
-                                        tour_data.date,
+                                        to_time(tour_data.date),
                                     )
                                     .await;
                             }
@@ -1351,9 +1357,9 @@ async fn main() {
                                     .add_event_food_prep(
                                         event.event_id,
                                         recipe.recipe_id.clone(),
-                                        prep_data.prep_date,
-                                        prep_data.use_start_date,
-                                        prep_data.use_end_date,
+                                        to_time(prep_data.prep_date),
+                                        prep_data.use_start_date.map(to_time),
+                                        to_time(prep_data.use_end_date),
                                     )
                                     .await;
                             }
@@ -1389,7 +1395,7 @@ async fn main() {
 
                                 if let Some(date) = tour_data.date {
                                     let _ = food_base
-                                        .update_event_shopping_tour_date(tour_id, date)
+                                        .update_event_shopping_tour_date(tour_id, to_time(date))
                                         .await;
                                     println!("Updated tour date");
                                 }
@@ -1441,19 +1447,25 @@ async fn main() {
 
                                 if let Some(prep_date) = prep_edit_data.prep_date.clone() {
                                     let _ = food_base
-                                        .update_event_food_prep_prep_date(prep_id, prep_date)
+                                        .update_event_food_prep_prep_date(
+                                            prep_id,
+                                            to_time(prep_date),
+                                        )
                                         .await;
                                 }
 
                                 if let Some(use_from) = prep_edit_data.start {
                                     let _ = food_base
-                                        .update_event_food_prep_use_from(prep_id, use_from)
+                                        .update_event_food_prep_use_from(prep_id, to_time(use_from))
                                         .await;
                                 }
 
                                 if let Some(use_until) = prep_edit_data.end {
                                     let _ = food_base
-                                        .update_event_food_prep_use_until(prep_id, use_until)
+                                        .update_event_food_prep_use_until(
+                                            prep_id,
+                                            to_time(use_until),
+                                        )
                                         .await;
                                 }
                             }

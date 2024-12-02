@@ -120,9 +120,9 @@ impl Default for Unit {
     }
 }
 
-impl std::string::ToString for Unit {
-    fn to_string(&self) -> String {
-        self.name.to_string()
+impl Display for Unit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.name)
     }
 }
 
@@ -244,6 +244,7 @@ impl FoodBase {
         Ok(ingredient)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_ingredient_source(
         &self,
         ingredient_id: i32,

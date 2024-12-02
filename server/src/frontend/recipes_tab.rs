@@ -146,9 +146,8 @@ pub async fn shopping_list(
         .unwrap();
     let shopping_list = subrecipes
         .iter()
-        .filter_map(|recipe| {
-            (!recipe.is_subrecipe).then(|| (recipe.ingredient.clone(), recipe.weight.to_string()))
-        })
+        .filter(|&recipe| (!recipe.is_subrecipe))
+        .map(|recipe| (recipe.ingredient.clone(), recipe.weight.to_string()))
         .collect::<Vec<_>>();
 
     html! {

@@ -8,7 +8,7 @@ use axum::{
 use bigdecimal::BigDecimal;
 use maud::{html, Markup};
 use serde::Deserialize;
-use time::{macros::format_description, PrimitiveDateTime};
+use time::{macros::format_description, OffsetDateTime};
 
 pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -46,7 +46,7 @@ pub async fn update_meal(
     Form(meal): Form<MealForm>,
 ) -> impl IntoResponse {
     let append_start = format!("{}:00-00:00", meal.start_time);
-    let start_time = PrimitiveDateTime::parse(
+    let start_time = OffsetDateTime::parse(
         &append_start,
         &time::format_description::well_known::Rfc3339,
     )
@@ -55,7 +55,7 @@ pub async fn update_meal(
     // Parse end time
     let append_end = format!("{}:00-00:00", meal.end_time);
     let end_time =
-        PrimitiveDateTime::parse(&append_end, &time::format_description::well_known::Rfc3339)
+        OffsetDateTime::parse(&append_end, &time::format_description::well_known::Rfc3339)
             .map_err(|_| StatusCode::BAD_REQUEST)?;
     let result = if meal_id != -1 {
         state
@@ -96,9 +96,11 @@ async fn meal_form(
     state: State<MyAppState>,
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> Result<Markup, Markup> {
-    let mut meal = foodlib::Meal::default();
-    meal.name = "Select Recipe".to_string();
-    meal.place = "Select Place".to_string();
+    let mut meal = foodlib::Meal {
+        name: "Select Recipe".to_string(),
+        place: "Select Place".to_string(),
+        ..Default::default()
+    };
     if meal_id != -1 {
         meal = state
             .get_event_meal(dbg!(meal_id))
@@ -174,7 +176,7 @@ async fn meal_form(
                 }
                 tr {
                     td { "Price" }
-                    td { (meal.price.to_bigdecimal(2).to_string()) "€" }
+                    td { (meal.price.to_string()) "€" }
                 }
                 tr {
                     td { "Servings" }

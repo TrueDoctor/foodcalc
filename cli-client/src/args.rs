@@ -1,5 +1,6 @@
+use chrono::NaiveDateTime;
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use sqlx::types::{chrono::NaiveDateTime, BigDecimal};
+use sqlx::types::BigDecimal;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]

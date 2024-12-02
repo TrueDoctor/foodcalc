@@ -2,8 +2,6 @@ use async_trait::async_trait;
 use axum_login::{AuthUser, AuthnBackend, UserId};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
-use time::macros::datetime;
-use time::macros::time;
 use time::OffsetDateTime;
 
 impl AuthUser for User {

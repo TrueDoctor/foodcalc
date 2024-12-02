@@ -5,7 +5,7 @@ use axum::{Json, Router};
 use http::header::CONTENT_TYPE;
 use http::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
-use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
+use time::OffsetDateTime;
 use tokio::net::TcpListener;
 
 use foodlib::*;
@@ -71,10 +71,7 @@ async fn main() {
 
     for meal in event_meals {
         println!("Adding Meal {:?}", meal);
-        let to_utc = |time: PrimitiveDateTime| {
-            time.assume_offset(UtcOffset::from_hms(2, 0, 0).unwrap())
-                .unix_timestamp()
-        };
+        let to_utc = |time: OffsetDateTime| time.unix_timestamp();
         println!("{}", to_utc(meal.start));
         meal_states.insert(
             meal.meal_id,
@@ -135,7 +132,7 @@ async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
     let day = |time| {
         OffsetDateTime::from_unix_timestamp(time - 3 * hour)
             .unwrap()
-            .to_offset(UtcOffset::from_hms(2, 0, 0).unwrap()) // Using UTC+2 explicitly
+            .to_offset(time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC))
             .date()
             .day()
     };
@@ -176,8 +173,8 @@ struct EventMeal {
     event_id: i32,
     #[allow(unused)]
     recipe_id: i32,
-    start: PrimitiveDateTime,
-    end: PrimitiveDateTime,
+    start: OffsetDateTime,
+    end: OffsetDateTime,
     recipe: String,
     place: String,
 }
