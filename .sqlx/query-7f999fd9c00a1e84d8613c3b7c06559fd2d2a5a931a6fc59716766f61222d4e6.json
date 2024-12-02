@@ -41,12 +41,12 @@
       {
         "ordinal": 7,
         "name": "start_time!",
-        "type_info": "Timestamp"
+        "type_info": "Timestamptz"
       },
       {
         "ordinal": 8,
         "name": "end_time!",
-        "type_info": "Timestamp"
+        "type_info": "Timestamptz"
       },
       {
         "ordinal": 9,
@@ -61,7 +61,7 @@
       {
         "ordinal": 11,
         "name": "price!",
-        "type_info": "Money"
+        "type_info": "Numeric"
       },
       {
         "ordinal": 12,

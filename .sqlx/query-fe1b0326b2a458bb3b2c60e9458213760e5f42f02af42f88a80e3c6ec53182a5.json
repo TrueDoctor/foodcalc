@@ -11,8 +11,8 @@
         "Text",
         "Numeric",
         "Int4",
-        "Timestamp",
-        "Timestamp"
+        "Timestamptz",
+        "Timestamptz"
       ]
     },
     "nullable": []

@@ -6,7 +6,7 @@
       {
         "ordinal": 0,
         "name": "price",
-        "type_info": "Money"
+        "type_info": "Numeric"
       }
     ],
     "parameters": {

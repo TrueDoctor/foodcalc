@@ -25,23 +25,23 @@
       },
       {
         "ordinal": 4,
-        "name": "price",
-        "type_info": "Money"
-      },
-      {
-        "ordinal": 5,
         "name": "url",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "comment",
         "type_info": "Text"
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "ingredient_source_id",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "price",
+        "type_info": "Numeric"
       }
     ],
     "parameters": {
@@ -54,9 +54,9 @@
       false,
       false,
       false,
+      true,
+      true,
       false,
-      true,
-      true,
       false
     ]
   },

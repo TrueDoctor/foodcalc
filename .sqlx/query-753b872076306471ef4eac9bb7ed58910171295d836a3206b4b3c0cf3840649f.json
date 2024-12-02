@@ -15,13 +15,13 @@
       },
       {
         "ordinal": 2,
-        "name": "tour_date",
-        "type_info": "Timestamp"
+        "name": "store_id",
+        "type_info": "Int4"
       },
       {
         "ordinal": 3,
-        "name": "store_id",
-        "type_info": "Int4"
+        "name": "tour_date",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {

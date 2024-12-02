@@ -16,7 +16,7 @@
         "Varchar",
         "Text",
         "Numeric",
-        "Money",
+        "Numeric",
         "Int4",
         "Int4"
       ]

@@ -21,17 +21,17 @@
       {
         "ordinal": 3,
         "name": "prep_date",
-        "type_info": "Timestamp"
+        "type_info": "Timestamptz"
       },
       {
         "ordinal": 4,
         "name": "use_from",
-        "type_info": "Timestamp"
+        "type_info": "Timestamptz"
       },
       {
         "ordinal": 5,
         "name": "use_until",
-        "type_info": "Timestamp"
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {

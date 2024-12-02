@@ -7,8 +7,8 @@
       "Left": [
         "Int4",
         "Int4",
-        "Timestamp",
-        "Timestamp",
+        "Timestamptz",
+        "Timestamptz",
         "Numeric",
         "Int4",
         "Text",

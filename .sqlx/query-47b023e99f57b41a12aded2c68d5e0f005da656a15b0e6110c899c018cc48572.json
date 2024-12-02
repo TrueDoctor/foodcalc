@@ -16,7 +16,7 @@
       {
         "ordinal": 2,
         "name": "price!",
-        "type_info": "Money"
+        "type_info": "Numeric"
       },
       {
         "ordinal": 3,

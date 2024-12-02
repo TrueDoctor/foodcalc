@@ -13,7 +13,7 @@
       "Left": [
         "Int4",
         "Text",
-        "Money",
+        "Numeric",
         "Numeric"
       ]
     },

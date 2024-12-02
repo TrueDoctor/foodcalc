@@ -21,14 +21,14 @@
       {
         "ordinal": 3,
         "name": "budget",
-        "type_info": "Money"
+        "type_info": "Numeric"
       }
     ],
     "parameters": {
       "Left": [
         "Varchar",
         "Text",
-        "Money",
+        "Numeric",
         "Int4"
       ]
     },
