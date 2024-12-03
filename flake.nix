@@ -16,40 +16,6 @@
       overlays = [ (import rust-overlay) ];
       forAllSystems = nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed;
     in {
-      #packages = forAllSystems (system:
-      #  let pkgs = import nixpkgs { inherit system overlays; };
-      #  in rec {
-      #    default = pkgs.stdenv.mkDerivation {
-      #      pname = "foodcalc";
-      #      version = "1.0.0";
-      #      src = ./cli-client; # Path to the cli-client directory
-      #      cargoSha256 = "..."; # SHA256 hash of your source code
-      #      cargoBuildFlags = [
-      #        "--release"
-      #      ];
-      #      nativeBuildInputs = [
-      #        pkgs.rustc
-      #        pkgs.cargo
-      #      ];
-      #      buildInputs = [
-      #        pkgs.openssl
-      #        pkgs.expat
-      #        pkgs.fontconfig
-      #        pkgs.freetype
-      #        pkgs.libGL
-      #        pkgs.vulkan-loader
-      #        pkgs.wayland
-      #        pkgs.wayland-protocols
-      #        pkgs.libxkbcommon
-      #      ];
-      #      outputs = [ "out" ];
-      #      installPhase = ''
-      #        mkdir -p $out/bin
-      #        cp target/release/foodctl $out/bin/
-      #      '';
-      #    };
-      #  }
-      #);
       devShell = forAllSystems ( system:
         let 
           pkgs = import nixpkgs { inherit system overlays; };
@@ -58,25 +24,13 @@
           };
           buildInputs = with pkgs; [
               openssl
-              expat
-              fontconfig
-              freetype
               icu
-              graphite2
-              stdenv.cc.cc.lib
-              libpng
-              zlib
-
-              libGL
-              vulkan-loader
-              wayland
-              wayland-protocols
-              libxkbcommon
           ];        
         in pkgs.mkShell {
           packages = [
             pkgs.bacon
             pkgs.sqlx-cli
+            pkgs.cargo-udeps
           ];
           nativeBuildInputs = with pkgs; [
             toolchain
