@@ -1158,6 +1158,7 @@ dependencies = [
  "bigdecimal",
  "comemo",
  "eyre",
+ "foodlib_new",
  "log",
  "metro-scrape",
  "num",
@@ -1170,6 +1171,17 @@ dependencies = [
  "typst",
  "typst-as-lib",
  "typst-pdf",
+]
+
+[[package]]
+name = "foodlib_new"
+version = "0.1.0"
+dependencies = [
+ "bigdecimal",
+ "log",
+ "serde",
+ "sqlx",
+ "time",
 ]
 
 [[package]]

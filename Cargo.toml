@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["metro-scrape", "server", "foodlib", "cli-client", "api" , "status-api"]
+members = ["metro-scrape", "server", "foodlib", "cli-client", "api" , "status-api", "foodlib_new"]
 default-members = ["server", "foodlib"]
 
 [workspace.dependencies]

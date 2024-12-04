@@ -8,6 +8,7 @@ typst = ["comemo", "dep:typst", "typst-as-lib", "typst-pdf"]
 
 [dependencies]
 metro-scrape = { version = "0.1.0", path = "../metro-scrape" }
+foodlib_new = { path = "../foodlib_new" }
 
 
 tokio = { workspace = true, optional = true }

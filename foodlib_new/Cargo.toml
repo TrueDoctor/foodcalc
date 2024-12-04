@@ -1,0 +1,11 @@
+[package]
+name = "foodlib_new"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sqlx.workspace = true
+log.workspace = true
+serde.workspace = true
+bigdecimal.workspace = true
+time.workspace = true
