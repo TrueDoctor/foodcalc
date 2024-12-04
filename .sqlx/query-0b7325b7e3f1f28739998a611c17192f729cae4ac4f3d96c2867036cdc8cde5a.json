@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                i.ingredient_id,\n                i.name as ingredient_name,\n                fp.property_id as \"property_id!\",\n                fp.name as \"property_name!\"\n            FROM ingredients i\n            LEFT JOIN ingredient_properties ip ON ip.ingredient_id = i.ingredient_id\n            LEFT JOIN food_properties fp ON fp.property_id = ip.property_id\n            WHERE i.ingredient_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "property_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "property_name!",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0b7325b7e3f1f28739998a611c17192f729cae4ac4f3d96c2867036cdc8cde5a"
+}

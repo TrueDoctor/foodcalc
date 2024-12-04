@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM stores \n            WHERE store_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "befef6a9f868cfa25051aa2d81c4515a86d07ce5a00c75ea5d71b80b7175fe6d"
+}

@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO base_conversions (from_unit, to_unit, from_amount, to_amount)\n            VALUES ($1, $2, $3, $4)\n            RETURNING from_unit, to_unit, from_amount, to_amount\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "from_unit",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "to_unit",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "from_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "to_amount",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Numeric",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "75ab8031d6a461f15a3cdd3d4c2c3cdd4fb58ae3241cda8cdcc6a1f0605ceaa9"
+}

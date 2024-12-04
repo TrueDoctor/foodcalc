@@ -352,6 +352,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bcrypt"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b1866ecef4f2d06a0bb77880015fdf2b89e25a1c2e5addacb87e459c86dc67e"
+dependencies = [
+ "base64 0.22.0",
+ "blowfish",
+ "getrandom",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "biblatex"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1160,7 +1173,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum-login",
- "bcrypt",
+ "bcrypt 0.15.0",
  "bigdecimal",
  "comemo",
  "eyre",
@@ -1183,6 +1196,9 @@ dependencies = [
 name = "foodlib_new"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum-login",
+ "bcrypt 0.16.0",
  "bigdecimal",
  "log",
  "pretty_assertions",

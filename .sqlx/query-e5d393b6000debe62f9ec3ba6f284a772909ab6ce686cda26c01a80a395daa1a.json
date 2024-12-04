@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM metro_categories WHERE ingredient_source_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e5d393b6000debe62f9ec3ba6f284a772909ab6ce686cda26c01a80a395daa1a"
+}

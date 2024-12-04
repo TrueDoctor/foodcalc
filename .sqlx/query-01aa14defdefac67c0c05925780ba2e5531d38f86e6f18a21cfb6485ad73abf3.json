@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO steps (\n                    recipe_id, step_order, step_name, step_description,\n                    fixed_duration, duration_per_kg\n                )\n                VALUES ($1, $2, $3, $4, $5, $6)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Float8",
+        "Varchar",
+        "Text",
+        "Interval",
+        "Interval"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "01aa14defdefac67c0c05925780ba2e5531d38f86e6f18a21cfb6485ad73abf3"
+}

@@ -3,6 +3,7 @@ pub use error::Result;
 use sqlx::PgPool;
 use std::sync::Arc;
 
+pub mod auth;
 pub mod entities;
 pub mod error;
 pub mod ops;
@@ -39,15 +40,19 @@ impl FoodLib {
     //     ops::events::EventOps::new(self.pool.clone())
     // }
 
-    // pub fn inventories(&self) -> ops::inventories::InventoryOps {
-    //     ops::inventories::InventoryOps::new(self.pool.clone())
-    // }
+    pub fn inventories(&self) -> ops::inventories::InventoryOps {
+        ops::inventories::InventoryOps::new(self.pool.clone())
+    }
 
-    // pub fn users(&self) -> ops::users::UserOps {
-    //     ops::users::UserOps::new(self.pool.clone())
-    // }
+    pub fn users(&self) -> ops::users::UserOps {
+        ops::users::UserOps::new(self.pool.clone())
+    }
 
-    // pub fn stores(&self) -> ops::stores::StoreOps {
-    //     ops::stores::StoreOps::new(self.pool.clone())
-    // }
+    pub fn units(&self) -> ops::units::UnitOps {
+        ops::units::UnitOps::new(self.pool.clone())
+    }
+
+    pub fn stores(&self) -> ops::stores::StoreOps {
+        ops::stores::StoreOps::new(self.pool.clone())
+    }
 }

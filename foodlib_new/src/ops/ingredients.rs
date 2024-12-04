@@ -19,21 +19,19 @@ impl IngredientOps {
 
     // Basic CRUD operations
     pub async fn create(&self, ingredient: Ingredient) -> Result<Ingredient> {
-        let row = dbg!(
-            sqlx::query_as!(
-                Ingredient,
-                r#"
+        let row = sqlx::query_as!(
+            Ingredient,
+            r#"
             INSERT INTO ingredients (name, energy, comment)
             VALUES ($1, $2, $3)
             RETURNING ingredient_id as "id", name, energy, comment
             "#,
-                ingredient.name,
-                ingredient.energy,
-                ingredient.comment,
-            )
-            .fetch_one(&*self.pool)
-            .await
-        )?;
+            ingredient.name,
+            ingredient.energy,
+            ingredient.comment,
+        )
+        .fetch_one(&*self.pool)
+        .await?;
 
         Ok(row)
     }
