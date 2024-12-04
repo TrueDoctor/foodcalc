@@ -37,6 +37,7 @@
             nodejs
             cargo
             pkg-config
+            cargo-nextest
          ];
          inherit buildInputs;
           

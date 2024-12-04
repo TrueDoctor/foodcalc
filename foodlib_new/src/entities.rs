@@ -1,5 +1,5 @@
 // pub mod event;
-// pub mod ingredient;
+pub mod ingredient;
 // pub mod inventory;
 // pub mod meal;
 pub mod recipe;
