@@ -27,9 +27,9 @@ impl FoodLib {
         ops::recipes::RecipeOps::new(self.pool.clone())
     }
 
-    // pub fn ingredients(&self) -> ops::ingredients::IngredientOps {
-    //     ops::ingredients::IngredientOps::new(self.pool.clone())
-    // }
+    pub fn ingredients(&self) -> ops::ingredients::IngredientOps {
+        ops::ingredients::IngredientOps::new(self.pool.clone())
+    }
 
     // pub fn meals(&self) -> ops::meals::MealOps {
     //     ops::meals::MealOps::new(self.pool.clone())

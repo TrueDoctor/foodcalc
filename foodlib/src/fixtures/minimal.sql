@@ -69,6 +69,31 @@ INSERT INTO weights (unit_id, ingredient_id, weight) VALUES
   (1, 9, 0.001),  -- 1g = 0.001kg
   (5, 9, 0.010);  -- 1 slice ≈ 10g = 0.010kg
 
+
+-- Add basic food properties
+INSERT INTO food_properties (property_id, name) VALUES
+    (1, 'Vegetarian'),
+    (2, 'Vegan'),
+    (3, 'Gluten-Free'),
+    (4, 'Dairy-Free'),
+    (5, 'Nut-Free'),
+    (6, 'Contains Peanuts'),
+    (7, 'Contains Tree Nuts'),
+    (8, 'Contains Dairy'),
+    (9, 'Contains Gluten'),
+    (10, 'Contains Eggs');
+
+-- Initial property assignments
+INSERT INTO ingredient_properties (ingredient_id, property_id) VALUES
+    (2, 1),  -- Tomato is vegetarian
+    (2, 2),  -- Tomato is vegan
+    (2, 3),  -- Tomato is gluten-free
+    (2, 4),  -- Tomato is dairy-free
+    (2, 5),  -- Tomato is nut-free
+    (1, 9),  -- Pasta contains gluten
+    (7, 10); -- Eggs contain eggs
+
+
 -- Stores
 INSERT INTO stores (store_id, name) VALUES
   (1, 'Local Grocery'),
@@ -182,3 +207,20 @@ INSERT INTO groups (id, name) VALUES
 INSERT INTO user_groups (user_id, group_id) VALUES
   (1, 1),  -- admin in Administrators group
   (2, 2);  -- user in Users group
+
+
+-- Reset all sequences to max values
+SELECT setval('ingredients_ingredient_id_seq', (SELECT COALESCE(MAX(ingredient_id), 1) FROM ingredients));
+SELECT setval('ingredient_sources_ingredient_source_id_seq', (SELECT COALESCE(MAX(ingredient_source_id), 1) FROM ingredient_sources));
+SELECT setval('recipes_recipe_id_seq', (SELECT COALESCE(MAX(recipe_id), 1) FROM recipes));
+SELECT setval('events_event_id_seq', (SELECT COALESCE(MAX(event_id), 1) FROM events));
+SELECT setval('places_place_id_seq', (SELECT COALESCE(MAX(place_id), 1) FROM places));
+SELECT setval('units_unit_id_seq', (SELECT COALESCE(MAX(unit_id), 1) FROM units));
+SELECT setval('stores_store_id_seq', (SELECT COALESCE(MAX(store_id), 1) FROM stores));
+SELECT setval('steps_step_id_seq', (SELECT COALESCE(MAX(step_id), 1) FROM steps));
+SELECT setval('food_properties_property_id_seq', (SELECT COALESCE(MAX(property_id), 1) FROM food_properties));
+SELECT setval('users_id_seq', (SELECT COALESCE(MAX(id), 1) FROM users));
+SELECT setval('groups_id_seq', (SELECT COALESCE(MAX(id), 1) FROM groups));
+SELECT setval('shopping_tours_tour_id_seq', (SELECT COALESCE(MAX(tour_id), 1) FROM shopping_tours));
+SELECT setval('food_prep_prep_id_seq', (SELECT COALESCE(MAX(prep_id), 1) FROM food_prep));
+SELECT setval('inventories_inventory_id_seq', (SELECT COALESCE(MAX(inventory_id), 1) FROM inventories));
