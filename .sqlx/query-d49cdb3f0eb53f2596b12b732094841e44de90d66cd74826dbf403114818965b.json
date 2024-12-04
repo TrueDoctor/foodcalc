@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO steps (recipe_id, step_order, step_name, step_description, \n                             fixed_duration, duration_per_kg)\n            VALUES ($1, $2, $3, $4, $5, $6)\n            RETURNING \n                step_id as id, recipe_id, step_order as \"order\", \n                step_name as name, step_description as description,\n                fixed_duration, duration_per_kg\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "recipe_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "order",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "fixed_duration",
+        "type_info": "Interval"
+      },
+      {
+        "ordinal": 6,
+        "name": "duration_per_kg",
+        "type_info": "Interval"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Float8",
+        "Varchar",
+        "Text",
+        "Interval",
+        "Interval"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d49cdb3f0eb53f2596b12b732094841e44de90d66cd74826dbf403114818965b"
+}

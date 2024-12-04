@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO inventory_ingredients (inventory_id, ingredient_id, amount)\n            VALUES ($1, $2, $3)\n            RETURNING inventory_id, ingredient_id, amount\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inventory_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "amount",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7f9715dfb34dd053c3df9be73b6d4fe1765782c1a72c40f3fbaeaa25b39d52d4"
+}

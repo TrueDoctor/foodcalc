@@ -1,8 +1,9 @@
-// pub mod event;
+pub mod event;
 pub mod ingredient;
-pub mod unit;
-// pub mod inventory;
-// pub mod meal;
+pub mod inventory;
+pub mod meal;
+pub mod property;
 pub mod recipe;
-// pub mod store;
-// pub mod user;
+pub mod store;
+pub mod unit;
+pub mod user;

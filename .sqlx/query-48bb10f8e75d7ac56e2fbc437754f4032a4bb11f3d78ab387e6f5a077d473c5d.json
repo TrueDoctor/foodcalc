@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                ingredient_source_id as \"id\",\n                ingredient_id,\n                store_id,\n                package_size,\n                unit_id,\n                price,\n                url,\n                comment\n            FROM ingredient_sources\n            WHERE ingredient_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "store_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "package_size",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "unit_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "price",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "comment",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "48bb10f8e75d7ac56e2fbc437754f4032a4bb11f3d78ab387e6f5a077d473c5d"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT to_amount / from_amount as \"conversion_factor!\"\n            FROM conversions \n            WHERE from_unit = $1 AND to_unit = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "conversion_factor!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "701ed3289faded622f725c415e4a93c0406f28c5f949263a09402695d142428e"
+}

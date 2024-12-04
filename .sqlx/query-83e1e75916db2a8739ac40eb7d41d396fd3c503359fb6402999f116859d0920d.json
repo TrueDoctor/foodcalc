@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM weights WHERE ingredient_id = $1 AND unit_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "83e1e75916db2a8739ac40eb7d41d396fd3c503359fb6402999f116859d0920d"
+}
