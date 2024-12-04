@@ -2585,3 +2585,4 @@ SELECT pg_catalog.setval('public.users_id_seq', 1, true);
 -- PostgreSQL database dump complete
 --
 
+REFRESH MATERIALIZED VIEW conversions;
