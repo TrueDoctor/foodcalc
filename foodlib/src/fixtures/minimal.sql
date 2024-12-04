@@ -22,6 +22,7 @@ INSERT INTO ingredients (ingredient_id, name, energy, comment) VALUES
 -- Base conversions between units
 INSERT INTO base_conversions (from_unit, to_unit, from_amount, to_amount) VALUES
   (1, 0, 1000, 1),    -- 1000g = 1kg
+  (0, 2, 1, 1),    -- 1000g = 1kg
   (3, 2, 1000, 1),    -- 1000mL = 1L
   (0, 0, 1, 1),       -- base unit self-conversion
   (2, 2, 1, 1);       -- base unit self-conversion

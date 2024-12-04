@@ -151,6 +151,12 @@ CREATE MATERIALIZED VIEW conversions AS
             base_conversions.to_amount
            FROM base_conversions
         UNION
+         SELECT base_conversions.to_unit,
+            base_conversions.from_unit,
+            base_conversions.to_amount,
+            base_conversions.from_amount
+           FROM base_conversions
+        UNION
          SELECT conversion_table_1.from_unit,
             base_conversions.to_unit,
             conversion_table_1.from_amount,
