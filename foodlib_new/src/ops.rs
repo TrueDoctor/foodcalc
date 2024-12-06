@@ -10,6 +10,8 @@ pub mod meals;
 pub mod users;
 
 #[cfg(test)]
+pub mod events_test;
+#[cfg(test)]
 pub mod ingredients_test;
 #[cfg(test)]
 pub mod inventories_test;
