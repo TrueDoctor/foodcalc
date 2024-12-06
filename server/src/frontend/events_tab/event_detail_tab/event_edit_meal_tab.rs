@@ -118,7 +118,7 @@ async fn meal_form(
         .map_err(|e| html_error(&format!("Failed to fetch places {e}"), "/events"))?;
     places.sort_by(|a, b| a.name.cmp(&b.name));
 
-    let time_format = format_description!("[day]-[month]-[year][hour]:[minute]");
+    let time_format = format_description!("[year]-[month]-[day]T[hour]:[minute]");
 
     Ok(html! {
         div class="flex justify-center w-full mb-4" {
@@ -164,7 +164,7 @@ async fn meal_form(
                 }
                 tr {
                     td { "Weight" }
-                    td { (meal.weight.to_string()) "g" }
+                    td { (meal.weight.round(2).to_string()) "g" }
                 }
                 tr {
                     td {
@@ -176,7 +176,7 @@ async fn meal_form(
                 }
                 tr {
                     td { "Price" }
-                    td { (meal.price.to_string()) "€" }
+                    td { (meal.price.round(2).to_string()) "€" }
                 }
                 tr {
                     td { "Servings" }

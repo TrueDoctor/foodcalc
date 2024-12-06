@@ -12,6 +12,7 @@ use foodlib::{Backend, Event, EventRecipeIngredient, Meal, SourceOverrideView, S
 use maud::{html, Markup};
 use num::FromPrimitive;
 use serde::Deserialize;
+use time::macros::format_description;
 
 mod event_edit_meal_tab;
 
@@ -337,10 +338,12 @@ async fn update_override(
 
 fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
     let format = |x, unit| html! { td { (&format!("{:.3}{}", x,unit)) } };
+    let time_format = format_description!("[day].[month] [hour]:[minute]");
+
     html! {
         tr {
             td { (event_meal.name) }
-            td { (event_meal.start_time) }
+            td { (event_meal.start_time.format(&time_format).unwrap()) }
             td { (event_meal.servings) }
             (format(event_meal.energy.to_f64().unwrap_or_default(), "kj"))
             (format(event_meal.weight.to_f64().unwrap_or_default() /  event_meal.servings as f64 * 1000., "g"))
