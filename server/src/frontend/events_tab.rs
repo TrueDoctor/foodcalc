@@ -29,7 +29,7 @@ pub struct SearchParameters {
 
 pub async fn add_form() -> Markup {
     html! {
-        form hx-post="/events/add" target="#content" hx-swap="outerHTML" {
+        form hx-post="/events/add" hx-target="#content" hx-swap="innerHTML" {
             div class="flex flex-row gap-2" {
                 input type="hidden" id="event_id" name="event_id" value="0";
                 input class="text" type="text" id="event_name" name="event_name" required="required" placeholder="Event Name";
