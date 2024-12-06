@@ -90,8 +90,9 @@ async fn test_add_meal(pool: PgPool) {
     .await
     .unwrap();
 
-    let meals = ops.get_event_meals(2).await.unwrap();
+    let mut meals = ops.get_event_meals(2).await.unwrap();
     assert_eq!(meals.len(), 2);
+    meals.sort_unstable_by_key(|x| -x.meal_id);
 
     let new_meal = &meals[0];
     assert_eq!(new_meal.event_id, 2);
