@@ -1,6 +1,6 @@
 use axum::extract::{Host, State};
 use foodlib::{AuthSession, User};
-use maud::{html, Markup};
+use maud::{html, Markup, DOCTYPE};
 
 use crate::{
     frontend::{ingredients_tab::ingredients_view, CSS_HASH, LOGIN_URL},
@@ -27,6 +27,7 @@ pub async fn home_view(mut auth: AuthSession, host: Host, state: State<MyAppStat
         log::info!("logged in test user");
     }
     html! {
+        (DOCTYPE)
         head {
             title { "Foodcalc" }
             link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x))) {}

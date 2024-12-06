@@ -219,14 +219,12 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
             table class="w-full text-inherit table-auto object-center table-fixed" {
                 // We add extra table headers to account for the buttons
                 thead { tr { th { "ID" } th { "Name" } th { "Comment" }  th {} th {} th {}} }
-                form hx-post="/recipes" hx-target="#content"  class="w-full" {
                     tbody id="search-results"  {
                         (recipe_add_form())
                         @for recipe in recipes.iter() {
                             (format_recipe(recipe))
                         }
                     }
-                }
                 span class="htmx-indicator" {
                     "Searching..."
                 }
@@ -237,10 +235,10 @@ pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
 
 fn recipe_add_form() -> Markup {
     html! {
-        tr  { td {  }
+        tr id="add"  { td {  }
             td { input class="grow text" type="text" name="name" placeholder="Recipe name" required="required"; }
             td { input class="grow text" type="text" name="comment" placeholder="Comment"; }
-            td { button class="btn btn-primary" type="submit"  { "Add" } }
+            td { button class="btn btn-primary" hx-include="[name='name'],[name='comment']" hx-target="#content" hx-post="/recipes" { "Add" } }
             td {} td {} td { div id="dialog"; }
         }
     }
