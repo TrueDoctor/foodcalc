@@ -2,11 +2,10 @@ use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use chrono::prelude::*;
 use http::header::CONTENT_TYPE;
 use http::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
-use sqlx::types::chrono::NaiveDateTime;
+use time::OffsetDateTime;
 use tokio::net::TcpListener;
 
 use foodlib::*;
@@ -72,11 +71,7 @@ async fn main() {
 
     for meal in event_meals {
         println!("Adding Meal {:?}", meal);
-        let to_utc = |time: NaiveDateTime| {
-            time.and_local_timezone(FixedOffset::east_opt(2 * 3600).unwrap())
-                .unwrap()
-                .timestamp()
-        };
+        let to_utc = |time: OffsetDateTime| time.unix_timestamp();
         println!("{}", to_utc(meal.start));
         meal_states.insert(
             meal.meal_id,
@@ -133,14 +128,15 @@ async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
 
     // create vec of days with meals
     let hour = 3600;
+
     let day = |time| {
-        Local
-            .timestamp_opt(time - 3 * hour, 0)
+        OffsetDateTime::from_unix_timestamp(time - 3 * hour)
             .unwrap()
-            .date_naive()
+            .to_offset(time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC))
+            .date()
             .day()
     };
-    let Some(first) = data.get(0) else {
+    let Some(first) = data.first() else {
         return (StatusCode::OK, Json(vec![]));
     };
     let mut current_day = day(first.status.start);
@@ -173,10 +169,12 @@ async fn update_status(
 #[derive(Debug)]
 struct EventMeal {
     meal_id: i32,
+    #[allow(unused)]
     event_id: i32,
+    #[allow(unused)]
     recipe_id: i32,
-    start: NaiveDateTime,
-    end: NaiveDateTime,
+    start: OffsetDateTime,
+    end: OffsetDateTime,
     recipe: String,
     place: String,
 }

@@ -8,7 +8,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: postgres://postgres@localhost/food_calc_testing
-  BIN_NAME: "backend"
+  BIN_NAME: "server"
 
 jobs:
   test:
@@ -41,7 +41,7 @@ jobs:
         done
     
     - name: Install NPM Dependencies
-      run: cd backend && npm install && cd ..
+      run: cd server && npm install && cd ..
     - name: Install Tectonic Dependencies
       run: sudo apt install libgraphite2-dev
     - name: Run tests
@@ -63,9 +63,9 @@ jobs:
         TARGET: /srv/foodcalc/build
         SCRIPT_AFTER: |
           echo $RSYNC_STDOUT 
-          cd /srv/foodcalc/build/backend && npm install
+          cd /srv/foodcalc/build/server && npm install
           cd /srv/foodcalc/build/
-          cargo build --release --bin ${{ env.BIN_NAME }} --features tectonic
+          cargo build --release --bin ${{ env.BIN_NAME }} --features typst
           sudo /bin/systemctl stop foodcalc 
           cp /srv/foodcalc/build/target/release/${{ env.BIN_NAME }} /srv/foodcalc/${{ env.BIN_NAME }}
           sudo /bin/systemctl start foodcalc

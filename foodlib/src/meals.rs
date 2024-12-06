@@ -1,7 +1,9 @@
+#![allow(clippy::too_many_arguments)]
 use bigdecimal::BigDecimal;
+use time::{macros::time, OffsetDateTime};
 
+use crate::PrimitiveDateTime;
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::types::PgMoney, types::chrono::NaiveDateTime};
 use tabled::Tabled;
 
 use crate::FoodBase;
@@ -20,19 +22,15 @@ pub struct Meal {
     pub place_id: i32,
     pub place: String,
     #[tabled(rename = "Start")]
-    pub start_time: NaiveDateTime,
+    pub start_time: PrimitiveDateTime,
     #[tabled(rename = "End")]
-    pub end_time: NaiveDateTime,
+    pub end_time: PrimitiveDateTime,
     #[tabled(rename = "Weight")]
     pub weight: BigDecimal,
     #[tabled(rename = "Energy")]
     pub energy: BigDecimal,
-    #[serde(
-        serialize_with = "crate::util::serialize_money",
-        deserialize_with = "crate::util::deserialize_money"
-    )]
     #[tabled(rename = "Price", display_with = "crate::util::format_pg_money")]
-    pub price: PgMoney,
+    pub price: BigDecimal,
     #[tabled(rename = "Servings")]
     pub servings: i32,
     #[tabled(rename = "Comment", display_with = "crate::util::display_optional")]
@@ -41,10 +39,9 @@ pub struct Meal {
 
 impl Default for Meal {
     fn default() -> Self {
-        let time = chrono::Local::now();
-        let date = time.date_naive();
-        let time = chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap();
-        let start_time = NaiveDateTime::new(date, time);
+        let now = OffsetDateTime::now_utc();
+        let noon = time!(12:00:00);
+        let start_time = now.replace_time(noon);
         Self {
             meal_id: Default::default(),
             event_id: Default::default(),
@@ -57,7 +54,7 @@ impl Default for Meal {
             end_time: start_time,
             weight: Default::default(),
             energy: BigDecimal::from(2400),
-            price: PgMoney::from(0),
+            price: BigDecimal::from(0),
             servings: 1,
         }
     }
@@ -79,7 +76,7 @@ impl FoodBase {
              event_meals.end_time as "end_time!",
              COALESCE(round(sum(weight),2),0) as "weight!",
              COALESCE((CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END),0) as "energy!",
-             COALESCE(sum(price),'0'::float8::numeric::money) as "price!",
+             COALESCE(sum(price),0) as "price!",
              event_meals.servings as "servings!"
 
             FROM event_ingredients
@@ -111,7 +108,7 @@ impl FoodBase {
              event_meals.end_time as "end_time!",
              COALESCE(round(sum(weight),2),0) as "weight!",
              COALESCE((CASE WHEN event_meals.servings != 0 THEN round(sum(energy) / event_meals.servings,0) ELSE 0 END),0) as "energy!",
-             COALESCE(sum(price),'0'::float8::numeric::money) as "price!",
+             COALESCE(sum(price), 0) as "price!",
              event_meals.servings as "servings!"
 
             FROM event_ingredients
@@ -163,8 +160,8 @@ impl FoodBase {
         meal_id: i32,
         recipe_id: i32,
         place_id: i32,
-        start_time: NaiveDateTime,
-        end_time: NaiveDateTime,
+        start_time: PrimitiveDateTime,
+        end_time: PrimitiveDateTime,
         energy: BigDecimal,
         servings: i32,
         comment: Option<String>,
@@ -204,8 +201,8 @@ impl FoodBase {
         event_id: i32,
         recipe_id: i32,
         place_id: i32,
-        start_time: NaiveDateTime,
-        end_time: NaiveDateTime,
+        start_time: PrimitiveDateTime,
+        end_time: PrimitiveDateTime,
         energy: BigDecimal,
         servings: i32,
         comment: Option<String>,
@@ -254,7 +251,7 @@ impl FoodBase {
         event_id: i32,
         recipe_id: i32,
         place_id: i32,
-        start_time: NaiveDateTime,
+        start_time: PrimitiveDateTime,
     ) -> eyre::Result<()> {
         let count = sqlx::query!(
             r#"

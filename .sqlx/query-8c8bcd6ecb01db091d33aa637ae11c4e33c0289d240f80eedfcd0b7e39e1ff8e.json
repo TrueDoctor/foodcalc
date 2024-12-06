@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " \n                SELECT * FROM inventories \n                WHERE inventory_id = $1\n                ORDER BY inventory_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inventory_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8c8bcd6ecb01db091d33aa637ae11c4e33c0289d240f80eedfcd0b7e39e1ff8e"
+}

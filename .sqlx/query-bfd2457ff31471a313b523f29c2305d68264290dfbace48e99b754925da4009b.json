@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT *\n                FROM places\n                WHERE place_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "place_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "bfd2457ff31471a313b523f29c2305d68264290dfbace48e99b754925da4009b"
+}

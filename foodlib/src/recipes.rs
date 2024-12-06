@@ -1,10 +1,8 @@
-use std::{borrow::Cow, fmt::Display};
+use std::borrow::Cow;
+use std::fmt::{self, Display, Formatter};
 
 use serde::{Deserialize, Serialize};
-use sqlx::{
-    postgres::types::{PgInterval, PgMoney},
-    types::BigDecimal,
-};
+use sqlx::{postgres::types::PgInterval, types::BigDecimal};
 use tabled::Tabled;
 
 pub mod export;
@@ -34,11 +32,7 @@ pub struct EventRecipeIngredient {
     pub name: String,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
-    #[serde(
-        serialize_with = "crate::util::serialize_money",
-        deserialize_with = "crate::util::deserialize_money"
-    )]
-    pub price: PgMoney,
+    pub price: BigDecimal,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -112,14 +106,15 @@ impl RecipeMetaIngredient {
     }
 }
 
-impl std::string::ToString for RecipeMetaIngredient {
-    fn to_string(&self) -> String {
-        self.name().to_string()
+impl Display for RecipeMetaIngredient {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
     }
 }
-impl std::string::ToString for RecipeIngredient {
-    fn to_string(&self) -> String {
-        self.ingredient.name().to_string()
+
+impl Display for RecipeIngredient {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.ingredient.name())
     }
 }
 
@@ -491,11 +486,7 @@ impl FoodBase {
         Ok(recipe)
     }
 
-    pub async fn add_recipe(
-        &self,
-        name: &String,
-        comment: &Option<String>,
-    ) -> eyre::Result<Recipe> {
+    pub async fn add_recipe(&self, name: &str, comment: &Option<String>) -> eyre::Result<Recipe> {
         let recipe = sqlx::query_as!(
             Recipe,
             r#"
@@ -503,7 +494,7 @@ impl FoodBase {
                 VALUES ($1, $2)
                 RETURNING *
             "#,
-            name.clone(),
+            name,
             comment.clone(),
         )
         .fetch_one(&*self.pg_pool)

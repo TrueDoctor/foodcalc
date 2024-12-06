@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT name, recipes.recipe_id, comment FROM recipe_ingredients\n                INNER JOIN recipes USING(recipe_id)\n                WHERE ingredient_id = $1\n                GROUP BY recipes.name, recipes.recipe_id, recipes.comment\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "recipe_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "560ffcc4b7265c23ec502c4b4962d7c45bda65382a4319c3e5bc88b2f9c7c4e5"
+}

@@ -6,11 +6,9 @@ use axum::{
     Json, Router,
 };
 use foodlib::Event;
+use num::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
-use sqlx::{
-    postgres::types::PgMoney,
-    types::{chrono::NaiveDateTime, BigDecimal},
-};
+use sqlx::types::{time::OffsetDateTime, BigDecimal};
 
 use crate::ApiState;
 
@@ -19,7 +17,7 @@ fn event_to_body(event: Event) -> EventBody {
         id: Some(event.event_id),
         name: event.event_name,
         comment: event.comment,
-        budget: event.budget.map(|b| b.0 as f64 / 100.),
+        budget: event.budget.as_ref().and_then(ToPrimitive::to_f64),
     }
 }
 
@@ -68,7 +66,7 @@ async fn add_event(
     State(state): State<ApiState>,
     Json(body): Json<EventBody>,
 ) -> impl IntoResponse {
-    let budget = body.budget.map(|budget| PgMoney((budget * 100.) as i64));
+    let budget = body.budget.and_then(|budget| BigDecimal::from_f64(budget));
 
     let query = state.food_base.add_event(body.name, budget, body.comment);
     match query.await {
@@ -101,9 +99,8 @@ async fn update_event(
     Path(event_id): Path<i32>,
     Json(body): Json<EventBody>,
 ) -> impl IntoResponse {
-    let budget = body.budget.map(|budget| PgMoney((budget * 100.) as i64));
+    let budget = body.budget.and_then(FromPrimitive::from_f64);
 
-    dbg!(budget);
     let event = Event {
         event_id: event_id.clone(),
         event_name: body.name.clone(),
@@ -141,8 +138,8 @@ async fn meal_add(
             event_id,
             body.recipe,
             body.place,
-            NaiveDateTime::from_timestamp_millis(body.start).unwrap(),
-            NaiveDateTime::from_timestamp_millis(body.end).unwrap(),
+            OffsetDateTime::from_unix_timestamp(body.start).unwrap(),
+            OffsetDateTime::from_unix_timestamp(body.end).unwrap(),
             body.energy,
             body.servings,
             body.comment,
@@ -184,8 +181,8 @@ async fn meal_update(
         body.event_id,
         body.recipe,
         body.place,
-        NaiveDateTime::from_timestamp_millis(body.start).unwrap(),
-        NaiveDateTime::from_timestamp_millis(body.end).unwrap(),
+        OffsetDateTime::from_unix_timestamp(body.start).unwrap(),
+        OffsetDateTime::from_unix_timestamp(body.end).unwrap(),
         BigDecimal::from(body.energy),
         body.servings,
         body.comment,
@@ -242,12 +239,12 @@ async fn meal_list(State(state): State<ApiState>, Path(event_id): Path<i32>) -> 
                             name: meal.place,
                         },
                         date: APIDate {
-                            start: meal.start_time.timestamp_millis(),
-                            end: meal.start_time.timestamp_millis(),
+                            start: meal.start_time.unix_timestamp(),
+                            end: meal.start_time.unix_timestamp(),
                         },
                         weight: meal.weight,
                         energy: meal.energy,
-                        price: meal.price.to_bigdecimal(2),
+                        price: meal.price,
                         servings: meal.servings,
                         comment: meal.comment,
                     };
@@ -279,12 +276,12 @@ async fn get_meal(State(state): State<ApiState>, Path(meal_id): Path<i32>) -> im
                     name: meal.place,
                 },
                 date: APIDate {
-                    start: meal.start_time.timestamp_millis(),
-                    end: meal.start_time.timestamp_millis(),
+                    start: meal.start_time.unix_timestamp(),
+                    end: meal.start_time.unix_timestamp(),
                 },
                 weight: meal.weight,
                 energy: meal.energy,
-                price: meal.price.to_bigdecimal(2),
+                price: meal.price,
                 servings: meal.servings,
                 comment: meal.comment,
             };

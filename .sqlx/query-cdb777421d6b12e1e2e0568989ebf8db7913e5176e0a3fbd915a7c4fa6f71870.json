@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM shopping_tours WHERE tour_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cdb777421d6b12e1e2e0568989ebf8db7913e5176e0a3fbd915a7c4fa6f71870"
+}

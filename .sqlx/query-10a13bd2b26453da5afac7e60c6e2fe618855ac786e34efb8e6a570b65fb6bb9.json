@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE event_meals\n                    SET recipe_id = $1,\n                        place_id = $2,\n                        start_time = $3,\n                        end_time = $4,\n                        energy_per_serving = $5,\n                        servings = $6,\n                        comment = $7\n                    WHERE\n                        meal_id = $8\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Timestamptz",
+        "Timestamptz",
+        "Numeric",
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "10a13bd2b26453da5afac7e60c6e2fe618855ac786e34efb8e6a570b65fb6bb9"
+}

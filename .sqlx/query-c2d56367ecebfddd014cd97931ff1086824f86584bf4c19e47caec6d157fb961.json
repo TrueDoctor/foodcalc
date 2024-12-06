@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO ingredient_sources ( ingredient_id, store_id, url, comment, package_size, price, unit_id)\n                VALUES ( $1, $2, $3, $4, $5, $6, $7)\n                RETURNING ingredient_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Text",
+        "Numeric",
+        "Numeric",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c2d56367ecebfddd014cd97931ff1086824f86584bf4c19e47caec6d157fb961"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO metro_categories (ingredient_source_id, category)\n                VALUES ($1, $2)\n                ON CONFLICT (ingredient_source_id) DO\n                UPDATE SET category = $2\n                WHERE metro_categories.ingredient_source_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7431d0ad786f2511a9a063857f98779731ae5558b05271cbeebf537fe9762b6e"
+}

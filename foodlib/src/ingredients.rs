@@ -1,3 +1,4 @@
+use bigdecimal::BigDecimal;
 use num::FromPrimitive;
 use num::Num;
 use sqlx::Error;
@@ -7,7 +8,6 @@ use std::str::FromStr;
 use tabled::Tabled;
 
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::types::PgMoney, types::BigDecimal};
 
 use crate::{
     recipes::{Recipe, RecipeIngredient, RecipeMetaIngredient},
@@ -120,9 +120,9 @@ impl Default for Unit {
     }
 }
 
-impl std::string::ToString for Unit {
-    fn to_string(&self) -> String {
-        self.name.to_string()
+impl Display for Unit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.name)
     }
 }
 
@@ -133,7 +133,7 @@ pub struct ShoppingListItem {
     #[tabled(rename = "Name")]
     pub ingredient_name: String,
     #[tabled(rename = "Price", display_with = "crate::util::format_pg_money")]
-    pub price: PgMoney,
+    pub price: BigDecimal,
     #[tabled(rename = "Weight")]
     pub weight: BigDecimal,
 }
@@ -145,7 +145,7 @@ pub struct IngredientSource {
     pub store_id: i32,
     pub package_size: BigDecimal,
     pub unit_id: i32,
-    pub price: PgMoney,
+    pub price: BigDecimal,
     pub url: Option<String>,
     pub comment: Option<String>,
 }
@@ -158,7 +158,7 @@ impl Default for IngredientSource {
             store_id: 0,
             package_size: 0.into(),
             unit_id: 0,
-            price: PgMoney(0),
+            price: Default::default(),
             url: None,
             comment: None,
         }
@@ -244,12 +244,13 @@ impl FoodBase {
         Ok(ingredient)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_ingredient_source(
         &self,
         ingredient_id: i32,
         store_id: i32,
         weight: BigDecimal,
-        price: PgMoney,
+        price: BigDecimal,
         url: Option<String>,
         comment: Option<String>,
         unit_id: i32,
@@ -502,12 +503,8 @@ impl FoodBase {
                 bundle.weight_per_piece.as_ref().map(|w| w.to_string())
             );
             println!("{}: {}", bundle.details.header.misc_name_webshop, price);
-            let price = sqlx::postgres::types::PgMoney::from_bigdecimal(
-                BigDecimal::from_f64(price)
-                    .ok_or(eyre::eyre!("Failed to represent as BigDecimal"))?,
-                2,
-            )
-            .map_err(|e| eyre::eyre!(e))?;
+            let price = BigDecimal::from_f64(price)
+                .ok_or(eyre::eyre!("Failed to represent as BigDecimal"))?;
             let id = foodbase
                 .update_ingredient_source_price(
                     s.ingredient_id,
@@ -590,7 +587,7 @@ impl FoodBase {
         &self,
         ingredient_id: i32,
         url: Option<String>,
-        price: PgMoney,
+        price: BigDecimal,
         weight: BigDecimal,
     ) -> eyre::Result<i32> {
         sqlx::query!(
@@ -684,8 +681,9 @@ pub struct Store {
     pub name: String,
 }
 
+#[cfg(test)]
 mod tests {
-    use crate::*;
+    use crate::PgPool;
     #[test]
     fn test_unit_parsing() {
         use super::*;

@@ -1,33 +1,28 @@
 [workspace]
 resolver = "2"
-members = ["app", "metro-scrape", "backend", "foodlib", "cli-client", "api" , "status-api"]
-default-members = ["app", "backend", "foodlib"]
+members = ["metro-scrape", "server", "foodlib", "cli-client", "api" , "status-api"]
+default-members = ["server", "foodlib"]
 
 [workspace.dependencies]
-sqlx = { version = "0.7", features = [
+sqlx = { version = "0.8", features = [
 	"postgres",
+	"time",
 	"macros",
 	"migrate",
 	"uuid",
 	"runtime-tokio-rustls",
 	"bigdecimal",
-	"chrono",
 ] }
 
+axum = { version = "0.7", features = ["macros"] }
 num = "0.4"
-bigdecimal = { version = "0.3", features = ["serde"] }
+bigdecimal = { version = "0.4", features = ["serde"] }
 dotenv = "0.15.0"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 log = "0.4"
 eyre = "0.6"
 serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
+time = { version = "0.3", features = ["serde", "parsing", "local-offset"] }
 regex = "1"
-axum-login = { git = "https://github.com/maxcountryman/axum-login", rev = "5239b38b2698a3db3f92075b6ad430aea79c215a", features = [
-	"sqlx",
-	"postgres",
-] }
-
-
-[profile.dev.package.sqlx-macros]
-opt-level = 3
+axum-login = "0.16"

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE ingredient_sources\n                SET ingredient_id = $1, store_id = $2, url = $3, comment = $4, package_size = $5, price = $6, unit_id = $7\n                WHERE ingredient_source_id = $8\n                RETURNING ingredient_source_id \n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_source_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Text",
+        "Numeric",
+        "Numeric",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "07bba58c5b01fe70a1a6793c5d507b4afc39c4b87af9079a76cf0142db4def78"
+}

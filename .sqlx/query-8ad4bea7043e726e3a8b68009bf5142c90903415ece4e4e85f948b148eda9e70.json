@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM event_meals\n            WHERE\n                event_id = $1 AND\n                recipe_id = $2 AND\n                place_id = $3 AND\n                start_time = $4\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8ad4bea7043e726e3a8b68009bf5142c90903415ece4e4e85f948b148eda9e70"
+}

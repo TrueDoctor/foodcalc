@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " \n                SELECT ingredient_id, name, amount FROM ingredients\n                INNER JOIN inventory_ingredients USING (ingredient_id) \n                WHERE inventory_id = $1 AND LOWER(name) LIKE LOWER($2)\n                ORDER BY name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "amount",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "63d37ab1c8018504b19401bf18386516166342d4522d13746e0a05e6919d0fbc"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                DELETE FROM ingredient_sources WHERE ingredient_source_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b42fd26f52dd911820e30b8e977891bbd5633a3843c8f3725d5ce86521267dc4"
+}

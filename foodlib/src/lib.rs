@@ -7,6 +7,7 @@ mod ingredients;
 mod inventories;
 mod meals;
 mod recipes;
+#[cfg(feature = "typst")]
 pub mod typst;
 mod users;
 mod util;
@@ -17,6 +18,8 @@ pub use inventories::*;
 pub use meals::*;
 pub use recipes::*;
 pub use users::*;
+
+type PrimitiveDateTime = time::OffsetDateTime;
 
 #[derive(Debug, Clone)]
 pub struct FoodBase {
@@ -40,6 +43,6 @@ impl FoodBase {
     }
 
     pub fn pool(&self) -> &PgPool {
-        &*self.pg_pool
+        &self.pg_pool
     }
 }
