@@ -445,23 +445,29 @@ CREATE VIEW prep_ingredients_with_duplicates AS
    AND event_ingredients_before_prep_time_resolve.start_time >= resolved_prep_starts.use_from
    AND event_ingredients_before_prep_time_resolve.start_time <= resolved_prep_starts.use_until;
 
-CREATE VIEW prep_ingredients AS
-    SELECT DISTINCT event_id,
-        prep_id,
-        recipe_id,
-        prep_date,
-        ingredient_id,
-        ingredient,
-        subrecipe_hierarchy,
-        meal_id
-    FROM prep_ingredients_with_duplicates
-    JOIN (
-        SELECT event_id, ingredient_id, subrecipe_hierarchy, meal_id, min(prep_date) as min_date
-        FROM prep_ingredients_with_duplicates 
-        GROUP BY event_id, ingredient_id, subrecipe_hierarchy, meal_id
-    ) min_dates 
-    USING (event_id, ingredient_id, subrecipe_hierarchy, meal_id)
-    WHERE prep_date = min_date;
+CREATE OR REPLACE VIEW public.prep_ingredients AS
+SELECT event_id,
+    prep_id,
+    recipe_id,
+    prep_date,
+    ingredient_id,
+    ingredient,
+    subrecipe_hierarchy,
+    meal_id
+   FROM ( SELECT rps.event_id,
+            rps.prep_id,
+            rps.recipe_id,
+            rps.prep_date,
+            eibptr.ingredient_id,
+            eibptr.ingredient,
+            eibptr.subrecipe_hierarchy,
+            eibptr.meal_id,
+            row_number() OVER (PARTITION BY rps.event_id, eibptr.ingredient_id, eibptr.subrecipe_hierarchy, eibptr.meal_id ORDER BY rps.prep_date) AS rn
+           FROM resolved_prep_starts rps
+             LEFT JOIN event_ingredients_before_prep_time_resolve eibptr ON rps.event_id = eibptr.event_id
+          WHERE eibptr.subrecipe_hierarchy ~ concat('^(.*\.)?', rps.recipe_id, '(\..*)?$') AND eibptr.start_time >= rps.use_from AND eibptr.start_time <= rps.use_until) subquery
+  WHERE rn = 1
+  ORDER BY event_id, prep_date, ingredient_id;
 
 CREATE VIEW event_ingredients AS
     SELECT 
