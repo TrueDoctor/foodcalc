@@ -571,7 +571,6 @@ CREATE VIEW shopping_list AS
                 shopping_tour_ingredients.buy_by,
                 sum(shopping_tour_ingredients.weight) AS weight
             FROM shopping_tour_ingredients
-            WHERE shopping_tour_ingredients.tour_id IS NOT NULL
             GROUP BY 
                 shopping_tour_ingredients.event_id,
                 shopping_tour_ingredients.tour_id,

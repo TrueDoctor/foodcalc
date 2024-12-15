@@ -278,34 +278,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b7e4c2464d97fe331d41de9d5db0def0a96f4d823b8b32a2efd503578988973"
 
 [[package]]
-name = "backend"
-version = "0.1.0"
-dependencies = [
- "axum",
- "axum-login",
- "bigdecimal",
- "dotenv",
- "eyre",
- "fern",
- "foodlib",
- "futures-util",
- "log",
- "maud",
- "mime_guess",
- "num",
- "rand",
- "regex",
- "serde",
- "serde_json",
- "sqlx",
- "time",
- "tokio",
- "tower-http 0.6.2",
- "tower-sessions",
- "tower-sessions-sqlx-store",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3248,6 +3220,34 @@ dependencies = [
  "ryu",
  "serde",
  "unsafe-libyaml",
+]
+
+[[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "axum-login",
+ "bigdecimal",
+ "dotenv",
+ "eyre",
+ "fern",
+ "foodlib",
+ "futures-util",
+ "log",
+ "maud",
+ "mime_guess",
+ "num",
+ "rand",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "tokio",
+ "tower-http 0.6.2",
+ "tower-sessions",
+ "tower-sessions-sqlx-store",
 ]
 
 [[package]]
