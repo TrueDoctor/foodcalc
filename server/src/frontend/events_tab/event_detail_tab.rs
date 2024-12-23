@@ -168,7 +168,7 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
             label for="comment" { "Comment:" };
             input name="comment" class="text" type="text" value=(&event.comment.unwrap_or_default());
             label for="budget" { "Budget:" };
-            input name="budget" class="text" type="text" value=(event.budget.and_then(|x|x.to_f64()).unwrap_or(0.) / 100.);
+            input name="budget" class="text" type="text" value=(event.budget.and_then(|x|x.to_f64()).unwrap_or(0.));
             div class="flex flex-row items-center justify-center gap-4" {
                 button class="btn btn-primary" hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
                 span class="htmx-indicator" { "Saving\u{a0}…" }
