@@ -1,11 +1,16 @@
-use crate::{FoodBase, Ingredient, Unit};
-use bigdecimal::BigDecimal;
-use eyre::{eyre, Result};
-use foodlib_new::entities::recipe as new_recipe;
-use serde::{Deserialize, Serialize};
-use sqlx::postgres::types::PgInterval;
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
+
+use serde::{Deserialize, Serialize};
+use sqlx::{postgres::types::PgInterval, types::BigDecimal};
 use tabled::Tabled;
+
+pub mod export;
+
+use crate::{
+    ingredients::{Ingredient, Unit},
+    FoodBase,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct Recipe {
@@ -113,108 +118,109 @@ impl Display for RecipeIngredient {
     }
 }
 
-impl From<Recipe> for new_recipe::Recipe {
-    fn from(r: Recipe) -> Self {
-        new_recipe::Recipe {
-            id: r.recipe_id,
-            name: r.name,
-            comment: r.comment,
-        }
-    }
-}
-
-impl From<new_recipe::Recipe> for Recipe {
-    fn from(r: new_recipe::Recipe) -> Self {
-        Recipe {
-            recipe_id: r.id,
-            name: r.name,
-            comment: r.comment,
-        }
-    }
-}
-
-impl From<RecipeStep> for new_recipe::RecipeStep {
-    fn from(s: RecipeStep) -> Self {
-        new_recipe::RecipeStep {
-            id: s.step_id,
-            recipe_id: s.recipe_id,
-            order: s.step_order,
-            name: s.step_name,
-            description: s.step_description,
-            fixed_duration: s.fixed_duration,
-            duration_per_kg: s.duration_per_kg,
-        }
-    }
-}
-
-impl From<new_recipe::RecipeStep> for RecipeStep {
-    fn from(s: new_recipe::RecipeStep) -> Self {
-        RecipeStep {
-            step_id: s.id,
-            recipe_id: s.recipe_id,
-            step_order: s.order,
-            step_name: s.name,
-            step_description: s.description,
-            fixed_duration: s.fixed_duration,
-            duration_per_kg: s.duration_per_kg,
-        }
-    }
-}
-
 impl FoodBase {
-    pub async fn add_recipe(
+    pub async fn get_recipe_ingredients(
         &self,
-        name: String,
-        energy: BigDecimal,
-        comment: Option<String>,
-    ) -> Result<Recipe> {
-        let recipe = self
-            .new_lib
-            .recipes()
-            .create(new_recipe::Recipe {
-                id: -1,
-                name,
-                comment,
-            })
-            .await?;
-        Ok(recipe.into())
-    }
-
-    pub async fn update_recipe(&self, recipe: &Recipe) -> Result<Recipe> {
-        let recipe = self.new_lib.recipes().update(recipe.clone().into()).await?;
-        Ok(recipe.into())
-    }
-
-    pub async fn delete_recipe(&self, id: i32) -> Result<()> {
-        Ok(self.new_lib.recipes().delete(id).await?)
-    }
-
-    pub async fn get_recipes(&self) -> Result<Vec<Recipe>> {
-        let recipes = self.new_lib.recipes().list().await?;
-        Ok(recipes.into_iter().map(Into::into).collect())
-    }
-
-    pub async fn get_recipe(&self, id: i32) -> Result<Recipe> {
-        let recipe = self.new_lib.recipes().get(id).await?;
-        Ok(recipe.into())
-    }
-
-    pub async fn get_recipe_from_string_reference(&self, reference: String) -> Option<Recipe> {
-        if let Ok(recipe_id) = reference.parse::<i32>() {
-            self.new_lib
-                .recipes()
-                .get(recipe_id)
-                .await
-                .ok()
-                .map(Into::into)
-        } else {
-            self.new_lib
-                .recipes()
-                .get_by_name(&reference)
-                .await
-                .ok()
-                .map(Into::into)
+        recipe_id: i32,
+    ) -> eyre::Result<Vec<RecipeIngredient>> {
+        struct RecipeIngredientWeight {
+            ingredient_id: i32,
+            name: String,
+            comment: Option<String>,
+            energy: BigDecimal,
+            amount: BigDecimal,
+            unit_id: i32,
+            unit_name: String,
         }
+        let records = sqlx::query_as!(
+            RecipeIngredientWeight,
+            r#" SELECT ingredient_id, ingredients.name, energy, comment, amount, unit_id, units.name as "unit_name!"
+                FROM recipe_ingredients
+                JOIN ingredients USING(ingredient_id)
+                JOIN units USING(unit_id)
+                WHERE recipe_ingredients.recipe_id = $1
+                ORDER BY ingredient_id  "#,
+            recipe_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        let records = records
+            .into_iter()
+            .map(
+                |RecipeIngredientWeight {
+                     ingredient_id,
+                     name,
+                     comment,
+                     energy,
+                     unit_name,
+                     unit_id,
+                     amount,
+                 }| RecipeIngredient {
+                    ingredient: RecipeMetaIngredient::Ingredient(Ingredient {
+                        ingredient_id,
+                        name,
+                        comment,
+                        energy,
+                    }),
+                    amount,
+                    unit: Unit {
+                        name: Cow::Owned(unit_name),
+                        unit_id,
+                    },
+                },
+            )
+            .collect();
+
+        Ok(records)
+    }
+
+    pub async fn get_recipe_meta_ingredients(
+        &self,
+        recipe_id: i32,
+    ) -> eyre::Result<Vec<RecipeIngredient>> {
+        struct RecipeIngredientWeight {
+            recipe_id: i32,
+            name: String,
+            comment: Option<String>,
+            weight: BigDecimal,
+        }
+        let records = sqlx::query_as!(
+            RecipeIngredientWeight,
+            r#" SELECT recipe_id, name,  comment, weight as "weight!"
+                FROM meta_recipes
+                JOIN recipes ON(recipe_id = child_id)
+                WHERE parent_id = $1
+                ORDER BY recipe_id  "#,
+            recipe_id
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        let records = records
+            .into_iter()
+            .map(
+                |RecipeIngredientWeight {
+                     recipe_id,
+                     name,
+                     comment,
+                     weight,
+                 }| RecipeIngredient {
+                    ingredient: RecipeMetaIngredient::MetaRecipe(Recipe {
+                        recipe_id,
+                        name,
+                        comment,
+                    }),
+                    amount: weight,
+                    unit: Unit {
+                        name: Cow::Borrowed("kg"),
+                        unit_id: 0,
+                    },
+                },
+            )
+            .collect();
+
+        Ok(records)
     }
 
     pub async fn add_recipe_ingredient(
@@ -223,17 +229,21 @@ impl FoodBase {
         ingredient_id: i32,
         amount: BigDecimal,
         unit_id: i32,
-    ) -> Result<()> {
-        Ok(self
-            .new_lib
-            .recipes()
-            .add_ingredient(new_recipe::RecipeIngredient {
-                recipe_id,
-                ingredient_id,
-                amount,
-                unit_id,
-            })
-            .await?)
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id)
+                VALUES ($1, $2, $3, $4)
+            "#,
+            recipe_id,
+            ingredient_id,
+            amount,
+            unit_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Inserted {} recipe_ingredients", count.rows_affected());
+        Ok(())
     }
 
     pub async fn update_recipe_ingredient(
@@ -242,25 +252,60 @@ impl FoodBase {
         ingredient_id: i32,
         amount: BigDecimal,
         unit: i32,
-    ) -> Result<()> {
-        Ok(self
-            .new_lib
-            .recipes()
-            .update_ingredient(new_recipe::RecipeIngredient {
-                recipe_id,
-                ingredient_id,
-                amount,
-                unit_id: unit,
-            })
-            .await?)
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                UPDATE recipe_ingredients
+                SET amount = $3, unit_id = $4
+                WHERE recipe_id = $1 AND ingredient_id = $2
+            "#,
+            recipe_id,
+            ingredient_id,
+            amount,
+            unit,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Updated {} recipe_ingredients", count.rows_affected());
+        Ok(())
     }
 
-    pub async fn delete_recipe_ingredient(&self, recipe_id: i32, ingredient_id: i32) -> Result<()> {
-        Ok(self
-            .new_lib
-            .recipes()
-            .delete_ingredient(recipe_id, ingredient_id)
-            .await?)
+    pub async fn delete_recipe_ingredient(
+        &self,
+        recipe_id: i32,
+        ingredient_id: i32,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM recipe_ingredients
+                WHERE recipe_id = $1 AND ingredient_id = $2
+            "#,
+            recipe_id,
+            ingredient_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Deleted {} recipe_ingredients", count.rows_affected());
+        Ok(())
+    }
+
+    pub async fn delete_recipe_meta_ingredient(
+        &self,
+        recipe_id: i32,
+        meta_recipe_id: i32,
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM meta_recipes
+                WHERE parent_id = $1 AND child_id = $2
+            "#,
+            recipe_id,
+            meta_recipe_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Deleted {} meta_recipes", count.rows_affected());
+        Ok(())
     }
 
     pub async fn add_recipe_meta_ingredient(
@@ -268,16 +313,20 @@ impl FoodBase {
         recipe_id: i32,
         meta_recipe_id: i32,
         weight: BigDecimal,
-    ) -> Result<()> {
-        Ok(self
-            .new_lib
-            .recipes()
-            .add_meta_ingredient(new_recipe::RecipeMetaIngredient {
-                parent_id: recipe_id,
-                child_id: meta_recipe_id,
-                weight,
-            })
-            .await?)
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                INSERT INTO meta_recipes (parent_id, child_id, weight)
+                VALUES ($1, $2, $3)
+            "#,
+            recipe_id,
+            meta_recipe_id,
+            weight,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Inserted {} meta_recipes", count.rows_affected());
+        Ok(())
     }
 
     pub async fn update_recipe_meta_ingredient(
@@ -285,103 +334,361 @@ impl FoodBase {
         recipe_id: i32,
         meta_recipe_id: i32,
         weight: BigDecimal,
-    ) -> Result<()> {
-        Ok(self
-            .new_lib
-            .recipes()
-            .update_meta_ingredient(new_recipe::RecipeMetaIngredient {
-                parent_id: recipe_id,
-                child_id: meta_recipe_id,
-                weight,
-            })
-            .await?)
+    ) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                UPDATE meta_recipes
+                SET weight = $3
+                WHERE parent_id = $1 AND child_id = $2
+            "#,
+            recipe_id,
+            meta_recipe_id,
+            weight,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Updated {} meta_recipes", count.rows_affected());
+        Ok(())
     }
 
-    pub async fn delete_recipe_meta_ingredient(
-        &self,
-        recipe_id: i32,
-        meta_recipe_id: i32,
-    ) -> Result<()> {
-        Ok(self
-            .new_lib
-            .recipes()
-            .delete_meta_ingredient(recipe_id, meta_recipe_id)
-            .await?)
+    pub async fn add_recipe_step(&self, step: &RecipeStep) -> eyre::Result<RecipeStep> {
+        let step = sqlx::query_as!(
+            RecipeStep,
+            r#"
+                INSERT INTO steps (step_order, step_name, step_description, recipe_id, fixed_duration, duration_per_kg)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING *
+            "#,
+            step.step_order,
+            step.step_name,
+            step.step_description,
+            step.recipe_id,
+            step.fixed_duration,
+            step.duration_per_kg,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(step)
     }
 
-    pub async fn add_recipe_step(&self, step: &RecipeStep) -> Result<RecipeStep> {
-        let step = self.new_lib.recipes().add_step(step.clone().into()).await?;
-        Ok(step.into())
+    pub async fn update_recipe_step(&self, step: &RecipeStep) -> eyre::Result<RecipeStep> {
+        let step = sqlx::query_as!(
+            RecipeStep,
+            r#"
+                UPDATE steps
+                SET step_order = $1, step_name = $2, step_description = $3, fixed_duration = $4, duration_per_kg = $5
+                WHERE step_id = $6
+                RETURNING *
+            "#,
+            step.step_order,
+            step.step_name,
+            step.step_description,
+            step.fixed_duration,
+            step.duration_per_kg,
+            step.step_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(step)
     }
 
-    pub async fn update_recipe_step(&self, step: &RecipeStep) -> Result<RecipeStep> {
-        let step = self
-            .new_lib
-            .recipes()
-            .update_step(step.clone().into())
-            .await?;
-        Ok(step.into())
+    pub async fn delete_step(&self, recipe_id: i32, step_id: i32) -> eyre::Result<()> {
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM steps
+                WHERE recipe_id = $1 AND step_id = $2
+            "#,
+            recipe_id,
+            step_id,
+        )
+        .execute(&*self.pg_pool)
+        .await?;
+        log::debug!("Deleted {} steps", count.rows_affected());
+        Ok(())
     }
 
-    pub async fn delete_step(&self, recipe_id: i32, step_id: i32) -> Result<()> {
-        Ok(self
-            .new_lib
-            .recipes()
-            .delete_step(recipe_id, step_id)
-            .await?)
+    pub async fn delete_recipe(&self, recipe_id: i32) -> eyre::Result<()> {
+        let mut transaction = self.pg_pool.begin().await?;
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM recipe_ingredients
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} recipe_ingredients", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM meta_recipes
+                WHERE parent_id = $1 OR child_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} meta_recipes", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM steps
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} steps", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM event_meals
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} event_meals", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM recipes
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} recipes", count.rows_affected());
+
+        transaction.commit().await?;
+        Ok(())
     }
 
-    pub async fn get_recipe_steps(&self, recipe_id: i32) -> Result<Vec<RecipeStep>> {
-        let steps = self.new_lib.recipes().get_steps(recipe_id).await?;
-        Ok(steps.into_iter().map(Into::into).collect())
+    pub async fn update_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
+        let recipe = sqlx::query_as!(
+            Recipe,
+            r#"
+                UPDATE recipes
+                SET name = $1, comment = $2
+                WHERE recipe_id = $3
+                RETURNING *
+            "#,
+            recipe.name,
+            recipe.comment,
+            recipe.recipe_id,
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(recipe)
     }
 
+    pub async fn add_recipe(&self, name: &str, comment: &Option<String>) -> eyre::Result<Recipe> {
+        let recipe = sqlx::query_as!(
+            Recipe,
+            r#"
+                INSERT INTO recipes (name, comment)
+                VALUES ($1, $2)
+                RETURNING *
+            "#,
+            name,
+            comment.clone(),
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(recipe)
+    }
+
+    pub async fn insert_recipe(&self, recipe: &Recipe) -> eyre::Result<Recipe> {
+        self.add_recipe(&recipe.name, &recipe.comment).await
+    }
+
+    // TODO: Human race condition, add proper locking / edit notifications
     pub async fn update_recipe_entries(
         &self,
         recipe_id: i32,
         entries: impl Iterator<Item = RecipeIngredient>,
-    ) -> Result<()> {
-        let mut regular_ingredients = Vec::new();
-        let mut meta_ingredients = Vec::new();
+    ) -> eyre::Result<()> {
+        let mut transaction = self.pg_pool.begin().await?;
+        pub async fn insert_recipe_entry<'a>(
+            executor: impl sqlx::Executor<'a, Database = sqlx::Postgres>,
+            recipe_id: i32,
+            entry: RecipeIngredient,
+        ) -> sqlx::Result<()> {
+            let count = match entry.ingredient {
+                RecipeMetaIngredient::Ingredient(ingredient) => sqlx::query!(
+                    r#"
+                            INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id)
+                            VALUES ($1, $2, $3, $4)
+                        "#,
+                    recipe_id,
+                    ingredient.ingredient_id,
+                    entry.amount,
+                    entry.unit.unit_id,
+                )
+                .execute(executor)
+                .await?
+                .rows_affected(),
+                RecipeMetaIngredient::MetaRecipe(recipe) => sqlx::query!(
+                    r#"
+                            INSERT INTO meta_recipes (parent_id, child_id, weight)
+                            VALUES ($1, $2, $3)
+                        "#,
+                    recipe_id,
+                    recipe.recipe_id,
+                    entry.amount,
+                )
+                .execute(executor)
+                .await?
+                .rows_affected(),
+            };
+            assert_eq!(count, 1);
 
-        // Split entries into regular and meta ingredients
-        for entry in entries {
-            match entry.ingredient {
-                RecipeMetaIngredient::Ingredient(ingredient) => {
-                    regular_ingredients.push(new_recipe::RecipeIngredient {
-                        recipe_id,
-                        ingredient_id: ingredient.ingredient_id,
-                        amount: entry.amount.clone(),
-                        unit_id: entry.unit.unit_id,
-                    });
-                }
-                RecipeMetaIngredient::MetaRecipe(recipe) => {
-                    meta_ingredients.push(new_recipe::RecipeMetaIngredient {
-                        parent_id: recipe_id,
-                        child_id: recipe.recipe_id,
-                        weight: entry.amount,
-                    });
-                }
-            }
+            Ok(())
         }
 
-        Ok(self
-            .new_lib
-            .recipes()
-            .update_recipe_entries(recipe_id, regular_ingredients, meta_ingredients)
-            .await?)
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM recipe_ingredients
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} recipe_ingredients", count.rows_affected());
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM meta_recipes
+                WHERE parent_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} meta_recipes", count.rows_affected());
+
+        for entry in entries {
+            insert_recipe_entry(&mut *transaction, recipe_id, entry).await?;
+        }
+        transaction.commit().await?;
+        Ok(())
     }
 
+    // TODO: Human race condition, add proper locking / edit notifications
     pub async fn update_recipe_steps(
         &self,
         recipe_id: i32,
         entries: impl Iterator<Item = RecipeStep>,
-    ) -> Result<()> {
-        let entries = entries.map(Into::into).collect();
-        Ok(self
-            .new_lib
-            .recipes()
-            .update_recipe_steps(recipe_id, entries)
-            .await?)
+    ) -> eyre::Result<()> {
+        let mut transaction = self.pg_pool.begin().await?;
+        pub async fn insert_recipe_step<'a>(
+            executor: impl sqlx::Executor<'a, Database = sqlx::Postgres>,
+            recipe_id: i32,
+            entry: RecipeStep,
+        ) -> sqlx::Result<()> {
+            let count = sqlx::query!(
+                r#"
+                            INSERT INTO steps (step_order, step_name, step_description, recipe_id, fixed_duration, duration_per_kg)
+                            VALUES ($1, $2, $3, $4, $5, $6)
+                        "#,
+                entry.step_order,
+                entry.step_name,
+                entry.step_description,
+                recipe_id,
+                entry.fixed_duration,
+                entry.duration_per_kg,
+            )
+            .execute(executor)
+            .await?
+            .rows_affected();
+            assert_eq!(count, 1);
+
+            Ok(())
+        }
+
+        let count = sqlx::query!(
+            r#"
+                DELETE FROM steps
+                WHERE recipe_id = $1
+            "#,
+            recipe_id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        log::debug!("Deleted {} steps", count.rows_affected());
+
+        for entry in entries {
+            insert_recipe_step(&mut *transaction, recipe_id, entry).await?;
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn get_recipe_steps(&self, recipe_id: i32) -> eyre::Result<Vec<RecipeStep>> {
+        let mut conn = self.pg_pool.acquire().await?;
+        let steps = sqlx::query_as!(
+            RecipeStep,
+            r#"
+            SELECT
+                step_id,
+                step_order,
+                step_name,
+                step_description,
+                fixed_duration,
+                duration_per_kg,
+                recipe_id
+            FROM steps
+            WHERE recipe_id = $1
+            ORDER BY step_order
+            "#,
+            recipe_id
+        )
+        .fetch_all(&mut *conn)
+        .await?;
+        Ok(steps)
+    }
+
+    pub async fn get_recipes(&self) -> eyre::Result<Vec<Recipe>> {
+        let records = sqlx::query_as!(Recipe, r#" SELECT * FROM recipes ORDER BY recipe_id "#,)
+            .fetch_all(&*self.pg_pool)
+            .await?;
+
+        Ok(records)
+    }
+
+    pub async fn get_recipe(&self, recipe_id: i32) -> eyre::Result<Recipe> {
+        let records = sqlx::query_as!(
+            Recipe,
+            r#" SELECT * FROM recipes WHERE recipe_id = $1 ORDER BY recipe_id "#,
+            recipe_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    pub async fn get_recipe_from_string_reference(&self, reference: String) -> Option<Recipe> {
+        let recipe_id = reference.parse::<i32>().unwrap_or(-1);
+
+        let records = sqlx::query_as!(
+            Recipe,
+            r#" 
+                SELECT * FROM recipes 
+                WHERE recipe_id = $1 OR name = $2
+                ORDER BY recipe_id
+            "#,
+            recipe_id,
+            reference
+        )
+        .fetch_one(&*self.pg_pool)
+        .await;
+
+        records.ok()
     }
 }
