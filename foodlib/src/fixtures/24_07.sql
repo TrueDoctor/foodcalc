@@ -17,34 +17,6 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Data for Name: databases; Type: TABLE DATA; Schema: _sqlx_test; Owner: dennis
---
-
-INSERT INTO _sqlx_test.databases VALUES ('_sqlx_test_21', 'foodlib_new::ops::recipes::tests::test_search_by_ingredients', '2024-12-04 13:16:28.751772+00');
-INSERT INTO _sqlx_test.databases VALUES ('_sqlx_test_20', 'foodlib_new::ops::recipes::tests::test_recipe_ingredients', '2024-12-04 13:16:28.751822+00');
-INSERT INTO _sqlx_test.databases VALUES ('_sqlx_test_26', 'foodlib_new::ops::recipes::tests::test_update_recipe_entries', '2024-12-04 13:16:28.790945+00');
-
-
---
--- Data for Name: _sqlx_migrations; Type: TABLE DATA; Schema: public; Owner: dennis
---
-
-INSERT INTO public._sqlx_migrations VALUES (20230719115112, 'init', '2024-11-30 18:43:33.160374+00', true, '\xacddfcb4d0e946d0a661e71b2ec5a946ed51851ba0e998332c34da39b2d2598b17dd11d3131becf250172425f8de6f9a', 449009689);
-INSERT INTO public._sqlx_migrations VALUES (20230719120414, 'add users', '2024-11-30 18:43:33.657804+00', true, '\xf2a37a1f8fc198e4257b16a22f23f22d226447214c5f4a1869cd36139b226eb1793a53fc99af5d483b4ea32b9f3bf483', 124348886);
-INSERT INTO public._sqlx_migrations VALUES (20231120140016, 'add inventory', '2024-11-30 18:43:33.825144+00', true, '\xdeff4f29b326a7562d41d04911f31616fd2efc81540602667a1ff277096d854a979d13f7e999834187c77d88250cb42e', 108737200);
-INSERT INTO public._sqlx_migrations VALUES (20240508135205, 'Update Shopping List for more accurate prices', '2024-11-30 18:43:33.975019+00', true, '\x9890a4acf37517547581a27c7fe5246319d89c4fb3a77432c376411609784f02a1b452c7589cb0099848f1bd88ee3380', 117200135);
-INSERT INTO public._sqlx_migrations VALUES (20240517120334, 'add meal id', '2024-11-30 18:43:34.132244+00', true, '\xe99ad51fc3d6079fa1f8838aead5e912f2d0c5ba00bf68f5feb2157c40c926dce2afa791ddae46964df9876a5277c06b', 127933450);
-INSERT INTO public._sqlx_migrations VALUES (20240529142320, 'add event shopping tours overrides and meal prep tables', '2024-11-30 18:43:34.285461+00', true, '\xbfd8de921430021f242ab01e1f8021764df483e9740d366d7c12ab55ef7b5d561429d0a2f1325551b4fe2756cc8b7c28', 108670495);
-INSERT INTO public._sqlx_migrations VALUES (20240529175324, 'update views to support meal prep and overrides', '2024-11-30 18:43:34.450811+00', true, '\xc931146be83ec647bd101494026b1fdf864210ac55ba03abbc2040c533cb388c19c1009a958548427967fa9ecab3b81f', 125008797);
-INSERT INTO public._sqlx_migrations VALUES (20240529202502, 'fix shopping list', '2024-11-30 18:43:34.603498+00', true, '\xf3b68a11997a0c1a78433fd29bb1750de22ff675f459a3863e3358f8df4b519d4a05170c8839c4200c9a7f72dfa61791', 123903386);
-INSERT INTO public._sqlx_migrations VALUES (20240529205114, 'fix shopping list duplication by event', '2024-11-30 18:43:34.760568+00', true, '\x952b4443c089fe239e001b91b7973d4adddd5d3bb717acb0bfe9afe7f192845ed1a4bc4f9406c58aee8c104966cdf3de', 133207735);
-INSERT INTO public._sqlx_migrations VALUES (20240529211035, 'fix best ingredient sources', '2024-11-30 18:43:34.919901+00', true, '\x22aa4fae10faf00774d947d81eb3c59b2eb617974eae978faf92fe3a542e234e5c477f1a0c669c7027d74948668d1138', 99654430);
-INSERT INTO public._sqlx_migrations VALUES (20240530164225, 'add metro categories', '2024-11-30 18:43:35.056861+00', true, '\x51e354ab5efa0e52913bd37bfac7738eec42817eaa67faed77234313c1a11061f1ea814a6ad1b1635e1b95013283a16a', 159241369);
-INSERT INTO public._sqlx_migrations VALUES (20240605161226, 'fix food prep', '2024-11-30 18:43:35.255676+00', true, '\xacd14d94041d62f2c1ac18e2aa71bb68748184f902fef5212839dad454d9623b3757bb0397bd4e5ae6dfe8e25bb22b95', 106831815);
-INSERT INTO public._sqlx_migrations VALUES (20240705134012, 'add tourless items to list', '2024-11-30 18:43:35.396124+00', true, '\x12f67019c26d2f3c7780aef5f9f7bc16934e48c46188863daeea7d45c3b8225dcb72404aa1a8e4953066db7d9a50ac67', 98674937);
-INSERT INTO public._sqlx_migrations VALUES (20240710154308, 'performance optimizations', '2024-11-30 18:43:35.520321+00', true, '\x39065d035ba1abb3650cc623d094d397fc0ba85d35ba7bdae925e314c1bf6e45064b30148f26802a4149e6caa162b395', 99507544);
-INSERT INTO public._sqlx_migrations VALUES (20241108122437, 'fix recipe name null', '2024-11-30 18:43:35.659339+00', true, '\x944e71a6476a8b714995bc942344b7c61fcb7471fb6651eec9abbee14aa2687801064ee3a48f5a54059f8d02594641e3', 124850429);
-INSERT INTO public._sqlx_migrations VALUES (20241130160829, 'deprecate timestamp and pg money', '2024-11-30 18:48:58.944232+00', true, '\xdfa6d772a87862d6e3bf570568344dd645e99be8204ecf7d44dbcf2ce3f06063a5dcca4a884de6110af70e437073202d', 307324662);
 
 
 --
@@ -2610,18 +2582,6 @@ INSERT INTO public.weights VALUES (9, 76, 0.176);
 INSERT INTO public.weights VALUES (9, 232, 0.025);
 
 
---
--- Data for Name: session; Type: TABLE DATA; Schema: tower_sessions; Owner: dennis
---
-
-INSERT INTO tower_sessions.session VALUES ('Zzfe5MwWhLDyVUfEWxkkeg', '\x93c4107a24195bc44755f2b08416cce4de376781af6178756d2d6c6f67696e2e6461746182a9617574685f686173689870617373776f7264a7757365725f69640099cd07e8cd0152173839ce2dbeb657000000', '2024-12-03 23:56:57.767473+00');
-
-
---
--- Name: database_ids; Type: SEQUENCE SET; Schema: _sqlx_test; Owner: dennis
---
-
-SELECT pg_catalog.setval('_sqlx_test.database_ids', 27, true);
 
 
 --

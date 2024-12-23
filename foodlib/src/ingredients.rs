@@ -443,27 +443,8 @@ impl FoodBase {
         &self,
         recipe_id: i32,
     ) -> eyre::Result<Vec<RecipeIngredient>> {
-        let units = self.new_lib.units().list().await?;
-        let ingredients = self.new_lib.recipes().get_ingredients(recipe_id).await?;
-        let ingredients: Vec<_> = ingredients
-            .into_iter()
-            .map(|ri| {
-                let unit = units.iter().find(|u| u.id = ri.unit_id).unwrap();
-                RecipeIngredient {
-                    ingredient: RecipeMetaIngredient::Ingredient(ri.into()),
-                    amount: ri.amount,
-                    unit: Unit {
-                        unit_id: ri.unit_id,
-                        name: unit.name.into(),
-                    },
-                }
-            })
-            .collect();
-        let mut records = self
-            .new_lib
-            .recipes()
-            .get_meta_ingredients(recipe_id)
-            .await?;
+        let ingredients = self.get_recipe_ingredients(recipe_id).await?;
+        let mut records = self.get_recipe_meta_ingredients(recipe_id).await?;
         records.extend(ingredients);
         Ok(records)
     }
