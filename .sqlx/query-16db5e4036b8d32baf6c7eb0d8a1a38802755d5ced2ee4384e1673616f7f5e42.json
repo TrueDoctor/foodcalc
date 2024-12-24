@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                DELETE FROM event_meals\n                WHERE\n                    meal_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "16db5e4036b8d32baf6c7eb0d8a1a38802755d5ced2ee4384e1673616f7f5e42"
+}

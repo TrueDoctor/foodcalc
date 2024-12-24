@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO ingredient_sources (\n                ingredient_id, store_id, package_size, unit_id, price, url, comment\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7)\n            RETURNING \n                ingredient_source_id as \"id\",\n                ingredient_id,\n                store_id,\n                package_size,\n                unit_id,\n                price,\n                url,\n                comment\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "store_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "package_size",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "unit_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "price",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "comment",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Numeric",
+        "Int4",
+        "Numeric",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "5b9d2d2fb65584aec71c9a4d3ad5804d62606d3574007e725febf47e5f813a09"
+}

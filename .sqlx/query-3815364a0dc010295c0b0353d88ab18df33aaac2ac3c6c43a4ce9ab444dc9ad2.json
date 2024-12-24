@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE base_conversions\n            SET from_amount = $3, to_amount = $4\n            WHERE from_unit = $1 AND to_unit = $2\n            RETURNING from_unit, to_unit, from_amount, to_amount\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "from_unit",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "to_unit",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "from_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "to_amount",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Numeric",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3815364a0dc010295c0b0353d88ab18df33aaac2ac3c6c43a4ce9ab444dc9ad2"
+}

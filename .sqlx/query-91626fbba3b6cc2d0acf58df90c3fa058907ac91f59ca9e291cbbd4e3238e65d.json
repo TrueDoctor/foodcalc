@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT ingredient_id, unit_id, weight\n            FROM weights\n            WHERE ingredient_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "unit_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "weight",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "91626fbba3b6cc2d0acf58df90c3fa058907ac91f59ca9e291cbbd4e3238e65d"
+}

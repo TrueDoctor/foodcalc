@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM meta_recipes \n            WHERE parent_id = $1 AND child_id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "84195edcf6806910468e2cd3ff1176609d97342fa6c4fecc47df0c5539970117"
+}

@@ -16,7 +16,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 use foodlib::Backend;
 mod frontend;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct MyAppState {
     db_connection: FoodBase,
 }
