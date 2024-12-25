@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM base_conversions WHERE from_unit = $1 OR to_unit = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "21bd70be2b884f41589844b89c8b1c1a14d3d2fd9f4f7974f0935acace90755b"
+}

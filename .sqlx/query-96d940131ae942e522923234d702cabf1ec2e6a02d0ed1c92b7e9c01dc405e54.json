@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                r.recipe_id,\n                r.name as recipe_name,\n                i.ingredient_id,\n                i.name as ingredient_name,\n                coalesce(rr.weight, 0) as \"weight!\",\n                sr.recipe_id as subrecipe_id,\n                sr.name as subrecipe_name,\n                rr.acc as hierarchy_path\n            FROM resolved_recipes rr\n            JOIN recipes r ON r.recipe_id = rr.recipe_id\n            LEFT JOIN ingredients i ON i.ingredient_id = rr.ingredient_id\n            LEFT JOIN recipes sr ON sr.recipe_id = rr.subrecipe_id\n            WHERE r.recipe_id = $1\n            ORDER BY COALESCE(sr.name, i.name)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recipe_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "recipe_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "ingredient_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "weight!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "subrecipe_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "subrecipe_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "hierarchy_path",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "96d940131ae942e522923234d702cabf1ec2e6a02d0ed1c92b7e9c01dc405e54"
+}

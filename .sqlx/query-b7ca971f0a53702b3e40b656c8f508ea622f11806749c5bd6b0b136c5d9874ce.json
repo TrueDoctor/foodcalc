@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM recipe_ingredients \n            WHERE recipe_id = $1 AND ingredient_id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b7ca971f0a53702b3e40b656c8f508ea622f11806749c5bd6b0b136c5d9874ce"
+}
