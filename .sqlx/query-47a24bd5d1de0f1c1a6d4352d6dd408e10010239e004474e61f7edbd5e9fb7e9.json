@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                step_id as id, recipe_id, step_order as \"order\",\n                step_name as name, step_description as description,\n                fixed_duration, duration_per_kg\n            FROM steps\n            WHERE recipe_id = $1\n            ORDER BY step_order\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "recipe_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "order",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "fixed_duration",
+        "type_info": "Interval"
+      },
+      {
+        "ordinal": 6,
+        "name": "duration_per_kg",
+        "type_info": "Interval"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "47a24bd5d1de0f1c1a6d4352d6dd408e10010239e004474e61f7edbd5e9fb7e9"
+}

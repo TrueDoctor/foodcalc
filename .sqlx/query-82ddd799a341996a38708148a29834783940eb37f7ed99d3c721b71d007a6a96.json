@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO metro_categories (ingredient_source_id, category)\n            VALUES ($1, $2)\n            ON CONFLICT (ingredient_source_id) DO UPDATE \n            SET category = $2\n            RETURNING ingredient_source_id, category\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_source_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "category",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "82ddd799a341996a38708148a29834783940eb37f7ed99d3c721b71d007a6a96"
+}

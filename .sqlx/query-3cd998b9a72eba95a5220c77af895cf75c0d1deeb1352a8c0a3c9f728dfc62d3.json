@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH matching_recipes AS (\n                SELECT r.recipe_id, r.name, r.comment,\n                       COUNT(DISTINCT ri.ingredient_id) as matching_ingredients,\n                       (SELECT COUNT(DISTINCT ingredient_id) \n                        FROM recipe_ingredients \n                        WHERE recipe_id = r.recipe_id) as total_ingredients\n                FROM recipes r\n                JOIN recipe_ingredients ri ON r.recipe_id = ri.recipe_id\n                WHERE ri.ingredient_id = ANY($1)\n                GROUP BY r.recipe_id, r.name, r.comment\n            )\n            SELECT \n                recipe_id as id,\n                name,\n                comment\n            FROM matching_recipes\n            ORDER BY \n                matching_ingredients::float / total_ingredients DESC,\n                name ASC\n            LIMIT $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "3cd998b9a72eba95a5220c77af895cf75c0d1deeb1352a8c0a3c9f728dfc62d3"
+}

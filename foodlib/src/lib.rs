@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use foodlib_new::{error::Error as NewError, FoodLib};
 use sqlx::PgPool;
 
 mod events;
@@ -21,15 +22,18 @@ pub use users::*;
 
 type PrimitiveDateTime = time::OffsetDateTime;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct FoodBase {
-    pub(crate) pg_pool: Arc<PgPool>,
+    pg_pool: Arc<PgPool>,
+    new_lib: FoodLib,
 }
 
 impl FoodBase {
     pub fn new_with_pool(pg_pool: PgPool) -> Self {
+        let pool = Arc::new(pg_pool);
         Self {
-            pg_pool: Arc::new(pg_pool),
+            pg_pool: pool.clone(),
+            new_lib: FoodLib::from_shared(pool),
         }
     }
 
