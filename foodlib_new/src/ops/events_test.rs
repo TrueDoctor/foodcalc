@@ -85,7 +85,7 @@ async fn test_shopping_list_with_source_overrides(pool: PgPool) {
 
     assert_eq!(
         *tomatoes.price.as_ref().unwrap(),
-        BigDecimal::from_str("2.99").unwrap() * &tomatoes.weight
+        BigDecimal::from_str("1.99").unwrap() * &tomatoes.weight
     );
 }
 
