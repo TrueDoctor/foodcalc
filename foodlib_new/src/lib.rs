@@ -36,9 +36,9 @@ impl FoodLib {
         ops::meals::MealOps::new(self.pool.clone())
     }
 
-    // pub fn events(&self) -> ops::events::EventOps {
-    //     ops::events::EventOps::new(self.pool.clone())
-    // }
+    pub fn events(&self) -> ops::events::EventOps {
+        ops::events::EventOps::new(self.pool.clone())
+    }
 
     pub fn inventories(&self) -> ops::inventories::InventoryOps {
         ops::inventories::InventoryOps::new(self.pool.clone())

@@ -11,6 +11,17 @@ pub struct Event {
     pub budget: Option<BigDecimal>,
 }
 
+impl Default for Event {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            name: "Test Event".to_string(),
+            comment: Some("Test comment".to_string()),
+            budget: None,
+        }
+    }
+}
+
 /// A scheduled shopping trip for an event
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShoppingTour {

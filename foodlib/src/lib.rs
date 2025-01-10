@@ -49,4 +49,7 @@ impl FoodBase {
     pub fn pool(&self) -> &PgPool {
         &self.pg_pool
     }
+    pub fn new_lib(&self) -> &FoodLib {
+        &self.new_lib
+    }
 }

@@ -53,6 +53,7 @@ async fn main() {
         .await
         .expect("Failed to connect to database");
 
+    let food_lib = food_base.new_lib();
     println!("Setting up Logging");
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
@@ -66,8 +67,17 @@ async fn main() {
     let mut meal_states = HashMap::new();
 
     let current_time = now();
+    let next_event = food_lib
+        .events()
+        .get_upcoming_events(OffsetDateTime::now_utc())
+        .await
+        // If we don't have any upcoming events, use anything
+        .unwrap_or_default()
+        .first()
+        .map(|e| e.id)
+        .unwrap_or(38);
 
-    let event_meals = get_event_meals(&food_base, 38).await;
+    let event_meals = get_event_meals(&food_base, next_event).await;
 
     for meal in event_meals {
         println!("Adding Meal {:?}", meal);
