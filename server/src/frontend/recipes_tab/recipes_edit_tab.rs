@@ -621,7 +621,7 @@ impl SubRecipeTableFormattable for RecipeIngredient {
                     input class=(form_id) type="hidden" name=("subrecipe_id") value=(subrecipe_id);
                     input class=(form_id) type="hidden" name=("subrecipe_name") value=(subrecipe.name);
                     input class=(form_id) type="hidden" name=("subrecipe_unit_id") value=(self.unit.unit_id);
-                    div class=(format!("w-full {}",form_id)) name=("subrecipe") { (subrecipe.name) }
+                    div class=(format!("w-full {}",form_id)) name=("subrecipe") { a hx-target="#content" hx-get=(format!("/recipes/edit/{}", subrecipe.recipe_id)) { (subrecipe.name) } }
                 }
                 td { input class=(format!("text {}",form_id)) name="subrecipe_amount" value=(self.amount) required="required" hx-put="recipes/edit/change-subrecipe" hx-target=(format!("#subrecipe-{}", subrecipe_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-indicator=".htmx-indicator" hx-swap="outerHTML"; }
                 td { (self.unit.name) }
