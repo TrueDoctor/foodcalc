@@ -182,7 +182,7 @@ async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Resu
         }
         table class="w-full text-inherit table-auto object-center mb-2 table-fixed" {
             thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} }  }
-            tbody {
+            tbody class="text-center" {
                 @for meal in meals {
                     (format_event_meal(event_id, &meal))
                 }
