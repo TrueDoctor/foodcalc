@@ -59,12 +59,12 @@ pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameter
 pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
     html! {
          dialog class="dialog" open="open" {
-             div class="flex flex-col items-center justify-center" {
-                 div class="flex flex-col items-center justify-center" {
-                     h1 { "Export recipe" }
+             div class="flex flex-col items-center justify-center p-2" {
+                 div class="flex flex-col items-center justify-center gap-2" {
+                     h1 class="text-lg mb-2" { "Export recipe" }
                      // Input mask for energy and number of servings as a form which downloads the recipe as a PDF on Submit
-                        form class="flex flex-col items-center justify-center" action=(format!("/recipes/export_pdf/{}", recipe_id)) {
-                            div class="flex flex-row items-center justify-center" {
+                        form class="flex flex-col items-center justify-center gap-x-8" action=(format!("/recipes/export_pdf/{}", recipe_id)) {
+                            div class="flex flex-row items-center justify-center gap-4" {
                                 input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy kJ/serving" required="required";
                                 input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="number_of_servings" placeholder="Number of servings" required="required";
                                 button class="btn btn-primary" type="submit" hx-post=(format!("/recipes/shopping-list/{}", recipe_id)) hx-target="#shopping-list" { "Shopping list" }
