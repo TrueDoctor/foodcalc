@@ -65,6 +65,19 @@ pub struct ShoppingTour {
     #[tabled(rename = "Store ID")]
     pub store_id: i32,
 }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Tabled)]
+pub struct ShoppingTourWithStore {
+    #[tabled(rename = "ID")]
+    pub tour_id: i32,
+    #[tabled(skip)]
+    pub event_id: i32,
+    #[tabled(rename = "Date")]
+    pub tour_date: PrimitiveDateTime,
+    #[tabled(rename = "Store ID")]
+    pub store_id: i32,
+    #[tabled(rename = "Store Name")]
+    pub store_name: String,
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
 pub struct SourceOverride {
@@ -334,10 +347,13 @@ impl FoodBase {
         Ok(shopping_list)
     }
 
-    pub async fn get_event_shopping_tours(&self, event_id: i32) -> eyre::Result<Vec<ShoppingTour>> {
+    pub async fn get_event_shopping_tours(
+        &self,
+        event_id: i32,
+    ) -> eyre::Result<Vec<ShoppingTourWithStore>> {
         let records = sqlx::query_as!(
-            ShoppingTour,
-            "SELECT * FROM shopping_tours WHERE event_id=$1",
+            ShoppingTourWithStore,
+            "SELECT tour_id, tour_date,event_id, store_id, name as store_name FROM shopping_tours JOIN stores using(store_id) WHERE event_id=$1 ",
             event_id
         )
         .fetch_all(&*self.pg_pool)

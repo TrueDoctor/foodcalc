@@ -61,7 +61,7 @@ pub struct SourceOverrideView {
 }
 
 /// Item in a shopping list for an event
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShoppingListItem {
     pub event_id: i32,
     pub event_name: String,

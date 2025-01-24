@@ -3233,6 +3233,7 @@ dependencies = [
  "eyre",
  "fern",
  "foodlib",
+ "foodlib_new",
  "futures-util",
  "log",
  "maud",
