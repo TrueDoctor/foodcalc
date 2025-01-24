@@ -165,6 +165,15 @@ impl Default for IngredientSource {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IngredientHasScource {
+    pub ingredient_id: i32,
+    pub name: String,
+    pub energy: BigDecimal,
+    pub comment: Option<String>,
+    pub has_sources: Option<bool>,
+}
+
 pub fn parse_package_size(description: &str) -> Option<(BigDecimal, i32)> {
     use regex::Regex;
     let number_regex = Regex::new(r"^[0-9][0-9,\.]*").expect("failed to compile number regex");
@@ -314,6 +323,17 @@ impl FoodBase {
         let records = sqlx::query_as!(
             Ingredient,
             r#" SELECT * FROM ingredients ORDER BY ingredient_id "#,
+        )
+        .fetch_all(&*self.pg_pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    pub async fn get_ingredients_has_sources(&self) -> eyre::Result<Vec<IngredientHasScource>> {
+        let records = sqlx::query_as!(
+            IngredientHasScource,
+            r#" SELECT ingredients.*, EXISTS(SELECT 1 FROM ingredient_sources WHERE ingredient_id = ingredients.ingredient_id) as has_sources FROM ingredients ORDER BY ingredient_id "#,
         )
         .fetch_all(&*self.pg_pool)
         .await?;
@@ -556,6 +576,17 @@ impl FoodBase {
         };
 
         Ok(records)
+    }
+
+    pub async fn has_ingredient_sources(&self, ingredient_id: i32) -> eyre::Result<bool> {
+        let record = sqlx::query!(
+            r#" SELECT EXISTS(SELECT 1 FROM ingredient_sources WHERE ingredient_id = $1) "#,
+            ingredient_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(record.exists.unwrap_or(false))
     }
 
     pub async fn get_metro_ingredient_sources(

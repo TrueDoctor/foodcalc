@@ -1,3 +1,5 @@
+use std::os::linux::raw::stat;
+
 use axum::extract::{Form, Path, State};
 use axum::response::{IntoResponse, Response};
 use axum_login::login_required;
@@ -52,7 +54,8 @@ pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameter
 
     html! {
         @for ingredient in filtered_ingredients {
-            (format_ingredient(ingredient))
+            @let has_sources = state.has_ingredient_sources(ingredient.ingredient_id).await.unwrap_or_default();
+            (format_ingredient(ingredient, has_sources))
         }
     }
 }
@@ -62,6 +65,10 @@ pub async fn add_ingredient(
     form: axum::extract::Form<Ingredient>,
 ) -> Response {
     let ingredient = form.0;
+    let has_sources = state
+        .has_ingredient_sources(ingredient.ingredient_id)
+        .await
+        .unwrap_or_default();
     if ingredient.ingredient_id == -1 {
         dbg!("Adding ingredient");
         match state
@@ -79,7 +86,7 @@ pub async fn add_ingredient(
         dbg!("Updating ingredient");
         match state.update_ingredient(&ingredient).await {
             Err(_) => html_error("Failed to update ingredient", "/ingredients"),
-            Ok(_) => format_ingredient(&ingredient),
+            Ok(_) => format_ingredient(&ingredient, has_sources),
         }
         .into_response()
     }
@@ -147,9 +154,22 @@ async fn delete_source(
 pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
     let ingredients = state
         .db_connection
-        .get_ingredients()
+        .get_ingredients_has_sources()
         .await
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .iter()
+        .map(|ingredient_has_scource| {
+            (
+                Ingredient {
+                    ingredient_id: ingredient_has_scource.ingredient_id,
+                    name: ingredient_has_scource.name.clone(),
+                    energy: ingredient_has_scource.energy.clone(),
+                    comment: ingredient_has_scource.comment.clone(),
+                },
+                ingredient_has_scource.has_sources.unwrap(),
+            )
+        })
+        .collect::<Vec<(Ingredient, bool)>>();
 
     html! {
         div id="ingredients"{
@@ -179,7 +199,7 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
                 } }
                 tbody id="search-results" {
                     @for ingredient in ingredients.iter() {
-                        (format_ingredient(ingredient))
+                        (format_ingredient(&ingredient.0, ingredient.1))
                     }
                 }
             }
@@ -352,7 +372,8 @@ fn format_ingredient_source(
     }
 }
 
-fn format_ingredient(ingredient: &Ingredient) -> Markup {
+fn format_ingredient(ingredient: &Ingredient, has_sources: bool) -> Markup {
+    let sources_button_text = if has_sources { "" } else { "⚠️" };
     html! {
         tr id=(format!("ingredient-{}", ingredient.ingredient_id)) {
             td class="text-center opacity-70" { (ingredient.ingredient_id) }
@@ -371,11 +392,14 @@ fn format_ingredient(ingredient: &Ingredient) -> Markup {
                 hx-swap="beforebegin" { "Delete" }
             }
             td {
-                button class="btn btn-primary"
+                button class="btn btn-primary relative"
                 hx-get=(format!("/ingredients/sources/{}", ingredient.ingredient_id))
                 hx-swap="afterend"
                 // hx-target=(format!("#ingredient-{}", ingredient.ingredient_id))
-                { "Sources ▼" }
+                {
+                    span class="absolute left-0 transform translate-x-6" { (sources_button_text) }
+                    span class="block" { "Sources ▼" }
+                }
             }
         }
     }
