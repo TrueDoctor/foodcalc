@@ -288,8 +288,8 @@ async fn sources_table(state: State<MyAppState>, id: Path<i32>) -> Markup {
                 thead {
                     tr {
                         th { "Store" }
-                        th { "Weight" }
-                        th { "Price" }
+                        th { "Weight (kg)" }
+                        th { "Price (€)" }
                         th { "Url" }
                         th {}
                         th {}
@@ -324,8 +324,8 @@ fn format_add_ingredient_source(stores: &[Store], ingredient_id: i32) -> Markup 
                     }
                 }
             }
-            td {input class="text" name="weight" placeholder="Weight";}
-            td {input class="text" name="price" placeholder="Price";}
+            td {input class="text" name="weight" placeholder="Weight (kg)";}
+            td {input class="text" name="price" placeholder="Price (€)";}
             td {input class="text" name="url" placeholder="Url";}
             td {button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/-1", ingredient_id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Add" }}
             td {}
