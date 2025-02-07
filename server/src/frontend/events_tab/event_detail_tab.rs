@@ -257,7 +257,7 @@ async fn ingredients_per_serving(state: State<MyAppState>, meal_id: Path<i32>) -
     };
 
     html! {
-        dialog open="true" id="popup" class="w-1/2" {
+        dialog open="true" id="popup" class="w-1/2 dialog" {
             div class="flex-col items-center justify-center" {
                 table class="w-full table-auto object-center table-fixed" {
                     thead { tr { th { "Ingredient" } th {"Amount"} th {"Energy"} th {"Price"} } }
