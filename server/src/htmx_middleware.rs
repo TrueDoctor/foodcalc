@@ -72,7 +72,6 @@ pub async fn htmx_middleware(req: Request, next: Next) -> Response<Body> {
             for (name, value) in headers.iter() {
                 headers_mut.insert(name, value.clone());
             }
-            headers_mut.remove("content-length");
 
             // Set content type to HTML for wrapped response
             headers_mut.insert("content-type", "text/html; charset=utf-8".parse().unwrap());

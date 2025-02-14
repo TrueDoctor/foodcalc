@@ -26,14 +26,14 @@ pub fn router() -> Router<crate::ApiState> {
     Router::new()
         .route("/", get(list_events))
         .route("/", put(add_event))
-        .route("/:event_id/", get(show_event))
-        .route("/:event_id/", delete(delete_event))
-        .route("/:event_id/", post(update_event))
-        .route("/:event_id/meals/", get(meal_list))
-        .route("/:event_id/meals/", put(meal_add))
-        .route("/meals/:meal_id", get(get_meal))
-        .route("/meals/:meal_id", delete(meal_delete))
-        .route("/meals/:meal_id", post(meal_update))
+        .route("/{event_id}/", get(show_event))
+        .route("/{event_id}/", delete(delete_event))
+        .route("/{event_id}/", post(update_event))
+        .route("/{event_id}/meals/", get(meal_list))
+        .route("/{event_id}/meals/", put(meal_add))
+        .route("/meals/{meal_id}", get(get_meal))
+        .route("/meals/{meal_id}", delete(meal_delete))
+        .route("/meals/{meal_id}", post(meal_update))
 }
 
 async fn list_events(State(state): State<ApiState>) -> impl IntoResponse {

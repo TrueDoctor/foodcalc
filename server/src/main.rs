@@ -91,7 +91,7 @@ async fn main() {
 
     // Combine routes with middleware
     let app = Router::new()
-        .nest("/", frontend::frontend_router())
+        .merge(frontend::frontend_router())
         .with_state(state)
         .layer(auth_layer)
         .layer(CorsLayer::very_permissive())

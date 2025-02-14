@@ -24,11 +24,11 @@ pub fn frontend_router() -> Router {
         .nest("/inventories", inventories_tab::inventories_router())
         .nest("/events", events_tab::events_router())
         .route_layer(login_required!(Backend, login_url = LOGIN_URL))
-        .nest("/", home::home_router())
+        .merge(home::home_router())
         .nest("/ingredients", ingredients_tab::ingredients_router())
         .nest("/recipes", recipes_tab::recipes_router())
         .nest("/auth", login_tab::login_router())
-        .route("/static/*-style.css", get(static_style))
+        .route("/static/{*-style.css}", get(static_style))
 }
 
 thread_local! {

@@ -1,4 +1,7 @@
-use axum::extract::{Form, Path, State};
+use axum::{
+    extract::{Form, Path, State},
+    routing::{delete, put},
+};
 use bigdecimal::BigDecimal;
 use foodlib::{Ingredient, Recipe, RecipeIngredient, RecipeMetaIngredient, RecipeStep, Unit};
 use maud::{html, Markup};
@@ -9,54 +12,27 @@ use crate::MyAppState;
 
 pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/:recipe_id", axum::routing::get(recipe_edit_view))
-        //.route("/add-step", axum::routing::put(add_step_form))
-        //.route("/edit-step", axum::routing::put(handle_edit_step))
-        //.route("/delete-step", axum::routing::delete(handle_step_delete))
+        .route("/{recipe_id}", axum::routing::get(recipe_edit_view))
+        .route("/add-ingredient/{recipe_id}", put(add_ingredient_form))
+        .route("/add-subrecipe/{recipe_id}", put(add_subrecipe_form))
+        .route("/add-step/{recipe_id}", put(add_step_form))
+        .route("/commit-ingredient", put(handle_ingredient_add))
+        .route("/commit-subrecipe", put(handle_subrecipe_add))
+        .route("/commit-step", put(handle_step_add))
+        .route("/delete-ingredient", delete(handle_ingredient_delete))
         .route(
-            "/add-ingredient/:recipe_id",
-            axum::routing::put(add_ingredient_form),
+            "/delete-subrecipe/{recipe_id}/{step_id}",
+            delete(handle_subrecipe_delete),
         )
         .route(
-            "/add-subrecipe/:recipe_id",
-            axum::routing::put(add_subrecipe_form),
+            "/delete-step/{recipe_id}/{step_id}",
+            delete(handle_step_delete),
         )
-        .route("/add-step/:recipe_id", axum::routing::put(add_step_form))
-        .route(
-            "/commit-ingredient",
-            axum::routing::put(handle_ingredient_add),
-        )
-        .route(
-            "/commit-subrecipe",
-            axum::routing::put(handle_subrecipe_add),
-        )
-        .route("/commit-step", axum::routing::put(handle_step_add))
-        .route(
-            "/delete-ingredient",
-            axum::routing::delete(handle_ingredient_delete),
-        )
-        .route(
-            "/delete-subrecipe/:recipe_id/:step_id",
-            axum::routing::delete(handle_subrecipe_delete),
-        )
-        .route(
-            "/delete-step/:recipe_id/:step_id",
-            axum::routing::delete(handle_step_delete),
-        )
-        .route(
-            "/change-ingredient",
-            axum::routing::put(handle_ingredient_change),
-        )
-        .route(
-            "/change-subrecipe",
-            axum::routing::put(handle_subrecipe_change),
-        )
-        .route("/change-name", axum::routing::put(handle_name_change))
-        .route("/change-step", axum::routing::put(handle_step_change))
-        .route(
-            "/change-step-order",
-            axum::routing::put(handle_step_order_change),
-        )
+        .route("/change-ingredient", put(handle_ingredient_change))
+        .route("/change-subrecipe", put(handle_subrecipe_change))
+        .route("/change-name", put(handle_name_change))
+        .route("/change-step", put(handle_step_change))
+        .route("/change-step-order", put(handle_step_order_change))
 }
 
 #[derive(Deserialize, Debug)]
@@ -593,7 +569,7 @@ impl IngredientTableFormattable for RecipeIngredient {
                 }
                 td { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-target=(format!("#ingredient-{}", ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML"; }
                 td { select class=(format!("unit {} fc-select",form_id)) name="ingredient_unit_id" selected=(self.unit.name) hx-target=(format!("#ingredient-{}", ingredient_id)) hx-swap="outerHTML" required="required" hx-put="recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-include=(format!(".{}", form_id)) { @for unit in unit_types {
-                    @if unit.unit_id == self.unit.unit_id { option value=(unit.unit_id) selected { (unit.name) } } else { option value=(unit.unit_id) { (unit.name) } } } } }
+                    @if unit.unit_id == self.unit.unit_id { option value=(unit.unit_id) selected { (unit.name) } } @else { option value=(unit.unit_id) { (unit.name) } } } } }
                 td { button class="btn btn-cancel" hx-target="#contents" hx-delete=("recipes/edit/delete-ingredient") hx-include=(format!(".{}", form_id)) { "Delete" } }
             }
         }

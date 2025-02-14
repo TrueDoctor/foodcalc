@@ -14,8 +14,8 @@ pub fn router() -> Router<crate::ApiState> {
     Router::new()
         .route("/", get(list_places))
         .route("/", put(add_places))
-        .route("/:place_id", get(get_place))
-        .route("/:place_id", post(update_place))
+        .route("/{place_id}", get(get_place))
+        .route("/{place_id}", post(update_place))
 }
 
 async fn list_places(State(state): State<ApiState>) -> impl IntoResponse {

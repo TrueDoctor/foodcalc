@@ -24,22 +24,22 @@ use crate::{
 
 pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/:event_id", post(update_event))
-        .route("/:event_id/overrides/:source_id", post(update_override))
-        .route("/:event_id/overrides/:source_id", delete(delete_override))
-        .route("/export/pdf/:meal_id", get(export_recipe_pdf))
+        .route("/{event_id}", post(update_event))
+        .route("/{event_id}/overrides/{source_id}", post(update_override))
+        .route("/{event_id}/overrides/{source_id}", delete(delete_override))
+        .route("/export/pdf/{meal_id}", get(export_recipe_pdf))
         .route(
-            "/:event_id/overrides/:source_id/delete_dialog",
+            "/{event_id}/overrides/{source_id}/delete_dialog",
             get(delete_override_dialog),
         )
-        .route("/export_pdf/:meal_id", get(export_recipe_pdf))
+        .route("/export_pdf/{meal_id}", get(export_recipe_pdf))
         .route_layer(login_required!(Backend, login_url = LOGIN_URL))
-        .route("/:event_id", get(event_form))
+        .route("/{event_id}", get(event_form))
         .route(
-            "/ingredients-per-serving/:meal_id",
+            "/ingredients-per-serving/{meal_id}",
             get(ingredients_per_serving),
         )
-        .route("/delete/:event_id/:meal_id", get(delete_meal_dialog))
+        .route("/delete/{event_id}/{meal_id}", get(delete_meal_dialog))
         .nest(
             "/event_edit_meal",
             event_edit_meal_tab::event_edit_meal_router(),

@@ -1,6 +1,6 @@
 use crate::MyAppState;
 use axum::extract::{Form, Path, State};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum_login::login_required;
 #[cfg(feature = "typst")]
 use foodlib::typst::export_recipes;
@@ -14,11 +14,8 @@ mod recipes_edit_tab;
 pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/", post(add_recipe))
-        .route("/delete/:recipe_id", get(delete_recipe))
-        .route(
-            "/delete_nqa/:recipe_id",
-            axum::routing::delete(delete_recipe_nqa),
-        )
+        .route("/delete/{recipe_id}", get(delete_recipe))
+        .route("/delete_nqa/{recipe_id}", delete(delete_recipe_nqa))
         .nest("/edit/", recipes_edit_tab::recipes_edit_router())
         .route_layer(login_required!(
             Backend,
@@ -26,9 +23,9 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
             redirect_field = "protected"
         ))
         .route("/search", post(search))
-        .route("/shopping-list/:recipe_id", post(shopping_list))
-        .route("/export/:recipe_id", get(export_recipe))
-        .route("/export_pdf/:recipe_id", get(export_recipe_pdf))
+        .route("/shopping-list/{recipe_id}", post(shopping_list))
+        .route("/export/{recipe_id}", get(export_recipe))
+        .route("/export_pdf/{recipe_id}", get(export_recipe_pdf))
         .route("/", get(recipes_view))
 }
 

@@ -22,15 +22,15 @@ use crate::{
 
 pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/add/:event_id", get(add_shopping_tour))
-        .route("/edit/:event_id/:tour_id", get(shopping_tour_form))
+        .route("/add/{event_id}", get(add_shopping_tour))
+        .route("/edit/{event_id}/{tour_id}", get(shopping_tour_form))
         .route("/save", post(save_tour))
-        .route("/export/:tour_id/plain", get(export_plain))
-        .route("/export/:tour_id/metro", get(export_metro))
-        .route("/update_inventory/:tour_id", post(update_inventory))
-        .route("/confirm_update/:tour_id", get(confirm_update))
+        .route("/export/{tour_id}/plain", get(export_plain))
+        .route("/export/{tour_id}/metro", get(export_metro))
+        .route("/update_inventory/{tour_id}", post(update_inventory))
+        .route("/confirm_update/{tour_id}", get(confirm_update))
         .route(
-            "/toggle_inventory/:event_id/:inventory_id",
+            "/toggle_inventory/{event_id}/{inventory_id}",
             post(toggle_inventory),
         )
 }

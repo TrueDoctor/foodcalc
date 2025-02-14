@@ -102,7 +102,7 @@ async fn main() {
     println!("Loading Routes");
     let app = Router::<AppState>::new()
         .route("/", get(get_status))
-        .route("/:meal_id", post(update_status))
+        .route("/{meal_id}", post(update_status))
         .with_state(Arc::new(Mutex::new(ApiState { meal_states })))
         .layer(TraceLayer::new_for_http())
         .layer(cors);

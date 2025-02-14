@@ -17,18 +17,18 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/", axum::routing::post(add_ingredient))
         .route(
-            "/sources/:ingredient/:source",
+            "/sources/{ingredient}/{sourc}",
             axum::routing::post(update_source),
         )
-        .route("/:id", axum::routing::delete(delete))
+        .route("/{id}", axum::routing::delete(delete))
         .route("/edit", axum::routing::get(edit_ingredient_form))
-        .route("/delete/:id", axum::routing::get(delete_ingredient_form))
+        .route("/delete/{id}", axum::routing::get(delete_ingredient_form))
         .route(
-            "/sources/delete/:ingredient_id/:source_id",
+            "/sources/delete/{ingredient_id}/{source_id}",
             axum::routing::get(delete_source),
         )
         .route_layer(login_required!(Backend, login_url = LOGIN_URL))
-        .route("/sources/:id", axum::routing::get(sources_table))
+        .route("/sources/{id}", axum::routing::get(sources_table))
         .route("/search", axum::routing::post(search))
         .route("/", axum::routing::get(ingredients_view))
 }
@@ -220,11 +220,12 @@ async fn delete(state: State<MyAppState>, id: Path<i32>) -> Markup {
     }
 }
 
-pub async fn edit_ingredient_form(old: Option<Form<Ingredient>>) -> Markup {
-    let ingredient = old.unwrap_or(Form(Ingredient {
+#[axum::debug_handler]
+pub async fn edit_ingredient_form(Form(old): Form<Option<Ingredient>>) -> Markup {
+    let ingredient = old.unwrap_or(Ingredient {
         ingredient_id: -1,
         ..Default::default()
-    }));
+    });
     let id = ingredient.ingredient_id;
     html! {
         td colspan="6" {

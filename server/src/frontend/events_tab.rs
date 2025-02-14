@@ -14,11 +14,11 @@ use super::html_error;
 pub(crate) fn events_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/", axum::routing::get(event_list))
-        .route("/delete/:event_id", axum::routing::get(delete_dialog))
-        .route("/delete/:event_id", axum::routing::delete(delete))
+        .route("/delete/{event_id}", axum::routing::get(delete_dialog))
+        .route("/delete/{event_id}", axum::routing::delete(delete))
         .route("/add", axum::routing::put(add_form))
         .route("/add", axum::routing::post(add))
-        .route("/duplicate/:event_id", axum::routing::post(duplicate))
+        .route("/duplicate/{event_id}", axum::routing::post(duplicate))
         .nest("/edit", event_detail_tab::event_detail_router())
         .route("/search", axum::routing::post(search))
 }

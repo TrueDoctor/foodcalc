@@ -14,7 +14,7 @@ sqlx = { version = "0.8", features = [
 	"bigdecimal",
 ] }
 
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.8", features = ["macros"] }
 async-trait = "0.1"
 num = "0.4"
 bigdecimal = { version = "0.4", features = ["serde"] }
@@ -26,5 +26,5 @@ serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 time = { version = "0.3", features = ["serde", "parsing", "local-offset"] }
 regex = "1"
-axum-login = "0.16"
+axum-login = "0.17"
 futures = { version = "0.3", default-features = false }

@@ -10,8 +10,8 @@ use crate::ApiState;
 
 pub fn router() -> Router<crate::ApiState> {
     Router::new()
-        .route("/meal/:meal_id", get(calc_meal))
-        .route("/recipe/:recipe_id", get(calc_recipe))
+        .route("/meal/{meal_id}", get(calc_meal))
+        .route("/recipe/{recipe_id}", get(calc_recipe))
 }
 
 async fn calc_meal(State(_state): State<ApiState>, Path(_meal_id): Path<i32>) -> impl IntoResponse {

@@ -1,7 +1,5 @@
-use axum::{
-    extract::{Host, State},
-    response::IntoResponse,
-};
+use axum::{extract::State, response::IntoResponse};
+use axum_extra::extract::Host;
 use foodlib::{AuthSession, User};
 use maud::{html, Markup};
 
@@ -14,6 +12,7 @@ pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
     axum::Router::new().route("/", axum::routing::get(home_view))
 }
 
+#[axum::debug_handler]
 pub async fn home_view(
     mut auth: AuthSession,
     host: Host,

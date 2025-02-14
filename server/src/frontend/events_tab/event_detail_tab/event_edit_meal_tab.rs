@@ -12,9 +12,9 @@ use time::{macros::format_description, OffsetDateTime};
 
 pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/:event_id/:meal_id", post(update_meal))
-        .route("/:event_id/:meal_id", get(meal_form))
-        .route("/:event_id/:meal_id", delete(delete_meal))
+        .route("/{event_id}/{meal_id}", post(update_meal))
+        .route("/{event_id}/{meal_id}", get(meal_form))
+        .route("/{event_id}/{meal_id}", delete(delete_meal))
 }
 
 #[derive(Clone, PartialEq, Deserialize)]
