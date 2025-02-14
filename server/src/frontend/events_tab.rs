@@ -128,6 +128,16 @@ pub async fn event_list(State(state): State<MyAppState>) -> Markup {
                 }
             }
         }
+        //overwrite the default htmx indicator behaviour to swap the text of the button
+        style { ("
+                .inverse-htmx-indicator { display: inline; } 
+                .htmx-request .inverse-htmx-indicator {display: none;} 
+                .htmx-request.inverse-htmx-indicator {display: none;} 
+
+                .my-htmx-indicator { display: none; } 
+                .my-htmx-request .htmx-indicator {display: inline;} 
+                .my-htmx-request.htmx-indicator {display: inline;} 
+            ") }
     }
 }
 
@@ -155,19 +165,9 @@ fn format_event(event: &foodlib::Event) -> Markup {
             td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/{}", event.event_id)) {"Edit"} }
             td { button class="btn btn-primary" hx-target="#content" hx-indicator=("#".to_owned() + &indicator_id) hx-post=(format!("/events/duplicate/{}", event.event_id)) hx-swap="innerHTML show:window:top" {
             span id=(indicator_id) class="inverse-htmx-indicator" { "Duplicate" }
-            span id=(indicator_id) class="htmx-indicator" { "Duplicating..." }
+            span id=(indicator_id) class="my-htmx-indicator" { "Duplicating..." }
             } }
             td { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/delete/{}", event.event_id) ) {"Delete"} }
         }
-        //overwrite the default htmx indicator behaviour to swap the text of the button
-        style { ("
-                .inverse-htmx-indicator { display: inline; } 
-                .htmx-request .inverse-htmx-indicator {display: none;} 
-                .htmx-request.inverse-htmx-indicator {display: none;} 
-
-                .htmx-indicator { display: none; } 
-                .htmx-request .htmx-indicator {display: inline;} 
-                .htmx-request.htmx-indicator {display: inline;} 
-            ") }
     }
 }
