@@ -25,26 +25,36 @@ impl FoodBase {
         recipe_id: i32,
         weight: BigDecimal,
     ) -> eyre::Result<Vec<SubRecipe>> {
-        let subrecipes = sqlx::query_as!(
+        let mut subrecipes = sqlx::query_as!(
             SubRecipe,
             r#"
                 SELECT
                     recipe as "recipe!",
+                    recipe_id as "recipe_id!",
                     ingredient as "ingredient!",
-                    round(weight * $2, 10)  as "weight!",
+                    round(weight * $1, 10)  as "weight!",
                     subrecipe as "subrecipe!",
                     is_subrecipe as "is_subrecipe!",
-                    subrecipe_id as "subrecipe_id!"
-                FROM subrecipes
-                WHERE recipe_id = $1
+                    subrecipe_id as "subrecipe_id!",
+                    subrecipe_hierarchy
+                FROM subrecipes as s
+                WHERE recipe_id = $2
                 ORDER BY recipe, subrecipe_id, ingredient
 
             "#,
-            recipe_id,
             weight,
+            recipe_id,
         )
         .fetch_all(&*self.pg_pool)
         .await?;
+        subrecipes.sort_by_key(|s| {
+            s.subrecipe_hierarchy
+                .clone()
+                .unwrap_or_default()
+                .chars()
+                .filter(|x| *x == '.')
+                .count()
+        });
         Ok(subrecipes)
     }
 
@@ -121,13 +131,15 @@ impl FoodBase {
         weight: BigDecimal,
         date: String,
     ) -> eyre::Result<RecipeInfo> {
-        let subrecipes = self.fetch_subrecipes(recipe_id, weight).await?;
+        let mut subrecipes = self.fetch_subrecipes(recipe_id, weight).await?;
+        sort_subrecipes_topologically(&mut subrecipes);
 
-        let keys = subrecipes
+        let mut keys = subrecipes
             .iter()
             .map(|sr| sr.subrecipe_id)
-            .collect::<HashSet<i32>>();
+            .collect::<Vec<i32>>();
         let mut recipes = Vec::<(Vec<SubRecipe>, Vec<RecipeStep>)>::with_capacity(keys.len());
+        keys.dedup();
         for id in keys {
             let ingredients = subrecipes
                 .iter()
@@ -155,11 +167,13 @@ impl FoodBase {
     //
     //}
 
-    pub async fn format_subrecipes_markdown(&self, subrecipes: Vec<SubRecipe>) -> String {
+    pub async fn format_subrecipes_markdown(&self, mut subrecipes: Vec<SubRecipe>) -> String {
+        sort_subrecipes_topologically(&mut subrecipes);
         let mut keys = subrecipes
             .iter()
             .map(|sr| sr.subrecipe_id)
             .collect::<Vec<i32>>();
+
         keys.dedup();
 
         let mut subrecipe_markdown = Vec::new();
@@ -194,6 +208,18 @@ impl FoodBase {
     // pub async fn generate_recipes_typst(&self, subrecipes: &[SubRecipe]) -> eyre::Result<Vec<u8>> {
     //        crate::typst::export_recipes(subrecipes, self).await
     //    }
+}
+
+fn sort_subrecipes_topologically(subrecipes: &mut Vec<SubRecipe>) {
+    subrecipes.sort_by_key(|s| {
+        s.subrecipe_hierarchy
+            .clone()
+            .unwrap_or_default()
+            .split('.')
+            .position(|id| id == s.subrecipe_id.to_string())
+            .map(|x| x + 1)
+            .unwrap_or(0)
+    });
 }
 
 fn format_recipe_markdown(
