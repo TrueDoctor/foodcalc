@@ -117,17 +117,19 @@ impl FoodBase {
 
     async fn order_topologically(
         &self,
-        recipe_ids: Vec<i32>,
+        ids: Vec<i32>,
     ) -> eyre::Result<Vec<i32>> {
-        let order = sqlx.query!(
+        let mut order = sqlx::query!(
             r#"
-                SELECT recipe_id FROM resolved_recipes
+                SELECT recipe_id as "recipe_id!", acc FROM resolved_recipes
                 WHERE recipe_id = ANY($1)
-                LENGTH(acc) - LENGTH(REPLACE(acc, '.', ''))
             "#,
             &ids,
         ).fetch_all(&*self.pg_pool).await?;
-        return order
+
+        order.sort_by_key(|row| row.acc.to_owned().unwrap_or_default().chars().filter(|&c| c == '.').count());
+        let sorted_ids = order.into_iter().map(|row| row.recipe_id).collect::<Vec<_>>();
+        Ok(sorted_ids)
     }
 
     async fn fetch_recipes_infos(
@@ -143,7 +145,7 @@ impl FoodBase {
             .map(|sr| sr.subrecipe_id)
             .collect::<HashSet<i32>>();
         let mut recipes = Vec::<(Vec<SubRecipe>, Vec<RecipeStep>)>::with_capacity(keys.len());
-        let keys = order_topologically(keys.into_iter().collect::<Vec<i32>>()).await?;
+        let keys = self.order_topologically(keys.into_iter().collect::<Vec<i32>>()).await?;
         for id in keys {
             let ingredients = subrecipes
                 .iter()
