@@ -43,6 +43,8 @@ pub struct SubRecipe {
     pub subrecipe: String,
     pub weight: BigDecimal,
     pub is_subrecipe: bool,
+    pub recipe_id: i32,
+    pub subrecipe_hierarchy: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
