@@ -1,5 +1,6 @@
 use crate::entities::event::*;
 use crate::error::{Error, Result};
+use crate::meal::Meal;
 use bigdecimal::BigDecimal;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -123,6 +124,181 @@ impl EventOps {
 
         tx.commit().await?;
         Ok(())
+    }
+
+    /// Duplicates an event, including all associated data
+    pub async fn duplicate(&self, id: i32) -> Result<i32> {
+        let mut tx = self.pool.begin().await?;
+
+        // Get the event details
+        let event = sqlx::query_as!(
+            Event,
+            r#"
+            SELECT 
+                event_id as id,
+                event_name as name,
+                comment,
+                budget
+            FROM events 
+            WHERE event_id = $1
+            "#,
+            id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let new_name = format!("{} (Copy)", event.name);
+
+        // Create a new event
+        let new_event = sqlx::query_as!(
+            Event,
+            r#"
+            INSERT INTO events (event_name, comment, budget)
+            VALUES ($1, $2, $3)
+            RETURNING event_id as id, event_name as name, comment, budget
+            "#,
+            new_name,
+            event.comment,
+            event.budget,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        // Duplicate meal plans
+        let meals = crate::ops::meals::MealOps::new(self.pool.clone())
+            .get_event_meals(id)
+            .await?;
+
+        for meal in meals {
+            sqlx::query!(
+                    r#"
+                        INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    "#,
+                    new_event.id,
+                    meal.recipe_id,
+                    meal.place_id,
+                    meal.start_time,
+                    meal.end_time,
+                    meal.energy,
+                    meal.servings,
+                    meal.comment,
+                )
+                .execute(&mut *tx)
+                .await?;
+        }
+
+        // Duplicate event source overrides
+        let overrides = sqlx::query_as!(
+            SourceOverride,
+            r#"
+            SELECT event_id, ingredient_source_id as source_id
+            FROM event_source_overrides
+            WHERE event_id = $1
+            "#,
+            id
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+
+        for source_override in overrides {
+            sqlx::query!(
+                r#"
+                INSERT INTO event_source_overrides (event_id, ingredient_source_id)
+                VALUES ($1, $2)
+                "#,
+                new_event.id,
+                source_override.source_id,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // TODO Duplicate shopping tours
+        let tours = sqlx::query_as!(
+            ShoppingTour,
+            r#"
+            SELECT tour_id as id, event_id, tour_date, store_id
+            FROM shopping_tours
+            WHERE event_id = $1
+            "#,
+            id
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+
+        for tour in tours {
+            sqlx::query!(
+                r#"
+                INSERT INTO shopping_tours (event_id, tour_date, store_id)
+                VALUES ($1, $2, $3)
+                "#,
+                new_event.id,
+                tour.tour_date,
+                tour.store_id,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // Duplicate food prep tasks
+        let preps = sqlx::query_as!(
+            FoodPrep,
+            r#"
+            SELECT prep_id as id, event_id, recipe_id, prep_date, use_from, use_until
+            FROM food_prep
+            WHERE event_id = $1
+            "#,
+            id
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+
+        for prep in preps {
+            sqlx::query!(
+                r#"
+                INSERT INTO food_prep (event_id, recipe_id, prep_date, use_from, use_until)
+                VALUES ($1, $2, $3, $4, $5)
+                "#,
+                new_event.id,
+                prep.recipe_id,
+                prep.prep_date,
+                prep.use_from,
+                prep.use_until,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // Duplicate inventory associations
+        let inventories = sqlx::query_as!(
+            EventInventory,
+            r#"
+            SELECT event_id, inventory_id
+            FROM event_inventories
+            WHERE event_id = $1
+            "#,
+            id
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+
+        for inventory in inventories {
+            sqlx::query!(
+                r#"
+                INSERT INTO event_inventories (event_id, inventory_id)
+                VALUES ($1, $2)
+                "#,
+                new_event.id,
+                inventory.inventory_id,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+
+        Ok(new_event.id)
     }
 
     /// Lists all events

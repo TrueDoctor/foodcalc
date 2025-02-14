@@ -131,7 +131,10 @@ pub async fn export_recipe_pdf(
     }
 }
 
-async fn event_form(state: State<MyAppState>, Path(event_id): Path<i32>) -> Result<Markup, Markup> {
+pub async fn event_form(
+    state: State<MyAppState>,
+    Path(event_id): Path<i32>,
+) -> Result<Markup, Markup> {
     let stores = state
         .get_stores()
         .await
