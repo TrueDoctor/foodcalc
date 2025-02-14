@@ -15,7 +15,10 @@ use num::ToPrimitive;
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
-use crate::{frontend::events_tab::event_detail_tab, MyAppState};
+use crate::{
+    frontend::{events_tab::event_detail_tab, html_error},
+    MyAppState,
+};
 
 pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -27,6 +30,10 @@ pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
         .route("/export/:tour_id/metro", get(export_metro))
         .route("/update_inventory/:tour_id", post(update_inventory))
         .route("/confirm_update/:tour_id", get(confirm_update))
+        .route(
+            "/toggle_inventory/:event_id/:inventory_id",
+            post(toggle_inventory),
+        )
 }
 
 #[derive(Deserialize)]
@@ -35,8 +42,14 @@ struct TourForm {
     tour_id: Option<i32>,
     store_id: i32,
     date: String,
-    inventories: Vec<i32>,
 }
+
+#[derive(Deserialize)]
+struct ToggleForm {
+    checked: bool,
+    tour_id: i32,
+}
+
 async fn add_shopping_tour(state: State<MyAppState>, Path(event_id): Path<i32>) -> Markup {
     shopping_tour_form(state, Path((event_id, -1))).await
 }
@@ -88,7 +101,6 @@ async fn shopping_tour_form(
     } else {
         (default_tour, vec![], vec![])
     };
-    dbg!(&shopping_list);
     let tour_id = if tour_id < 0 { None } else { Some(tour_id) };
 
     let inventory_items = if tour_id.is_some() {
@@ -157,9 +169,10 @@ async fn shopping_tour_form(
                                 div class="flex items-center gap-2" {
                                     input type="checkbox"
                                         class="w-4 h-4"
-                                        name="inventories"
-                                        value=(inventory.id)
-                                        checked[event_inventories.iter().any(|inv| inv.inventory_id == inventory.id)];
+                                        checked[event_inventories.iter().any(|inv| inv.inventory_id == inventory.id)]
+                                        hx-post=(format!("/events/edit/shopping_tours/toggle_inventory/{}/{}", event_id, inventory.id))
+                                        hx-target="#content"
+                                        hx-vals=(format!("{{\"checked\": {}, \"tour_id\": {}}}", !event_inventories.iter().any(|inv| inv.inventory_id == inventory.id), tour_id.unwrap_or_default()));
                                     span { (inventory.name) }
                                 }
                             }
@@ -282,6 +295,33 @@ async fn save_tour(
         }
     }
 
+    // let existing_inventories = state
+    //     .new_lib()
+    //     .events()
+    //     .get_inventories(form.event_id)
+    //     .await
+    //     .unwrap_or_default();
+    // let mut to_remove = existing_inventories.clone();
+    // to_remove.retain(|x| !form.inventories.contains(&x.inventory_id));
+    // for id in to_remove {
+    //     state
+    //         .new_lib()
+    //         .events()
+    //         .remove_inventory(form.event_id, id.inventory_id)
+    //         .await
+    //         .expect("Failed to remove inventory from database");
+    // }
+    // let mut to_remove = existing_inventories.clone();
+    // to_remove.retain(|x| !form.inventories.contains(&x.inventory_id));
+    // for id in to_remove {
+    //     state
+    //         .new_lib()
+    //         .events()
+    //         .add_inventory(form.event_id, id.inventory_id)
+    //         .await
+    //         .expect("Failed to remove inventory from database");
+    // }
+
     // Redirect back to event edit page
     html! {
         (event_detail_tab::event_form(State(state), Path(form.event_id)).await.unwrap_or_default())
@@ -320,27 +360,109 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItem]) ->
     }
 }
 
-async fn confirm_update(Path(tour_id): Path<i32>) -> Markup {
+async fn confirm_update(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> Markup {
+    // Calculate inventory changes
+    let tours = state
+        .new_lib()
+        .events()
+        .get_shopping_list(tour_id)
+        .await
+        .unwrap_or_default();
+    let tour = tours.first().unwrap();
+    let shopping_list = state
+        .new_lib()
+        .events()
+        .get_shopping_list(tour_id)
+        .await
+        .unwrap_or_default();
+    let inventories = state
+        .new_lib()
+        .events()
+        .get_inventories(tour.event_id)
+        .await
+        .unwrap_or_default();
+
+    // Get current inventory states and calculate changes
+    let mut changes = Vec::new();
+    for inv in &inventories {
+        let inventory = state
+            .new_lib()
+            .inventories()
+            .get_inventory(inv.inventory_id)
+            .await
+            .unwrap();
+        let items = state
+            .new_lib()
+            .inventories()
+            .get_inventory_items(inv.inventory_id)
+            .await
+            .unwrap_or_default();
+        for item in &shopping_list {
+            if let Some(current_item) = items.iter().find(|i| i.ingredient_id == item.ingredient_id)
+            {
+                let new_amount = current_item.amount.clone() - item.weight.clone();
+                if new_amount != current_item.amount {
+                    changes.push((
+                        inventory.name.clone(),
+                        item.ingredient_name.clone(),
+                        current_item.amount.clone(),
+                        item.weight.clone(),
+                        new_amount,
+                    ));
+                }
+            }
+        }
+    }
+
     html! {
         div class="flex flex-col space-y-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg" {
             h3 class="text-xl text-red-600 dark:text-red-400" { "Warning!" }
-            p class="text-gray-700 dark:text-gray-300" {
+            p class="text-gray-700 dark:text-gray-300 mb-4" {
                 "This will subtract the listed amounts from your inventories. This action cannot be undone."
             }
-            div class="flex space-x-2 justify-end" {
-                button class="btn btn-primary"
-                    hx-get=(format!("/events/edit/shopping_tours/export/{}/plain", tour_id))
-                    hx-target="this"
-                    target="_blank" {
-                    "Review List First"
+
+            // Inventory changes table
+            @if !changes.is_empty() {
+                div class="overflow-x-auto mb-4" {
+                    table class="w-full text-inherit table-auto min-w-[500px]" {
+                        thead {
+                            tr {
+                                th { "Inventory" }
+                                th { "Product" }
+                                th class="text-right" { "Current" }
+                                th class="text-right" { "Change" }
+                                th class="text-right" { "New Value" }
+                            }
+                        }
+                        tbody {
+                            @for (inv_name, prod_name, current, change, new_val) in &changes {
+                                tr {
+                                    td { (inv_name) }
+                                    td { (prod_name) }
+                                    td class="text-right" { (format!("{:.2} kg", current)) }
+                                    td class="text-right text-red-600" { (format!("-{:.2} kg", change)) }
+                                    td class="text-right" { (format!("{:.2} kg", new_val)) }
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+
+            div class="flex flex-row-reverse space-x-4 space-x-reverse" {
                 button class="btn btn-cancel"
                     hx-post=(format!("/events/edit/shopping_tours/update_inventory/{}", tour_id))
                     hx-target="#content" {
                     "Apply Changes"
                 }
+                a class="btn btn-primary"
+                    href=(format!("/events/edit/shopping_tours/export/{}/plain", tour_id))
+                    target="_blank" {
+                    "Review List in New Tab"
+                }
                 button class="btn btn-abort"
-                    onclick="this.closest('div.flex.flex-col').remove()" {
+                    hx-get=(format!("/events/edit/shopping_tours/edit/{}/{}", tour.event_id, tour_id))
+                    hx-target="#content" {
                     "Cancel"
                 }
             }
@@ -525,6 +647,33 @@ async fn process_shopping_list_item(
     }
 
     Ok(())
+}
+
+async fn toggle_inventory(
+    State(state): State<MyAppState>,
+    Path((event_id, inventory_id)): Path<(i32, i32)>,
+    Form(form): Form<ToggleForm>,
+) -> Markup {
+    let result = if form.checked {
+        state
+            .new_lib()
+            .events()
+            .add_inventory(event_id, inventory_id)
+            .await
+            .map(|_| ())
+    } else {
+        state
+            .new_lib()
+            .events()
+            .remove_inventory(event_id, inventory_id)
+            .await
+    };
+
+    if let Err(e) = result {
+        return html_error(&e.to_string(), "");
+    }
+
+    shopping_tour_form(State(state), Path((event_id, form.tour_id))).await
 }
 
 async fn update_inventory(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> Markup {
