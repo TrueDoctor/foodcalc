@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use axum::{
     extract::{Form, Path, State},
     response::{IntoResponse, Response},

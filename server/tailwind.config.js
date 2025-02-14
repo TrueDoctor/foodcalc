@@ -1,4 +1,4 @@
-export const content = ["./src/frontend/**/*.rs"]
+export const content = ["./src/frontend/**/*.rs", "./src/htmx_middleware.rs"]
 
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);

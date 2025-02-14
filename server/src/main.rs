@@ -15,6 +15,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use foodlib::Backend;
 mod frontend;
+mod htmx_middleware;
 
 #[derive(Clone)]
 pub struct MyAppState {
@@ -94,7 +95,8 @@ async fn main() {
         .with_state(state)
         .layer(auth_layer)
         .layer(CorsLayer::very_permissive())
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn(htmx_middleware::htmx_middleware));
 
     println!("Listening on http://localhost:{port}");
 

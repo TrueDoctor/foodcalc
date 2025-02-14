@@ -32,7 +32,7 @@ pub fn frontend_router() -> Router {
 }
 
 thread_local! {
-    static CSS_HASH: u64 = {
+    pub (crate) static CSS_HASH: u64 = {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         hasher.write(include_str!("index.css").as_bytes());
         hasher.finish()

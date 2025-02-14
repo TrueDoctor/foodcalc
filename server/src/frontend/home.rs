@@ -1,9 +1,12 @@
-use axum::extract::{Host, State};
+use axum::{
+    extract::{Host, State},
+    response::IntoResponse,
+};
 use foodlib::{AuthSession, User};
-use maud::{html, Markup, DOCTYPE};
+use maud::{html, Markup};
 
 use crate::{
-    frontend::{ingredients_tab::ingredients_view, CSS_HASH, LOGIN_URL},
+    frontend::{ingredients_tab::ingredients_view, LOGIN_URL},
     MyAppState,
 };
 
@@ -11,7 +14,11 @@ pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
     axum::Router::new().route("/", axum::routing::get(home_view))
 }
 
-pub async fn home_view(mut auth: AuthSession, host: Host, state: State<MyAppState>) -> Markup {
+pub async fn home_view(
+    mut auth: AuthSession,
+    host: Host,
+    state: State<MyAppState>,
+) -> impl IntoResponse {
     let (host, _) = host.0.split_once(':').unwrap_or_default();
     #[cfg(debug_assertions)]
     if host == "127.0.0.1" || host == "localhost" {
@@ -26,24 +33,7 @@ pub async fn home_view(mut auth: AuthSession, host: Host, state: State<MyAppStat
         auth.login(&user).await.unwrap();
         log::info!("logged in test user");
     }
-    html! {
-        (DOCTYPE)
-        head {
-            title { "Foodcalc" }
-            link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x))) {}
-            script src="https://unpkg.com/htmx.org@1.9.6" {}
-            script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/debug.js" {}
-            meta name="viewport" content="width=800, initial-scale=1";
-        }
-        body class="
-            bg-light-bg-light text-gray-800
-            dark:bg-dark-bg-dark dark:text-gray-100" {
-            div {
-                (navbar())
-                (content(state).await)
-            }
-        }
-    }
+    ([("HX-Replace-Url", "ingredients")], content(state).await)
 }
 
 pub async fn content(State(state): State<MyAppState>) -> Markup {

@@ -1,6 +1,5 @@
 use crate::entities::event::*;
 use crate::error::{Error, Result};
-use crate::meal::Meal;
 use bigdecimal::BigDecimal;
 use sqlx::PgPool;
 use std::sync::Arc;
