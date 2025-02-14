@@ -398,6 +398,24 @@ impl EventOps {
         Ok(records)
     }
 
+    /// Gets shopping tour by id
+    pub async fn get_shopping_tour(&self, tour_id: i32) -> Result<ShoppingTour> {
+        let records = sqlx::query_as!(
+            ShoppingTour,
+            r#"
+            SELECT tour_id as id, event_id, tour_date, store_id
+            FROM shopping_tours
+            WHERE tour_id = $1
+            ORDER BY tour_date
+            "#,
+            tour_id
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
     /// Gets the shopping list for a specific tour
     pub async fn get_shopping_list(&self, tour_id: i32) -> Result<Vec<ShoppingListItem>> {
         let records = sqlx::query_as!(
@@ -680,6 +698,7 @@ impl EventOps {
             SELECT event_id, inventory_id
             FROM event_inventories
             WHERE event_id = $1
+            ORDER BY inventory_id
             "#,
             event_id
         )

@@ -15,6 +15,7 @@ use serde::Deserialize;
 use time::macros::format_description;
 
 mod event_edit_meal_tab;
+mod shopping_tours;
 
 use crate::{
     frontend::{html_error, LOGIN_URL},
@@ -43,6 +44,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
             "/event_edit_meal",
             event_edit_meal_tab::event_edit_meal_router(),
         )
+        .nest("/shopping_tours", shopping_tours::shopping_tour_router())
 }
 
 pub async fn delete_override_dialog(
@@ -196,6 +198,7 @@ pub async fn event_form(
                 option value=(ingredient.name) {}
             }
         }
+        (render_shopping_tours(&state, event_id).await)
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Ingredient Sources Overrides" }
         }
@@ -271,6 +274,53 @@ async fn ingredients_per_serving(state: State<MyAppState>, meal_id: Path<i32>) -
                     }
                 }
                 button class="btn btn-primary" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
+            }
+        }
+    }
+}
+
+pub async fn render_shopping_tours(state: &State<MyAppState>, event_id: i32) -> Markup {
+    let tours = state
+        .get_event_shopping_tours(event_id)
+        .await
+        .unwrap_or_default();
+
+    html! {
+        div class="flex-col items-center justify-center mb-2" {
+            p class="text-2xl" { "Shopping Tours" }
+        }
+        div class="flex flex-row items-center justify-center mb-2" {
+            button class="btn btn-primary"
+                hx-get=(format!("/events/edit/shopping_tours/add/{}", event_id))
+                hx-swap="innerHtml show:window:top"
+                hx-target="#content" { "Add Shopping Tour" }
+        }
+        table class="w-full text-inherit table-auto object-center table-fixed" {
+            thead {
+                tr {
+                    th { "Date" }
+                    th { "Store" }
+                    th {} th {} th {}
+                }
+            }
+            tbody {
+                @for tour in tours {
+                    tr {
+                        td { (tour.tour_date.format(&time::format_description::parse("[day].[month] [hour]:[minute]").unwrap()).unwrap()) }
+                        td { (tour.store_name) }
+                        td {
+                            button class="btn btn-primary"
+                                hx-get=(format!("/events/edit/shopping_tours/edit/{}/{}", event_id, tour.tour_id))
+                                hx-swap="innerHtml show:window:top"
+                                hx-target="#content" { "Edit" }
+                        }
+                        td {
+                            button class="btn btn-cancel"
+                                hx-delete=(format!("/events/edit/shopping_tours/delete/{}/{}", event_id, tour.tour_id))
+                                hx-target="#content" { "Delete" }
+                        }
+                    }
+                }
             }
         }
     }

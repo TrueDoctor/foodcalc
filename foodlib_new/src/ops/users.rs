@@ -103,7 +103,8 @@ impl UserOps {
 
     pub async fn get_user_by_string_reference(&self, reference: String) -> Option<User> {
         let id = reference.parse::<i64>().unwrap_or(-1);
-        let user = sqlx::query_as!(
+
+        sqlx::query_as!(
             User,
             r#"
             SELECT id, username, email, password_hash, is_admin, created_at
@@ -115,9 +116,7 @@ impl UserOps {
         )
         .fetch_one(&*self.pool)
         .await
-        .ok();
-
-        user
+        .ok()
     }
 
     pub async fn get_all_users(&self) -> Result<Vec<User>> {

@@ -13,6 +13,7 @@ typst = ["foodlib/typst"]
 [dependencies]
 axum.workspace = true
 foodlib = { path = "../foodlib" }
+foodlib_new = { path = "../foodlib_new" }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 mime_guess = "2"
 rand = { version = "0.8", features = ["min_const_gen"] }
@@ -31,6 +32,7 @@ time = { workspace = true }
 log = { workspace = true }
 regex = { workspace = true }
 bigdecimal = { workspace = true }
+futures = { workspace = true }
 serde_json = "1.0.117"
 tower-sessions = { version = "0.13.0", features = ["signed"] }
 tower-sessions-sqlx-store = { version = "0.14.2", features = ["postgres"] }

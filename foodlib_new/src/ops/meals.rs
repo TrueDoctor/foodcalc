@@ -5,7 +5,7 @@ use crate::{
 use bigdecimal::BigDecimal;
 use sqlx::PgPool;
 use std::sync::Arc;
-use time::{macros::time, OffsetDateTime};
+use time::OffsetDateTime;
 
 #[derive(Clone)]
 pub struct MealOps {
@@ -123,6 +123,7 @@ impl MealOps {
     }
 
     /// Update a single meal.
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_meal(
         &self,
         meal_id: i32,
@@ -171,6 +172,7 @@ impl MealOps {
     }
 
     /// Add a new meal.
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_meal(
         &self,
         event_id: i32,

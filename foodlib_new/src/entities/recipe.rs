@@ -1,7 +1,6 @@
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
-use time::OffsetDateTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recipe {

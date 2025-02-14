@@ -714,7 +714,6 @@ pub struct Store {
 
 #[cfg(test)]
 mod tests {
-    use crate::PgPool;
     #[test]
     fn test_unit_parsing() {
         use super::*;

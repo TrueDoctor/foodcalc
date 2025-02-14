@@ -1,7 +1,4 @@
-use crate::{
-    entities::inventory::*,
-    error::{Error, Result},
-};
+use crate::{entities::inventory::*, error::Result};
 use sqlx::PgPool;
 use std::sync::Arc;
 
