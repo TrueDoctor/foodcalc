@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use foodlib_new::{error::Error as NewError, FoodLib};
+use foodlib_new::FoodLib;
 use sqlx::PgPool;
 
 mod events;

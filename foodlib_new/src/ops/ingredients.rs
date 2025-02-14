@@ -1,9 +1,6 @@
 // foodlib_new/src/ops/ingredients.rs
 
-use crate::{
-    entities::ingredient::*,
-    error::{Error, Result},
-};
+use crate::{entities::ingredient::*, error::Result};
 use sqlx::PgPool;
 use std::sync::Arc;
 

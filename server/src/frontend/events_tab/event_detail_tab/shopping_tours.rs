@@ -2,12 +2,12 @@
 use axum::{
     extract::{Form, Path, State},
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{get, post},
 };
 use bigdecimal::BigDecimal;
 use foodlib_new::error::{Error, Result};
 use foodlib_new::{
-    event::{EventInventory, ShoppingListItem, ShoppingTour},
+    event::{ShoppingListItem, ShoppingTour},
     inventory::InventoryItem,
 };
 use maud::{html, Markup};
@@ -25,7 +25,6 @@ pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
         .route("/add/:event_id", get(add_shopping_tour))
         .route("/edit/:event_id/:tour_id", get(shopping_tour_form))
         .route("/save", post(save_tour))
-        // .route("/delete/:event_id/:tour_id", delete(delete_tour))
         .route("/export/:tour_id/plain", get(export_plain))
         .route("/export/:tour_id/metro", get(export_metro))
         .route("/update_inventory/:tour_id", post(update_inventory))
@@ -295,33 +294,6 @@ async fn save_tour(
         }
     }
 
-    // let existing_inventories = state
-    //     .new_lib()
-    //     .events()
-    //     .get_inventories(form.event_id)
-    //     .await
-    //     .unwrap_or_default();
-    // let mut to_remove = existing_inventories.clone();
-    // to_remove.retain(|x| !form.inventories.contains(&x.inventory_id));
-    // for id in to_remove {
-    //     state
-    //         .new_lib()
-    //         .events()
-    //         .remove_inventory(form.event_id, id.inventory_id)
-    //         .await
-    //         .expect("Failed to remove inventory from database");
-    // }
-    // let mut to_remove = existing_inventories.clone();
-    // to_remove.retain(|x| !form.inventories.contains(&x.inventory_id));
-    // for id in to_remove {
-    //     state
-    //         .new_lib()
-    //         .events()
-    //         .add_inventory(form.event_id, id.inventory_id)
-    //         .await
-    //         .expect("Failed to remove inventory from database");
-    // }
-
     // Redirect back to event edit page
     html! {
         (event_detail_tab::event_form(State(state), Path(form.event_id)).await.unwrap_or_default())
@@ -347,9 +319,9 @@ fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItem]) -> &'stat
 fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItem]) -> String {
     let inv_amount = inventory
         .iter()
-        .find(|i| i.ingredient_id == item.ingredient_id)
+        .filter(|i| i.ingredient_id == item.ingredient_id)
         .map(|i| i.amount.clone())
-        .unwrap_or_default();
+        .sum::<BigDecimal>();
 
     if inv_amount >= item.weight {
         "Available".to_string()
@@ -357,116 +329,6 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItem]) ->
         format!("Insufficient ({:.2} kg available)", inv_amount)
     } else {
         "Not in inventory".to_string()
-    }
-}
-
-async fn confirm_update(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> Markup {
-    // Calculate inventory changes
-    let tours = state
-        .new_lib()
-        .events()
-        .get_shopping_list(tour_id)
-        .await
-        .unwrap_or_default();
-    let tour = tours.first().unwrap();
-    let shopping_list = state
-        .new_lib()
-        .events()
-        .get_shopping_list(tour_id)
-        .await
-        .unwrap_or_default();
-    let inventories = state
-        .new_lib()
-        .events()
-        .get_inventories(tour.event_id)
-        .await
-        .unwrap_or_default();
-
-    // Get current inventory states and calculate changes
-    let mut changes = Vec::new();
-    for inv in &inventories {
-        let inventory = state
-            .new_lib()
-            .inventories()
-            .get_inventory(inv.inventory_id)
-            .await
-            .unwrap();
-        let items = state
-            .new_lib()
-            .inventories()
-            .get_inventory_items(inv.inventory_id)
-            .await
-            .unwrap_or_default();
-        for item in &shopping_list {
-            if let Some(current_item) = items.iter().find(|i| i.ingredient_id == item.ingredient_id)
-            {
-                let new_amount = current_item.amount.clone() - item.weight.clone();
-                if new_amount != current_item.amount {
-                    changes.push((
-                        inventory.name.clone(),
-                        item.ingredient_name.clone(),
-                        current_item.amount.clone(),
-                        item.weight.clone(),
-                        new_amount,
-                    ));
-                }
-            }
-        }
-    }
-
-    html! {
-        div class="flex flex-col space-y-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg" {
-            h3 class="text-xl text-red-600 dark:text-red-400" { "Warning!" }
-            p class="text-gray-700 dark:text-gray-300 mb-4" {
-                "This will subtract the listed amounts from your inventories. This action cannot be undone."
-            }
-
-            // Inventory changes table
-            @if !changes.is_empty() {
-                div class="overflow-x-auto mb-4" {
-                    table class="w-full text-inherit table-auto min-w-[500px]" {
-                        thead {
-                            tr {
-                                th { "Inventory" }
-                                th { "Product" }
-                                th class="text-right" { "Current" }
-                                th class="text-right" { "Change" }
-                                th class="text-right" { "New Value" }
-                            }
-                        }
-                        tbody {
-                            @for (inv_name, prod_name, current, change, new_val) in &changes {
-                                tr {
-                                    td { (inv_name) }
-                                    td { (prod_name) }
-                                    td class="text-right" { (format!("{:.2} kg", current)) }
-                                    td class="text-right text-red-600" { (format!("-{:.2} kg", change)) }
-                                    td class="text-right" { (format!("{:.2} kg", new_val)) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            div class="flex flex-row-reverse space-x-4 space-x-reverse" {
-                button class="btn btn-cancel"
-                    hx-post=(format!("/events/edit/shopping_tours/update_inventory/{}", tour_id))
-                    hx-target="#content" {
-                    "Apply Changes"
-                }
-                a class="btn btn-primary"
-                    href=(format!("/events/edit/shopping_tours/export/{}/plain", tour_id))
-                    target="_blank" {
-                    "Review List in New Tab"
-                }
-                button class="btn btn-abort"
-                    hx-get=(format!("/events/edit/shopping_tours/edit/{}/{}", tour.event_id, tour_id))
-                    hx-target="#content" {
-                    "Cancel"
-                }
-            }
-        }
     }
 }
 
@@ -580,75 +442,6 @@ fn calculate_subtraction(available: &BigDecimal, remaining: &BigDecimal) -> BigD
     }
 }
 
-/// Updates a single inventory item and returns how much was actually subtracted
-async fn update_single_inventory(
-    ops: &foodlib_new::FoodLib,
-    inventory_id: i32,
-    ingredient_id: i32,
-    to_subtract: BigDecimal,
-) -> Result<BigDecimal> {
-    let items = ops.inventories().get_inventory_items(inventory_id).await?;
-
-    if let Some(current_item) = items.iter().find(|i| i.ingredient_id == ingredient_id) {
-        let new_amount = current_item.amount.clone() - to_subtract.clone();
-
-        ops.inventories()
-            .update_inventory_item(InventoryItem {
-                inventory_id,
-                ingredient_id,
-                amount: new_amount,
-            })
-            .await?;
-
-        Ok(to_subtract)
-    } else {
-        Ok(BigDecimal::from(0))
-    }
-}
-
-/// Processes a single shopping list item across multiple inventories
-async fn process_shopping_list_item(
-    ops: &foodlib_new::FoodLib,
-    item: &ShoppingListItem,
-    inventories: &[EventInventory],
-) -> Result<()> {
-    let mut remaining = item.weight.clone();
-
-    for inv in inventories {
-        // Skip if we've already covered the full amount
-        if remaining <= BigDecimal::from(0) {
-            break;
-        }
-
-        // Try to update this inventory and track what was subtracted
-        if let Ok(items) = ops
-            .inventories()
-            .get_inventory_items(inv.inventory_id)
-            .await
-        {
-            if let Some(current_item) = items.iter().find(|i| i.ingredient_id == item.ingredient_id)
-            {
-                let to_subtract = calculate_subtraction(&current_item.amount, &remaining);
-
-                if to_subtract > BigDecimal::from(0) {
-                    if let Ok(subtracted) = update_single_inventory(
-                        ops,
-                        inv.inventory_id,
-                        item.ingredient_id,
-                        to_subtract,
-                    )
-                    .await
-                    {
-                        remaining -= subtracted;
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
 async fn toggle_inventory(
     State(state): State<MyAppState>,
     Path((event_id, inventory_id)): Path<(i32, i32)>,
@@ -678,28 +471,23 @@ async fn toggle_inventory(
 
 async fn update_inventory(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> Markup {
     let lib = state.new_lib();
+    let result = || async {
+        let changes = calculate_inventory_changes(lib, tour_id).await?;
+        let tour = lib.events().get_shopping_tour(tour_id).await?;
 
-    // Get tour and associated data
-    let result = async {
-        let tours = lib.events().get_shopping_tours(tour_id).await?;
-        let tour = tours.first().ok_or(Error::NotFound {
-            entity: "ShoppingTour",
-            id: tour_id.to_string(),
-        })?;
-
-        let shopping_list = lib.events().get_shopping_list(tour_id).await?;
-        let inventories = lib.events().get_inventories(tour.event_id).await?;
-
-        // Process each shopping list item
-        for item in shopping_list {
-            process_shopping_list_item(lib, &item, &inventories).await?;
+        for (_, inventory_id, _, ingredient_id, _, _, amount) in changes {
+            lib.inventories()
+                .update_inventory_item(InventoryItem {
+                    inventory_id,
+                    ingredient_id,
+                    amount,
+                })
+                .await?;
         }
+        Ok::<i32, Error>(tour.event_id)
+    };
 
-        Ok::<_, Error>(tour.event_id)
-    }
-    .await;
-
-    match result {
+    match result().await {
         Ok(event_id) => {
             // Redirect back to event page
             event_detail_tab::event_form(State(state), Path(event_id))
@@ -710,6 +498,126 @@ async fn update_inventory(State(state): State<MyAppState>, Path(tour_id): Path<i
             html! {
                 div class="error" {
                     ("Failed to update inventory: ") (e.to_string())
+                }
+            }
+        }
+    }
+}
+
+/// Calculate inventory changes showing what will be deducted from each inventory
+async fn calculate_inventory_changes(
+    lib: &foodlib_new::FoodLib,
+    tour_id: i32,
+) -> Result<Vec<(String, i32, String, i32, BigDecimal, BigDecimal, BigDecimal)>> {
+    let tour = lib.events().get_shopping_tour(tour_id).await?;
+    let inventory_ops = lib.inventories();
+
+    let shopping_list = lib.events().get_shopping_list(tour_id).await?;
+    let inventories = lib.events().get_inventories(tour.event_id).await?;
+    let inventories = inventories
+        .iter()
+        .map(|inv| inv.inventory_id)
+        .map(|id| inventory_ops.get_inventory(id));
+    let inventories = ::futures::future::join_all(inventories).await;
+
+    let mut changes = Vec::new();
+
+    // For each item in the shopping list
+    for item in &shopping_list {
+        let mut remaining = item.weight.clone();
+
+        // Try to satisfy from each inventory in order
+        for inv in &inventories {
+            let inv = inv.as_ref().unwrap().clone();
+            if remaining <= BigDecimal::from(0) {
+                break;
+            }
+
+            if let Ok(items) = lib.inventories().get_inventory_items(inv.id).await {
+                if let Some(current_item) =
+                    items.iter().find(|i| i.ingredient_id == item.ingredient_id)
+                {
+                    let to_subtract = calculate_subtraction(&current_item.amount, &remaining);
+
+                    if to_subtract > BigDecimal::from(0) {
+                        let new_amount = current_item.amount.clone() - to_subtract.clone();
+                        changes.push((
+                            inv.name.clone(),
+                            inv.id,
+                            item.ingredient_name.clone(),
+                            item.ingredient_id,
+                            current_item.amount.clone(),
+                            to_subtract.clone(),
+                            new_amount,
+                        ));
+                        remaining -= to_subtract;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(changes)
+}
+
+async fn confirm_update(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> Markup {
+    let lib = state.new_lib();
+
+    // Calculate expected changes
+    let changes = calculate_inventory_changes(lib, tour_id).await.unwrap();
+
+    let tour = lib.events().get_shopping_tour(tour_id).await.unwrap();
+
+    html! {
+        div class="flex flex-col space-y-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg" {
+            h3 class="text-xl text-red-600 dark:text-red-400" { "Warning!" }
+            p class="text-gray-700 dark:text-gray-300 mb-4" {
+                "This will subtract the listed amounts from your inventories. This action cannot be undone."
+            }
+
+            // Inventory changes table
+            @if !changes.is_empty() {
+                div class="overflow-x-auto mb-4" {
+                    table class="w-full text-inherit table-auto min-w-[500px]" {
+                        thead {
+                            tr {
+                                th { "Inventory" }
+                                th { "Product" }
+                                th class="text-right" { "Current" }
+                                th class="text-right" { "Change" }
+                                th class="text-right" { "New Value" }
+                            }
+                        }
+                        tbody {
+                            @for (inv_name, _inv_id, prod_name, _ingredient_id, current, change, new_val) in &changes {
+                                tr {
+                                    td { (inv_name) }
+                                    td { (prod_name) }
+                                    td class="text-right" { (format!("{:.2} kg", current)) }
+                                    td class="text-right text-red-600" { (format!("-{:.2} kg", change)) }
+                                    td class="text-right" { (format!("{:.2} kg", new_val)) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            div class="flex flex-row-reverse space-x-4 space-x-reverse" {
+                button class="btn btn-cancel"
+                    hx-post=(format!("/events/edit/shopping_tours/update_inventory/{}", tour_id))
+                    hx-target="#content" {
+                    "Apply Changes"
+                }
+                a class="btn btn-primary"
+                    href=(format!("/events/edit/shopping_tours/export/{}/plain", tour_id))
+                    target="_blank" {
+                    "Review List in New Tab"
+                }
+                button class="btn btn-abort"
+                    hx-get=(format!("/events/edit/shopping_tours/edit/{}/{}", tour.event_id, tour_id))
+                    hx-target="#content" {
+                    "Cancel"
                 }
             }
         }

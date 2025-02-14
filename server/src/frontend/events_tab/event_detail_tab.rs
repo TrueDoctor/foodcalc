@@ -292,6 +292,7 @@ pub async fn render_shopping_tours(state: &State<MyAppState>, event_id: i32) -> 
         div class="flex flex-row items-center justify-center mb-2" {
             button class="btn btn-primary"
                 hx-get=(format!("/events/edit/shopping_tours/add/{}", event_id))
+                hx-swap="innerHtml show:window:top"
                 hx-target="#content" { "Add Shopping Tour" }
         }
         table class="w-full text-inherit table-auto object-center table-fixed" {
@@ -310,6 +311,7 @@ pub async fn render_shopping_tours(state: &State<MyAppState>, event_id: i32) -> 
                         td {
                             button class="btn btn-primary"
                                 hx-get=(format!("/events/edit/shopping_tours/edit/{}/{}", event_id, tour.tour_id))
+                                hx-swap="innerHtml show:window:top"
                                 hx-target="#content" { "Edit" }
                         }
                         td {

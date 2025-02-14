@@ -1,13 +1,9 @@
 // foodlib_new/src/ops/stores.rs
 
-use bigdecimal::BigDecimal;
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use crate::{
-    entities::store::*,
-    error::{Error, Result},
-};
+use crate::{entities::store::*, error::Result};
 
 #[derive(Clone)]
 pub struct StoreOps {
