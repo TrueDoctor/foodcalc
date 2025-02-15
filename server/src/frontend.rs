@@ -49,4 +49,4 @@ async fn static_style() -> impl IntoResponse {
 pub type MResponse = foodlib_new::Result<Markup>;
 pub type IResponse = foodlib_new::Result<Response>;
 
-pub use foodlib_new::error::html_error;
+pub use foodlib_new::error::redirect_html_error as html_error;

@@ -41,7 +41,10 @@ pub async fn login_view(Form(redirect): Form<RedirectUrl>) -> impl IntoResponse 
     };
 
     (
-        [("HX-Retarget", "#content"), ("HX-Reswap", "afterbegin")],
+        [
+            ("HX-Retarget", "#content"),
+            ("HX-Reswap", "afterbegin show:top"),
+        ],
         html,
     )
 }

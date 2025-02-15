@@ -8,7 +8,7 @@ use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgInterval;
 
-use crate::MyAppState;
+use crate::{frontend::MResponse, MyAppState};
 
 pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -75,18 +75,6 @@ fn pg_interval_from_minutes(minutes: f64) -> PgInterval {
         months: 0,
         days: 0,
         microseconds: (60_000_000. * minutes) as i64,
-    }
-}
-
-fn return_to_recipe_edit_error(recipe_id: i32) -> Markup {
-    html! {
-        div id="error" class="flex flex-col items-center justify-center text-red-500" {
-            div {
-                h1 { "Error" }
-                p { "Failed to edit Recipe" }
-            }
-            button class="btn btn-primary" hx-get=(format!("/recipes/edit/{}", recipe_id)) hx-swap="outerHTML" hx-target="#error" { "Return to Recipe Edit" }
-        }
     }
 }
 
@@ -218,7 +206,7 @@ pub async fn handle_step_change(
 pub async fn handle_step_order_change(
     State(state): State<MyAppState>,
     Form(data): axum::extract::Form<UpdateRecipeStepHeader>,
-) -> Markup {
+) -> MResponse {
     let step = RecipeStep {
         step_id: data.step_id,
         step_order: data.step_order,
@@ -239,7 +227,7 @@ pub async fn handle_step_order_change(
 pub async fn handle_ingredient_delete(
     State(state): State<MyAppState>,
     Form(data): axum::extract::Form<UpdateIngredientHeader>,
-) -> Markup {
+) -> MResponse {
     state
         .db_connection
         .delete_recipe_ingredient(data.recipe_id, data.ingredient_id)
@@ -257,7 +245,7 @@ pub async fn handle_ingredient_delete(
 pub async fn handle_subrecipe_delete(
     State(state): State<MyAppState>,
     Path((recipe_id, subrecipe_id)): Path<(i32, i32)>,
-) -> Markup {
+) -> MResponse {
     state
         .db_connection
         .delete_recipe_meta_ingredient(recipe_id, subrecipe_id)
@@ -275,7 +263,7 @@ pub async fn handle_subrecipe_delete(
 pub async fn handle_step_delete(
     State(state): State<MyAppState>,
     Path((recipe_id, step_id)): Path<(i32, i32)>,
-) -> Markup {
+) -> MResponse {
     state
         .db_connection
         .delete_step(recipe_id, step_id)
@@ -293,7 +281,7 @@ pub async fn handle_step_delete(
 pub async fn handle_ingredient_add(
     State(state): State<MyAppState>,
     Form(data): axum::extract::Form<UpdateIngredientHeader>,
-) -> Markup {
+) -> MResponse {
     let ingredient_id = state
         .db_connection
         .get_ingredient_from_string_reference(data.ingredient_name.clone())
@@ -305,14 +293,10 @@ pub async fn handle_ingredient_add(
             comment: None,
         })
         .ingredient_id;
-    dbg!(format!(
-        "requested name {} yielded ingredient id {}",
-        data.ingredient_name, ingredient_id
-    ));
     if ingredient_id < 0 {
         add_ingredient_form(State(state), Path(data.recipe_id)).await
     } else {
-        let Ok(res) = state
+        state
             .db_connection
             .add_recipe_ingredient(
                 data.recipe_id,
@@ -320,19 +304,15 @@ pub async fn handle_ingredient_add(
                 data.ingredient_amount,
                 data.ingredient_unit_id,
             )
-            .await
-        else {
-            return return_to_recipe_edit_error(data.recipe_id);
-        };
-        dbg!(res);
-        (recipe_edit_view(State(state), Path(data.recipe_id))).await
+            .await?;
+        recipe_edit_view(State(state), Path(data.recipe_id)).await
     }
 }
 
 pub async fn handle_subrecipe_add(
     State(state): State<MyAppState>,
     Form(data): axum::extract::Form<UpdateSubrecipeHeader>,
-) -> Markup {
+) -> MResponse {
     let subrecipe_id = state
         .db_connection
         .get_recipe_from_string_reference(data.subrecipe_name.clone())
@@ -351,22 +331,18 @@ pub async fn handle_subrecipe_add(
     if subrecipe_id < 0 {
         add_subrecipe_form(State(state), Path(data.recipe_id)).await
     } else {
-        let Ok(res) = state
+        state
             .db_connection
             .add_recipe_meta_ingredient(data.recipe_id, subrecipe_id, data.subrecipe_amount)
-            .await
-        else {
-            return return_to_recipe_edit_error(data.recipe_id);
-        };
-        dbg!(res);
-        (recipe_edit_view(State(state), Path(data.recipe_id))).await
+            .await?;
+        recipe_edit_view(State(state), Path(data.recipe_id)).await
     }
 }
 
 pub async fn handle_step_add(
     State(state): State<MyAppState>,
     Form(data): axum::extract::Form<UpdateRecipeStepHeader>,
-) -> Markup {
+) -> MResponse {
     let step = RecipeStep {
         step_id: data.step_id,
         step_order: data.step_order,
@@ -376,24 +352,17 @@ pub async fn handle_step_add(
         duration_per_kg: pg_interval_from_minutes(data.duration_per_kg_minutes),
         recipe_id: data.recipe_id,
     };
-    let Ok(res) = state.add_recipe_step(&step).await else {
-        return return_to_recipe_edit_error(data.recipe_id);
-    };
-    dbg!(res);
+    state.add_recipe_step(&step).await?;
     (recipe_edit_view(State(state), Path(data.recipe_id))).await
 }
 
 pub async fn add_ingredient_form(
     State(state): State<MyAppState>,
     Path(recipe_id): Path<i32>,
-) -> Markup {
-    let ingredients = state
-        .db_connection
-        .get_ingredients()
-        .await
-        .unwrap_or_default();
-    let unit_types = state.get_units().await.unwrap_or_default();
-    html! {
+) -> MResponse {
+    let ingredients = state.db_connection.get_ingredients().await?;
+    let unit_types = state.get_units().await?;
+    Ok(html! {
         form hx-put="recipes/edit/commit-ingredient" hx-swap="outerHTML" hx-target="#contents" {
             datalist id=("ingredient_data_list") {
                 @for ingredient in ingredients {
@@ -414,15 +383,15 @@ pub async fn add_ingredient_form(
                 button class="btn btn-primary" type="submit" { "Submit" }
             }
         }
-    }
+    })
 }
 
 pub async fn add_subrecipe_form(
     State(state): State<MyAppState>,
     Path(recipe_id): Path<i32>,
-) -> Markup {
-    let subrecipes = state.get_recipes().await.unwrap_or_default();
-    html! {
+) -> MResponse {
+    let subrecipes = state.get_recipes().await?;
+    Ok(html! {
         form hx-put="recipes/edit/commit-subrecipe" hx-swap="outerHTML" hx-target="#contents" {
             datalist id=("subrecipe_data_list") {
                 @for subrecipe in subrecipes {
@@ -438,7 +407,7 @@ pub async fn add_subrecipe_form(
                 button class="btn btn-primary" type="submit" { "Submit" }
             }
         }
-    }
+    })
 }
 
 pub async fn add_step_form(State(_): State<MyAppState>, Path(recipe_id): Path<i32>) -> Markup {
@@ -462,30 +431,28 @@ pub async fn add_step_form(State(_): State<MyAppState>, Path(recipe_id): Path<i3
 pub async fn recipe_edit_view(
     State(state): State<MyAppState>,
     Path(recipe_id): Path<i32>,
-) -> Markup {
+) -> MResponse {
     let subrecipes = state
         .db_connection
         .get_recipe_meta_ingredients(recipe_id)
-        .await
-        .unwrap_or_default();
+        .await?;
 
     let ingredients = state
         .db_connection
         .get_recipe_ingredients(recipe_id)
-        .await
-        .unwrap_or_default();
-    let unit_types = state.get_units().await.unwrap_or_default();
+        .await?;
+    let unit_types = state.get_units().await?;
 
-    let steps = state
-        .db_connection
-        .get_recipe_steps(recipe_id)
-        .await
-        .unwrap_or_default();
+    let steps = state.db_connection.get_recipe_steps(recipe_id).await?;
 
-    html! {
+    let stats = state
+        .new_lib()
+        .recipes()
+        .get_recipe_stats(recipe_id)
+        .await?;
+
+    Ok(html! {
         div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full"{
-            put
-
             div id=("recipe-information") class="w-3/4" {
                 form hx-put="recipes/edit/change-name" hx-indicator=".htmx-indicator" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
@@ -498,6 +465,16 @@ pub async fn recipe_edit_view(
                 form hx-put=(format!("recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" hx-target="#styling-bullshit" class="w-full flex flex-col items-center justify-center pb-4" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     button type="submit" class="btn btn-primary"  { "Add Subrecipe (+)" }
+                }
+            }
+
+            div class="w-3/4 bg-blue-100 dark:bg-blue-900 p-4 mb-4 rounded-lg" {
+                div class="flex justify-between items-center" {
+                    h3 class="text-lg font-semibold" { "Recipe Weight Diagnostics" }
+                    div class="text-right" {
+                        p { "Total Weight: " (format!("{:.3} kg", stats.weight)) }
+                        p { "Total Energy: " (format!("{:.2} kJ", stats.energy / 1000.0)) }
+                    }
                 }
             }
 
@@ -542,7 +519,7 @@ pub async fn recipe_edit_view(
             }
             span class="htmx-indicator" { "Saving..." }
         }
-    }
+    })
 }
 
 pub trait IngredientTableFormattable {

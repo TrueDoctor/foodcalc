@@ -136,23 +136,25 @@ pub async fn event_form(
     state: State<MyAppState>,
     Path(event_id): Path<i32>,
 ) -> Result<Markup, Error> {
-    let stores = state
-        .get_stores()
-        .await
-        .map_err(|e| Error::Redirect(format!("Failed to fetch stores {e}"), "/events"))?;
+    let stores = state.get_stores().await.map_err(|e| {
+        Error::Redirect(format!("Failed to fetch stores {e}"), "/events".to_owned())
+    })?;
 
     let overrides = state
         .get_event_source_overrides(event_id)
         .await
-        .map_err(|e| Error::Redirect(format!("Failed to fetch sources {e}"), "/events"))?;
-    let ingredients = state
-        .get_ingredients()
-        .await
-        .map_err(|e| Error::Redirect(format!("Failed to fetch ingredients {e}"), "/events"))?;
-    let meals = state
-        .get_event_meals(event_id)
-        .await
-        .map_err(|e| Error::Redirect(format!("Failed to fetch meals: {e}"), "/events"))?;
+        .map_err(|e| {
+            Error::Redirect(format!("Failed to fetch sources {e}"), "/events".to_owned())
+        })?;
+    let ingredients = state.get_ingredients().await.map_err(|e| {
+        Error::Redirect(
+            format!("Failed to fetch ingredients {e}"),
+            "/events".to_owned(),
+        )
+    })?;
+    let meals = state.get_event_meals(event_id).await.map_err(|e| {
+        Error::Redirect(format!("Failed to fetch meals: {e}"), "/events".to_owned())
+    })?;
     let dummy_source = SourceOverrideView {
         ingredient_source_id: -1,
         ingredient_id: -1,
@@ -162,7 +164,7 @@ pub async fn event_form(
 
     let event = state.get_event(event_id).await.ok_or(Error::Redirect(
         "Failed to fetch event".to_owned(),
-        "/events",
+        "/events".to_owned(),
     ))?;
 
     Ok(html! {
@@ -384,7 +386,7 @@ async fn update_override(
     {
         Err(e) => Err(Error::Redirect(
             format!("Failed to add ingredient source\n{e}"),
-            "/events/edit/{event_id}",
+            format!("/events/edit/{event_id}"),
         )),
         Ok(_) => event_form(State(state), Path(event_id)).await,
     }

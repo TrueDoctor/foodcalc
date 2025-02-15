@@ -9,6 +9,8 @@ use maud::{html, Markup};
 use serde::Deserialize;
 
 use crate::frontend::LOGIN_URL;
+
+use super::MResponse;
 mod recipes_edit_tab;
 
 pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
@@ -247,7 +249,7 @@ struct NewRecipe {
     comment: Option<String>,
 }
 
-async fn add_recipe(state: State<MyAppState>, Form(recipe): Form<NewRecipe>) -> Markup {
+async fn add_recipe(state: State<MyAppState>, Form(recipe): Form<NewRecipe>) -> MResponse {
     let recipe = Recipe {
         name: recipe.name,
         comment: recipe.comment,
@@ -255,7 +257,10 @@ async fn add_recipe(state: State<MyAppState>, Form(recipe): Form<NewRecipe>) -> 
     };
     match state.insert_recipe(&recipe).await {
         Ok(recipe) => recipes_edit_tab::recipe_edit_view(state, Path(recipe.recipe_id)).await,
-        Err(e) => html_error(&e.to_string()),
+        Err(e) => Err(foodlib_new::Error::Redirect(
+            format!("{e}"),
+            "/recipes/".into(),
+        )),
     }
 }
 

@@ -45,8 +45,18 @@ pub async fn htmx_middleware(req: Request, next: Next) -> Response<Body> {
                 head {
                     title { "Foodcalc" }
                     link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x)));
-                    script src="https://unpkg.com/htmx.org@1.9.6" {}
-                    script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/debug.js" {}
+                    script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" {}
+                    script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/debug.js" {}
+                    meta name="htmx-config" content=r#"{
+                    "scrollBehavior":"smooth",
+                    "responseHandling": [
+                        {"code":"204", "swap": false},
+                        {"code":"[23]..", "swap": true},
+                        {"code":"422", "swap": true},
+                        {"code":"[45]..", "swap": false, "error":true},
+                        {"code":"...", "swap": true}
+                    ]
+                    }"#;
                     meta name="viewport" content="width=800, initial-scale=1";
                 }
                     body class="

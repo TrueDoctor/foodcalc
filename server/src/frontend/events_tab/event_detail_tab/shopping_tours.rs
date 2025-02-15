@@ -5,7 +5,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use bigdecimal::BigDecimal;
-use foodlib_new::error::{Error, Result};
+use foodlib_new::error::Result;
 use foodlib_new::{
     event::{ShoppingListItem, ShoppingTour},
     inventory::InventoryItem,
@@ -16,7 +16,7 @@ use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
 use crate::{
-    frontend::{events_tab::event_detail_tab, html_error, IResponse, MResponse},
+    frontend::{events_tab::event_detail_tab, IResponse, MResponse},
     MyAppState,
 };
 
