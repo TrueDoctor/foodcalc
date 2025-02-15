@@ -3,6 +3,9 @@ name = "foodlib_new"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+axum = ["dep:axum", "dep:maud"]
+
 [dependencies]
 sqlx.workspace = true
 log.workspace = true
@@ -12,6 +15,9 @@ time.workspace = true
 axum-login.workspace = true
 async-trait.workspace = true
 bcrypt = "0.16.0"
+axum = { workspace = true, optional = true }
+maud = { workspace = true, optional = true }
+eyre = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

@@ -1,4 +1,7 @@
-use crate::{frontend::events_tab::event_detail_tab, frontend::html_error, MyAppState};
+use crate::{
+    frontend::{events_tab::event_detail_tab, html_error, MResponse},
+    MyAppState,
+};
 use axum::{
     extract::{Form, Path, State},
     http::StatusCode,
@@ -31,20 +34,16 @@ pub struct MealForm {
 pub async fn delete_meal(
     state: State<MyAppState>,
     Path((event_id, meal_id)): Path<(i32, i32)>,
-) -> impl IntoResponse {
-    match state.remove_meal(meal_id).await {
-        Ok(_) => Ok(event_detail_tab::event_form(state, Path(event_id))
-            .await
-            .unwrap_or_else(|e| e)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
+) -> MResponse {
+    state.new_lib().meals().remove_meal(meal_id).await?;
+    event_detail_tab::event_form(state, Path(event_id)).await
 }
 
 pub async fn update_meal(
     state: State<MyAppState>,
     Path((event_id, meal_id)): Path<(i32, i32)>,
     Form(meal): Form<MealForm>,
-) -> impl IntoResponse {
+) -> MResponse {
     let append_start = format!("{}:00-00:00", meal.start_time);
     let start_time = OffsetDateTime::parse(
         &append_start,
@@ -85,10 +84,8 @@ pub async fn update_meal(
             .await
     };
     match result {
-        Ok(_) => Ok(event_detail_tab::event_form(state, Path(event_id))
-            .await
-            .unwrap_or_else(|e| e)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(_) => event_detail_tab::event_form(state, Path(event_id)).await,
+        Err(e) => Err(e.into()),
     }
 }
 

@@ -2,7 +2,7 @@
 use axum::{
     extract::{Form, Path, State},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use bigdecimal::BigDecimal;
 use foodlib_new::error::{Error, Result};
@@ -16,7 +16,7 @@ use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
 use crate::{
-    frontend::{events_tab::event_detail_tab, html_error},
+    frontend::{events_tab::event_detail_tab, html_error, IResponse, MResponse},
     MyAppState,
 };
 
@@ -29,6 +29,7 @@ pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
         .route("/export/{tour_id}/metro", get(export_metro))
         .route("/update_inventory/{tour_id}", post(update_inventory))
         .route("/confirm_update/{tour_id}", get(confirm_update))
+        .route("/{tour_id}", delete(delete_shopping_tour))
         .route(
             "/toggle_inventory/{event_id}/{inventory_id}",
             post(toggle_inventory),
@@ -49,21 +50,24 @@ struct ToggleForm {
     tour_id: i32,
 }
 
-async fn add_shopping_tour(state: State<MyAppState>, Path(event_id): Path<i32>) -> Markup {
+async fn add_shopping_tour(state: State<MyAppState>, Path(event_id): Path<i32>) -> MResponse {
     shopping_tour_form(state, Path((event_id, -1))).await
+}
+async fn delete_shopping_tour(state: State<MyAppState>, Path(tour_id): Path<i32>) -> MResponse {
+    state
+        .new_lib()
+        .events()
+        .delete_shopping_tour(tour_id)
+        .await?;
+    Ok(html! {})
 }
 
 async fn shopping_tour_form(
     State(state): State<MyAppState>,
     Path((event_id, tour_id)): Path<(i32, i32)>,
-) -> Markup {
-    let stores = state.get_stores().await.unwrap_or_default();
-    let inventories = state
-        .new_lib()
-        .inventories()
-        .get_all_inventories()
-        .await
-        .unwrap_or_default();
+) -> MResponse {
+    let stores = state.new_lib().stores().list().await?;
+    let inventories = state.new_lib().inventories().get_all_inventories().await?;
 
     let default_tour = ShoppingTour {
         event_id,
@@ -120,7 +124,7 @@ async fn shopping_tour_form(
         vec![]
     };
 
-    html! {
+    Ok(html! {
         div class="flex-col space-y-4 w-full" {
             h2 class="text-xl" {
                 @if tour_id.is_some() {
@@ -141,8 +145,8 @@ async fn shopping_tour_form(
                         label for="store_id" { "Store" }
                         select name="store_id" class="text" required {
                             @for store in stores {
-                                option value=(store.store_id)
-                                    selected[store.store_id == tour.store_id] {
+                                option value=(store.id)
+                                    selected[store.id == tour.store_id] {
                                     (store.name)
                                 }
                             }
@@ -248,24 +252,20 @@ async fn shopping_tour_form(
                 }
             }
         }
-    }
+    })
 }
 
-async fn save_tour(
-    State(state): State<MyAppState>,
-    Form(form): Form<TourForm>,
-) -> impl IntoResponse {
+async fn save_tour(State(state): State<MyAppState>, Form(form): Form<TourForm>) -> MResponse {
     // Parse the date
-    let tour_date = time::OffsetDateTime::parse(
-        &format!("{}:00Z", form.date),
-        format_description!(
-            "[year]-[month]-[day]T[hour]:[minute]:second[offset_hour sign:mandatory]"
-        ),
+    let primitive_date = time::PrimitiveDateTime::parse(
+        &form.date,
+        format_description!("[year]-[month]-[day]T[hour]:[minute]"),
     )
-    .unwrap();
+    .map_err(|x| foodlib_new::Error::Misc(x.to_string()))?;
+    let tour_date = primitive_date.assume_utc();
 
     // Create or update tour
-    match form.tour_id {
+    let result = match form.tour_id {
         Some(tour_id) if tour_id > 0 => {
             state
                 .new_lib()
@@ -277,7 +277,6 @@ async fn save_tour(
                     store_id: form.store_id,
                 })
                 .await
-                .ok();
         }
         _ => {
             state
@@ -290,14 +289,16 @@ async fn save_tour(
                     store_id: form.store_id,
                 })
                 .await
-                .ok();
         }
+    };
+    if let Err(ref e) = result {
+        log::error!("Encounterd error while saving tour {e}");
     }
 
     // Redirect back to event edit page
-    html! {
+    Ok(html! {
         (event_detail_tab::event_form(State(state), Path(form.event_id)).await.unwrap_or_default())
-    }
+    })
 }
 
 fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItem]) -> &'static str {
@@ -332,10 +333,7 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItem]) ->
     }
 }
 
-async fn export_plain(
-    State(state): State<MyAppState>,
-    Path(tour_id): Path<i32>,
-) -> impl IntoResponse {
+async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> IResponse {
     let shopping_list = state
         .new_lib()
         .events()
@@ -368,7 +366,7 @@ async fn export_plain(
         ));
         output.push('\n');
     }
-    (
+    Ok(IntoResponse::into_response((
         [
             (
                 axum::http::header::CONTENT_TYPE,
@@ -380,19 +378,11 @@ async fn export_plain(
             ),
         ],
         output,
-    )
+    )))
 }
 
-async fn export_metro(
-    State(state): State<MyAppState>,
-    Path(tour_id): Path<i32>,
-) -> impl IntoResponse {
-    let shopping_list = state
-        .new_lib()
-        .events()
-        .get_shopping_list(tour_id)
-        .await
-        .unwrap_or_default();
+async fn export_metro(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> IResponse {
+    let shopping_list = state.new_lib().events().get_shopping_list(tour_id).await?;
     let sources = state.get_ingredient_sources(None).await.unwrap_or_default();
 
     let mut output = String::new();
@@ -418,7 +408,7 @@ async fn export_metro(
         }
     }
 
-    (
+    Ok(IntoResponse::into_response((
         [
             (
                 axum::http::header::CONTENT_TYPE,
@@ -430,7 +420,7 @@ async fn export_metro(
             ),
         ],
         output,
-    )
+    )))
 }
 
 /// Calculates how much to subtract from a specific inventory for a given ingredient
@@ -446,62 +436,41 @@ async fn toggle_inventory(
     State(state): State<MyAppState>,
     Path((event_id, inventory_id)): Path<(i32, i32)>,
     Form(form): Form<ToggleForm>,
-) -> Markup {
-    let result = if form.checked {
+) -> MResponse {
+    if form.checked {
         state
             .new_lib()
             .events()
             .add_inventory(event_id, inventory_id)
-            .await
-            .map(|_| ())
+            .await?;
     } else {
         state
             .new_lib()
             .events()
             .remove_inventory(event_id, inventory_id)
-            .await
+            .await?;
     };
-
-    if let Err(e) = result {
-        return html_error(&e.to_string(), "");
-    }
 
     shopping_tour_form(State(state), Path((event_id, form.tour_id))).await
 }
 
-async fn update_inventory(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> Markup {
+async fn update_inventory(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> MResponse {
     let lib = state.new_lib();
-    let result = || async {
-        let changes = calculate_inventory_changes(lib, tour_id).await?;
-        let tour = lib.events().get_shopping_tour(tour_id).await?;
+    let changes = calculate_inventory_changes(lib, tour_id).await?;
+    let tour = lib.events().get_shopping_tour(tour_id).await?;
 
-        for (_, inventory_id, _, ingredient_id, _, _, amount) in changes {
-            lib.inventories()
-                .update_inventory_item(InventoryItem {
-                    inventory_id,
-                    ingredient_id,
-                    amount,
-                })
-                .await?;
-        }
-        Ok::<i32, Error>(tour.event_id)
-    };
-
-    match result().await {
-        Ok(event_id) => {
-            // Redirect back to event page
-            event_detail_tab::event_form(State(state), Path(event_id))
-                .await
-                .unwrap_or_default()
-        }
-        Err(e) => {
-            html! {
-                div class="error" {
-                    ("Failed to update inventory: ") (e.to_string())
-                }
-            }
-        }
+    for (_, inventory_id, _, ingredient_id, _, _, amount) in changes {
+        lib.inventories()
+            .update_inventory_item(InventoryItem {
+                inventory_id,
+                ingredient_id,
+                amount,
+            })
+            .await?;
     }
+
+    // Redirect back to event page
+    event_detail_tab::event_form(State(state), Path(tour.event_id)).await
 }
 
 /// Calculate inventory changes showing what will be deducted from each inventory

@@ -1,5 +1,5 @@
 pub use entities::*;
-pub use error::Result;
+pub use error::{Error, Result};
 use sqlx::PgPool;
 use std::sync::Arc;
 

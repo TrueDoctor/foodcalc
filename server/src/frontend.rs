@@ -4,7 +4,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum_login::login_required;
 use foodlib::Backend;
-use maud::{html, Markup};
+use maud::Markup;
 
 use crate::MyAppState;
 
@@ -46,18 +46,7 @@ async fn static_style() -> impl IntoResponse {
         .body(style.to_owned())
         .unwrap()
 }
+pub type MResponse = foodlib_new::Result<Markup>;
+pub type IResponse = foodlib_new::Result<Response>;
 
-pub fn html_error(reason: &str, redirect: &str) -> Markup {
-    html! {
-        dialog open="true"
-        id="error"
-        class="flex flex-col items-center justify-center text-red-500" {
-            div {
-                h1 { "Error" }
-                p { (reason) }
-                button class="btn btn-primary" hx-get=(redirect) hx-target="#content"  { "Back" }
-            }
-        }
-
-    }
-}
+pub use foodlib_new::error::html_error;

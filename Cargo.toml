@@ -28,3 +28,4 @@ time = { version = "0.3", features = ["serde", "parsing", "local-offset"] }
 regex = "1"
 axum-login = "0.17"
 futures = { version = "0.3", default-features = false }
+maud = { version = "0.27", features = ["axum"] }

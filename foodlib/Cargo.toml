@@ -5,6 +5,7 @@ edition = "2021"
 
 [features]
 typst = ["comemo", "dep:typst", "typst-as-lib", "typst-pdf"]
+axum = ["dep:axum", "dep:maud"]
 
 [dependencies]
 metro-scrape = { version = "0.1.0", path = "../metro-scrape" }
@@ -24,6 +25,8 @@ sqlx = { workspace = true }
 bcrypt = "0.15.0"
 tabled = "0.14.0"
 async-trait = "0.1.83"
+axum = { workspace = true, optional = true }
+maud = { workspace = true, optional = true }
 
 #typst
 comemo = { version = "0.4.0", optional = true }

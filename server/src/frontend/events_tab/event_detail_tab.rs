@@ -9,6 +9,7 @@ use bigdecimal::ToPrimitive;
 #[cfg(feature = "typst")]
 use foodlib::typst::export_recipes;
 use foodlib::{Backend, Event, EventRecipeIngredient, Meal, SourceOverrideView, Store};
+use foodlib_new::Error;
 use maud::{html, Markup};
 use num::FromPrimitive;
 use serde::Deserialize;
@@ -18,7 +19,7 @@ mod event_edit_meal_tab;
 mod shopping_tours;
 
 use crate::{
-    frontend::{html_error, LOGIN_URL},
+    frontend::{html_error, MResponse, LOGIN_URL},
     MyAppState,
 };
 
@@ -69,15 +70,13 @@ pub async fn delete_override_dialog(
 pub async fn delete_override(
     state: State<MyAppState>,
     Path((event_id, source_id)): Path<(i32, i32)>,
-) -> Markup {
+) -> MResponse {
     match state
         .delete_event_source_override_with_event_id(event_id, source_id)
         .await
     {
-        Ok(_) => event_form(state, Path(event_id))
-            .await
-            .unwrap_or_else(|e| e),
-        Err(_) => html_error("Failed to delete source override", "/events"),
+        Ok(_) => event_form(state, Path(event_id)).await,
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -136,24 +135,24 @@ pub async fn export_recipe_pdf(
 pub async fn event_form(
     state: State<MyAppState>,
     Path(event_id): Path<i32>,
-) -> Result<Markup, Markup> {
+) -> Result<Markup, Error> {
     let stores = state
         .get_stores()
         .await
-        .map_err(|e| html_error(&format!("Failed to fetch stores {e}"), "/events"))?;
+        .map_err(|e| Error::Redirect(format!("Failed to fetch stores {e}"), "/events"))?;
 
     let overrides = state
         .get_event_source_overrides(event_id)
         .await
-        .map_err(|e| html_error(&format!("Failed to fetch sources {e}"), "/events"))?;
+        .map_err(|e| Error::Redirect(format!("Failed to fetch sources {e}"), "/events"))?;
     let ingredients = state
         .get_ingredients()
         .await
-        .map_err(|e| html_error(&format!("Failed to fetch ingredients {e}"), "/events"))?;
+        .map_err(|e| Error::Redirect(format!("Failed to fetch ingredients {e}"), "/events"))?;
     let meals = state
         .get_event_meals(event_id)
         .await
-        .map_err(|e| html_error(&format!("Failed to fetch meals: {e}"), "/events"))?;
+        .map_err(|e| Error::Redirect(format!("Failed to fetch meals: {e}"), "/events"))?;
     let dummy_source = SourceOverrideView {
         ingredient_source_id: -1,
         ingredient_id: -1,
@@ -161,10 +160,10 @@ pub async fn event_form(
         ..Default::default()
     };
 
-    let event = state
-        .get_event(event_id)
-        .await
-        .ok_or(html_error("Failed to fetch event", "/events"))?;
+    let event = state.get_event(event_id).await.ok_or(Error::Redirect(
+        "Failed to fetch event".to_owned(),
+        "/events",
+    ))?;
 
     Ok(html! {
         div class="flex flex-row items-center justify-center gap-4" id="event_form" {
@@ -316,8 +315,9 @@ pub async fn render_shopping_tours(state: &State<MyAppState>, event_id: i32) -> 
                         }
                         td {
                             button class="btn btn-cancel"
-                                hx-delete=(format!("/events/edit/shopping_tours/delete/{}/{}", event_id, tour.tour_id))
-                                hx-target="#content" { "Delete" }
+                                hx-delete=(format!("/events/edit/shopping_tours/{}", tour.tour_id))
+                                hx-swap="delete"
+                                hx-target="closest tr" { "Delete" }
                         }
                     }
                 }
@@ -377,15 +377,16 @@ async fn update_override(
     State(state): State<MyAppState>,
     Path((event_id, _ingredient_id)): Path<(i32, i32)>,
     Form(source): axum::extract::Form<SourceData>,
-) -> Markup {
+) -> MResponse {
     match state
         .set_default_event_source_override(event_id, source.ingredient, source.store_id)
         .await
     {
-        Err(_) => html_error("Failed to add ingredient source", "/events/edit/{event_id}"),
-        Ok(_) => event_form(State(state), Path(event_id))
-            .await
-            .unwrap_or_else(|e| e),
+        Err(e) => Err(Error::Redirect(
+            format!("Failed to add ingredient source\n{e}"),
+            "/events/edit/{event_id}",
+        )),
+        Ok(_) => event_form(State(state), Path(event_id)).await,
     }
 }
 

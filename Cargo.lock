@@ -1163,6 +1163,7 @@ name = "foodlib"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "axum-login",
  "bcrypt 0.15.1",
  "bigdecimal",
@@ -1170,6 +1171,7 @@ dependencies = [
  "eyre",
  "foodlib_new",
  "log",
+ "maud",
  "metro-scrape",
  "num",
  "regex",
@@ -1188,10 +1190,13 @@ name = "foodlib_new"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "axum-login",
  "bcrypt 0.16.0",
  "bigdecimal",
+ "eyre",
  "log",
+ "maud",
  "pretty_assertions",
  "serde",
  "sqlx",
