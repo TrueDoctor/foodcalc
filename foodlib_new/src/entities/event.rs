@@ -43,7 +43,7 @@ pub struct FoodPrep {
 }
 
 /// Source override for ingredients in an event
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq)]
 pub struct SourceOverride {
     pub event_id: i32,
     pub source_id: i32,

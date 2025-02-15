@@ -84,33 +84,33 @@ async fn test_delete_ingredient(pool: sqlx::PgPool) {
         .await
         .unwrap();
 
-    // // Add some related records
-    // ops.add_source(IngredientSource {
-    //     id: -1,
-    //     ingredient_id: ingredient.id,
-    //     store_id: 1,
-    //     package_size: BigDecimal::from(1),
-    //     unit_id: 0,
-    //     price: BigDecimal::from(1),
-    //     url: None,
-    //     comment: None,
-    // })
-    // .await
-    // .unwrap();
+    // Add some related records
+    ops.add_source(IngredientSource {
+        id: -1,
+        ingredient_id: ingredient.id,
+        store_id: 1,
+        package_size: BigDecimal::from(1),
+        unit_id: 0,
+        price: BigDecimal::from(1),
+        url: None,
+        comment: None,
+    })
+    .await
+    .unwrap();
 
-    // ops.add_weight(IngredientWeight {
-    //     ingredient_id: ingredient.id,
-    //     unit_id: 1,
-    //     weight: BigDecimal::from_str("0.001").unwrap(),
-    // })
-    // .await
-    // .unwrap();
+    ops.add_weight(IngredientWeight {
+        ingredient_id: ingredient.id,
+        unit_id: 1,
+        weight: BigDecimal::from_str("0.001").unwrap(),
+    })
+    .await
+    .unwrap();
 
     // Delete and verify cascading deletes worked
-    // ops.delete(ingredient.id).await.unwrap();
+    ops.delete(ingredient.id).await.unwrap();
 
-    // let err = ops.get(ingredient.id).await.unwrap_err();
-    // assert!(matches!(err, Error::Database(_)));
+    let err = ops.get(ingredient.id).await.unwrap_err();
+    assert!(matches!(err, Error::Database(_)));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]

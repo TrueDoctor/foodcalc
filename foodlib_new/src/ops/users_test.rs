@@ -2,7 +2,6 @@
 
 use crate::{entities::user::*, error::Error, ops::users::UserOps};
 use pretty_assertions::assert_eq;
-use std::{str::FromStr, sync::Arc};
 use time::OffsetDateTime;
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]

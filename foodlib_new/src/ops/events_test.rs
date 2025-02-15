@@ -208,7 +208,14 @@ async fn test_source_override_management(pool: PgPool) {
     let ops = EventOps::new(Arc::new(pool));
 
     // Add new override
-    let override_ = ops.set_source_override(101, 100).await.unwrap();
+    let override_ = ops.set_source_override(101, 100).await.ok();
+    assert_eq!(
+        override_,
+        Some(SourceOverride {
+            event_id: 101,
+            source_id: 100
+        })
+    );
 
     // Get all overrides
     let overrides = ops.get_source_overrides(101).await.unwrap();

@@ -1,7 +1,7 @@
 // meals_test.rs
 
 use crate::{entities::meal::*, error::Error, ops::meals::MealOps};
-use bigdecimal::{BigDecimal, FromPrimitive};
+use bigdecimal::BigDecimal;
 use pretty_assertions::assert_eq;
 use sqlx::PgPool;
 use std::sync::Arc;
