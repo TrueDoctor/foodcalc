@@ -262,7 +262,6 @@ async fn delete_ingredient_form(state: State<MyAppState>, id: Path<i32>) -> Mark
         }
     }
 }
-
 async fn sources_table(state: State<MyAppState>, id: Path<i32>) -> Markup {
     let Ok(sources) = state.get_ingredient_sources(Some(id.0)).await else {
         return html_error("Failed to fetch ingredient_sources", "/ingredients");
@@ -277,7 +276,7 @@ async fn sources_table(state: State<MyAppState>, id: Path<i32>) -> Markup {
     };
 
     html! {
-        dialog open="true" class="w-2/3 dialog"  id="popup"{
+        dialog open="true" class="w-2/3 dialog z-50"  id="popup"{
             div class="flex justify-between w-full mb-2" {
                 div class="flex gap-2" {}
                 p class="text-2xl" { (format!("Sources for {}", ingredient.name)) }
