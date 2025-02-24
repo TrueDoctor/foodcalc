@@ -46,6 +46,11 @@ impl From<eyre::Report> for Error {
         Error::Misc(value.to_string())
     }
 }
+impl From<time::error::Parse> for Error {
+    fn from(value: time::error::Parse) -> Self {
+        Error::Misc(value.to_string())
+    }
+}
 #[cfg(feature = "axum")]
 impl From<axum::http::StatusCode> for Error {
     fn from(value: axum::http::StatusCode) -> Self {

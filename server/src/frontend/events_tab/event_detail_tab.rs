@@ -16,6 +16,7 @@ use serde::Deserialize;
 use time::macros::format_description;
 
 mod event_edit_meal_tab;
+mod food_prep;
 mod shopping_tours;
 
 use crate::{
@@ -46,6 +47,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
             event_edit_meal_tab::event_edit_meal_router(),
         )
         .nest("/shopping_tours", shopping_tours::shopping_tour_router())
+        .nest("/food_prep", food_prep::food_prep_router())
 }
 
 pub async fn delete_override_dialog(
@@ -200,6 +202,7 @@ pub async fn event_form(
             }
         }
         (render_shopping_tours(&state, event_id).await)
+        (food_prep::render_food_prep(&state, event_id).await?)
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Ingredient Sources Overrides" }
         }

@@ -533,6 +533,31 @@ impl EventOps {
 
         Ok(record)
     }
+    pub async fn get_food_prep(&self, prep_id: i32) -> Result<FoodPrep> {
+        let record = sqlx::query_as!(
+            FoodPrep,
+            r#"
+            SELECT
+                prep_id as id,
+                event_id,
+                recipe_id,
+                prep_date,
+                use_from,
+                use_until
+            FROM food_prep
+            WHERE prep_id = $1
+            "#,
+            prep_id,
+        )
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "FoodPrep",
+            id: prep_id.to_string(),
+        })?;
+
+        Ok(record)
+    }
 
     /// Deletes a food preparation task
     pub async fn delete_food_prep(&self, id: i32) -> Result<()> {
