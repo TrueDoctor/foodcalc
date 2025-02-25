@@ -141,20 +141,11 @@ pub async fn handle_ingredient_change(
     foodlib: FoodLib,
     Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
-    let recipe_ingredient = foodlib
-        .recipes()
-        .update_ingredient(RecipeIngredient {
-            recipe_id: data.recipe_id,
-            ingredient_id: data.ingredient_id,
-            amount: data.ingredient_amount.clone(),
-            unit_id: data.ingredient_unit_id,
-            name: None,
-        })
-        .await?;
+    let recipe_ingredient = foodlib.recipes().update_ingredient(data.into()).await?;
 
     Ok(recipe_ingredient.format_for_ingredient_table(
         foodlib.units().list().await.unwrap_or_default().clone(),
-        data.recipe_id,
+        recipe_ingredient.recipe_id,
     ))
 }
 
@@ -292,7 +283,7 @@ pub async fn add_ingredient_form(foodlib: FoodLib, Path(recipe_id): Path<i32>) -
     let unit_types = foodlib.units().list().await?;
 
     Ok(html! {
-        form hx-put="recipes/edit/commit-ingredient" hx-swap="outerHTML" hx-target="#contents" {
+        form hx-put="/recipes/edit/commit-ingredient" hx-swap="outerHTML" hx-target="#contents" {
             datalist id=("ingredient_data_list") {
                 @for ingredient in ingredients {
                     option value=(ingredient.name) { }
@@ -319,7 +310,7 @@ pub async fn add_subrecipe_form(foodlib: FoodLib, Path(recipe_id): Path<i32>) ->
     let subrecipes = foodlib.recipes().list().await?;
 
     Ok(html! {
-        form hx-put="recipes/edit/commit-subrecipe" hx-swap="outerHTML" hx-target="#contents" {
+        form hx-put="/recipes/edit/commit-subrecipe" hx-swap="outerHTML" hx-target="#contents" {
             datalist id=("subrecipe_data_list") {
                 @for subrecipe in subrecipes {
                     option value=(subrecipe.name) { }
@@ -339,7 +330,7 @@ pub async fn add_subrecipe_form(foodlib: FoodLib, Path(recipe_id): Path<i32>) ->
 
 pub async fn add_step_form(Path(recipe_id): Path<i32>) -> Markup {
     html! {
-        form id="test5" hx-put="recipes/edit/commit-step" hx-swap="outerHTML" hx-target="#contents" {
+        form id="test5" hx-put="/recipes/edit/commit-step" hx-swap="outerHTML" hx-target="#contents" {
             div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
                 h1 { "Add Step" }
                 input type="hidden" name=("recipe_id") value=(recipe_id);
@@ -367,7 +358,7 @@ pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> M
     Ok(html! {
         div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full"{
             div id=("recipe-information") class="w-3/4" {
-                form hx-put="recipes/edit/change-name" hx-indicator=".htmx-indicator" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
+                form hx-put="/recipes/edit/change-name" hx-indicator=".htmx-indicator" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     input class="text" type="text" name="name" value=(recipe.name) required="required";
                     textarea class="text" name="comment" { (recipe.comment.unwrap_or_default()) }
@@ -375,7 +366,7 @@ pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> M
             }
 
             div id="styling-bullshit" class="mb-6 mt-6 w-1/4" {
-                form hx-put=(format!("recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" hx-target="#styling-bullshit" class="w-full flex flex-col items-center justify-center pb-4" {
+                form hx-put=(format!("/recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" hx-target="#styling-bullshit" class="w-full flex flex-col items-center justify-center pb-4" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     button type="submit" class="btn btn-primary"  { "Add Subrecipe (+)" }
                 }
@@ -403,7 +394,7 @@ pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> M
                 }
             }
 
-            form hx-put=(format!("recipes/edit/add-ingredient/{}", recipe_id)) hx-swap="outerHTML" class="w-1/4 mt-6 flex flex-col items-center justify-center" {
+            form hx-put=(format!("/recipes/edit/add-ingredient/{}", recipe_id)) hx-swap="outerHTML" class="w-1/4 mt-6 flex flex-col items-center justify-center" {
                 input type="hidden" name=("recipe_id") value=(recipe_id);
                 button type="submit" class="btn btn-primary"  { "Add Ingredient (+)" }
             }
@@ -417,7 +408,7 @@ pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> M
                 }
             }
 
-            form hx-put=(format!("recipes/edit/add-step/{}", recipe_id)) hx-swap="outerHTML" class="w-1/4 mt-6 flex flex-col items-center justify-center" {
+            form hx-put=(format!("/recipes/edit/add-step/{}", recipe_id)) hx-swap="outerHTML" class="w-1/4 mt-6 flex flex-col items-center justify-center" {
                 input type="hidden" name=("recipe_id") value=(recipe_id);
                 button type="submit" class="btn btn-primary"  { "Add Step (+)" }
             }
@@ -456,10 +447,10 @@ impl IngredientTableFormattable for RecipeIngredient {
                     input class=(form_id) type="hidden" name=("ingredient_name") value=(self.name.clone().unwrap_or_default());
                     div class=(format!("w-full {}",form_id)) name=("ingredient") { (self.name.clone().unwrap_or_default()) }
                 }
-                td { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-target=(format!("#ingredient-{}", ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML"; }
-                td { select class=(format!("unit {} fc-select",form_id)) name="ingredient_unit_id" selected=(unit.name) hx-target=(format!("#ingredient-{}", ingredient_id)) hx-swap="outerHTML" required="required" hx-put="recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-include=(format!(".{}", form_id)) { @for unit in unit_types {
+                td { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-target=(format!("#ingredient-{}", ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML"; }
+                td { select class=(format!("unit {} fc-select",form_id)) name="ingredient_unit_id" selected=(unit.name) hx-target=(format!("#ingredient-{}", ingredient_id)) hx-swap="outerHTML" required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-include=(format!(".{}", form_id)) { @for unit in unit_types {
                     @if unit.id == self.unit_id { option value=(unit.id) selected { (unit.name) } } @else { option value=(unit.id) { (unit.name) } } } } }
-                td { button class="btn btn-cancel" hx-target="#contents" hx-delete=("recipes/edit/delete-ingredient") hx-include=(format!(".{}", form_id)) { "Delete" } }
+                td { button class="btn btn-cancel" hx-target="#contents" hx-delete=("/recipes/edit/delete-ingredient") hx-include=(format!(".{}", form_id)) { "Delete" } }
             }
         }
     }
@@ -486,9 +477,9 @@ impl SubRecipeTableFormattable for RecipeMetaIngredient {
                     input class=(form_id) type="hidden" name=("subrecipe_unit_id") value=(0);
                     div class=(format!("w-full {}",form_id)) name=("subrecipe") { a hx-target="#content" hx-get=(format!("/recipes/edit/{}", subrecipe_id)) { (name) } }
                 }
-                td { input class=(format!("text {}",form_id)) name="subrecipe_amount" value=(amount) required="required" hx-put="recipes/edit/change-subrecipe" hx-target=(format!("#subrecipe-{}", subrecipe_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-indicator=".htmx-indicator" hx-swap="outerHTML"; }
+                td { input class=(format!("text {}",form_id)) name="subrecipe_amount" value=(amount) required="required" hx-put="/recipes/edit/change-subrecipe" hx-target=(format!("#subrecipe-{}", subrecipe_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-indicator=".htmx-indicator" hx-swap="outerHTML"; }
                 td { "kg" }
-                td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("recipes/edit/delete-subrecipe/{}/{}", recipe_id, subrecipe_id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
+                td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-subrecipe/{}/{}", recipe_id, subrecipe_id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
             }
         }
     }
@@ -506,13 +497,13 @@ impl StepTableFormattable for RecipeStep {
                 td style="text-align:left" {
                     input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
                     input class=(form_id) type="hidden" name=("step_id") value=(self.id);
-                    input class=(format!("text {}",form_id)) name="step_order" value=(self.order) required="required" hx-put="recipes/edit/change-step-order" hx-target="#contents" hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator";
+                    input class=(format!("text {}",form_id)) name="step_order" value=(self.order) required="required" hx-put="/recipes/edit/change-step-order" hx-target="#contents" hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator";
                 }
-                td { input class=(format!("text {}",form_id)) name=("step_name") value=(self.name) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { input class=(format!("text {}",form_id)) name="step_description" value=(self.description) hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("recipes/edit/delete-step/{}/{}", recipe_id, self.id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
+                td { input class=(format!("text {}",form_id)) name=("step_name") value=(self.name) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td { input class=(format!("text {}",form_id)) name="step_description" value=(self.description) hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-step/{}/{}", recipe_id, self.id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
             }
         }
     }
