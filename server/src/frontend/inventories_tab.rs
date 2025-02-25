@@ -195,6 +195,7 @@ pub async fn handle_ingredient_commit(
             name: String::new(),
             energy: BigDecimal::from(-1),
             comment: None,
+            owner_id: -1,
         })
         .ingredient_id;
 

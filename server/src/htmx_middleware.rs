@@ -52,6 +52,8 @@ pub async fn htmx_middleware(req: Request, next: Next) -> Response<Body> {
                     "responseHandling": [
                         {"code":"204", "swap": false},
                         {"code":"[23]..", "swap": true},
+                        {"code":"401", "swap": true},
+                        {"code":"403", "swap": true},
                         {"code":"422", "swap": true},
                         {"code":"[45]..", "swap": false, "error":true},
                         {"code":"...", "swap": true}

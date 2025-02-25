@@ -24,6 +24,8 @@ pub enum Error {
     Authentication(Box<axum_login::Error<AuthBackend>>),
     #[cfg(feature = "axum")]
     Status(axum::http::StatusCode),
+    Unauthorized(String),
+    Forbidden(String),
 }
 
 impl From<sqlx::Error> for Error {
@@ -74,6 +76,8 @@ impl fmt::Display for Error {
             Error::Redirect(e, _) => write!(f, "{}", e),
             #[cfg(feature = "axum")]
             Error::Status(e) => write!(f, "{}", e),
+            Error::Unauthorized(message) => write!(f, "Unauthorized: {}", message),
+            Error::Forbidden(message) => write!(f, "Forbidden: {}", message),
         }
     }
 }
@@ -87,6 +91,8 @@ impl axum::response::IntoResponse for Error {
         let status = match self {
             Error::Redirect(e, ref r) => return redirect_html_error(&e, r).into_response(),
             Error::NotFound { .. } => StatusCode::NOT_FOUND,
+            Error::Unauthorized { .. } => StatusCode::UNAUTHORIZED,
+            Error::Forbidden { .. } => StatusCode::FORBIDDEN,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
         focus_html_error(&format!("{self}"), status).into_response()

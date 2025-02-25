@@ -7,6 +7,37 @@ pub struct Ingredient {
     pub name: String,
     pub energy: BigDecimal,
     pub comment: Option<String>,
+    pub owner_id: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct IngredientWithSource {
+    pub id: i32,
+    pub name: String,
+    pub energy: BigDecimal,
+    pub comment: Option<String>,
+    pub owner_id: i64,
+    pub has_sources: bool,
+}
+
+impl From<Ingredient> for IngredientWithSource {
+    fn from(value: Ingredient) -> Self {
+        let Ingredient {
+            id,
+            name,
+            energy,
+            comment,
+            owner_id,
+        } = value;
+        Self {
+            id,
+            name,
+            energy,
+            comment,
+            owner_id,
+            has_sources: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

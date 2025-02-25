@@ -1,4 +1,3 @@
-// shopping_tours.rs
 use axum::{
     extract::{Form, Path, State},
     response::IntoResponse,
@@ -17,7 +16,7 @@ use time::{macros::format_description, OffsetDateTime};
 
 use crate::{
     frontend::{events_tab::event_detail_tab, IResponse, MResponse},
-    MyAppState,
+    FoodLib, MyAppState,
 };
 
 pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
@@ -74,6 +73,7 @@ async fn shopping_tour_form(
         id: -1,
         tour_date: OffsetDateTime::now_utc(),
         store_id: 0,
+        store_name: None,
     };
 
     // If tour_id is provided, get existing tour data
@@ -255,7 +255,7 @@ async fn shopping_tour_form(
     })
 }
 
-async fn save_tour(State(state): State<MyAppState>, Form(form): Form<TourForm>) -> MResponse {
+async fn save_tour(foodlib: FoodLib, Form(form): Form<TourForm>) -> MResponse {
     // Parse the date
     let primitive_date = time::PrimitiveDateTime::parse(
         &form.date,
@@ -267,26 +267,26 @@ async fn save_tour(State(state): State<MyAppState>, Form(form): Form<TourForm>) 
     // Create or update tour
     let result = match form.tour_id {
         Some(tour_id) if tour_id > 0 => {
-            state
-                .new_lib()
+            foodlib
                 .events()
                 .update_shopping_tour(foodlib_new::event::ShoppingTour {
                     id: tour_id,
                     event_id: form.event_id,
                     tour_date,
                     store_id: form.store_id,
+                    store_name: None,
                 })
                 .await
         }
         _ => {
-            state
-                .new_lib()
+            foodlib
                 .events()
                 .add_shopping_tour(foodlib_new::event::ShoppingTour {
                     id: -1,
                     event_id: form.event_id,
                     tour_date,
                     store_id: form.store_id,
+                    store_name: None,
                 })
                 .await
         }
@@ -297,7 +297,7 @@ async fn save_tour(State(state): State<MyAppState>, Form(form): Form<TourForm>) 
 
     // Redirect back to event edit page
     Ok(html! {
-        (event_detail_tab::event_form(State(state), Path(form.event_id)).await.unwrap_or_default())
+        (event_detail_tab::event_form(foodlib, Path(form.event_id)).await.unwrap_or_default())
     })
 }
 
@@ -454,13 +454,13 @@ async fn toggle_inventory(
     shopping_tour_form(State(state), Path((event_id, form.tour_id))).await
 }
 
-async fn update_inventory(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> MResponse {
-    let lib = state.new_lib();
-    let changes = calculate_inventory_changes(lib, tour_id).await?;
-    let tour = lib.events().get_shopping_tour(tour_id).await?;
+async fn update_inventory(foodlib: FoodLib, Path(tour_id): Path<i32>) -> MResponse {
+    let changes = calculate_inventory_changes(&foodlib.0, tour_id).await?;
+    let tour = foodlib.events().get_shopping_tour(tour_id).await?;
 
     for (_, inventory_id, _, ingredient_id, _, _, amount) in changes {
-        lib.inventories()
+        foodlib
+            .inventories()
             .update_inventory_item(InventoryItem {
                 inventory_id,
                 ingredient_id,
@@ -470,7 +470,7 @@ async fn update_inventory(State(state): State<MyAppState>, Path(tour_id): Path<i
     }
 
     // Redirect back to event page
-    event_detail_tab::event_form(State(state), Path(tour.event_id)).await
+    event_detail_tab::event_form(foodlib, Path(tour.event_id)).await
 }
 
 /// Calculate inventory changes showing what will be deducted from each inventory

@@ -1,16 +1,17 @@
-use crate::MyAppState;
+use crate::FoodLib;
 use axum::extract::{Form, Path, State};
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
-#[cfg(feature = "typst")]
-use foodlib::typst::export_recipes;
-use foodlib::{Backend, Recipe};
+use foodlib::Backend;
+use foodlib_new::recipe::Recipe;
+use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
 
-use crate::frontend::LOGIN_URL;
-
 use super::MResponse;
+use crate::frontend::LOGIN_URL;
+use crate::MyAppState;
+
 mod recipes_edit_tab;
 
 pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
@@ -36,23 +37,20 @@ pub struct SearchParameters {
     search: String,
 }
 
-pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameters>) -> Markup {
+pub async fn search(foodlib: FoodLib, query: Form<SearchParameters>) -> MResponse {
     let query = query.search.to_lowercase();
-    let Ok(recipes) = state.get_recipes().await else {
-        return html_error("Failed to fetch recipes");
-    };
+    let recipes = foodlib.recipes().list().await?;
 
     let filtered_recipes = recipes
         .iter()
         .filter(|x| x.name.to_lowercase().contains(&query));
 
-    // (recipe_add_form())
-    html! {
+    Ok(html! {
         (recipe_add_form())
         @for recipe in filtered_recipes {
             (format_recipe(recipe))
         }
-    }
+    })
 }
 
 pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
@@ -77,7 +75,7 @@ pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
     }
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Deserialize)]
 pub struct ExportRecipe {
     energy: f64,
     number_of_servings: u32,
@@ -87,69 +85,58 @@ pub async fn export_recipe_pdf(
     State(state): State<MyAppState>,
     Path(recipe_id): Path<i32>,
     Form(form): Form<ExportRecipe>,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Markup> {
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), foodlib_new::Error> {
     let energy = form.energy;
     let number_of_servings = form.number_of_servings;
 
-    let Ok(recipe_info) = state
-        .db_connection
+    let recipe_info = state
         .fetch_user_input_meal(
             recipe_id,
             number_of_servings as f64,
             energy as u32,
             "".to_string(),
         )
-        .await
-    else {
-        return Err(html_error("Meal fetching failed"));
-    };
+        .await?;
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
-    let result = export_recipes(recipe_info).await;
+    let result = foodlib::typst::export_recipes(recipe_info).await;
     #[cfg(not(feature = "typst"))]
-    let result = Err("Compiled without typst support");
+    let result = Err(foodlib_new::Error::Misc(
+        "Server compiled without typst support".into(),
+    ));
+    let recipe = result?;
 
-    match result {
-        Ok(recipe) => {
-            let headers = [
-                (
-                    axum::http::header::CONTENT_DISPOSITION,
-                    format!("attachment; filename=\"{}.pdf\"", title),
-                ),
-                (
-                    axum::http::header::CONTENT_TYPE,
-                    "application/pdf".to_string(),
-                ),
-            ];
-            Ok((headers, recipe))
-        }
-        Err(error) => {
-            log::error!("Failed to save recipe export: {}", error);
-            Err(html_error("Failed to save recipe export"))
-        }
-    }
+    let headers = [
+        (
+            axum::http::header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}.pdf\"", title),
+        ),
+        (
+            axum::http::header::CONTENT_TYPE,
+            "application/pdf".to_string(),
+        ),
+    ];
+    Ok((headers, recipe))
 }
 
 pub async fn shopping_list(
     State(state): State<MyAppState>,
     Path(recipe_id): Path<i32>,
     Form(form): Form<ExportRecipe>,
-) -> Markup {
+) -> MResponse {
     let energy = form.energy;
     let number_of_servings = form.number_of_servings;
 
     let subrecipes = state
-        .db_connection
         .fetch_subrecipes_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
-        .await
-        .unwrap();
+        .await?;
     let shopping_list = subrecipes
         .iter()
-        .filter(|&recipe| (!recipe.is_subrecipe))
+        .filter(|&recipe| !recipe.is_subrecipe)
         .map(|recipe| (recipe.ingredient.clone(), recipe.weight.to_string()))
         .collect::<Vec<_>>();
 
-    html! {
+    Ok(html! {
         div class="flex flex-col items-center justify-center" {
             h1 { "Shopping list" }
             table class="w-full text-inherit table-auto object-center table-fixed" {
@@ -165,23 +152,12 @@ pub async fn shopping_list(
                 }
             }
         }
-    }
+    })
 }
 
-pub async fn delete_recipe_nqa(
-    State(state): State<MyAppState>,
-    Path(recipe_id): Path<i32>,
-) -> Markup {
-    if let Err(error) = state.delete_recipe(recipe_id).await {
-        log::error!("Failed to delete recipe: {}", error);
-        return html_error("Failed to delete recipe");
-    };
-
-    recipes_view(State(state)).await
-}
-
-fn html_error(reason: &str) -> Markup {
-    crate::frontend::html_error(reason, "/recipes")
+pub async fn delete_recipe_nqa(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+    foodlib.recipes().delete(recipe_id).await?;
+    Ok(recipes_view(foodlib).await)
 }
 
 pub async fn delete_recipe(Path(recipe_id): Path<i32>) -> Markup {
@@ -198,10 +174,8 @@ pub async fn delete_recipe(Path(recipe_id): Path<i32>) -> Markup {
     }
 }
 
-pub async fn recipes_view(State(state): State<MyAppState>) -> Markup {
-    let Ok(recipes) = state.get_recipes().await else {
-        return html_error("Failed to fetch recipes");
-    };
+pub async fn recipes_view(foodlib: FoodLib) -> Markup {
+    let recipes = foodlib.recipes().list().await.unwrap_or_default();
 
     html! {
         div id="recipes" class="w-full"  {
@@ -249,30 +223,27 @@ struct NewRecipe {
     comment: Option<String>,
 }
 
-async fn add_recipe(state: State<MyAppState>, Form(recipe): Form<NewRecipe>) -> MResponse {
+async fn add_recipe(foodlib: FoodLib, user: User, Form(recipe_data): Form<NewRecipe>) -> MResponse {
     let recipe = Recipe {
-        name: recipe.name,
-        comment: recipe.comment,
-        recipe_id: -1,
+        id: -1,
+        name: recipe_data.name,
+        comment: recipe_data.comment,
+        owner_id: user.id,
     };
-    match state.insert_recipe(&recipe).await {
-        Ok(recipe) => recipes_edit_tab::recipe_edit_view(state, Path(recipe.recipe_id)).await,
-        Err(e) => Err(foodlib_new::Error::Redirect(
-            format!("{e}"),
-            "/recipes/".into(),
-        )),
-    }
+
+    let created_recipe = foodlib.recipes().create(recipe).await?;
+    recipes_edit_tab::recipe_edit_view(foodlib, Path(created_recipe.id)).await
 }
 
-fn format_recipe(recipe: &foodlib::Recipe) -> Markup {
+fn format_recipe(recipe: &Recipe) -> Markup {
     html! {
-        tr id=(format!("recipe-{}", recipe.recipe_id)) {
-            td { (recipe.recipe_id) }
+        tr id=(format!("recipe-{}", recipe.id)) {
+            td { (recipe.id) }
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
-            td { button class="btn btn-primary" type="button" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.recipe_id)) { "Edit" } }
-            td { button class="btn btn-cancel"  type="button" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.recipe_id)) { "Delete" } }
-            td { button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.recipe_id)) hx-swap="afterend" { "Export" } }
+            td { button class="btn btn-primary" type="button" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" } }
+            td { button class="btn btn-cancel"  type="button" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.id)) { "Delete" } }
+            td { button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.id)) hx-swap="afterend" { "Export" } }
             td { div id="dialog"; }
         }
     }

@@ -7,6 +7,7 @@ pub struct Recipe {
     pub id: i32,
     pub name: String,
     pub comment: Option<String>,
+    pub owner_id: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,6 +16,7 @@ pub struct RecipeIngredient {
     pub ingredient_id: i32,
     pub amount: BigDecimal,
     pub unit_id: i32,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +35,7 @@ pub struct RecipeMetaIngredient {
     pub parent_id: i32,
     pub child_id: i32,
     pub weight: BigDecimal,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

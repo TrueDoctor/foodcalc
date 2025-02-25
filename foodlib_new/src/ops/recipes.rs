@@ -32,12 +32,13 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            INSERT INTO recipes (name, comment)
-            VALUES ($1, $2)
-            RETURNING recipe_id as id, name, comment
+            INSERT INTO recipes (name, comment, owner_id)
+            VALUES ($1, $2, $3)
+            RETURNING recipe_id as id, name, comment, owner_id
             "#,
             recipe.name,
             recipe.comment,
+            recipe.owner_id,
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -49,7 +50,7 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment 
+            SELECT recipe_id as id, name, comment, owner_id 
             FROM recipes 
             WHERE recipe_id = $1
             "#,
@@ -69,7 +70,7 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment 
+            SELECT recipe_id as id, name, comment, owner_id 
             FROM recipes 
             WHERE name = $1
             "#,
@@ -92,7 +93,7 @@ impl RecipeOps {
             UPDATE recipes 
             SET name = $1, comment = $2
             WHERE recipe_id = $3
-            RETURNING recipe_id as id, name, comment
+            RETURNING recipe_id as id, name, comment, owner_id
             "#,
             recipe.name,
             recipe.comment,
@@ -149,7 +150,7 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment 
+            SELECT recipe_id as id, name, comment, owner_id 
             FROM recipes 
             ORDER BY name
             "#
@@ -178,7 +179,10 @@ impl RecipeOps {
         Ok(())
     }
 
-    pub async fn update_ingredient(&self, ingredient: RecipeIngredient) -> Result<()> {
+    pub async fn update_ingredient(
+        &self,
+        ingredient: RecipeIngredient,
+    ) -> Result<RecipeIngredient> {
         let result = sqlx::query!(
             r#"
             UPDATE recipe_ingredients 
@@ -203,7 +207,7 @@ impl RecipeOps {
             });
         }
 
-        Ok(())
+        Ok(ingredient)
     }
 
     pub async fn delete_ingredient(&self, recipe_id: i32, ingredient_id: i32) -> Result<()> {
@@ -232,8 +236,8 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             RecipeIngredient,
             r#"
-            SELECT recipe_id, ingredient_id, amount, unit_id
-            FROM recipe_ingredients
+            SELECT recipe_id, ingredient_id, amount, unit_id, name
+            FROM recipe_ingredients JOIN ingredients USING(ingredient_id)
             WHERE recipe_id = $1
             ORDER BY ingredient_id
             "#,
@@ -370,8 +374,9 @@ impl RecipeOps {
             SELECT 
                 parent_id,
                 child_id,
+                name,
                 weight
-            FROM meta_recipes
+            FROM meta_recipes JOIN recipes ON(child_id = recipe_id)
             WHERE parent_id = $1
             ORDER BY child_id
             "#,
@@ -399,7 +404,10 @@ impl RecipeOps {
         Ok(())
     }
 
-    pub async fn update_meta_ingredient(&self, meta: RecipeMetaIngredient) -> Result<()> {
+    pub async fn update_meta_ingredient(
+        &self,
+        meta: RecipeMetaIngredient,
+    ) -> Result<RecipeMetaIngredient> {
         let result = sqlx::query!(
             r#"
             UPDATE meta_recipes 
@@ -420,7 +428,7 @@ impl RecipeOps {
             });
         }
 
-        Ok(())
+        Ok(meta)
     }
 
     pub async fn delete_meta_ingredient(&self, parent_id: i32, child_id: i32) -> Result<()> {
@@ -506,7 +514,7 @@ impl RecipeOps {
             Recipe,
             r#"
             WITH matching_recipes AS (
-                SELECT r.recipe_id, r.name, r.comment,
+                SELECT r.recipe_id, r.name, r.comment, r.owner_id,
                        COUNT(DISTINCT ri.ingredient_id) as matching_ingredients,
                        (SELECT COUNT(DISTINCT ingredient_id) 
                         FROM recipe_ingredients 
@@ -519,7 +527,8 @@ impl RecipeOps {
             SELECT 
                 recipe_id as id,
                 name,
-                comment
+                comment,
+                owner_id
             FROM matching_recipes
             ORDER BY 
                 matching_ingredients::float / total_ingredients DESC,

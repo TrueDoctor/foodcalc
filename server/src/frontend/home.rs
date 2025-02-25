@@ -1,11 +1,11 @@
-use axum::{extract::State, response::IntoResponse};
+use axum::response::IntoResponse;
 use axum_extra::extract::Host;
 use foodlib::{AuthSession, User};
 use maud::{html, Markup};
 
 use crate::{
     frontend::{ingredients_tab::ingredients_view, LOGIN_URL},
-    MyAppState,
+    FoodLib,
 };
 
 pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
@@ -13,11 +13,7 @@ pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
 }
 
 #[axum::debug_handler]
-pub async fn home_view(
-    mut auth: AuthSession,
-    host: Host,
-    state: State<MyAppState>,
-) -> impl IntoResponse {
+pub async fn home_view(mut auth: AuthSession, host: Host, foodlib: FoodLib) -> impl IntoResponse {
     let (host, _) = host.0.split_once(':').unwrap_or_default();
     #[cfg(debug_assertions)]
     if host == "127.0.0.1" || host == "localhost" {
@@ -32,14 +28,14 @@ pub async fn home_view(
         auth.login(&user).await.unwrap();
         log::info!("logged in test user");
     }
-    ([("HX-Replace-Url", "ingredients")], content(state).await)
+    ([("HX-Replace-Url", "ingredients")], content(foodlib).await)
 }
 
-pub async fn content(State(state): State<MyAppState>) -> Markup {
+pub async fn content(foodlib: FoodLib) -> Markup {
     html! {
         div class="flex flex-col items-center justify-center mb-16" {
             div id="content" class="w-3/4 flex flex-col items-center justify-center" {
-                (ingredients_view(State(state)).await)
+                (ingredients_view(foodlib).await)
             }
         }
     }
@@ -105,21 +101,3 @@ fn navbutton(text: &str, link: &str) -> Markup {
             hover:shadow-inner hover:bg-blue-800" { (text) }
     }
 }
-
-//pub fn navbar() -> Markup {
-//    html! {
-//        div class="
-//            rounded-xl
-//            flex items-center justify-around flex-wrap
-//            mx-16 my-4
-//            gap-24
-//            bg-blue-700 text-white
-//            " {
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/" { "Home" }
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/ingredients" { "Ingredients" }
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/recipes" { "Recipes" }
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/events" { "Events" }
-//             a class="hover:bg-blue-500 p-6 round-lg" href="/stores" { "Stores" }
-//        }
-//    }
-//}

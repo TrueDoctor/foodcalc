@@ -1,6 +1,6 @@
 use std::{env, net::SocketAddr, ops::Deref, time::Duration};
 
-use axum::Router;
+use axum::{Extension, Router};
 use axum_login::{
     tower_sessions::{ExpiredDeletion, Expiry, SessionManagerLayer},
     AuthManagerLayerBuilder,
@@ -16,6 +16,8 @@ use tower_sessions_sqlx_store::PostgresStore;
 use foodlib::Backend;
 mod frontend;
 mod htmx_middleware;
+
+type FoodLib = Extension<foodlib_new::FoodLib>;
 
 #[derive(Clone)]
 pub struct MyAppState {
@@ -88,11 +90,13 @@ async fn main() {
     let state = MyAppState {
         db_connection: FoodBase::new_with_pool(pool),
     };
+    let new_lib = foodlib_new::FoodLib::from_shared(state.pool_arc());
 
     // Combine routes with middleware
     let app = Router::new()
         .merge(frontend::frontend_router())
         .with_state(state)
+        .layer(Extension(new_lib))
         .layer(auth_layer)
         .layer(CorsLayer::very_permissive())
         .layer(TraceLayer::new_for_http())

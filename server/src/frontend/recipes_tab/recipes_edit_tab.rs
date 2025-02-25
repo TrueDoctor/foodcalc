@@ -1,9 +1,15 @@
+use crate::FoodLib;
 use axum::{
-    extract::{Form, Path, State},
+    extract::{Form, Path},
     routing::{delete, put},
 };
 use bigdecimal::BigDecimal;
-use foodlib::{Ingredient, Recipe, RecipeIngredient, RecipeMetaIngredient, RecipeStep, Unit};
+use foodlib_new::{
+    ingredient::Ingredient,
+    recipe::{Recipe, RecipeIngredient, RecipeMetaIngredient, RecipeStep},
+    unit::Unit,
+    user::User,
+};
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgInterval;
@@ -51,12 +57,35 @@ pub struct UpdateIngredientHeader {
     pub ingredient_unit_id: i32,
 }
 
+impl From<UpdateIngredientHeader> for RecipeIngredient {
+    fn from(value: UpdateIngredientHeader) -> Self {
+        Self {
+            recipe_id: value.recipe_id,
+            ingredient_id: value.ingredient_id,
+            amount: value.ingredient_amount,
+            unit_id: value.ingredient_unit_id,
+            name: Some(value.ingredient_name),
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct UpdateSubrecipeHeader {
     pub recipe_id: i32,
     pub subrecipe_id: i32,
     pub subrecipe_name: String,
     pub subrecipe_amount: BigDecimal,
+}
+
+impl From<UpdateSubrecipeHeader> for RecipeMetaIngredient {
+    fn from(value: UpdateSubrecipeHeader) -> Self {
+        Self {
+            parent_id: value.recipe_id,
+            child_id: value.subrecipe_id,
+            weight: value.subrecipe_amount,
+            name: Some(value.subrecipe_name),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,6 +99,20 @@ pub struct UpdateRecipeStepHeader {
     pub recipe_id: i32,
 }
 
+impl From<UpdateRecipeStepHeader> for RecipeStep {
+    fn from(value: UpdateRecipeStepHeader) -> Self {
+        RecipeStep {
+            id: value.step_id,
+            order: value.step_order,
+            name: value.step_name,
+            description: value.step_description,
+            fixed_duration: pg_interval_from_minutes(value.fixed_duration_minutes),
+            duration_per_kg: pg_interval_from_minutes(value.duration_per_kg_minutes),
+            recipe_id: value.recipe_id,
+        }
+    }
+}
+
 fn pg_interval_from_minutes(minutes: f64) -> PgInterval {
     PgInterval {
         months: 0,
@@ -79,289 +122,175 @@ fn pg_interval_from_minutes(minutes: f64) -> PgInterval {
 }
 
 pub async fn handle_name_change(
-    State(state): State<MyAppState>,
-    Form(data): axum::extract::Form<UpdateNameHeader>,
-) {
-    state
-        .db_connection
-        .update_recipe(&foodlib::Recipe {
-            recipe_id: data.recipe_id,
-            name: data.name.clone(),
-            comment: Some(data.comment.clone()),
+    foodlib: FoodLib,
+    Form(data): Form<UpdateNameHeader>,
+) -> Result<(), foodlib_new::Error> {
+    foodlib
+        .recipes()
+        .update(foodlib_new::recipe::Recipe {
+            id: data.recipe_id,
+            name: data.name,
+            comment: Some(data.comment),
+            owner_id: -1, // We don't change the owner
         })
-        .await
-        .unwrap_or_else(|_| {
-            log::warn!("Failed to update recipe {}", data.recipe_id);
-            Recipe {
-                recipe_id: -1,
-                name: String::new(),
-                comment: None,
-            }
-        });
+        .await?;
+    Ok(())
 }
 
 pub async fn handle_ingredient_change(
-    State(state): State<MyAppState>,
-    Form(data): axum::extract::Form<UpdateIngredientHeader>,
-) -> Markup {
-    let unit = state
-        .db_connection
-        .get_unit(data.ingredient_unit_id)
-        .await
-        .unwrap_or_default();
-    state
-        .db_connection
-        .update_recipe_ingredient(
-            data.recipe_id,
-            data.ingredient_id,
-            data.ingredient_amount.clone(),
-            unit.unit_id,
-        )
-        .await
-        .unwrap_or_else(|_| {
-            log::warn!(
-                "Failed to update ingredient {} in recipe {}",
-                data.ingredient_id,
-                data.recipe_id
-            )
-        });
-    let recipe_ingredient = RecipeIngredient {
-        ingredient: RecipeMetaIngredient::Ingredient(Ingredient {
+    foodlib: FoodLib,
+    Form(data): Form<UpdateIngredientHeader>,
+) -> MResponse {
+    let recipe_ingredient = foodlib
+        .recipes()
+        .update_ingredient(RecipeIngredient {
+            recipe_id: data.recipe_id,
             ingredient_id: data.ingredient_id,
-            name: data.ingredient_name.clone(),
-            energy: BigDecimal::from(-1),
-            comment: None,
-        }),
-        amount: data.ingredient_amount,
-        unit: state
-            .db_connection
-            .get_unit(data.ingredient_unit_id)
-            .await
-            .unwrap_or_default(),
-    };
-    dbg!(format!("unit: {:?}", recipe_ingredient.unit));
-    recipe_ingredient.format_for_ingredient_table(
-        state
-            .db_connection
-            .get_units()
-            .await
-            .unwrap_or_default()
-            .clone(),
+            amount: data.ingredient_amount.clone(),
+            unit_id: data.ingredient_unit_id,
+            name: None,
+        })
+        .await?;
+
+    Ok(recipe_ingredient.format_for_ingredient_table(
+        foodlib.units().list().await.unwrap_or_default().clone(),
         data.recipe_id,
-    )
+    ))
 }
 
 pub async fn handle_subrecipe_change(
-    State(state): State<MyAppState>,
-    Form(data): axum::extract::Form<UpdateSubrecipeHeader>,
-) -> Markup {
-    state
-        .db_connection
-        .update_recipe_meta_ingredient(
-            data.recipe_id,
-            data.subrecipe_id,
-            data.subrecipe_amount.clone(),
-        )
-        .await
-        .unwrap_or_else(|_| {
-            log::warn!(
-                "Failed to update subrecipe {} in recipe {}",
-                data.subrecipe_id,
-                data.recipe_id
-            )
-        });
-    let sub_recipe = RecipeIngredient {
-        ingredient: RecipeMetaIngredient::MetaRecipe(Recipe {
-            recipe_id: data.recipe_id,
-            name: data.subrecipe_name,
-            comment: None,
-        }),
-        amount: data.subrecipe_amount,
-        unit: state.get_unit(0).await.unwrap_or_default(),
-    };
-    sub_recipe.format_for_subrecipe_table(data.recipe_id)
+    foodlib: FoodLib,
+    Form(data): Form<UpdateSubrecipeHeader>,
+) -> MResponse {
+    let sub_recipe = foodlib
+        .recipes()
+        .update_meta_ingredient(data.into())
+        .await?;
+
+    Ok(sub_recipe.format_for_subrecipe_table())
 }
 
 pub async fn handle_step_change(
-    State(state): State<MyAppState>,
-    Form(data): axum::extract::Form<UpdateRecipeStepHeader>,
-) -> Markup {
-    let step = RecipeStep {
-        step_id: data.step_id,
-        step_order: data.step_order,
-        step_name: data.step_name,
-        step_description: data.step_description,
-        fixed_duration: pg_interval_from_minutes(data.fixed_duration_minutes),
-        duration_per_kg: pg_interval_from_minutes(data.duration_per_kg_minutes),
-        recipe_id: data.recipe_id,
-    };
-    state
-        .db_connection
-        .update_recipe_step(&step)
-        .await
-        .unwrap_or_default();
-    step.format_for_step_table(data.recipe_id)
+    foodlib: FoodLib,
+    Form(data): Form<UpdateRecipeStepHeader>,
+) -> MResponse {
+    let recipe_id = data.recipe_id;
+    let step = foodlib.recipes().update_step(data.into()).await?;
+
+    Ok(step.format_for_step_table(recipe_id))
 }
 
 pub async fn handle_step_order_change(
-    State(state): State<MyAppState>,
-    Form(data): axum::extract::Form<UpdateRecipeStepHeader>,
+    foodlib: FoodLib,
+    Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
-    let step = RecipeStep {
-        step_id: data.step_id,
-        step_order: data.step_order,
-        step_name: data.step_name,
-        step_description: data.step_description,
-        fixed_duration: pg_interval_from_minutes(data.fixed_duration_minutes),
-        duration_per_kg: pg_interval_from_minutes(data.duration_per_kg_minutes),
-        recipe_id: data.recipe_id,
-    };
-    state
-        .db_connection
-        .update_recipe_step(&step)
-        .await
-        .unwrap_or_default();
-    (recipe_edit_view(State(state), Path(data.recipe_id))).await
+    let recipe_id = data.recipe_id;
+    foodlib.recipes().update_step(data.into()).await?;
+
+    recipe_edit_view(foodlib, Path(recipe_id)).await
 }
 
 pub async fn handle_ingredient_delete(
-    State(state): State<MyAppState>,
-    Form(data): axum::extract::Form<UpdateIngredientHeader>,
+    foodlib: FoodLib,
+    Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
-    state
-        .db_connection
-        .delete_recipe_ingredient(data.recipe_id, data.ingredient_id)
-        .await
-        .unwrap_or_else(|_| {
-            log::warn!(
-                "Failed to delete ingredient {} from inventory {}",
-                data.ingredient_id,
-                data.recipe_id
-            )
-        });
-    (recipe_edit_view(State(state), Path(data.recipe_id))).await
+    foodlib
+        .recipes()
+        .delete_ingredient(data.recipe_id, data.ingredient_id)
+        .await?;
+
+    recipe_edit_view(foodlib, Path(data.recipe_id)).await
 }
 
 pub async fn handle_subrecipe_delete(
-    State(state): State<MyAppState>,
+    foodlib: FoodLib,
     Path((recipe_id, subrecipe_id)): Path<(i32, i32)>,
 ) -> MResponse {
-    state
-        .db_connection
-        .delete_recipe_meta_ingredient(recipe_id, subrecipe_id)
-        .await
-        .unwrap_or_else(|_| {
-            log::warn!(
-                "Failed to delete subrecipe {} from recipe {}",
-                subrecipe_id,
-                recipe_id
-            )
-        });
-    (recipe_edit_view(State(state), Path(recipe_id))).await
+    foodlib
+        .recipes()
+        .delete_meta_ingredient(recipe_id, subrecipe_id)
+        .await?;
+
+    recipe_edit_view(foodlib, Path(recipe_id)).await
 }
 
 pub async fn handle_step_delete(
-    State(state): State<MyAppState>,
+    foodlib: FoodLib,
     Path((recipe_id, step_id)): Path<(i32, i32)>,
 ) -> MResponse {
-    state
-        .db_connection
-        .delete_step(recipe_id, step_id)
-        .await
-        .unwrap_or_else(|_| {
-            log::warn!(
-                "Failed to delete step {} from recipe {}",
-                step_id,
-                recipe_id
-            )
-        });
-    (recipe_edit_view(State(state), Path(recipe_id))).await
+    foodlib.recipes().delete_step(recipe_id, step_id).await?;
+
+    recipe_edit_view(foodlib, Path(recipe_id)).await
 }
 
 pub async fn handle_ingredient_add(
-    State(state): State<MyAppState>,
-    Form(data): axum::extract::Form<UpdateIngredientHeader>,
+    foodlib: FoodLib,
+    user: User,
+    Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
-    let ingredient_id = state
-        .db_connection
-        .get_ingredient_from_string_reference(data.ingredient_name.clone())
+    let ingredient_id = foodlib
+        .ingredients()
+        .get_by_name(&data.ingredient_name)
         .await
         .unwrap_or(Ingredient {
-            ingredient_id: -1,
             name: String::new(),
             energy: BigDecimal::from(-1),
             comment: None,
+            id: -1,
+            owner_id: user.id,
         })
-        .ingredient_id;
+        .id;
+
+    let recipe_id = data.recipe_id;
     if ingredient_id < 0 {
-        add_ingredient_form(State(state), Path(data.recipe_id)).await
+        add_ingredient_form(foodlib, Path(recipe_id)).await
     } else {
-        state
-            .db_connection
-            .add_recipe_ingredient(
-                data.recipe_id,
-                ingredient_id,
-                data.ingredient_amount,
-                data.ingredient_unit_id,
-            )
-            .await?;
-        recipe_edit_view(State(state), Path(data.recipe_id)).await
+        foodlib.recipes().add_ingredient(data.into()).await?;
+
+        recipe_edit_view(foodlib, Path(recipe_id)).await
     }
 }
 
 pub async fn handle_subrecipe_add(
-    State(state): State<MyAppState>,
-    Form(data): axum::extract::Form<UpdateSubrecipeHeader>,
+    user: User,
+    foodlib: FoodLib,
+    Form(data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
-    let subrecipe_id = state
-        .db_connection
-        .get_recipe_from_string_reference(data.subrecipe_name.clone())
+    let subrecipe_id = foodlib
+        .recipes()
+        .get_by_name(&data.subrecipe_name)
         .await
         .unwrap_or(Recipe {
-            recipe_id: -1,
+            id: -1,
             name: String::new(),
             comment: None,
+            owner_id: user.id,
         })
-        .recipe_id;
+        .id;
 
-    dbg!(format!(
-        "requested name {} yielded subrecipe id {}",
-        data.subrecipe_name, subrecipe_id
-    ));
+    let recipe_id = data.recipe_id;
     if subrecipe_id < 0 {
-        add_subrecipe_form(State(state), Path(data.recipe_id)).await
+        add_subrecipe_form(foodlib, Path(recipe_id)).await
     } else {
-        state
-            .db_connection
-            .add_recipe_meta_ingredient(data.recipe_id, subrecipe_id, data.subrecipe_amount)
-            .await?;
-        recipe_edit_view(State(state), Path(data.recipe_id)).await
+        foodlib.recipes().add_meta_ingredient(data.into()).await?;
+
+        recipe_edit_view(foodlib, Path(recipe_id)).await
     }
 }
 
 pub async fn handle_step_add(
-    State(state): State<MyAppState>,
-    Form(data): axum::extract::Form<UpdateRecipeStepHeader>,
+    foodlib: FoodLib,
+    Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
-    let step = RecipeStep {
-        step_id: data.step_id,
-        step_order: data.step_order,
-        step_name: data.step_name,
-        step_description: data.step_description,
-        fixed_duration: pg_interval_from_minutes(data.fixed_duration_minutes),
-        duration_per_kg: pg_interval_from_minutes(data.duration_per_kg_minutes),
-        recipe_id: data.recipe_id,
-    };
-    state.add_recipe_step(&step).await?;
-    (recipe_edit_view(State(state), Path(data.recipe_id))).await
+    let recipe_id = data.recipe_id;
+    foodlib.recipes().add_step(data.into()).await?;
+    recipe_edit_view(foodlib, Path(recipe_id)).await
 }
 
-pub async fn add_ingredient_form(
-    State(state): State<MyAppState>,
-    Path(recipe_id): Path<i32>,
-) -> MResponse {
-    let ingredients = state.db_connection.get_ingredients().await?;
-    let unit_types = state.get_units().await?;
+pub async fn add_ingredient_form(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+    let ingredients = foodlib.ingredients().list().await?;
+    let unit_types = foodlib.units().list().await?;
+
     Ok(html! {
         form hx-put="recipes/edit/commit-ingredient" hx-swap="outerHTML" hx-target="#contents" {
             datalist id=("ingredient_data_list") {
@@ -377,7 +306,7 @@ pub async fn add_ingredient_form(
                 input class="text" type="text" name=("ingredient_amount") placeholder="Amount" value="" required="required";
                 select class=("unit fc-select") name="ingredient_unit_id" required="required" {
                     @for unit in unit_types {
-                        option value=(unit.unit_id) { (unit.name) }
+                        option value=(unit.id) { (unit.name) }
                     }
                 }
                 button class="btn btn-primary" type="submit" { "Submit" }
@@ -386,11 +315,9 @@ pub async fn add_ingredient_form(
     })
 }
 
-pub async fn add_subrecipe_form(
-    State(state): State<MyAppState>,
-    Path(recipe_id): Path<i32>,
-) -> MResponse {
-    let subrecipes = state.get_recipes().await?;
+pub async fn add_subrecipe_form(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+    let subrecipes = foodlib.recipes().list().await?;
+
     Ok(html! {
         form hx-put="recipes/edit/commit-subrecipe" hx-swap="outerHTML" hx-target="#contents" {
             datalist id=("subrecipe_data_list") {
@@ -410,7 +337,7 @@ pub async fn add_subrecipe_form(
     })
 }
 
-pub async fn add_step_form(State(_): State<MyAppState>, Path(recipe_id): Path<i32>) -> Markup {
+pub async fn add_step_form(Path(recipe_id): Path<i32>) -> Markup {
     html! {
         form id="test5" hx-put="recipes/edit/commit-step" hx-swap="outerHTML" hx-target="#contents" {
             div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
@@ -428,36 +355,22 @@ pub async fn add_step_form(State(_): State<MyAppState>, Path(recipe_id): Path<i3
     }
 }
 
-pub async fn recipe_edit_view(
-    State(state): State<MyAppState>,
-    Path(recipe_id): Path<i32>,
-) -> MResponse {
-    let subrecipes = state
-        .db_connection
-        .get_recipe_meta_ingredients(recipe_id)
-        .await?;
+pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+    let subrecipes = foodlib.recipes().get_meta_ingredients(recipe_id).await?;
 
-    let ingredients = state
-        .db_connection
-        .get_recipe_ingredients(recipe_id)
-        .await?;
-    let unit_types = state.get_units().await?;
-
-    let steps = state.db_connection.get_recipe_steps(recipe_id).await?;
-
-    let stats = state
-        .new_lib()
-        .recipes()
-        .get_recipe_stats(recipe_id)
-        .await?;
+    let ingredients = foodlib.recipes().get_ingredients(recipe_id).await?;
+    let unit_types = foodlib.units().list().await?;
+    let steps = foodlib.recipes().get_steps(recipe_id).await?;
+    let stats = foodlib.recipes().get_recipe_stats(recipe_id).await?;
+    let recipe = foodlib.recipes().get(recipe_id).await?;
 
     Ok(html! {
         div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full"{
             div id=("recipe-information") class="w-3/4" {
                 form hx-put="recipes/edit/change-name" hx-indicator=".htmx-indicator" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
-                    input class="text" type="text" name="name" value=(state.get_recipe(recipe_id).await.unwrap_or_default().name) required="required";
-                    textarea class="text" name="comment" { (state.get_recipe(recipe_id).await.unwrap_or_default().comment.unwrap_or_default()) }
+                    input class="text" type="text" name="name" value=(recipe.name) required="required";
+                    textarea class="text" name="comment" { (recipe.comment.unwrap_or_default()) }
                     button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
             }
 
@@ -485,7 +398,7 @@ pub async fn recipe_edit_view(
                 div id=("meta-ingredients") class="w-3/4" {
                     table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
                         thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
-                        tbody { @for item in subrecipes { (item.format_for_subrecipe_table(recipe_id)) } }
+                        tbody { @for item in subrecipes { (item.format_for_subrecipe_table()) } }
                     }
                 }
             }
@@ -499,7 +412,7 @@ pub async fn recipe_edit_view(
                 div id=("ingredients") class="w-3/4" {
                     table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
                         thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
-                        tbody { @for item in ingredients { (item.format_for_ingredient_table(unit_types.clone(), recipe_id)) } }
+                        tbody { @for item in ingredients { (item.format_for_ingredient_table(unit_types.clone(), recipe_id,)) } }
                     }
                 }
             }
@@ -528,25 +441,24 @@ pub trait IngredientTableFormattable {
 
 impl IngredientTableFormattable for RecipeIngredient {
     fn format_for_ingredient_table(&self, unit_types: Vec<Unit>, recipe_id: i32) -> Markup {
-        let ingredient = match &self.ingredient {
-            foodlib::RecipeMetaIngredient::Ingredient(ingredient) => ingredient,
-            foodlib::RecipeMetaIngredient::MetaRecipe(_) => {
-                panic!("Expected ingredient, got subrecipe")
-            }
-        };
+        let ingredient = self;
         let ingredient_id = ingredient.ingredient_id;
         let form_id = format!("ingredient-{}-form", ingredient_id);
+        let unit = unit_types
+            .iter()
+            .find(|u| u.id == self.unit_id)
+            .unwrap_or(&unit_types[0]);
         html! {
             tr id=(format!("ingredient-{}", ingredient_id)) style="text-align:center"{ // TODO: Put into form
                 td style="text-align:left" {
                     input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
                     input class=(form_id) type="hidden" name=("ingredient_id") value=(ingredient_id);
-                    input class=(form_id) type="hidden" name=("ingredient_name") value=(self.ingredient.name());
-                    div class=(format!("w-full {}",form_id)) name=("ingredient") { (self.ingredient.name()) }
+                    input class=(form_id) type="hidden" name=("ingredient_name") value=(self.name.clone().unwrap_or_default());
+                    div class=(format!("w-full {}",form_id)) name=("ingredient") { (self.name.clone().unwrap_or_default()) }
                 }
                 td { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-target=(format!("#ingredient-{}", ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML"; }
-                td { select class=(format!("unit {} fc-select",form_id)) name="ingredient_unit_id" selected=(self.unit.name) hx-target=(format!("#ingredient-{}", ingredient_id)) hx-swap="outerHTML" required="required" hx-put="recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-include=(format!(".{}", form_id)) { @for unit in unit_types {
-                    @if unit.unit_id == self.unit.unit_id { option value=(unit.unit_id) selected { (unit.name) } } @else { option value=(unit.unit_id) { (unit.name) } } } } }
+                td { select class=(format!("unit {} fc-select",form_id)) name="ingredient_unit_id" selected=(unit.name) hx-target=(format!("#ingredient-{}", ingredient_id)) hx-swap="outerHTML" required="required" hx-put="recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-include=(format!(".{}", form_id)) { @for unit in unit_types {
+                    @if unit.id == self.unit_id { option value=(unit.id) selected { (unit.name) } } @else { option value=(unit.id) { (unit.name) } } } } }
                 td { button class="btn btn-cancel" hx-target="#contents" hx-delete=("recipes/edit/delete-ingredient") hx-include=(format!(".{}", form_id)) { "Delete" } }
             }
         }
@@ -554,30 +466,28 @@ impl IngredientTableFormattable for RecipeIngredient {
 }
 
 pub trait SubRecipeTableFormattable {
-    fn format_for_subrecipe_table(&self, recipe_id: i32) -> Markup;
+    fn format_for_subrecipe_table(&self) -> Markup;
 }
 
-impl SubRecipeTableFormattable for RecipeIngredient {
-    fn format_for_subrecipe_table(&self, recipe_id: i32) -> Markup {
-        let subrecipe = match &self.ingredient {
-            foodlib::RecipeMetaIngredient::Ingredient(_) => {
-                panic!("Expected subrecipe, got ingredient")
-            }
-            foodlib::RecipeMetaIngredient::MetaRecipe(subrecipe) => subrecipe,
-        };
-        let subrecipe_id = subrecipe.recipe_id;
+impl SubRecipeTableFormattable for RecipeMetaIngredient {
+    fn format_for_subrecipe_table(&self) -> Markup {
+        let subrecipe = self;
+        let subrecipe_id = subrecipe.child_id;
+        let recipe_id = self.parent_id;
         let form_id = format!("subrecipe-{}-form", subrecipe_id);
+        let amount = &self.weight;
+        let name = self.name.clone().unwrap_or_default();
         html! {
             tr id=(format!("subrecipe-{}", subrecipe_id)) style="text-align:center"{ // TODO: Put into form
                 td style="text-align:left" {
                     input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
                     input class=(form_id) type="hidden" name=("subrecipe_id") value=(subrecipe_id);
-                    input class=(form_id) type="hidden" name=("subrecipe_name") value=(subrecipe.name);
-                    input class=(form_id) type="hidden" name=("subrecipe_unit_id") value=(self.unit.unit_id);
-                    div class=(format!("w-full {}",form_id)) name=("subrecipe") { a hx-target="#content" hx-get=(format!("/recipes/edit/{}", subrecipe.recipe_id)) { (subrecipe.name) } }
+                    input class=(form_id) type="hidden" name=("subrecipe_name") value=(name);
+                    input class=(form_id) type="hidden" name=("subrecipe_unit_id") value=(0);
+                    div class=(format!("w-full {}",form_id)) name=("subrecipe") { a hx-target="#content" hx-get=(format!("/recipes/edit/{}", subrecipe_id)) { (name) } }
                 }
-                td { input class=(format!("text {}",form_id)) name="subrecipe_amount" value=(self.amount) required="required" hx-put="recipes/edit/change-subrecipe" hx-target=(format!("#subrecipe-{}", subrecipe_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-indicator=".htmx-indicator" hx-swap="outerHTML"; }
-                td { (self.unit.name) }
+                td { input class=(format!("text {}",form_id)) name="subrecipe_amount" value=(amount) required="required" hx-put="recipes/edit/change-subrecipe" hx-target=(format!("#subrecipe-{}", subrecipe_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-indicator=".htmx-indicator" hx-swap="outerHTML"; }
+                td { "kg" }
                 td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("recipes/edit/delete-subrecipe/{}/{}", recipe_id, subrecipe_id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
             }
         }
@@ -590,19 +500,19 @@ pub trait StepTableFormattable {
 
 impl StepTableFormattable for RecipeStep {
     fn format_for_step_table(&self, recipe_id: i32) -> Markup {
-        let form_id = format!("step-{}-form", self.step_id);
+        let form_id = format!("step-{}-form", self.id);
         html! {
-            tr id=(format!("step-{}", self.step_id)) style="text-align:center"{
+            tr id=(format!("step-{}", self.id)) style="text-align:center"{
                 td style="text-align:left" {
                     input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
-                    input class=(form_id) type="hidden" name=("step_id") value=(self.step_id);
-                    input class=(format!("text {}",form_id)) name="step_order" value=(self.step_order) required="required" hx-put="recipes/edit/change-step-order" hx-target="#contents" hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator";
+                    input class=(form_id) type="hidden" name=("step_id") value=(self.id);
+                    input class=(format!("text {}",form_id)) name="step_order" value=(self.order) required="required" hx-put="recipes/edit/change-step-order" hx-target="#contents" hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator";
                 }
-                td { input class=(format!("text {}",form_id)) name=("step_name") value=(self.step_name) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.step_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { input class=(format!("text {}",form_id)) name="step_description" value=(self.step_description) hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.step_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.step_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.step_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("recipes/edit/delete-step/{}/{}", recipe_id, self.step_id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
+                td { input class=(format!("text {}",form_id)) name=("step_name") value=(self.name) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td { input class=(format!("text {}",form_id)) name="step_description" value=(self.description) hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("recipes/edit/delete-step/{}/{}", recipe_id, self.id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
             }
         }
     }
