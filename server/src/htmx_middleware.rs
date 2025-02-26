@@ -39,7 +39,7 @@ pub async fn htmx_middleware(
         auth.login(&user).await.unwrap();
         log::info!("logged in test user");
         // When the user sends their first request, log them in and retry the request
-        return axum::response::Redirect::to("./").into_response();
+        return axum::response::Redirect::to(req.uri().path()).into_response();
     }
     let response = next.run(req).await;
 
@@ -83,6 +83,7 @@ pub async fn htmx_middleware(
                         {"code":"[23]..", "swap": true},
                         {"code":"401", "swap": true},
                         {"code":"403", "swap": true},
+                        {"code":"404", "swap": true},
                         {"code":"422", "swap": true},
                         {"code":"[45]..", "swap": false, "error":true},
                         {"code":"...", "swap": true}

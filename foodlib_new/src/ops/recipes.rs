@@ -152,7 +152,7 @@ impl RecipeOps {
             r#"
             SELECT recipe_id as id, name, comment, owner_id 
             FROM recipes 
-            ORDER BY name
+            ORDER BY recipe_id
             "#
         )
         .fetch_all(&*self.pool)
@@ -483,7 +483,7 @@ impl RecipeOps {
     }
 
     pub async fn get_recipe_stats(&self, recipe_id: i32) -> Result<RecipeStats> {
-        let record = sqlx::query_as!(
+        sqlx::query_as!(
             RecipeStats,
             r#"
             SELECT 
@@ -500,9 +500,7 @@ impl RecipeOps {
         .ok_or(Error::NotFound {
             entity: "RecipeStats",
             id: recipe_id.to_string(),
-        })?;
-
-        Ok(record)
+        })
     }
 
     pub async fn search_by_ingredients(

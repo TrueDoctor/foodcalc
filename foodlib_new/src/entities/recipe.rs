@@ -38,7 +38,7 @@ pub struct RecipeMetaIngredient {
     pub name: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RecipeStats {
     pub recipe_id: i32,
     pub weight: BigDecimal,

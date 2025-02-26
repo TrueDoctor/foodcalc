@@ -188,7 +188,7 @@ async fn meal_form(
         div class="flex justify-between w-full mt-4 gap-2" {
             button class="btn btn-abort" hx-target="#content" hx-get=(format!("/events/edit/{}", event_id)) { "Abort" }
 
-            button class="btn btn-primary mx-4" hx-target="#content" hx-post=(format!("events/edit/event_edit_meal/{}/{}", event_id, meal_id)) hx-include="*" { "Save" }
+            button class="btn btn-primary mx-4" hx-target="#content" hx-post=(format!("/events/edit/event_edit_meal/{}/{}", event_id, meal_id)) hx-include="*" { "Save" }
         }
     })
 }

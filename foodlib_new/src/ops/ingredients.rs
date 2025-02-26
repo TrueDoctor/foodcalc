@@ -1,6 +1,6 @@
 // foodlib_new/src/ops/ingredients.rs
 
-use crate::{entities::ingredient::*, error::Result, recipe::Recipe};
+use crate::{entities::ingredient::*, error::Result, recipe::Recipe, Error};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -56,7 +56,7 @@ impl IngredientOps {
     }
 
     pub async fn get_by_name(&self, name: &str) -> Result<Ingredient> {
-        let row = sqlx::query_as!(
+        sqlx::query_as!(
             Ingredient,
             r#"
             SELECT 
@@ -70,10 +70,12 @@ impl IngredientOps {
             "#,
             name
         )
-        .fetch_one(&*self.pool)
-        .await?;
-
-        Ok(row)
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "Ingredient",
+            id: name.to_string(),
+        })
     }
 
     pub async fn usages(&self, ingredient_id: i32) -> Result<Vec<Recipe>> {

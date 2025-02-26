@@ -25,9 +25,12 @@ pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
         .route("/commit-ingredient", put(handle_ingredient_add))
         .route("/commit-subrecipe", put(handle_subrecipe_add))
         .route("/commit-step", put(handle_step_add))
-        .route("/delete-ingredient", delete(handle_ingredient_delete))
         .route(
-            "/delete-subrecipe/{recipe_id}/{step_id}",
+            "/delete-ingredient/{recipe_id}/{ingredient_id}",
+            delete(handle_ingredient_delete),
+        )
+        .route(
+            "/delete-subrecipe/{recipe_id}/{subrecipe_id}",
             delete(handle_subrecipe_delete),
         )
         .route(
@@ -183,14 +186,14 @@ pub async fn handle_step_order_change(
 
 pub async fn handle_ingredient_delete(
     foodlib: FoodLib,
-    Form(data): Form<UpdateIngredientHeader>,
+    Path((recipe_id, ingredient_id)): Path<(i32, i32)>,
 ) -> MResponse {
     foodlib
         .recipes()
-        .delete_ingredient(data.recipe_id, data.ingredient_id)
+        .delete_ingredient(recipe_id, ingredient_id)
         .await?;
 
-    recipe_edit_view(foodlib, Path(data.recipe_id)).await
+    recipe_edit_view(foodlib, Path(recipe_id)).await
 }
 
 pub async fn handle_subrecipe_delete(
@@ -216,57 +219,30 @@ pub async fn handle_step_delete(
 
 pub async fn handle_ingredient_add(
     foodlib: FoodLib,
-    user: User,
-    Form(data): Form<UpdateIngredientHeader>,
+    Form(mut data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
-    let ingredient_id = foodlib
+    let ingredient = foodlib
         .ingredients()
         .get_by_name(&data.ingredient_name)
-        .await
-        .unwrap_or(Ingredient {
-            name: String::new(),
-            energy: BigDecimal::from(-1),
-            comment: None,
-            id: -1,
-            owner_id: user.id,
-        })
-        .id;
+        .await?;
 
     let recipe_id = data.recipe_id;
-    if ingredient_id < 0 {
-        add_ingredient_form(foodlib, Path(recipe_id)).await
-    } else {
-        foodlib.recipes().add_ingredient(data.into()).await?;
+    data.ingredient_id = ingredient.id;
+    foodlib.recipes().add_ingredient(data.into()).await?;
 
-        recipe_edit_view(foodlib, Path(recipe_id)).await
-    }
+    recipe_edit_view(foodlib, Path(recipe_id)).await
 }
 
 pub async fn handle_subrecipe_add(
-    user: User,
     foodlib: FoodLib,
-    Form(data): Form<UpdateSubrecipeHeader>,
+    Form(mut data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
-    let subrecipe_id = foodlib
-        .recipes()
-        .get_by_name(&data.subrecipe_name)
-        .await
-        .unwrap_or(Recipe {
-            id: -1,
-            name: String::new(),
-            comment: None,
-            owner_id: user.id,
-        })
-        .id;
-
+    let subrecipe = foodlib.recipes().get_by_name(&data.subrecipe_name).await?;
     let recipe_id = data.recipe_id;
-    if subrecipe_id < 0 {
-        add_subrecipe_form(foodlib, Path(recipe_id)).await
-    } else {
-        foodlib.recipes().add_meta_ingredient(data.into()).await?;
+    data.subrecipe_id = subrecipe.id;
+    foodlib.recipes().add_meta_ingredient(data.into()).await?;
 
-        recipe_edit_view(foodlib, Path(recipe_id)).await
-    }
+    recipe_edit_view(foodlib, Path(recipe_id)).await
 }
 
 pub async fn handle_step_add(
@@ -352,7 +328,12 @@ pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> M
     let ingredients = foodlib.recipes().get_ingredients(recipe_id).await?;
     let unit_types = foodlib.units().list().await?;
     let steps = foodlib.recipes().get_steps(recipe_id).await?;
-    let stats = foodlib.recipes().get_recipe_stats(recipe_id).await?;
+    // The stats might not exist yet if we are creating a new recipe
+    let stats = foodlib
+        .recipes()
+        .get_recipe_stats(recipe_id)
+        .await
+        .unwrap_or_default();
     let recipe = foodlib.recipes().get(recipe_id).await?;
 
     Ok(html! {
@@ -365,13 +346,6 @@ pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> M
                     button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
             }
 
-            div id="styling-bullshit" class="mb-6 mt-6 w-1/4" {
-                form hx-put=(format!("/recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" hx-target="#styling-bullshit" class="w-full flex flex-col items-center justify-center pb-4" {
-                    input type="hidden" name=("recipe_id") value=(recipe_id);
-                    button type="submit" class="btn btn-primary"  { "Add Subrecipe (+)" }
-                }
-            }
-
             div class="w-3/4 bg-blue-100 dark:bg-blue-900 p-4 mb-4 rounded-lg" {
                 div class="flex justify-between items-center" {
                     h3 class="text-lg font-semibold" { "Recipe Weight Diagnostics" }
@@ -379,6 +353,13 @@ pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> M
                         p { "Total Weight: " (format!("{:.3} kg", stats.weight)) }
                         p { "Total Energy: " (format!("{:.2} kJ", stats.energy / 1000.0)) }
                     }
+                }
+            }
+
+            div id="styling-bullshit" class="mb-6 mt-6 w-1/4" {
+                form hx-put=(format!("/recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" hx-target="#styling-bullshit" class="w-full flex flex-col items-center justify-center pb-4" {
+                    input type="hidden" name=("recipe_id") value=(recipe_id);
+                    button type="submit" class="btn btn-primary"  { "Add Subrecipe (+)" }
                 }
             }
 
@@ -450,7 +431,7 @@ impl IngredientTableFormattable for RecipeIngredient {
                 td { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-target=(format!("#ingredient-{}", ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML"; }
                 td { select class=(format!("unit {} fc-select",form_id)) name="ingredient_unit_id" selected=(unit.name) hx-target=(format!("#ingredient-{}", ingredient_id)) hx-swap="outerHTML" required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-include=(format!(".{}", form_id)) { @for unit in unit_types {
                     @if unit.id == self.unit_id { option value=(unit.id) selected { (unit.name) } } @else { option value=(unit.id) { (unit.name) } } } } }
-                td { button class="btn btn-cancel" hx-target="#contents" hx-delete=("/recipes/edit/delete-ingredient") hx-include=(format!(".{}", form_id)) { "Delete" } }
+                td { button class="btn btn-cancel" hx-target="#contents" hx-delete=(format!("/recipes/edit/delete-ingredient/{recipe_id}/{ingredient_id}"))  { "Delete" } }
             }
         }
     }

@@ -4,7 +4,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use bigdecimal::BigDecimal;
-use foodlib_new::error::Result;
+use foodlib_new::{error::Result, inventory::InventoryItemWithName};
 use foodlib_new::{
     event::{ShoppingListItem, ShoppingTour},
     inventory::InventoryItem,
@@ -66,7 +66,7 @@ async fn shopping_tour_form(
     Path((event_id, tour_id)): Path<(i32, i32)>,
 ) -> MResponse {
     let stores = state.new_lib().stores().list().await?;
-    let inventories = state.new_lib().inventories().get_all_inventories().await?;
+    let inventories = state.new_lib().inventories().list().await?;
 
     let default_tour = ShoppingTour {
         event_id,
@@ -113,7 +113,7 @@ async fn shopping_tour_form(
             if let Ok(items) = state
                 .new_lib()
                 .inventories()
-                .get_inventory_items(inv.inventory_id)
+                .get_items(inv.inventory_id)
                 .await
             {
                 all_items.extend(items);
@@ -166,17 +166,19 @@ async fn shopping_tour_form(
                     }
 
                     div class="flex flex-col space-y-2" {
-                        label { "Use Inventories" }
-                        div class="space-y-1" {
-                            @for inventory in inventories {
-                                div class="flex items-center gap-2" {
-                                    input type="checkbox"
-                                        class="w-4 h-4"
-                                        checked[event_inventories.iter().any(|inv| inv.inventory_id == inventory.id)]
-                                        hx-post=(format!("/events/edit/shopping_tours/toggle_inventory/{}/{}", event_id, inventory.id))
-                                        hx-target="#content"
-                                        hx-vals=(format!("{{\"checked\": {}, \"tour_id\": {}}}", !event_inventories.iter().any(|inv| inv.inventory_id == inventory.id), tour_id.unwrap_or_default()));
-                                    span { (inventory.name) }
+                        @if tour_id.is_some() {
+                            label { "Use Inventories" }
+                            div class="space-y-1" {
+                                @for inventory in inventories {
+                                    div class="flex items-center gap-2" {
+                                        input type="checkbox"
+                                            class="w-4 h-4"
+                                            checked[event_inventories.iter().any(|inv| inv.inventory_id == inventory.id)]
+                                            hx-post=(format!("/events/edit/shopping_tours/toggle_inventory/{}/{}", event_id, inventory.id))
+                                            hx-target="#content"
+                                            hx-vals=(format!("{{\"checked\": {}, \"tour_id\": {}}}", !event_inventories.iter().any(|inv| inv.inventory_id == inventory.id), tour_id.unwrap_or_default()));
+                                        span { (inventory.name) }
+                                    }
                                 }
                             }
                         }
@@ -301,7 +303,7 @@ async fn save_tour(foodlib: FoodLib, Form(form): Form<TourForm>) -> MResponse {
     })
 }
 
-fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItem]) -> &'static str {
+fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> &'static str {
     let inv_amount = inventory
         .iter()
         .find(|i| i.ingredient_id == item.ingredient_id)
@@ -317,7 +319,7 @@ fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItem]) -> &'stat
     }
 }
 
-fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItem]) -> String {
+fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> String {
     let inv_amount = inventory
         .iter()
         .filter(|i| i.ingredient_id == item.ingredient_id)
@@ -461,7 +463,7 @@ async fn update_inventory(foodlib: FoodLib, Path(tour_id): Path<i32>) -> MRespon
     for (_, inventory_id, _, ingredient_id, _, _, amount) in changes {
         foodlib
             .inventories()
-            .update_inventory_item(InventoryItem {
+            .update_item(InventoryItem {
                 inventory_id,
                 ingredient_id,
                 amount,
@@ -486,7 +488,7 @@ async fn calculate_inventory_changes(
     let inventories = inventories
         .iter()
         .map(|inv| inv.inventory_id)
-        .map(|id| inventory_ops.get_inventory(id));
+        .map(|id| inventory_ops.get(id));
     let inventories = ::futures::future::join_all(inventories).await;
 
     let mut changes = Vec::new();
@@ -502,7 +504,7 @@ async fn calculate_inventory_changes(
                 break;
             }
 
-            if let Ok(items) = lib.inventories().get_inventory_items(inv.id).await {
+            if let Ok(items) = lib.inventories().get_items(inv.id).await {
                 if let Some(current_item) =
                     items.iter().find(|i| i.ingredient_id == item.ingredient_id)
                 {

@@ -1,9 +1,9 @@
 use crate::FoodLib;
 use axum::extract::{Form, Path};
 use axum::response::IntoResponse;
+use axum::routing::{delete, get, post};
 use axum_login::login_required;
 use bigdecimal::BigDecimal;
-use foodlib::IngredientHasScource;
 use foodlib_new::auth::AuthBackend;
 use foodlib_new::ingredient::IngredientWithSource;
 use foodlib_new::user::User;
@@ -21,22 +21,19 @@ use crate::MyAppState;
 
 pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/", axum::routing::post(add_ingredient))
-        .route(
-            "/sources/{ingredient}/{sourc}",
-            axum::routing::post(update_source),
-        )
-        .route("/{id}", axum::routing::delete(delete))
-        .route("/edit", axum::routing::get(edit_ingredient_form))
-        .route("/delete/{id}", axum::routing::get(delete_ingredient_form))
+        .route("/", post(update_ingredient))
+        .route("/sources/{ingredient}/{source}", post(update_source))
+        .route("/{id}", delete(delete_ingredient))
+        .route("/edit", get(edit_ingredient_form))
+        .route("/delete/{id}", get(delete_ingredient_form))
         .route(
             "/sources/delete/{ingredient_id}/{source_id}",
-            axum::routing::get(delete_source),
+            get(delete_source),
         )
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
-        .route("/sources/{id}", axum::routing::get(sources_table))
-        .route("/search", axum::routing::post(search))
-        .route("/", axum::routing::get(ingredients_view))
+        .route("/sources/{id}", get(sources_table))
+        .route("/search", post(search))
+        .route("/", get(ingredients_view))
 }
 
 #[derive(Deserialize)]
@@ -44,7 +41,6 @@ pub struct SearchParameters {
     search: String,
 }
 
-#[axum::debug_handler]
 pub async fn search(
     foodlib: FoodLib,
     user: Option<User>,
@@ -64,7 +60,7 @@ pub async fn search(
     })
 }
 
-pub async fn add_ingredient(
+pub async fn update_ingredient(
     foodlib: FoodLib,
     user: User,
     Form(mut ingredient): Form<Ingredient>,
@@ -201,7 +197,7 @@ fn add_ingredient_button(user: Option<&User>) -> Markup {
     }
 }
 
-async fn delete(foodlib: FoodLib, user: User, id: Path<i32>) -> MResponse {
+async fn delete_ingredient(foodlib: FoodLib, user: User, id: Path<i32>) -> MResponse {
     if !user.is_admin {
         return Err(foodlib_new::Error::Forbidden(
             "You don't have permission to delete ingredients".into(),
@@ -368,7 +364,7 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>) -> 
                 }
             }
             td {
-                @if can_edit(ingredient.owner_id) {
+                @if user.is_some_and(|x|x.is_admin) {
                     button class="btn btn-cancel"
                     hx-get=(format!("/ingredients/delete/{}", ingredient.id))
                     hx-swap="beforebegin" { "Delete" }

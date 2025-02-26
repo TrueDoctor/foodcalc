@@ -12,15 +12,16 @@ impl InventoryOps {
         Self { pool }
     }
 
-    pub async fn create_inventory(&self, inventory: Inventory) -> Result<Inventory> {
+    pub async fn create(&self, inventory: Inventory) -> Result<Inventory> {
         let row = sqlx::query_as!(
             Inventory,
             r#"
-            INSERT INTO inventories (name)
-            VALUES ($1)
-            RETURNING inventory_id as "id", name
+            INSERT INTO inventories (name, owner_id)
+            VALUES ($1, $2)
+            RETURNING inventory_id as "id", name, owner_id
             "#,
-            inventory.name
+            inventory.name,
+            inventory.owner_id,
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -28,14 +29,14 @@ impl InventoryOps {
         Ok(row)
     }
 
-    pub async fn update_inventory(&self, inventory: Inventory) -> Result<Inventory> {
+    pub async fn update(&self, inventory: Inventory) -> Result<Inventory> {
         let row = sqlx::query_as!(
             Inventory,
             r#"
             UPDATE inventories
             SET name = $1
             WHERE inventory_id = $2
-            RETURNING inventory_id as "id", name
+            RETURNING inventory_id as "id", name, owner_id
             "#,
             inventory.name,
             inventory.id
@@ -46,7 +47,7 @@ impl InventoryOps {
         Ok(row)
     }
 
-    pub async fn delete_inventory(&self, id: i32) -> Result<()> {
+    pub async fn delete(&self, id: i32) -> Result<()> {
         sqlx::query!(r#"DELETE FROM inventories WHERE inventory_id = $1"#, id)
             .execute(&*self.pool)
             .await?;
@@ -54,11 +55,11 @@ impl InventoryOps {
         Ok(())
     }
 
-    pub async fn get_inventory(&self, id: i32) -> Result<Inventory> {
+    pub async fn get(&self, id: i32) -> Result<Inventory> {
         let row = sqlx::query_as!(
             Inventory,
             r#"
-            SELECT inventory_id as "id", name
+            SELECT inventory_id as "id", name, owner_id
             FROM inventories
             WHERE inventory_id = $1
             "#,
@@ -70,11 +71,11 @@ impl InventoryOps {
         Ok(row)
     }
 
-    pub async fn get_all_inventories(&self) -> Result<Vec<Inventory>> {
+    pub async fn list(&self) -> Result<Vec<Inventory>> {
         let rows = sqlx::query_as!(
             Inventory,
             r#"
-            SELECT inventory_id as "id", name
+            SELECT inventory_id as "id", name, owner_id
             FROM inventories
             ORDER BY name
             "#
@@ -85,7 +86,7 @@ impl InventoryOps {
         Ok(rows)
     }
 
-    pub async fn add_inventory_item(&self, item: InventoryItem) -> Result<InventoryItem> {
+    pub async fn add_item(&self, item: InventoryItem) -> Result<InventoryItem> {
         let row = sqlx::query_as!(
             InventoryItem,
             r#"
@@ -103,7 +104,7 @@ impl InventoryOps {
         Ok(row)
     }
 
-    pub async fn update_inventory_item(&self, item: InventoryItem) -> Result<InventoryItem> {
+    pub async fn update_item(&self, item: InventoryItem) -> Result<InventoryItem> {
         let row = sqlx::query_as!(
             InventoryItem,
             r#"
@@ -122,7 +123,7 @@ impl InventoryOps {
         Ok(row)
     }
 
-    pub async fn delete_inventory_item(&self, inventory_id: i32, ingredient_id: i32) -> Result<()> {
+    pub async fn delete_item(&self, inventory_id: i32, ingredient_id: i32) -> Result<()> {
         sqlx::query!(
             r#"
             DELETE FROM inventory_ingredients
@@ -137,12 +138,12 @@ impl InventoryOps {
         Ok(())
     }
 
-    pub async fn get_inventory_items(&self, inventory_id: i32) -> Result<Vec<InventoryItem>> {
+    pub async fn get_items(&self, inventory_id: i32) -> Result<Vec<InventoryItemWithName>> {
         let rows = sqlx::query_as!(
-            InventoryItem,
+            InventoryItemWithName,
             r#"
-            SELECT inventory_id, ingredient_id, amount
-            FROM inventory_ingredients
+            SELECT inventory_id, ingredient_id, amount, name
+            FROM inventory_ingredients JOIN ingredients USING(ingredient_id)
             WHERE inventory_id = $1
             "#,
             inventory_id

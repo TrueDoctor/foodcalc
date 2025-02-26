@@ -1,37 +1,38 @@
-use axum::extract::{Form, State};
+use crate::FoodLib;
+use axum::{
+    extract::Form,
+    routing::{get, put},
+};
+use axum_login::login_required;
 use bigdecimal::BigDecimal;
-use foodlib::{Ingredient, IngredientWithWeight, Inventory, InventoryIngredient};
+use foodlib_new::{
+    auth::AuthBackend,
+    ingredient::Ingredient,
+    inventory::{Inventory, InventoryItem, InventoryItemWithName},
+    user::User,
+};
 use maud::{html, Markup};
 use serde::Deserialize;
 
+use super::MResponse;
+use crate::frontend::LOGIN_URL;
 use crate::MyAppState;
 
 pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/commit", axum::routing::put(commit_inventory))
-        .route("/add-inventory", axum::routing::get(handle_add_inventory))
-        .route("/edit-inventory", axum::routing::put(handle_edit_inventory))
-        .route("/", axum::routing::get(select_inventory_form))
-        .route("/select", axum::routing::put(handle_select))
-        .route("/manage", axum::routing::put(handle_manage))
-        .route(
-            "/delete-inventory",
-            axum::routing::put(handle_delete_inventory),
-        )
-        .route("/add-ingredient", axum::routing::put(add_ingredient_form))
-        .route(
-            "/commit-ingredient",
-            axum::routing::put(handle_ingredient_commit),
-        )
-        .route(
-            "/delete-ingredient",
-            axum::routing::put(handle_ingredient_delete),
-        )
-        .route(
-            "/change-ingredient-amount",
-            axum::routing::put(handle_ingredient_change),
-        )
-        .route("/abort", axum::routing::put(handle_abort))
+        .route("/commit", put(commit_inventory))
+        .route("/add-inventory", get(handle_add_inventory))
+        .route("/edit-inventory", put(handle_edit_inventory))
+        .route("/", get(select_inventory_form))
+        .route("/select", put(handle_select))
+        .route("/manage", put(handle_manage))
+        .route("/delete-inventory", put(handle_delete_inventory))
+        .route("/add-ingredient", put(add_ingredient_form))
+        .route("/commit-ingredient", put(handle_ingredient_commit))
+        .route("/delete-ingredient", put(handle_ingredient_delete))
+        .route("/change-ingredient-amount", put(handle_ingredient_change))
+        .route("/abort", put(handle_abort))
+        .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
 }
 
 // Request parameters
@@ -47,31 +48,10 @@ static INVENTORIES_DIV: &str = "inventories";
 static INVENTORY_CONTENTS_DIV: &str = "contents";
 static INGREDIENTS_DATALIST: &str = "ingredients";
 
-// TODO: Refactor request paths to constants
-
 #[derive(Debug, Deserialize)]
 pub struct InventoryHeaderData {
     pub inventory_id: i32,
     pub filter_text: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct InventoryItemData {
-    pub inventory_id: i32,
-    pub filter_text: Option<String>,
-    // We get this from the deserialization
-    #[allow(unused)]
-    pub ingredient_id: i32,
-    pub ingredient_name: String,
-    pub ingredient_amount: BigDecimal,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateInventoryItemData {
-    pub inventory_id: i32,
-    pub filter_text: Option<String>,
-    pub ingredient_id: i32,
-    pub ingredient_amount: BigDecimal,
 }
 
 impl Default for InventoryHeaderData {
@@ -81,6 +61,15 @@ impl Default for InventoryHeaderData {
             filter_text: None,
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InventoryItemData {
+    pub inventory_id: i32,
+    pub filter_text: Option<String>,
+    pub ingredient_id: i32,
+    pub ingredient_name: String,
+    pub ingredient_amount: BigDecimal,
 }
 
 impl Default for InventoryItemData {
@@ -95,153 +84,113 @@ impl Default for InventoryItemData {
     }
 }
 
-fn return_to_inv_selection_error() -> Markup {
-    html! {
-        div id="error" class="flex flex-col items-center justify-center text-red-500" {
-            div {
-                h1 { "Error" }
-                p { "Failed to add ingredient" }
-            }
-            button class="btn btn-primary" hx-get="/inventories" hx-target=(["#", INVENTORIES_DIV].concat())  { "Back" }
+impl From<InventoryItemData> for InventoryItem {
+    fn from(item: InventoryItemData) -> Self {
+        InventoryItem {
+            inventory_id: item.inventory_id,
+            ingredient_id: item.ingredient_id,
+            amount: item.ingredient_amount,
         }
     }
 }
 
-fn return_to_inv_overview_error(inventory_id: i32) -> Markup {
-    html! {
-        div id="error" class="flex flex-col items-center justify-center text-red-500" {
-            form {
-                h1 { "Error" }
-                p { "Failed to add ingredient" }
-                input type="hidden" value=(inventory_id);
-            }
-            button class="btn btn-primary" hx-get="/inventories/select" hx-target=(INVENTORIES_DIV)  { "Back" }
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateInventoryItemData {
+    pub inventory_id: i32,
+    pub filter_text: Option<String>,
+    pub ingredient_id: i32,
+    pub ingredient_amount: BigDecimal,
+}
+
+impl From<UpdateInventoryItemData> for InventoryItem {
+    fn from(item: UpdateInventoryItemData) -> Self {
+        InventoryItem {
+            inventory_id: item.inventory_id,
+            ingredient_id: item.ingredient_id,
+            amount: item.ingredient_amount,
         }
     }
 }
 
-pub async fn handle_ingredient_change(
-    State(state): State<MyAppState>,
-    data: axum::extract::Form<UpdateInventoryItemData>,
-) -> Markup {
-    state
-        .db_connection
-        .update_inventory_item(InventoryIngredient {
-            inventory_id: data.inventory_id,
-            ingredient_id: data.ingredient_id,
-            amount: data.ingredient_amount.clone(),
-        })
-        .await
-        .unwrap_or_else(|_| {
-            log::warn!(
-                "Failed to update ingredient {} in inventory {}",
-                data.ingredient_id,
-                data.inventory_id
-            )
-        });
+async fn handle_ingredient_change(
+    foodlib: FoodLib,
+    Form(data): Form<UpdateInventoryItemData>,
+) -> MResponse {
+    let item: InventoryItem = data.clone().into();
+    let updated = foodlib.inventories().update_item(item).await?;
 
-    let ingredient_name = state
-        .db_connection
-        .get_ingredient_from_string_reference(data.ingredient_id.to_string())
-        .await
-        .unwrap_or_default()
-        .name;
-    let ingredient = IngredientWithWeight {
-        ingredient_id: data.ingredient_id,
-        name: ingredient_name,
-        amount: data.ingredient_amount.clone(),
+    // Get ingredient name for display
+    let ingredient = foodlib.ingredients().get(updated.ingredient_id).await?;
+
+    let ingredient_with_weight = InventoryItemWithName {
+        name: ingredient.name,
+        ..updated.into()
     };
 
-    ingredient.format_for_ingredient_table(InventoryHeaderData {
-        inventory_id: data.inventory_id,
-        filter_text: data.filter_text.clone(),
-    })
-}
-
-pub async fn handle_ingredient_delete(
-    State(state): State<MyAppState>,
-    data: axum::extract::Form<UpdateInventoryItemData>,
-) -> Markup {
-    // TODO: Delete ingredient
-    state
-        .db_connection
-        .delete_inventory_item(InventoryIngredient {
-            inventory_id: data.inventory_id,
-            ingredient_id: data.ingredient_id,
-            amount: data.ingredient_amount.clone(),
-        })
-        .await
-        .unwrap_or_else(|_| {
-            log::warn!(
-                "Failed to delete ingredient {} from inventory {}",
-                data.ingredient_id,
-                data.inventory_id
-            )
-        });
-    (render_filtered_inventory_contents(State(state), data.inventory_id, data.filter_text.clone()))
-        .await
-}
-
-pub async fn handle_ingredient_commit(
-    State(state): State<MyAppState>,
-    data: Form<InventoryItemData>,
-) -> Markup {
-    let ingredient_id = state
-        .db_connection
-        .get_ingredient_from_string_reference(data.ingredient_name.clone())
-        .await
-        .unwrap_or(Ingredient {
-            ingredient_id: -1,
-            name: String::new(),
-            energy: BigDecimal::from(-1),
-            comment: None,
-            owner_id: -1,
-        })
-        .ingredient_id;
-
-    dbg!(format!(
-        "requested name {} yielded ingredient id {}",
-        data.ingredient_name, ingredient_id
-    ));
-    if ingredient_id < 0 {
-        add_ingredient_form_with_header_data(InventoryHeaderData {
+    Ok(
+        ingredient_with_weight.format_for_ingredient_table(InventoryHeaderData {
             inventory_id: data.inventory_id,
             filter_text: data.filter_text.clone(),
-        })
-    } else {
-        let Ok(res) = state
-            .db_connection
-            .update_inventory_item(InventoryIngredient {
-                inventory_id: data.inventory_id,
-                ingredient_id,
-                amount: data.ingredient_amount.clone(),
-            })
-            .await
-        else {
-            return return_to_inv_overview_error(data.inventory_id);
-        };
-        dbg!(res);
-        (render_filtered_inventory_contents(
-            State(state),
-            data.inventory_id,
-            data.filter_text.clone(),
-        ))
+        }),
+    )
+}
+
+async fn handle_ingredient_delete(
+    foodlib: FoodLib,
+    Form(data): Form<UpdateInventoryItemData>,
+) -> MResponse {
+    foodlib
+        .inventories()
+        .delete_item(data.inventory_id, data.ingredient_id)
+        .await?;
+
+    render_filtered_inventory_contents(foodlib, data.inventory_id, data.filter_text.clone()).await
+}
+
+async fn handle_ingredient_commit(
+    foodlib: FoodLib,
+    Form(data): Form<InventoryItemData>,
+) -> MResponse {
+    // Try to find the ingredient by name
+    let Ok(ingredient) = foodlib
+        .ingredients()
+        .get_by_name(&data.ingredient_name)
         .await
+    else {
+        return Ok(add_ingredient_form_with_header_data(InventoryHeaderData {
+            inventory_id: data.inventory_id,
+            filter_text: data.filter_text.clone(),
+        }));
+    };
+    let items = foodlib.inventories().get_items(data.inventory_id).await?;
+
+    let item_in_inventory = items.iter().any(|x| x.ingredient_id == ingredient.id);
+    // Create inventory item
+    let item = InventoryItem {
+        inventory_id: data.inventory_id,
+        ingredient_id: ingredient.id,
+        amount: data.ingredient_amount,
+    };
+    if item_in_inventory {
+        foodlib.inventories().update_item(item).await?;
+    } else {
+        foodlib.inventories().add_item(item).await?;
     }
+    render_filtered_inventory_contents(foodlib, data.inventory_id, data.filter_text.clone()).await
 }
 
-pub async fn handle_abort(State(_): State<MyAppState>, data: Form<InventoryHeaderData>) -> Markup {
-    add_ingredient_button(data.inventory_id, data.filter_text.clone())
+async fn handle_abort(Form(header_data): Form<InventoryHeaderData>) -> Markup {
+    add_ingredient_button(header_data.inventory_id, header_data.filter_text.clone())
 }
 
-pub async fn add_ingredient_form(Form(header_data): Form<InventoryHeaderData>) -> Markup {
+async fn add_ingredient_form(Form(header_data): Form<InventoryHeaderData>) -> Markup {
     add_ingredient_form_with_header_data(header_data)
 }
 
-pub fn add_ingredient_form_with_header_data(header_data: InventoryHeaderData) -> Markup {
+fn add_ingredient_form_with_header_data(header_data: InventoryHeaderData) -> Markup {
     html! {
         div id="add-ingredient-div" class="gap-5 mb-2 flex flex-row items-center justify-center"{
-            form hx-put="inventories/commit-ingredient" id="add-ingredient-form" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-swap="outerHTML" {
+            form hx-put="/inventories/commit-ingredient" id="add-ingredient-form" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-swap="outerHTML" {
                 div class="flex flex-row items-center justify-center gap-5 h-10 w-full"{
                     h1 { "Add ingredient" }
                     input type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
@@ -252,7 +201,7 @@ pub fn add_ingredient_form_with_header_data(header_data: InventoryHeaderData) ->
                     button class="btn btn-primary" type="submit" { "Submit" }
                 }
             }
-            form hx-put="inventories/abort" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-swap="outerHTML" {
+            form hx-put="/inventories/abort" hx-target=(["#", INVENTORY_CONTENTS_DIV].concat()) hx-swap="outerHTML" {
                 input type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
                 input type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.clone().unwrap_or_default());
                 button class="btn btn-cancel" type="submit" { "Abort" }
@@ -262,79 +211,56 @@ pub fn add_ingredient_form_with_header_data(header_data: InventoryHeaderData) ->
 }
 
 pub async fn commit_inventory(
-    State(state): State<MyAppState>,
-    form: Form<foodlib::Inventory>,
-) -> Markup {
-    let inventory = form.0;
-    if inventory.inventory_id < 0 {
-        let Ok(inventory_id) = state.add_inventory(inventory.name).await else {
-            return return_to_inv_selection_error();
-        };
-        manage_inventory_form(State(state), inventory_id).await
+    foodlib: FoodLib,
+    user: User,
+    Form(mut inventory): Form<Inventory>,
+) -> MResponse {
+    if inventory.id < 0 {
+        // Creating new inventory
+        inventory.owner_id = user.id;
+        let inventory_id = foodlib.inventories().create(inventory).await?;
+        manage_inventory_form(foodlib, inventory_id.id).await
     } else {
-        let id = inventory.inventory_id;
-        let Ok(inventory_id) = state.update_inventory(inventory).await else {
-            return return_to_inv_overview_error(id);
-        };
-        manage_inventory_form(State(state), inventory_id).await
+        // Updating existing inventory (keeping existing owner)
+        let id = inventory.id;
+        foodlib.inventories().update(inventory).await?;
+        manage_inventory_form(foodlib, id).await
     }
 }
 
-pub async fn handle_select(
-    State(state): State<MyAppState>,
-    header_data: axum::extract::Form<InventoryHeaderData>,
-) -> Markup {
-    manage_inventory_form(State(state.clone()), header_data.inventory_id).await
+pub async fn handle_select(foodlib: FoodLib, header_data: Form<InventoryHeaderData>) -> MResponse {
+    manage_inventory_form(foodlib, header_data.inventory_id).await
 }
 
-pub async fn handle_add_inventory(State(state): State<MyAppState>) -> Markup {
-    add_or_edit_inventory_form(State(state), -1, String::new())
+pub async fn handle_add_inventory(user: User) -> Markup {
+    add_or_edit_inventory_form(-1, String::new(), user.id)
 }
 
 pub async fn handle_delete_inventory(
-    State(state): State<MyAppState>,
-    data: axum::extract::Form<InventoryHeaderData>,
-) -> Markup {
-    let Ok(_) = state
-        .db_connection
-        .delete_inventory(data.inventory_id)
-        .await
-    else {
-        return return_to_inv_overview_error(data.inventory_id);
-    };
-    select_inventory_form(State(state)).await
+    foodlib: FoodLib,
+    data: Form<InventoryHeaderData>,
+) -> MResponse {
+    foodlib.inventories().delete(data.inventory_id).await?;
+    select_inventory_form(foodlib).await
 }
 
-pub async fn handle_manage(
-    State(state): State<MyAppState>,
-    data: axum::extract::Form<InventoryHeaderData>,
-) -> Markup {
-    render_filtered_inventory_contents(State(state), data.inventory_id, data.filter_text.clone())
-        .await
+pub async fn handle_manage(foodlib: FoodLib, data: Form<InventoryHeaderData>) -> MResponse {
+    render_filtered_inventory_contents(foodlib, data.inventory_id, data.filter_text.clone()).await
 }
 
-#[axum::debug_handler]
 pub async fn handle_edit_inventory(
-    State(state): State<MyAppState>,
-    data: axum::extract::Form<InventoryHeaderData>,
+    foodlib: FoodLib,
+    user: User,
+    data: Form<InventoryHeaderData>,
 ) -> Markup {
-    let inventory_name = state
-        .db_connection
-        .get_inventory_from_id(data.inventory_id)
-        .await
-        .unwrap()
-        .name;
-
-    add_or_edit_inventory_form(State(state), data.inventory_id, inventory_name)
+    let inventory = foodlib.inventories().get(data.inventory_id).await.unwrap();
+    add_or_edit_inventory_form(data.inventory_id, inventory.name, user.id)
 }
 
-pub async fn select_inventory_form(State(state): State<MyAppState>) -> Markup {
-    let inventories = state
-        .db_connection
-        .get_inventories()
-        .await
-        .unwrap_or_default();
-    html! {
+pub async fn select_inventory_form(foodlib: FoodLib) -> MResponse {
+    let inventories = foodlib.inventories().list().await?;
+
+    Ok(html! {
         div class="flex flex-col items-center justify-center gap-5" id=(INVENTORIES_DIV) {
             form hx-put="/inventories/select" hx-target="this" hx-swap="outerHTML" hx-trigger="change" {
                 div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full" {
@@ -346,20 +272,13 @@ pub async fn select_inventory_form(State(state): State<MyAppState>) -> Markup {
                 }
             }
         }
-    }
+    })
 }
 
-pub async fn manage_inventory_form(
-    State(state): State<MyAppState>,
-    selected_inventory_id: i32,
-) -> Markup {
-    let inventories = state
-        .db_connection
-        .get_inventories()
-        .await
-        .unwrap_or_default();
+pub async fn manage_inventory_form(foodlib: FoodLib, selected_inventory_id: i32) -> MResponse {
+    let inventories = foodlib.inventories().list().await?;
 
-    html! {
+    Ok(html! {
         div class="flex flex-col items-center justify-center gap-5" id=(INVENTORIES_DIV) {
             div class="flex flex-col items-center justify-center gap-5" id=(INVENTORIES_DIV) {
                 div class="flex flex-col items-center justify-center" id=(INVENTORIES_DIV) {
@@ -381,31 +300,29 @@ pub async fn manage_inventory_form(
 
                         }
                     }
-                }(render_filtered_inventory_contents(State(state), selected_inventory_id, None).await)
+                }(render_filtered_inventory_contents(foodlib, selected_inventory_id, None).await?)
             }
         }
-    }
+    })
 }
 
 pub async fn render_filtered_inventory_contents(
-    State(state): State<MyAppState>,
+    foodlib: FoodLib,
     inventory_id: i32,
     filter: Option<String>,
-) -> Markup {
-    let contents = state
-        .db_connection
-        .get_filtered_inventory_contents(inventory_id, filter.clone())
-        .await
-        .unwrap_or_default();
-    dbg!(contents.clone());
+) -> MResponse {
+    let mut contents = if inventory_id > 0 {
+        foodlib.inventories().get_items(inventory_id).await?
+    } else {
+        Vec::new()
+    };
+    if let Some(ref filter) = filter {
+        contents.retain(|x| x.name.contains(filter));
+    }
 
-    let ingredient_list = state
-        .db_connection
-        .get_ingredients()
-        .await
-        .unwrap_or_default();
+    let ingredient_list = foodlib.ingredients().list().await?;
 
-    html! {
+    Ok(html! {
         div id=(INVENTORY_CONTENTS_DIV) class="flex flex-col items-center justify-center mb-16 w-full"{
             (add_ingredient_button(inventory_id, filter.clone()))
             div id=(SEARCH_RESULTS_DIV) class="w-full" {
@@ -414,11 +331,11 @@ pub async fn render_filtered_inventory_contents(
                 table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block"
                 max-height="60vh" overflow-y="scroll" {
                     thead { tr { th { "Name" } th { "Amount (kg)" } th { "Delete" } } }
-                    tbody { @for item in contents { (item.format_for_ingredient_table( InventoryHeaderData { inventory_id, filter_text: filter.clone()})) } }
+                    tbody { @for item in contents { (item.format_for_ingredient_table(InventoryHeaderData { inventory_id, filter_text: filter.clone()})) } }
                 }
             }
         }
-    }
+    })
 }
 
 pub fn add_ingredient_button(inventory_id: i32, filter: Option<String>) -> Markup {
@@ -432,9 +349,9 @@ pub fn add_ingredient_button(inventory_id: i32, filter: Option<String>) -> Marku
 }
 
 pub fn add_or_edit_inventory_form(
-    State(_state): State<MyAppState>,
     inventory_id: i32,
     inventory_name: String,
+    owner_id: i64,
 ) -> Markup {
     html! {
         form hx-put="/inventories/commit" hx-target="this" hx-swap="outerHTML" {
@@ -442,7 +359,8 @@ pub fn add_or_edit_inventory_form(
                 div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
                     h1 { @if inventory_id > 0 { "Edit inventory" } @else { "Add inventory" } }
                     input type="text" name="name" placeholder="Name" value=(inventory_name) required="required" class="text";
-                    input type="hidden" name="inventory_id" value=(inventory_id);
+                    input type="hidden" name="id" value=(inventory_id);
+                    input type="hidden" name="owner_id" value=(owner_id);
                     button class="btn btn-primary" type="submit" { "Submit" }
                 }
             }
@@ -450,46 +368,34 @@ pub fn add_or_edit_inventory_form(
     }
 }
 
-// TODO: Refactor when we build functions for GUI components
-pub trait SelectFormattable {
+// Trait implementations for formatter functions
+
+trait SelectFormattable {
     fn format_for_select(&self, selected_index: i32) -> Markup;
 }
 
 impl SelectFormattable for Inventory {
     fn format_for_select(&self, selected_index: i32) -> Markup {
         html! {
-            @if selected_index == self.inventory_id {
-                option selected value=(format!("{}", self.inventory_id)) { (self.name) };
+            @if selected_index == self.id {
+                option selected value=(format!("{}", self.id)) { (self.name) };
             }
             @else {
-                option value=(format!("{}", self.inventory_id)) { (self.name) };
+                option value=(format!("{}", self.id)) { (self.name) };
             }
         }
     }
 }
 
-impl SelectFormattable for IngredientWithWeight {
-    fn format_for_select(&self, selected_index: i32) -> Markup {
-        html! {
-            @if selected_index == self.ingredient_id {
-                option selected value=(format!("{}", self.ingredient_id)) { (self.name) };
-            }
-            @else {
-                option value=(format!("{}", self.ingredient_id)) { (self.name) };
-            }
-        }
-    }
-}
-
-pub trait IngredientTableFormattable {
+trait IngredientTableFormattable {
     fn format_for_ingredient_table(&self, header_data: InventoryHeaderData) -> Markup;
 }
 
-impl IngredientTableFormattable for IngredientWithWeight {
+impl IngredientTableFormattable for InventoryItemWithName {
     fn format_for_ingredient_table(&self, header_data: InventoryHeaderData) -> Markup {
         let form_id = format!("ingredient-{}-form", self.ingredient_id);
         html! {
-            tr id=(format!("ingredient-{}", self.ingredient_id)) style="text-align:center"{ // TODO: Put into form
+            tr id=(format!("ingredient-{}", self.ingredient_id)) style="text-align:center"{
                 td style="text-align:left" {
                     input class=(form_id) type="hidden" name=(INVENTORY_ID) value=(header_data.inventory_id);
                     input class=(form_id) type="hidden" name=(FILTER_TEXT) value=(header_data.filter_text.unwrap_or_default());
@@ -497,15 +403,15 @@ impl IngredientTableFormattable for IngredientWithWeight {
                     div class=(format!("w-full {}",form_id)) name=(INGREDIENT_NAME) { (self.name) }
                 }
                 td {
-                    input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="inventories/change-ingredient-amount" hx-target=(format!("#ingredient-{}", self.ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML";
+                    input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="/inventories/change-ingredient-amount" hx-target=(format!("#ingredient-{}", self.ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="keyup[keyCode==13]" hx-swap="outerHTML";
                 }
-                td { button hx-include=(format!(".{}", form_id)) class="btn btn-cancel" hx-put="inventories/delete-ingredient" type="submit" hx-target=(format!("#{}", INVENTORY_CONTENTS_DIV)) hx-swap="innerHTML" { "X" } }
+                td { button hx-include=(format!(".{}", form_id)) class="btn btn-cancel" hx-put="/inventories/delete-ingredient" type="submit" hx-target=(format!("#{}", INVENTORY_CONTENTS_DIV)) hx-swap="innerHTML" { "X" } }
             }
         }
     }
 }
 
-pub trait DataListFormattable {
+trait DataListFormattable {
     fn format_for_datalist(&self) -> Markup;
 }
 

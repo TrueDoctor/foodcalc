@@ -103,7 +103,7 @@ impl UnitOps {
             r#"
             SELECT unit_id as "id", name
             FROM units
-            ORDER BY name
+            ORDER BY unit_id
             "#
         )
         .fetch_all(&*self.pool)

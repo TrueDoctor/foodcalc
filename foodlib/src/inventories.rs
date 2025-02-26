@@ -10,6 +10,7 @@ use crate::FoodBase;
 pub struct Inventory {
     pub inventory_id: i32,
     pub name: String,
+    pub owner_id: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -32,8 +33,12 @@ pub struct InventoryCreate {
 }
 
 impl Inventory {
-    pub fn new(inventory_id: i32, name: String) -> Self {
-        Self { inventory_id, name }
+    pub fn new(inventory_id: i32, name: String, owner_id: i64) -> Self {
+        Self {
+            inventory_id,
+            name,
+            owner_id,
+        }
     }
 }
 
@@ -54,6 +59,7 @@ impl InventoryCreate {
         Ok(Inventory {
             inventory_id: id,
             name: self.name.clone(),
+            owner_id: -1,
         })
     }
 }
