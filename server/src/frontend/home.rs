@@ -1,6 +1,5 @@
 use axum::response::IntoResponse;
-use axum_extra::extract::Host;
-use foodlib::{AuthSession, User};
+use foodlib_new::user::User;
 use maud::{html, Markup};
 
 use crate::{
@@ -13,37 +12,25 @@ pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
 }
 
 #[axum::debug_handler]
-pub async fn home_view(mut auth: AuthSession, host: Host, foodlib: FoodLib) -> impl IntoResponse {
-    let (host, _) = host.0.split_once(':').unwrap_or_default();
-    #[cfg(debug_assertions)]
-    if host == "127.0.0.1" || host == "localhost" {
-        let user = User {
-            username: "test".into(),
-            id: 0,
-            is_admin: true,
-            // TODO: replace this with a better way to handle this
-            password_hash: String::from("password"),
-            ..Default::default()
-        };
-        auth.login(&user).await.unwrap();
-        log::info!("logged in test user");
-    }
-    ([("HX-Replace-Url", "ingredients")], content(foodlib).await)
+pub async fn home_view(user: Option<User>, foodlib: FoodLib) -> impl IntoResponse {
+    (
+        [("HX-Replace-Url", "ingredients")],
+        content(foodlib, user).await,
+    )
 }
 
-pub async fn content(foodlib: FoodLib) -> Markup {
+pub async fn content(foodlib: FoodLib, user: Option<User>) -> Markup {
     html! {
         div class="flex flex-col items-center justify-center mb-16" {
             div id="content" class="w-3/4 flex flex-col items-center justify-center" {
-                (ingredients_view(foodlib).await)
+                (ingredients_view(foodlib, user).await)
             }
         }
     }
 }
 
-pub fn navbar() -> Markup {
+pub fn navbar(user: Option<User>) -> Markup {
     html! {
-
         //Warn if using production database
         @if std::env::var("DATABASE_URL").unwrap().ends_with("food_calc") {
             dialog open="true" class="bg-btn-cancel-normal text-white rounded-lg w-full" id="banner" {
@@ -78,9 +65,11 @@ pub fn navbar() -> Markup {
         " {
             (navbutton("Ingredients", "/ingredients"))
             (navbutton("Recipes", "/recipes"))
-            (navbutton("Events", "/events"))
-            (navbutton("Inventories", "/inventories"))
-            (navbutton("Stores", "/stores"))
+            @if user.is_some_and(|x|x.is_admin) {
+                (navbutton("Events", "/events"))
+                (navbutton("Inventories", "/inventories"))
+            }
+            // (navbutton("Stores", "/stores"))
             a hx-get=(LOGIN_URL) hx-target="#content" class="flex flex-col items-center
                 transition ease-in-out transition duration-200 
                 rounded-xl p-6

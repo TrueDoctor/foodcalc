@@ -2,7 +2,7 @@ use crate::FoodLib;
 use axum::extract::{Form, Path, State};
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
-use foodlib::Backend;
+use foodlib_new::auth::AuthBackend;
 use foodlib_new::recipe::Recipe;
 use foodlib_new::user::User;
 use maud::{html, Markup};
@@ -21,7 +21,7 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
         .route("/delete_nqa/{recipe_id}", delete(delete_recipe_nqa))
         .nest("/edit/", recipes_edit_tab::recipes_edit_router())
         .route_layer(login_required!(
-            Backend,
+            AuthBackend,
             login_url = LOGIN_URL,
             redirect_field = "protected"
         ))

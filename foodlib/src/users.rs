@@ -24,18 +24,18 @@ pub struct Credentials {
 }
 
 #[derive(Debug, Clone)]
-pub struct Backend {
+pub struct OldBackend {
     db: PgPool,
 }
 
-impl Backend {
+impl OldBackend {
     pub fn new(db: PgPool) -> Self {
         Self { db }
     }
 }
 
 #[async_trait]
-impl AuthnBackend for Backend {
+impl AuthnBackend for OldBackend {
     type User = User;
     type Credentials = Credentials;
     type Error = sqlx::Error;
@@ -67,7 +67,7 @@ impl AuthnBackend for Backend {
 }
 
 // Type alias for convenience
-pub type AuthSession = axum_login::AuthSession<Backend>;
+pub type OldAuthSession = axum_login::AuthSession<OldBackend>;
 
 use crate::FoodBase;
 

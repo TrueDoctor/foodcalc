@@ -3,7 +3,7 @@ use std::hash::Hasher;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum_login::login_required;
-use foodlib::Backend;
+use foodlib_new::auth::AuthBackend;
 use maud::Markup;
 
 use crate::MyAppState;
@@ -23,7 +23,7 @@ pub fn frontend_router() -> Router {
     Router::new()
         .nest("/inventories", inventories_tab::inventories_router())
         .nest("/events", events_tab::events_router())
-        .route_layer(login_required!(Backend, login_url = LOGIN_URL))
+        .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
         .merge(home::home_router())
         .nest("/ingredients", ingredients_tab::ingredients_router())
         .nest("/recipes", recipes_tab::recipes_router())

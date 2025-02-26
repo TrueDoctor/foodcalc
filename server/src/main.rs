@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, ops::Deref, time::Duration};
+use std::{env, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
 
 use axum::{Extension, Router};
 use axum_login::{
@@ -13,7 +13,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tower_sessions::cookie::Key;
 use tower_sessions_sqlx_store::PostgresStore;
 
-use foodlib::Backend;
+use foodlib_new::auth::AuthBackend;
 mod frontend;
 mod htmx_middleware;
 
@@ -84,7 +84,7 @@ async fn main() {
         .with_signed(key);
 
     // Create auth backend and layer
-    let backend = Backend::new(pool.clone());
+    let backend = AuthBackend::new(Arc::new(pool.clone()));
     let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
 
     let state = MyAppState {
@@ -97,10 +97,10 @@ async fn main() {
         .merge(frontend::frontend_router())
         .with_state(state)
         .layer(Extension(new_lib))
+        .layer(axum::middleware::from_fn(htmx_middleware::htmx_middleware))
         .layer(auth_layer)
         .layer(CorsLayer::very_permissive())
-        .layer(TraceLayer::new_for_http())
-        .layer(axum::middleware::from_fn(htmx_middleware::htmx_middleware));
+        .layer(TraceLayer::new_for_http());
 
     println!("Listening on http://localhost:{port}");
 

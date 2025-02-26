@@ -3,7 +3,8 @@ use axum::extract::{Form, Path};
 use axum::response::IntoResponse;
 use axum_login::login_required;
 use bigdecimal::BigDecimal;
-use foodlib::Backend;
+use foodlib::IngredientHasScource;
+use foodlib_new::auth::AuthBackend;
 use foodlib_new::ingredient::IngredientWithSource;
 use foodlib_new::user::User;
 use foodlib_new::{
@@ -32,7 +33,7 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
             "/sources/delete/{ingredient_id}/{source_id}",
             axum::routing::get(delete_source),
         )
-        .route_layer(login_required!(Backend, login_url = LOGIN_URL))
+        .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
         .route("/sources/{id}", axum::routing::get(sources_table))
         .route("/search", axum::routing::post(search))
         .route("/", axum::routing::get(ingredients_view))
@@ -43,7 +44,12 @@ pub struct SearchParameters {
     search: String,
 }
 
-pub async fn search(foodlib: FoodLib, query: Form<SearchParameters>) -> MResponse {
+#[axum::debug_handler]
+pub async fn search(
+    foodlib: FoodLib,
+    user: Option<User>,
+    query: Form<SearchParameters>,
+) -> MResponse {
     let query = query.search.to_lowercase();
     let ingredients = foodlib.ingredients().list_with_sources().await?;
 
@@ -53,22 +59,27 @@ pub async fn search(foodlib: FoodLib, query: Form<SearchParameters>) -> MRespons
 
     Ok(html! {
         @for ingredient in filtered_ingredients {
-            (format_ingredient(ingredient))
+            (format_ingredient(ingredient, user.as_ref()))
         }
     })
 }
 
-pub async fn add_ingredient(foodlib: FoodLib, Form(ingredient): Form<Ingredient>) -> IResponse {
+pub async fn add_ingredient(
+    foodlib: FoodLib,
+    user: User,
+    Form(mut ingredient): Form<Ingredient>,
+) -> IResponse {
     if ingredient.id == -1 {
+        ingredient.owner_id = user.id;
         foodlib.ingredients().create(ingredient).await?;
         Ok((
             [("HX-Retarget", "#content"), ("HX-Reswap", "innerHTML")],
-            ingredients_view(foodlib).await,
+            ingredients_view(foodlib, Some(user)).await,
         )
             .into_response())
     } else {
         let updated = foodlib.ingredients().update(ingredient).await?;
-        Ok(format_ingredient(&updated.into()).into_response())
+        Ok(format_ingredient(&updated.into(), Some(&user)).into_response())
     }
 }
 
@@ -129,7 +140,7 @@ async fn delete_source(
     sources_table(foodlib, Path(ingredient_id)).await
 }
 
-pub async fn ingredients_view(foodlib: FoodLib) -> Markup {
+pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
     let ingredients = foodlib
         .ingredients()
         .list_with_sources()
@@ -147,7 +158,7 @@ pub async fn ingredients_view(foodlib: FoodLib) -> Markup {
                     autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
                     hx-target="#search-results" hx-indicator=".htmx-indicator";
             }
-            (add_ingredient_button())
+            (add_ingredient_button(user.as_ref()))
 
             span class="htmx-indicator" { "Searching..." }
 
@@ -163,7 +174,7 @@ pub async fn ingredients_view(foodlib: FoodLib) -> Markup {
                 } }
                 tbody id="search-results" {
                     @for ingredient in ingredients.iter() {
-                        (format_ingredient(ingredient))
+                        (format_ingredient(ingredient, user.as_ref()))
                     }
                 }
             }
@@ -171,32 +182,43 @@ pub async fn ingredients_view(foodlib: FoodLib) -> Markup {
     }
 }
 
-fn add_ingredient_button() -> Markup {
-    html! {
-        div class = "m-2" hx-target="this" id="ingredient--1" {
-            button class="btn bg-light-primary-normal dark:bg-dark-primary-normal" hx-get="/ingredients/edit" hx-swap="innerHTML" { "Add Ingredient (+)" }
-        }
-    }
-}
-
-async fn delete(foodlib: FoodLib, id: Path<i32>) -> MResponse {
-    foodlib.ingredients().delete(id.0).await?;
-    Ok(ingredients_view(foodlib).await)
-}
-
-pub async fn edit_ingredient_form(user: User, Form(old): Form<Option<Ingredient>>) -> Markup {
-    let ingredient = old.unwrap_or(Ingredient {
+fn add_ingredient_button(user: Option<&User>) -> Markup {
+    let ingredient: IngredientWithSource = Ingredient {
         id: -1,
         name: String::new(),
         energy: BigDecimal::from(0),
         comment: None,
-        owner_id: user.id,
-    });
+        owner_id: user.map(|x| x.id).unwrap_or(-1),
+    }
+    .into();
+    html! {
+        div class = "m-2" hx-target="this" id="ingredient--1" {
+            button class="btn bg-light-primary-normal dark:bg-dark-primary-normal"
+            hx-get="/ingredients/edit"
+            hx-vals=(serde_json::to_string(&ingredient).unwrap())
+            hx-swap="innerHTML" { "Add Ingredient (+)" }
+        }
+    }
+}
+
+async fn delete(foodlib: FoodLib, user: User, id: Path<i32>) -> MResponse {
+    if !user.is_admin {
+        return Err(foodlib_new::Error::Forbidden(
+            "You don't have permission to delete ingredients".into(),
+        ));
+    }
+    foodlib.ingredients().delete(id.0).await?;
+    Ok(ingredients_view(foodlib, Some(user)).await)
+}
+
+pub async fn edit_ingredient_form(Form(ingredient): Form<IngredientWithSource>) -> Markup {
     let id = ingredient.id;
     html! {
         td colspan="6" {
             div class="flex flex-col items-center justify-center w-full" {
                 div class="flex gap-2 w-full" {
+
+                    input type="hidden" name=("owner_id") value=(ingredient.owner_id);
                     input class="text" type="text" name="name" placeholder="Name" value=(ingredient.name) required="required";
                     input class="text shrink" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy (kJ/g)" required="required" value=(ingredient.energy);
                     input class="text grow" type="text" name="comment" placeholder="Comment" value=(ingredient.comment.as_ref().unwrap_or(&String::new()));
@@ -328,8 +350,9 @@ fn format_ingredient_source(
     }
 }
 
-fn format_ingredient(ingredient: &IngredientWithSource) -> Markup {
+fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>) -> Markup {
     let sources_button_text = if ingredient.has_sources { "" } else { "⚠️" };
+    let can_edit = |id: i64| user.is_some_and(|x| x.is_admin || x.id == id);
     html! {
         tr id=(format!("ingredient-{}", ingredient.id)) {
             td class="text-center opacity-70" { (ingredient.id) }
@@ -337,15 +360,19 @@ fn format_ingredient(ingredient: &IngredientWithSource) -> Markup {
             td class="text-center" { (ingredient.energy) }
             td class="text-center" { (ingredient.comment.as_ref().unwrap_or(&String::new())) }
             td {
-                button class="btn btn-primary"
-                hx-get="/ingredients/edit"
-                hx-target=(format!("#ingredient-{}", ingredient.id))
-                hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Edit" }
+                @if can_edit(ingredient.owner_id) {
+                    button class="btn btn-primary"
+                    hx-get="/ingredients/edit"
+                    hx-target=(format!("#ingredient-{}", ingredient.id))
+                    hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Edit" }
+                }
             }
             td {
-                button class="btn btn-cancel"
-                hx-get=(format!("/ingredients/delete/{}", ingredient.id))
-                hx-swap="beforebegin" { "Delete" }
+                @if can_edit(ingredient.owner_id) {
+                    button class="btn btn-cancel"
+                    hx-get=(format!("/ingredients/delete/{}", ingredient.id))
+                    hx-swap="beforebegin" { "Delete" }
+                }
             }
             td {
                 button class="btn btn-primary relative"

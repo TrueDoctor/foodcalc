@@ -101,14 +101,13 @@ impl IngredientOps {
             Ingredient,
             r#"
             UPDATE ingredients
-            SET name = $1, energy = $2, comment = $3, owner_id = $4
-            WHERE ingredient_id = $5
+            SET name = $1, energy = $2, comment = $3
+            WHERE ingredient_id = $4
             RETURNING ingredient_id as "id", name, energy, comment, owner_id
             "#,
             ingredient.name,
             ingredient.energy,
             ingredient.comment,
-            ingredient.owner_id,
             ingredient.id,
         )
         .fetch_one(&*self.pool)
@@ -170,7 +169,7 @@ impl IngredientOps {
                 owner_id,
                 comment 
             FROM ingredients 
-            ORDER BY name
+            ORDER BY ingredient_id
             "#,
         )
         .fetch_all(&*self.pool)
@@ -191,7 +190,7 @@ impl IngredientOps {
                 comment,
                 exists (select * from ingredient_sources as iss where iss.ingredient_id = ingredients.ingredient_id) as "has_sources!" 
             FROM ingredients 
-            ORDER BY name
+            ORDER BY ingredient_id
             "#,
         )
         .fetch_all(&*self.pool)

@@ -1,10 +1,9 @@
 use axum::{
-    extract::State,
     response::IntoResponse,
     routing::{get, post},
     Form,
 };
-use foodlib::{AuthSession, Credenitals};
+use foodlib_new::auth::{AuthSession, Credentials};
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -63,24 +62,15 @@ fn wrong_credentials(hidden: bool) -> Markup {
     }
 }
 
-async fn login_handler(
-    mut auth: AuthSession,
-    State(state): State<MyAppState>,
-    Form(data): Form<LoginData>,
-) -> impl IntoResponse {
+async fn login_handler(auth: AuthSession, Form(data): Form<LoginData>) -> impl IntoResponse {
     let (username, password) = (data.username, data.password);
-    let Ok(user) = state
-        .db_connection
-        .authenticate_user(Credenitals { username, password })
-        .await
-    else {
+    let Ok(_) = foodlib_new::auth::login(auth, Credentials { username, password }).await else {
         return (
             [("HX-Reswap", "outerHTML"), ("HX-Retarget", "#login-error")],
             wrong_credentials(false),
         )
             .into_response();
     };
-    auth.login(&user).await.unwrap();
     (
         [("HX-Reswap", "delete"), ("HX-Retarget", "#login-dialog")],
         (),
