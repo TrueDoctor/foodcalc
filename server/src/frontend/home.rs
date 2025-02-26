@@ -65,7 +65,7 @@ pub fn navbar(user: Option<User>) -> Markup {
         " {
             (navbutton("Ingredients", "/ingredients"))
             (navbutton("Recipes", "/recipes"))
-            @if user.is_some_and(|x|x.is_admin) {
+            @if user.is_some() {
                 (navbutton("Events", "/events"))
                 (navbutton("Inventories", "/inventories"))
             }

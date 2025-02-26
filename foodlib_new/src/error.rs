@@ -1,5 +1,6 @@
 use std::fmt;
 
+#[cfg(feature = "axum")]
 use crate::auth::AuthBackend;
 
 #[derive(Debug)]
@@ -21,6 +22,7 @@ pub enum Error {
     Misc(String),
     Redirect(String, String),
     Hashing,
+    #[cfg(feature = "axum")]
     Authentication(Box<axum_login::Error<AuthBackend>>),
     #[cfg(feature = "axum")]
     Status(axum::http::StatusCode),
@@ -38,6 +40,7 @@ impl From<bcrypt::BcryptError> for Error {
         Error::Hashing
     }
 }
+#[cfg(feature = "axum")]
 impl From<axum_login::Error<AuthBackend>> for Error {
     fn from(value: axum_login::Error<AuthBackend>) -> Self {
         Error::Authentication(Box::new(value))
@@ -71,6 +74,7 @@ impl fmt::Display for Error {
             Error::Conflict { message } => write!(f, "Conflict error: {}", message),
             Error::UserNotFound { name } => write!(f, "Did not find user: {}", name),
             Error::Hashing => write!(f, "Failed to compute hash"),
+            #[cfg(feature = "axum")]
             Error::Authentication(e) => write!(f, "Authentication Error: {}", e),
             Error::Misc(e) => write!(f, "{}", e),
             Error::Redirect(e, _) => write!(f, "{}", e),

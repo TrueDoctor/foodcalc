@@ -86,7 +86,7 @@ pub async fn htmx_middleware(
                         {"code":"404", "swap": true},
                         {"code":"422", "swap": true},
                         {"code":"[45]..", "swap": false, "error":true},
-                        {"code":"...", "swap": true}
+                        {"code":"...", "swap": false}
                     ]
                     }"#;
                     meta name="viewport" content="width=800, initial-scale=1";

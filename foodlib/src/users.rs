@@ -139,14 +139,15 @@ impl FoodBase {
         let user = sqlx::query_as!(
             User,
             r#"
-                INSERT INTO users (username, email, password_hash, is_admin)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO users (username, email, password_hash, is_admin, created_at)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING *
             "#,
             credentials.username,
             email,
             password_hash,
-            is_admin
+            is_admin,
+            OffsetDateTime::now_utc(),
         )
         .fetch_one(&*self.pg_pool)
         .await?;
