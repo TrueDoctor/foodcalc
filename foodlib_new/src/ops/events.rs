@@ -313,11 +313,12 @@ impl EventOps {
             SELECT 
                 event_id as id,
                 event_name as name,
-                comment,
+                events.comment,
                 owner_id,
                 budget
-            FROM events 
-            ORDER BY event_name
+            FROM events LEFT JOIN event_meals USING (event_id)
+            GROUP BY event_id, event_name, events.comment, owner_id, budget
+            ORDER BY MIN(start_time) DESC
             "#
         )
         .fetch_all(&*self.pool)
