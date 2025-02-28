@@ -271,7 +271,7 @@ fn format_recipe(recipe: &Recipe, user: Option<&User>) -> Markup {
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
             td {
                 @if can_edit_this {
-                    button class="btn btn-primary" type="button" hx-push-url="true" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" }
+                    button class="btn btn-primary" type="button" hx-push-url="true" hx-target="#content"  hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" }
                 }
             }
             td {
