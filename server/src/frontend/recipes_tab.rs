@@ -3,6 +3,7 @@ use axum::extract::{Form, Path, State};
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
+use foodlib_new::error::Error;
 use foodlib_new::recipe::Recipe;
 use foodlib_new::user::User;
 use maud::{html, Markup};
@@ -37,7 +38,11 @@ pub struct SearchParameters {
     search: String,
 }
 
-pub async fn search(foodlib: FoodLib, query: Form<SearchParameters>) -> MResponse {
+pub async fn search(
+    foodlib: FoodLib,
+    user: Option<User>,
+    query: Form<SearchParameters>,
+) -> MResponse {
     let query = query.search.to_lowercase();
     let recipes = foodlib.recipes().list().await?;
 
@@ -48,7 +53,7 @@ pub async fn search(foodlib: FoodLib, query: Form<SearchParameters>) -> MRespons
     Ok(html! {
         (recipe_add_form())
         @for recipe in filtered_recipes {
-            (format_recipe(recipe))
+            (format_recipe(recipe, user.as_ref()))
         }
     })
 }
@@ -155,12 +160,28 @@ pub async fn shopping_list(
     })
 }
 
-pub async fn delete_recipe_nqa(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+pub async fn delete_recipe_nqa(
+    foodlib: FoodLib,
+    user: User,
+    Path(recipe_id): Path<i32>,
+) -> MResponse {
+    // Only admins can delete recipes
+    if !user.is_admin {
+        return Err(Error::Forbidden(
+            "Only administrators can delete recipes".into(),
+        ));
+    }
+
     foodlib.recipes().delete(recipe_id).await?;
-    Ok(recipes_view(foodlib).await)
+    Ok(recipes_view(foodlib, Some(user)).await)
 }
 
-pub async fn delete_recipe(Path(recipe_id): Path<i32>) -> Markup {
+pub async fn delete_recipe(Path(recipe_id): Path<i32>, user: User) -> Markup {
+    // Only show delete dialog if user is admin
+    if !user.is_admin {
+        return html! {};
+    }
+
     html! {
         dialog class="dialog" open="open" id="dialog" {
             div class="flex flex-col items-center justify-center" {
@@ -174,7 +195,7 @@ pub async fn delete_recipe(Path(recipe_id): Path<i32>) -> Markup {
     }
 }
 
-pub async fn recipes_view(foodlib: FoodLib) -> Markup {
+pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
     let recipes = foodlib.recipes().list().await.unwrap_or_default();
 
     html! {
@@ -187,7 +208,6 @@ pub async fn recipes_view(foodlib: FoodLib) -> Markup {
                 input class="grow text h-full" type="search" placeholder="Search for recipe" id="search" name="search" autocomplete="off"
                     autofocus="autofocus" hx-post="/recipes/search" hx-trigger="keyup changed delay:100ms, search"
                     hx-target="#search-results" hx-indicator=".htmx-indicator";
-
             }
             table class="w-full text-inherit table-auto object-center table-fixed" {
                 // We add extra table headers to account for the buttons
@@ -195,7 +215,7 @@ pub async fn recipes_view(foodlib: FoodLib) -> Markup {
                     tbody id="search-results"  {
                         (recipe_add_form())
                         @for recipe in recipes.iter() {
-                            (format_recipe(recipe))
+                            (format_recipe(recipe, user.as_ref()))
                         }
                     }
                 span class="htmx-indicator" {
@@ -235,14 +255,30 @@ async fn add_recipe(foodlib: FoodLib, user: User, Form(recipe_data): Form<NewRec
     recipes_edit_tab::recipe_edit_view(foodlib, Path(created_recipe.id)).await
 }
 
-fn format_recipe(recipe: &Recipe) -> Markup {
+// Helper function to check if a user can edit a recipe
+fn can_edit(owner_id: i64, user: &User) -> bool {
+    user.is_admin || user.id == owner_id
+}
+
+fn format_recipe(recipe: &Recipe, user: Option<&User>) -> Markup {
+    let can_edit_this = user.map_or(false, |u| can_edit(recipe.owner_id, u));
+    let is_admin = user.map_or(false, |u| u.is_admin);
+
     html! {
         tr id=(format!("recipe-{}", recipe.id)) {
             td { (recipe.id) }
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
-            td { button class="btn btn-primary" type="button"  hx-push-url="true" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" } }
-            td { button class="btn btn-cancel"  type="button" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.id)) { "Delete" } }
+            td {
+                @if can_edit_this {
+                    button class="btn btn-primary" type="button" hx-push-url="true" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" }
+                }
+            }
+            td {
+                @if is_admin {
+                    button class="btn btn-cancel"  type="button" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.id)) { "Delete" }
+                }
+            }
             td { button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.id)) hx-swap="afterend" { "Export" } }
             td { div id="dialog"; }
         }
