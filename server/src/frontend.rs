@@ -29,6 +29,7 @@ pub fn frontend_router() -> Router {
         .nest("/recipes", recipes_tab::recipes_router())
         .nest("/auth", login_tab::login_router())
         .route("/static/{*-style.css}", get(static_style))
+        .route("/static/htmxv2.0.4.js", get(static_htmx))
 }
 
 thread_local! {
@@ -44,6 +45,14 @@ async fn static_style() -> impl IntoResponse {
     Response::builder()
         .header("Content-Type", "text/css")
         .body(style.to_owned())
+        .unwrap()
+}
+
+async fn static_htmx() -> impl IntoResponse {
+    let htmx = include_str!("../assets/htmxv2.0.4.js");
+    Response::builder()
+        .header("Content-Type", "text/javascript")
+        .body(htmx.to_owned())
         .unwrap()
 }
 pub type MResponse = foodlib_new::Result<Markup>;

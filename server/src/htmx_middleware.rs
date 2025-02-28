@@ -74,8 +74,7 @@ pub async fn htmx_middleware(
                 head {
                     title { "Foodcalc" }
                     link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x)));
-                    script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" {}
-                    script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/debug.js" {}
+                    script src="/static/htmxv2.0.4.js" {}
                     meta name="htmx-config" content=r#"{
                     "scrollBehavior":"smooth",
                     "responseHandling": [
