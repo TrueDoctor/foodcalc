@@ -8,6 +8,7 @@ use foodlib_new::auth::AuthBackend;
 use foodlib_new::ingredient::IngredientWithSource;
 use foodlib_new::user::User;
 use foodlib_new::{
+    error::Error,
     ingredient::{Ingredient, IngredientSource},
     store::Store,
 };
@@ -65,6 +66,7 @@ pub async fn update_ingredient(
     user: User,
     Form(mut ingredient): Form<Ingredient>,
 ) -> IResponse {
+    // For new ingredients, set the owner to the current user
     if ingredient.id == -1 {
         ingredient.owner_id = user.id;
         foodlib.ingredients().create(ingredient).await?;
@@ -74,6 +76,16 @@ pub async fn update_ingredient(
         )
             .into_response())
     } else {
+        // Check if user has permission to edit this ingredient
+        let existing = foodlib.ingredients().get(ingredient.id).await?;
+        if !can_edit(existing.owner_id, &user) {
+            return Err(Error::Forbidden(
+                "You don't have permission to edit this ingredient".into(),
+            ));
+        }
+
+        // Keep the original owner_id - don't allow ownership transfer via form manipulation
+        ingredient.owner_id = existing.owner_id;
         let updated = foodlib.ingredients().update(ingredient).await?;
         Ok(format_ingredient(&updated.into(), Some(&user)).into_response())
     }
@@ -90,9 +102,18 @@ struct SourceData {
 
 async fn update_source(
     foodlib: FoodLib,
+    user: User,
     Path((ingredient_id, source_id)): Path<(i32, i32)>,
     form: Form<SourceData>,
 ) -> MResponse {
+    // Check if user has permission to edit this ingredient's sources
+    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
+    if !can_edit(ingredient.owner_id, &user) {
+        return Err(Error::Forbidden(
+            "You don't have permission to edit sources for this ingredient".into(),
+        ));
+    }
+
     let data = form.0;
 
     if source_id == -1 {
@@ -109,7 +130,7 @@ async fn update_source(
         };
 
         foodlib.ingredients().add_source(source).await?;
-        sources_table(foodlib, Path(ingredient_id)).await
+        sources_table(foodlib, Some(user), Path(ingredient_id)).await
     } else {
         // Updating existing source
         let source = IngredientSource {
@@ -124,16 +145,25 @@ async fn update_source(
         };
 
         foodlib.ingredients().update_source(source).await?;
-        sources_table(foodlib, Path(ingredient_id)).await
+        sources_table(foodlib, Some(user), Path(ingredient_id)).await
     }
 }
 
 async fn delete_source(
     foodlib: FoodLib,
+    user: User,
     Path((ingredient_id, source_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    // Check if user has permission to delete sources for this ingredient
+    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
+    if !can_edit(ingredient.owner_id, &user) {
+        return Err(Error::Forbidden(
+            "You don't have permission to delete sources for this ingredient".into(),
+        ));
+    }
+
     foodlib.ingredients().delete_source(source_id).await?;
-    sources_table(foodlib, Path(ingredient_id)).await
+    sources_table(foodlib, Some(user), Path(ingredient_id)).await
 }
 
 pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
@@ -179,6 +209,11 @@ pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
 }
 
 fn add_ingredient_button(user: Option<&User>) -> Markup {
+    // Only show add button if user is logged in
+    if user.is_none() {
+        return html! {};
+    }
+
     let ingredient: IngredientWithSource = Ingredient {
         id: -1,
         name: String::new(),
@@ -198,6 +233,7 @@ fn add_ingredient_button(user: Option<&User>) -> Markup {
 }
 
 async fn delete_ingredient(foodlib: FoodLib, user: User, id: Path<i32>) -> MResponse {
+    // Only admins can delete ingredients
     if !user.is_admin {
         return Err(foodlib_new::Error::Forbidden(
             "You don't have permission to delete ingredients".into(),
@@ -227,7 +263,14 @@ pub async fn edit_ingredient_form(Form(ingredient): Form<IngredientWithSource>) 
     }
 }
 
-async fn delete_ingredient_form(foodlib: FoodLib, id: Path<i32>) -> MResponse {
+async fn delete_ingredient_form(foodlib: FoodLib, user: User, id: Path<i32>) -> MResponse {
+    // Only show delete form if user is an admin
+    if !user.is_admin {
+        return Err(foodlib_new::Error::Forbidden(
+            "You don't have permission to delete ingredients".into(),
+        ));
+    }
+
     let usages = foodlib.ingredients().usages(id.0).await?;
 
     Ok(html! {
@@ -246,10 +289,15 @@ async fn delete_ingredient_form(foodlib: FoodLib, id: Path<i32>) -> MResponse {
     })
 }
 
-async fn sources_table(foodlib: FoodLib, id: Path<i32>) -> MResponse {
+async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> MResponse {
     let sources = foodlib.ingredients().get_sources(id.0).await?;
     let stores = foodlib.stores().list().await?;
     let ingredient = foodlib.ingredients().get(id.0).await?;
+
+    // Check if user can edit this ingredient's sources
+    let can_edit_sources = user
+        .as_ref()
+        .map_or(false, |u| can_edit(ingredient.owner_id, u));
 
     Ok(html! {
         dialog open="true" class="w-2/3 dialog z-50" id="popup"{
@@ -270,9 +318,11 @@ async fn sources_table(foodlib: FoodLib, id: Path<i32>) -> MResponse {
                     }
                 }
                 tbody {
-                    (format_add_ingredient_source(&stores, id.0))
+                    @if can_edit_sources {
+                        (format_add_ingredient_source(&stores, id.0))
+                    }
                     @for source in sources {
-                        (format_ingredient_source(&source, &stores, id.0))
+                        (format_ingredient_source(&source, &stores, id.0, can_edit_sources))
                     }
                 }
             }
@@ -311,6 +361,7 @@ fn format_ingredient_source(
     source: &IngredientSource,
     stores: &[Store],
     ingredient_id: i32,
+    can_edit: bool,
 ) -> Markup {
     let option = |store: &Store, source_store| match store.id == source_store {
         false => html! {
@@ -331,24 +382,36 @@ fn format_ingredient_source(
         tr {
             td {
                 label for="stores" style="display:none" { "Pick a Store" }
-                select name="store_id" id="stores" required="true" class="text w-full" {
+                select name="store_id" id="stores" required="true" class="text w-full" disabled[!can_edit] {
                     @for store in stores {
                         (option(store, source.store_id))
                     }
                 }
             }
-            td {input class="text" name="weight" value=(source.package_size);}
-            td {input class="text" name="price" value=(source.price.to_f64().unwrap());}
-            td {input class="text" name="url" value=(source.url.clone().unwrap_or_default());}
-            td {button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/{}", ingredient_id, source.id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Update" }}
-            td {button class="btn btn-cancel" hx-get=(format!("/ingredients/sources/delete/{}/{}", ingredient_id, source.id)) hx-target="#popup" hx-swap="outerHTML" { "Delete" }}
+            td {input class="text" name="weight" value=(source.package_size) disabled[!can_edit];}
+            td {input class="text" name="price" value=(source.price.to_f64().unwrap()) disabled[!can_edit];}
+            td {input class="text" name="url" value=(source.url.clone().unwrap_or_default()) disabled[!can_edit];}
+            @if can_edit {
+                td {button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/{}", ingredient_id, source.id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Update" }}
+                td {button class="btn btn-cancel" hx-get=(format!("/ingredients/sources/delete/{}/{}", ingredient_id, source.id)) hx-target="#popup" hx-swap="outerHTML" { "Delete" }}
+            } @else {
+                td {}
+                td {}
+            }
         }
     }
 }
 
+// Helper function to check if a user can edit an ingredient
+fn can_edit(owner_id: i64, user: &User) -> bool {
+    user.is_admin || user.id == owner_id
+}
+
 fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>) -> Markup {
     let sources_button_text = if ingredient.has_sources { "" } else { "⚠️" };
-    let can_edit = |id: i64| user.is_some_and(|x| x.is_admin || x.id == id);
+    let can_edit_this = user.map_or(false, |u| can_edit(ingredient.owner_id, u));
+    let is_admin = user.map_or(false, |u| u.is_admin);
+
     html! {
         tr id=(format!("ingredient-{}", ingredient.id)) {
             td class="text-center opacity-70" { (ingredient.id) }
@@ -356,7 +419,7 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>) -> 
             td class="text-center" { (ingredient.energy) }
             td class="text-center" { (ingredient.comment.as_ref().unwrap_or(&String::new())) }
             td {
-                @if can_edit(ingredient.owner_id) {
+                @if can_edit_this {
                     button class="btn btn-primary"
                     hx-get="/ingredients/edit"
                     hx-target=(format!("#ingredient-{}", ingredient.id))
@@ -364,7 +427,7 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>) -> 
                 }
             }
             td {
-                @if user.is_some_and(|x|x.is_admin) {
+                @if is_admin {
                     button class="btn btn-cancel"
                     hx-get=(format!("/ingredients/delete/{}", ingredient.id))
                     hx-swap="beforebegin" { "Delete" }
