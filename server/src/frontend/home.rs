@@ -84,7 +84,7 @@ pub fn navbar(user: Option<User>) -> Markup {
 
 fn navbutton(text: &str, link: &str) -> Markup {
     html! {
-        a hx-get=(link) hx-target="#content" class="flex flex-col items-center grow
+        a hx-get=(link) hx-target="#content" hx-push-url="true" class="flex flex-col items-center grow
             transition ease-in-out transition duration-200 ease-in-out
             rounded-xl p-6
             hover:shadow-inner hover:bg-blue-800" { (text) }

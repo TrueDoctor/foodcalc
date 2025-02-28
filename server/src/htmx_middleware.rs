@@ -94,7 +94,7 @@ pub async fn htmx_middleware(
                     body class="
                     bg-light-bg-light text-gray-800
                     dark:bg-dark-bg-dark dark:text-gray-100" {
-                    div hx-push-url="true" {
+                    div  {
                         (home::navbar(auth.user))
                         div class="flex flex-col items-center justify-center mb-16" {
                             div id="content" class="w-3/4 flex flex-col items-center justify-center" {

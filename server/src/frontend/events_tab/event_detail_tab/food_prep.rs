@@ -1,3 +1,5 @@
+use std::collections::hash_map::Entry;
+
 use axum::{
     extract::{Form, Path, State},
     routing::{delete, get, post},
@@ -242,6 +244,7 @@ fn format_food_prep(event_id: i32, prep: &FoodPrep, recipe: &Recipe) -> Markup {
             td {
                 button class="btn btn-primary"
                     hx-target="#content"
+                    hx-push-url="true"
                     hx-get=(format!("/events/edit/food_prep/edit/{}/{}", event_id, prep.id)) {
                     "Edit"
                 }
@@ -263,9 +266,9 @@ pub async fn render_food_prep(foodlib: FoodLib, event_id: i32) -> MResponse {
     // Get recipes for all food preps
     let mut recipe_map = std::collections::HashMap::new();
     for prep in &preps {
-        if !recipe_map.contains_key(&prep.recipe_id) {
+        if let Entry::Vacant(e) = recipe_map.entry(prep.recipe_id) {
             if let Ok(recipe) = foodlib.recipes().get(prep.recipe_id).await {
-                recipe_map.insert(prep.recipe_id, recipe);
+                e.insert(recipe);
             }
         }
     }
@@ -278,6 +281,7 @@ pub async fn render_food_prep(foodlib: FoodLib, event_id: i32) -> MResponse {
             button class="btn btn-primary"
                 hx-get=(format!("/events/edit/food_prep/add/{}", event_id))
                 hx-swap="innerHtml"
+                hx-push-url="true"
                 hx-target="#content" { "Add Food Prep" }
         }
         table class="w-full text-inherit table-auto object-center table-fixed" {

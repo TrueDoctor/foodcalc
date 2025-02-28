@@ -159,7 +159,9 @@ pub async fn event_form(foodlib: FoodLib, Path(event_id): Path<i32>) -> MRespons
             p class="text-2xl" { "Meals" }
         }
         div class="flex flex-row items-center justify-center mb-2" {
-            button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/-1", event_id)) {"Add Meal"}
+            button class="btn btn-primary" hx-target="#content"
+                hx-push-url="true"
+                hx-get=(format!("/events/edit/event_edit_meal/{}/-1", event_id)) {"Add Meal"}
         }
         table class="w-full text-inherit table-auto object-center mb-2 table-fixed" {
             thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} }  }
@@ -222,6 +224,7 @@ pub async fn render_shopping_tours(foodlib: &FoodLib, event_id: i32) -> MRespons
             button class="btn btn-primary"
                 hx-get=(format!("/events/edit/shopping_tours/add/{}", event_id))
                 hx-swap="innerHtml show:window:top"
+                hx-push-url="true"
                 hx-target="#content" { "Add Shopping Tour" }
         }
         table class="w-full text-inherit table-auto object-center table-fixed" {
@@ -241,6 +244,7 @@ pub async fn render_shopping_tours(foodlib: &FoodLib, event_id: i32) -> MRespons
                             button class="btn btn-primary"
                                 hx-get=(format!("/events/edit/shopping_tours/edit/{}/{}", event_id, tour.id))
                                 hx-swap="innerHtml show:window:top"
+                                hx-push-url="true"
                                 hx-target="#content" { "Edit" }
                         }
                         td {
@@ -388,7 +392,10 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
             (format(event_meal.price.to_f64().unwrap_or_default() / event_meal.servings as f64, "€"))
             td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ingredients per serving"} }
             td { form class="m-0" action=(format!("/events/edit/export_pdf/{}", event_meal.meal_id)) { button class="btn btn-primary" {"Print"} } }
-            td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
+            td { button class="btn btn-primary"
+                hx-target="#content"
+                hx-push-url="true"
+                hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
             td { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/edit/delete/{}/{}", event_id, event_meal.meal_id)) {"Delete"} }
         }
     }

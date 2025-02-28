@@ -241,7 +241,7 @@ fn format_recipe(recipe: &Recipe) -> Markup {
             td { (recipe.id) }
             td { (recipe.name) }
             td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
-            td { button class="btn btn-primary" type="button" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" } }
+            td { button class="btn btn-primary" type="button"  hx-push-url="true" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" } }
             td { button class="btn btn-cancel"  type="button" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.id)) { "Delete" } }
             td { button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.id)) hx-swap="afterend" { "Export" } }
             td { div id="dialog"; }

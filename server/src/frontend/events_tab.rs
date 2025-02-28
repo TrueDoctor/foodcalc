@@ -141,7 +141,7 @@ fn format_event(event: &foodlib_new::event::Event) -> Markup {
             @let indicator_id = format!("indicator-{}", event.id);
             td { (event.name) }
             td class="text-center" { (event.comment.clone().unwrap_or_default()) }
-            td { button class="btn btn-primary" hx-target="#content" hx-get=(format!("/events/edit/{}", event.id)) {"Edit"} }
+            td { button class="btn btn-primary" hx-target="#content" hx-push-url="true" hx-get=(format!("/events/edit/{}", event.id)) {"Edit"} }
             td { button class="btn btn-primary" hx-target="#content" hx-indicator=("#".to_owned() + &indicator_id) hx-post=(format!("/events/duplicate/{}", event.id)) hx-swap="innerHTML show:window:top" {
             span id=(indicator_id) class="inverse-htmx-indicator" { "Duplicate" }
             span id=(indicator_id) class="my-htmx-indicator" { "Duplicating..." }
