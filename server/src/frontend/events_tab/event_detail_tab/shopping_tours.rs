@@ -1,11 +1,10 @@
-// shopping_tours.rs
 use axum::{
     extract::{Form, Path, State},
     response::IntoResponse,
     routing::{delete, get, post},
 };
 use bigdecimal::BigDecimal;
-use foodlib_new::error::Result;
+use foodlib_new::{error::Result, inventory::InventoryItemWithName};
 use foodlib_new::{
     event::{ShoppingListItem, ShoppingTour},
     inventory::InventoryItem,
@@ -17,7 +16,7 @@ use time::{macros::format_description, OffsetDateTime};
 
 use crate::{
     frontend::{events_tab::event_detail_tab, IResponse, MResponse},
-    MyAppState,
+    FoodLib, MyAppState,
 };
 
 pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
@@ -67,13 +66,14 @@ async fn shopping_tour_form(
     Path((event_id, tour_id)): Path<(i32, i32)>,
 ) -> MResponse {
     let stores = state.new_lib().stores().list().await?;
-    let inventories = state.new_lib().inventories().get_all_inventories().await?;
+    let inventories = state.new_lib().inventories().list().await?;
 
     let default_tour = ShoppingTour {
         event_id,
         id: -1,
         tour_date: OffsetDateTime::now_utc(),
         store_id: 0,
+        store_name: None,
     };
 
     // If tour_id is provided, get existing tour data
@@ -113,7 +113,7 @@ async fn shopping_tour_form(
             if let Ok(items) = state
                 .new_lib()
                 .inventories()
-                .get_inventory_items(inv.inventory_id)
+                .get_items(inv.inventory_id)
                 .await
             {
                 all_items.extend(items);
@@ -166,17 +166,19 @@ async fn shopping_tour_form(
                     }
 
                     div class="flex flex-col space-y-2" {
-                        label { "Use Inventories" }
-                        div class="space-y-1" {
-                            @for inventory in inventories {
-                                div class="flex items-center gap-2" {
-                                    input type="checkbox"
-                                        class="w-4 h-4"
-                                        checked[event_inventories.iter().any(|inv| inv.inventory_id == inventory.id)]
-                                        hx-post=(format!("/events/edit/shopping_tours/toggle_inventory/{}/{}", event_id, inventory.id))
-                                        hx-target="#content"
-                                        hx-vals=(format!("{{\"checked\": {}, \"tour_id\": {}}}", !event_inventories.iter().any(|inv| inv.inventory_id == inventory.id), tour_id.unwrap_or_default()));
-                                    span { (inventory.name) }
+                        @if tour_id.is_some() {
+                            label { "Use Inventories" }
+                            div class="space-y-1" {
+                                @for inventory in inventories {
+                                    div class="flex items-center gap-2" {
+                                        input type="checkbox"
+                                            class="w-4 h-4"
+                                            checked[event_inventories.iter().any(|inv| inv.inventory_id == inventory.id)]
+                                            hx-post=(format!("/events/edit/shopping_tours/toggle_inventory/{}/{}", event_id, inventory.id))
+                                            hx-target="#content"
+                                            hx-vals=(format!("{{\"checked\": {}, \"tour_id\": {}}}", !event_inventories.iter().any(|inv| inv.inventory_id == inventory.id), tour_id.unwrap_or_default()));
+                                        span { (inventory.name) }
+                                    }
                                 }
                             }
                         }
@@ -255,7 +257,7 @@ async fn shopping_tour_form(
     })
 }
 
-async fn save_tour(State(state): State<MyAppState>, Form(form): Form<TourForm>) -> MResponse {
+async fn save_tour(foodlib: FoodLib, Form(form): Form<TourForm>) -> MResponse {
     // Parse the date
     let primitive_date = time::PrimitiveDateTime::parse(
         &form.date,
@@ -267,26 +269,26 @@ async fn save_tour(State(state): State<MyAppState>, Form(form): Form<TourForm>) 
     // Create or update tour
     let result = match form.tour_id {
         Some(tour_id) if tour_id > 0 => {
-            state
-                .new_lib()
+            foodlib
                 .events()
                 .update_shopping_tour(foodlib_new::event::ShoppingTour {
                     id: tour_id,
                     event_id: form.event_id,
                     tour_date,
                     store_id: form.store_id,
+                    store_name: None,
                 })
                 .await
         }
         _ => {
-            state
-                .new_lib()
+            foodlib
                 .events()
                 .add_shopping_tour(foodlib_new::event::ShoppingTour {
                     id: -1,
                     event_id: form.event_id,
                     tour_date,
                     store_id: form.store_id,
+                    store_name: None,
                 })
                 .await
         }
@@ -297,11 +299,11 @@ async fn save_tour(State(state): State<MyAppState>, Form(form): Form<TourForm>) 
 
     // Redirect back to event edit page
     Ok(html! {
-        (event_detail_tab::event_form(State(state), Path(form.event_id)).await.unwrap_or_default())
+        (event_detail_tab::event_form(foodlib, Path(form.event_id)).await.unwrap_or_default())
     })
 }
 
-fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItem]) -> &'static str {
+fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> &'static str {
     let inv_amount = inventory
         .iter()
         .find(|i| i.ingredient_id == item.ingredient_id)
@@ -317,7 +319,7 @@ fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItem]) -> &'stat
     }
 }
 
-fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItem]) -> String {
+fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> String {
     let inv_amount = inventory
         .iter()
         .filter(|i| i.ingredient_id == item.ingredient_id)
@@ -454,14 +456,14 @@ async fn toggle_inventory(
     shopping_tour_form(State(state), Path((event_id, form.tour_id))).await
 }
 
-async fn update_inventory(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> MResponse {
-    let lib = state.new_lib();
-    let changes = calculate_inventory_changes(lib, tour_id).await?;
-    let tour = lib.events().get_shopping_tour(tour_id).await?;
+async fn update_inventory(foodlib: FoodLib, Path(tour_id): Path<i32>) -> MResponse {
+    let changes = calculate_inventory_changes(&foodlib.0, tour_id).await?;
+    let tour = foodlib.events().get_shopping_tour(tour_id).await?;
 
     for (_, inventory_id, _, ingredient_id, _, _, amount) in changes {
-        lib.inventories()
-            .update_inventory_item(InventoryItem {
+        foodlib
+            .inventories()
+            .update_item(InventoryItem {
                 inventory_id,
                 ingredient_id,
                 amount,
@@ -470,7 +472,7 @@ async fn update_inventory(State(state): State<MyAppState>, Path(tour_id): Path<i
     }
 
     // Redirect back to event page
-    event_detail_tab::event_form(State(state), Path(tour.event_id)).await
+    event_detail_tab::event_form(foodlib, Path(tour.event_id)).await
 }
 
 /// Calculate inventory changes showing what will be deducted from each inventory
@@ -486,7 +488,7 @@ async fn calculate_inventory_changes(
     let inventories = inventories
         .iter()
         .map(|inv| inv.inventory_id)
-        .map(|id| inventory_ops.get_inventory(id));
+        .map(|id| inventory_ops.get(id));
     let inventories = ::futures::future::join_all(inventories).await;
 
     let mut changes = Vec::new();
@@ -502,7 +504,7 @@ async fn calculate_inventory_changes(
                 break;
             }
 
-            if let Ok(items) = lib.inventories().get_inventory_items(inv.id).await {
+            if let Ok(items) = lib.inventories().get_items(inv.id).await {
                 if let Some(current_item) =
                     items.iter().find(|i| i.ingredient_id == item.ingredient_id)
                 {

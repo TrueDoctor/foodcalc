@@ -1,5 +1,6 @@
 use std::fmt;
 
+#[cfg(feature = "axum")]
 use crate::auth::AuthBackend;
 
 #[derive(Debug)]
@@ -21,9 +22,12 @@ pub enum Error {
     Misc(String),
     Redirect(String, String),
     Hashing,
+    #[cfg(feature = "axum")]
     Authentication(Box<axum_login::Error<AuthBackend>>),
     #[cfg(feature = "axum")]
     Status(axum::http::StatusCode),
+    Unauthorized(String),
+    Forbidden(String),
 }
 
 impl From<sqlx::Error> for Error {
@@ -36,6 +40,7 @@ impl From<bcrypt::BcryptError> for Error {
         Error::Hashing
     }
 }
+#[cfg(feature = "axum")]
 impl From<axum_login::Error<AuthBackend>> for Error {
     fn from(value: axum_login::Error<AuthBackend>) -> Self {
         Error::Authentication(Box::new(value))
@@ -69,11 +74,14 @@ impl fmt::Display for Error {
             Error::Conflict { message } => write!(f, "Conflict error: {}", message),
             Error::UserNotFound { name } => write!(f, "Did not find user: {}", name),
             Error::Hashing => write!(f, "Failed to compute hash"),
+            #[cfg(feature = "axum")]
             Error::Authentication(e) => write!(f, "Authentication Error: {}", e),
             Error::Misc(e) => write!(f, "{}", e),
             Error::Redirect(e, _) => write!(f, "{}", e),
             #[cfg(feature = "axum")]
             Error::Status(e) => write!(f, "{}", e),
+            Error::Unauthorized(message) => write!(f, "Unauthorized: {}", message),
+            Error::Forbidden(message) => write!(f, "Forbidden: {}", message),
         }
     }
 }
@@ -87,6 +95,8 @@ impl axum::response::IntoResponse for Error {
         let status = match self {
             Error::Redirect(e, ref r) => return redirect_html_error(&e, r).into_response(),
             Error::NotFound { .. } => StatusCode::NOT_FOUND,
+            Error::Unauthorized { .. } => StatusCode::UNAUTHORIZED,
+            Error::Forbidden { .. } => StatusCode::FORBIDDEN,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
         focus_html_error(&format!("{self}"), status).into_response()

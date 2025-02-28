@@ -11,14 +11,15 @@ async fn test_create_inventory(pool: sqlx::PgPool) {
     let inventory = Inventory {
         id: -1,
         name: "Test Inventory".to_string(),
+        owner_id: 1,
     };
 
-    let created = ops.create_inventory(inventory.clone()).await.unwrap();
+    let created = ops.create(inventory.clone()).await.unwrap();
     assert_eq!(created.name, inventory.name);
     assert!(created.id > 0);
 
     // Verify it exists in DB
-    let fetched = ops.get_inventory(created.id).await.unwrap();
+    let fetched = ops.get(created.id).await.unwrap();
     assert_eq!(fetched, created);
 }
 
@@ -28,17 +29,19 @@ async fn test_update_inventory(pool: sqlx::PgPool) {
 
     // Create a test inventory to update
     let inventory = ops
-        .create_inventory(Inventory {
+        .create(Inventory {
             id: -1,
             name: "Test Inventory".to_string(),
+            owner_id: 1,
         })
         .await
         .unwrap();
 
     let updated = ops
-        .update_inventory(Inventory {
+        .update(Inventory {
             id: inventory.id,
             name: "Updated Inventory".to_string(),
+            owner_id: 1,
         })
         .await
         .unwrap();
@@ -46,7 +49,7 @@ async fn test_update_inventory(pool: sqlx::PgPool) {
     assert_eq!(updated.name, "Updated Inventory");
 
     // Verify changes persisted
-    let fetched = ops.get_inventory(inventory.id).await.unwrap();
+    let fetched = ops.get(inventory.id).await.unwrap();
     assert_eq!(fetched, updated);
 }
 
@@ -56,16 +59,17 @@ async fn test_delete_inventory(pool: sqlx::PgPool) {
 
     // Create temporary inventory to delete
     let inventory = ops
-        .create_inventory(Inventory {
+        .create(Inventory {
             id: -1,
             name: "To Delete".to_string(),
+            owner_id: 1,
         })
         .await
         .unwrap();
 
-    ops.delete_inventory(inventory.id).await.unwrap();
+    ops.delete(inventory.id).await.unwrap();
 
-    let err = ops.get_inventory(inventory.id).await.unwrap_err();
+    let err = ops.get(inventory.id).await.unwrap_err();
     assert!(matches!(err, Error::Database(_)));
 }
 
@@ -73,7 +77,7 @@ async fn test_delete_inventory(pool: sqlx::PgPool) {
 async fn test_list_inventories(pool: sqlx::PgPool) {
     let ops = InventoryOps::new(pool.into());
 
-    let inventories = ops.get_all_inventories().await.unwrap();
+    let inventories = ops.list().await.unwrap();
     assert!(!inventories.is_empty());
 
     // Verify inventories from fixture are present
@@ -101,21 +105,23 @@ async fn test_inventory_items(pool: sqlx::PgPool) {
         amount: BigDecimal::from(100),
     };
 
-    let created = ops.add_inventory_item(item.clone()).await.unwrap();
+    let created = ops.add_item(item.clone()).await.unwrap();
     assert_eq!(created, item);
 
     // Test updating item
     let mut updated = created.clone();
     updated.amount = BigDecimal::from(200);
-    let result = ops.update_inventory_item(updated.clone()).await.unwrap();
+    let result = ops.update_item(updated.clone()).await.unwrap();
     assert_eq!(result, updated);
 
     // Test fetching items
-    let items = ops.get_inventory_items(1).await.unwrap();
+    let items = ops.get_items(1).await.unwrap();
+    let mut updated: InventoryItemWithName = updated.into();
+    updated.name = "Pasta".into();
     assert!(items.contains(&updated));
 
     // Test deleting item
-    ops.delete_inventory_item(1, 1).await.unwrap();
-    let items = ops.get_inventory_items(1).await.unwrap();
-    assert!(!items.contains(&item));
+    ops.delete_item(1, 1).await.unwrap();
+    let items = ops.get_items(1).await.unwrap();
+    assert!(!items.iter().any(|x| x.ingredient_id == item.ingredient_id));
 }

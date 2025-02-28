@@ -162,6 +162,7 @@ async fn update_reciepe(
             recipe_id,
             name: body.name,
             comment: body.comment,
+            owner_id: -1,
         })
         .await
     {

@@ -39,14 +39,6 @@ async fn test_shopping_list_with_source_overrides(pool: PgPool) {
             .unwrap();
     println!("{:#?}", tour_ingredients);
 
-    // // Debug the full shopping list view
-    // println!("\nFull shopping list view for tour 100:");
-    // let shopping_list = sqlx::query!("SELECT * FROM shopping_list")
-    //     .fetch_all(&*pool)
-    //     .await
-    //     .unwrap();
-    // println!("{:#?}", shopping_list);
-
     // Debug the event_ingredients view
     println!("\nEvent ingredients view:");
     let event_ingredients = sqlx::query!("SELECT * FROM event_ingredients WHERE event_id = 100")
@@ -139,6 +131,7 @@ async fn test_event_crud_operations(pool: PgPool) {
             name: "Test Event".to_string(),
             comment: Some("Test Comment".to_string()),
             budget: Some(BigDecimal::from(500)),
+            owner_id: 1,
         })
         .await
         .unwrap();
@@ -179,6 +172,7 @@ async fn test_shopping_tour_management(pool: PgPool) {
             event_id,
             tour_date: datetime!(2024-07-02 08:00:00 UTC),
             store_id: 1,
+            store_name: None,
         })
         .await
         .unwrap();

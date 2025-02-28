@@ -1,6 +1,6 @@
 use crate::{
     frontend::{events_tab::event_detail_tab, html_error, MResponse},
-    MyAppState,
+    FoodLib, MyAppState,
 };
 use axum::{
     extract::{Form, Path, State},
@@ -31,14 +31,15 @@ pub struct MealForm {
 }
 
 pub async fn delete_meal(
-    state: State<MyAppState>,
+    foodlib: FoodLib,
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> MResponse {
-    state.new_lib().meals().remove_meal(meal_id).await?;
-    event_detail_tab::event_form(state, Path(event_id)).await
+    foodlib.meals().remove_meal(meal_id).await?;
+    event_detail_tab::event_form(foodlib, Path(event_id)).await
 }
 
 pub async fn update_meal(
+    foodlib: FoodLib,
     state: State<MyAppState>,
     Path((event_id, meal_id)): Path<(i32, i32)>,
     Form(meal): Form<MealForm>,
@@ -83,7 +84,7 @@ pub async fn update_meal(
             .await
     };
     match result {
-        Ok(_) => event_detail_tab::event_form(state, Path(event_id)).await,
+        Ok(_) => event_detail_tab::event_form(foodlib, Path(event_id)).await,
         Err(e) => Err(e.into()),
     }
 }
@@ -187,7 +188,7 @@ async fn meal_form(
         div class="flex justify-between w-full mt-4 gap-2" {
             button class="btn btn-abort" hx-target="#content" hx-get=(format!("/events/edit/{}", event_id)) { "Abort" }
 
-            button class="btn btn-primary mx-4" hx-target="#content" hx-post=(format!("events/edit/event_edit_meal/{}/{}", event_id, meal_id)) hx-include="*" { "Save" }
+            button class="btn btn-primary mx-4" hx-target="#content" hx-post=(format!("/events/edit/event_edit_meal/{}/{}", event_id, meal_id)) hx-include="*" { "Save" }
         }
     })
 }

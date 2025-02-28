@@ -24,18 +24,18 @@ pub struct Credentials {
 }
 
 #[derive(Debug, Clone)]
-pub struct Backend {
+pub struct OldBackend {
     db: PgPool,
 }
 
-impl Backend {
+impl OldBackend {
     pub fn new(db: PgPool) -> Self {
         Self { db }
     }
 }
 
 #[async_trait]
-impl AuthnBackend for Backend {
+impl AuthnBackend for OldBackend {
     type User = User;
     type Credentials = Credentials;
     type Error = sqlx::Error;
@@ -67,7 +67,7 @@ impl AuthnBackend for Backend {
 }
 
 // Type alias for convenience
-pub type AuthSession = axum_login::AuthSession<Backend>;
+pub type OldAuthSession = axum_login::AuthSession<OldBackend>;
 
 use crate::FoodBase;
 
@@ -139,14 +139,15 @@ impl FoodBase {
         let user = sqlx::query_as!(
             User,
             r#"
-                INSERT INTO users (username, email, password_hash, is_admin)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO users (username, email, password_hash, is_admin, created_at)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING *
             "#,
             credentials.username,
             email,
             password_hash,
-            is_admin
+            is_admin,
+            OffsetDateTime::now_utc(),
         )
         .fetch_one(&*self.pg_pool)
         .await?;

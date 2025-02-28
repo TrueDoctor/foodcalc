@@ -509,6 +509,7 @@ async fn main() {
                         recipe_id: -1,
                         name: name.to_string(),
                         comment: Some(comment.to_string()),
+                        owner_id: -1,
                     })
                     .await
                 {

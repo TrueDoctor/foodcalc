@@ -1,6 +1,6 @@
 // foodlib_new/src/ops/ingredients.rs
 
-use crate::{entities::ingredient::*, error::Result};
+use crate::{entities::ingredient::*, error::Result, recipe::Recipe, Error};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -19,13 +19,14 @@ impl IngredientOps {
         let row = sqlx::query_as!(
             Ingredient,
             r#"
-            INSERT INTO ingredients (name, energy, comment)
-            VALUES ($1, $2, $3)
-            RETURNING ingredient_id as "id", name, energy, comment
+            INSERT INTO ingredients (name, energy, comment, owner_id)
+            VALUES ($1, $2, $3, $4)
+            RETURNING ingredient_id as "id", name, energy, comment, owner_id
             "#,
             ingredient.name,
             ingredient.energy,
             ingredient.comment,
+            ingredient.owner_id,
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -41,6 +42,7 @@ impl IngredientOps {
                 ingredient_id as "id", 
                 name, 
                 energy, 
+                owner_id,
                 comment 
             FROM ingredients 
             WHERE ingredient_id = $1
@@ -54,20 +56,43 @@ impl IngredientOps {
     }
 
     pub async fn get_by_name(&self, name: &str) -> Result<Ingredient> {
-        let row = sqlx::query_as!(
+        sqlx::query_as!(
             Ingredient,
             r#"
             SELECT 
                 ingredient_id as "id", 
                 name, 
                 energy, 
+                owner_id,
                 comment 
             FROM ingredients 
             WHERE name = $1
             "#,
             name
         )
-        .fetch_one(&*self.pool)
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "Ingredient",
+            id: name.to_string(),
+        })
+    }
+
+    pub async fn usages(&self, ingredient_id: i32) -> Result<Vec<Recipe>> {
+        let row = sqlx::query_as!(
+            Recipe,
+            r#"
+            SELECT 
+                recipe_id as "id", 
+                name, 
+                owner_id,
+                comment 
+            FROM recipes JOIN recipe_ingredients USING(recipe_id)
+            WHERE ingredient_id = $1
+            "#,
+            ingredient_id
+        )
+        .fetch_all(&*self.pool)
         .await?;
 
         Ok(row)
@@ -80,12 +105,12 @@ impl IngredientOps {
             UPDATE ingredients
             SET name = $1, energy = $2, comment = $3
             WHERE ingredient_id = $4
-            RETURNING ingredient_id as "id", name, energy, comment
+            RETURNING ingredient_id as "id", name, energy, comment, owner_id
             "#,
             ingredient.name,
             ingredient.energy,
             ingredient.comment,
-            ingredient.id
+            ingredient.id,
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -143,9 +168,31 @@ impl IngredientOps {
                 ingredient_id as "id", 
                 name, 
                 energy, 
+                owner_id,
                 comment 
             FROM ingredients 
-            ORDER BY name
+            ORDER BY ingredient_id
+            "#,
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    pub async fn list_with_sources(&self) -> Result<Vec<IngredientWithSource>> {
+        let rows = sqlx::query_as!(
+            IngredientWithSource,
+            r#"
+            SELECT 
+                ingredient_id as "id", 
+                name, 
+                energy, 
+                owner_id,
+                comment,
+                exists (select * from ingredient_sources as iss where iss.ingredient_id = ingredients.ingredient_id) as "has_sources!" 
+            FROM ingredients 
+            ORDER BY ingredient_id
             "#,
         )
         .fetch_all(&*self.pool)

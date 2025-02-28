@@ -3,6 +3,7 @@ pub use error::{Error, Result};
 use sqlx::PgPool;
 use std::sync::Arc;
 
+#[cfg(feature = "axum")]
 pub mod auth;
 pub mod entities;
 pub mod error;

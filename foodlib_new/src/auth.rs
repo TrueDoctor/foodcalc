@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use axum::extract::{FromRequestParts, OptionalFromRequestParts};
+use axum::http::request::Parts;
 use axum_login::{AuthUser, AuthnBackend, UserId};
 use bcrypt;
 use serde::Deserialize;
@@ -14,7 +16,6 @@ use crate::ops::users::UserOps;
 pub struct Credentials {
     pub username: String,
     pub password: String,
-    pub next: Option<String>,
 }
 
 impl AuthUser for User {
@@ -26,6 +27,41 @@ impl AuthUser for User {
 
     fn session_auth_hash(&self) -> &[u8] {
         self.password_hash.as_bytes()
+    }
+}
+
+// Helper extractor to get the current user from the session
+impl<S> FromRequestParts<S> for User
+where
+    S: Send + Sync,
+    AuthSession: FromRequestParts<S>,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self> {
+        // Extract the auth session
+        let auth = AuthSession::from_request_parts(parts, state)
+            .await
+            .map_err(|_| Error::Unauthorized("no auth headers".to_string()))?;
+
+        // Make sure the user is logged in
+        auth.user
+            .ok_or(Error::Unauthorized("Authentication required".to_string()))
+    }
+}
+impl<S> OptionalFromRequestParts<S> for User
+where
+    S: Send + Sync,
+    AuthSession: FromRequestParts<S>,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Option<Self>> {
+        // Extract the auth session
+        let auth = AuthSession::from_request_parts(parts, state).await.ok();
+
+        // Make sure the user is logged in
+        Ok(auth.and_then(|a| a.user))
     }
 }
 

@@ -7,17 +7,22 @@ INSERT INTO units (unit_id, name) VALUES
   (4, 'piece'),
   (5, 'slice');
 
+-- Users for testing
+INSERT INTO users (id, username, email, password_hash, is_admin, created_at) VALUES
+  (1, 'admin', 'admin@example.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG', true, '2024-12-04 00:00:00+00'),
+  (2, 'user', 'user@example.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG', false, '2024-12-04 00:00:00+00');
+
 -- Ingredients with energy in kJ/g
-INSERT INTO ingredients (ingredient_id, name, energy, comment) VALUES 
-  (1, 'Pasta', 15.7, 'Dried pasta'),
-  (2, 'Tomato', 0.18, 'Fresh tomatoes'),
-  (3, 'Garlic', 1.49, 'Fresh garlic'),
-  (4, 'Olive Oil', 37.0, 'Extra virgin'),
-  (5, 'Flour', 14.7, 'All-purpose flour'),
-  (6, 'Sugar', 16.8, 'Granulated sugar'),
-  (7, 'Eggs', 6.3, 'Large eggs'),
-  (8, 'Milk', 2.6, 'Whole milk, 3.5% fat'),
-  (9, 'Butter', 30.2, 'Unsalted butter');
+INSERT INTO ingredients (ingredient_id, name, energy, comment, owner_id) VALUES 
+  (1, 'Pasta', 15.7, 'Dried pasta', 1),
+  (2, 'Tomato', 0.18, 'Fresh tomatoes', 1),
+  (3, 'Garlic', 1.49, 'Fresh garlic', 1),
+  (4, 'Olive Oil', 37.0, 'Extra virgin', 1),
+  (5, 'Flour', 14.7, 'All-purpose flour', 1),
+  (6, 'Sugar', 16.8, 'Granulated sugar', 1),
+  (7, 'Eggs', 6.3, 'Large eggs', 1),
+  (8, 'Milk', 2.6, 'Whole milk, 3.5% fat', 1),
+  (9, 'Butter', 30.2, 'Unsalted butter', 1);
 
 -- Base conversions between units
 INSERT INTO base_conversions (from_unit, to_unit, from_amount, to_amount) VALUES
@@ -113,10 +118,10 @@ INSERT INTO ingredient_sources (ingredient_source_id, ingredient_id, store_id, p
   (9, 9, 1, 0.250, 0, 3.99, NULL, '250g butter block');
 
 -- Basic recipes
-INSERT INTO recipes (recipe_id, name, comment) VALUES
-  (1, 'Simple Pasta', 'Quick weeknight dinner'),
-  (2, 'Basic Cake', 'Classic vanilla cake'),
-  (3, 'Tomato Sauce', 'Basic sauce for pasta');
+INSERT INTO recipes (recipe_id, name, comment, owner_id) VALUES
+  (1, 'Simple Pasta', 'Quick weeknight dinner', 1),
+  (2, 'Basic Cake', 'Classic vanilla cake', 1),
+  (3, 'Tomato Sauce', 'Basic sauce for pasta', 2);
 
 -- Recipe ingredients
 INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id) VALUES
@@ -143,9 +148,9 @@ INSERT INTO places (place_id, name, comment) VALUES
   (2, 'Backup Kitchen', 'Secondary cooking area');
 
 -- Events
-INSERT INTO events (event_id, event_name, comment, budget) VALUES
-  (1, 'Family Dinner', 'Weekly family meal', 50.00),
-  (2, 'Birthday Party', 'Birthday celebration', 100.00);
+INSERT INTO events (event_id, event_name, comment, budget, owner_id) VALUES
+  (1, 'Family Dinner', 'Weekly family meal', 50.00, 1),
+  (2, 'Birthday Party', 'Birthday celebration', 100.00, 2);
 
 -- Event meals (energy in kJ per serving)
 INSERT INTO event_meals (event_id, recipe_id, place_id, comment, energy_per_serving, servings, start_time, end_time) VALUES
@@ -153,9 +158,9 @@ INSERT INTO event_meals (event_id, recipe_id, place_id, comment, energy_per_serv
   (2, 2, 1, 'Birthday cake', 1800, 12, '2024-12-04 14:00:00+00', '2024-12-04 15:00:00+00');
 
 -- Inventories
-INSERT INTO inventories (inventory_id, name) VALUES
-  (1, 'Main Pantry'),
-  (2, 'Backup Storage');
+INSERT INTO inventories (inventory_id, name, owner_id) VALUES
+  (1, 'Main Pantry', 1),
+  (2, 'Backup Storage', 2);
 
 -- Inventory contents (all in kg)
 INSERT INTO inventory_ingredients (inventory_id, ingredient_id, amount) VALUES
@@ -194,11 +199,6 @@ INSERT INTO steps (step_id, step_order, step_name, step_description, fixed_durat
   (8, 1, 'Prep Ingredients', 'Dice tomatoes and mince garlic', '00:10:00', '00:05:00', 3),
   (9, 2, 'Cook Sauce', 'Simmer all ingredients', '00:20:00', '00:15:00', 3);
 
--- Users for testing
-INSERT INTO users (id, username, email, password_hash, is_admin, created_at) VALUES
-  (1, 'admin', 'admin@example.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG', true, '2024-12-04 00:00:00+00'),
-  (2, 'user', 'user@example.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG', false, '2024-12-04 00:00:00+00');
-
 -- Groups
 INSERT INTO groups (id, name) VALUES
   (1, 'Administrators'),
@@ -225,3 +225,5 @@ SELECT setval('groups_id_seq', (SELECT COALESCE(MAX(id), 1) FROM groups));
 SELECT setval('shopping_tours_tour_id_seq', (SELECT COALESCE(MAX(tour_id), 1) FROM shopping_tours));
 SELECT setval('food_prep_prep_id_seq', (SELECT COALESCE(MAX(prep_id), 1) FROM food_prep));
 SELECT setval('inventories_inventory_id_seq', (SELECT COALESCE(MAX(inventory_id), 1) FROM inventories));
+
+

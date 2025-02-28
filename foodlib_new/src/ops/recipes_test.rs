@@ -12,12 +12,13 @@ async fn create_test_recipe(ops: &RecipeOps) -> Recipe {
         id: -1,
         name: "Test Recipe".to_string(),
         comment: Some("Test Comment".to_string()),
+        owner_id: 1,
     })
     .await
     .expect("Failed to create test recipe")
 }
 
-#[sqlx::test]
+#[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_create_recipe(pool: PgPool) {
     let ops = RecipeOps::new(Arc::new(pool));
 
@@ -27,7 +28,7 @@ async fn test_create_recipe(pool: PgPool) {
     assert!(recipe.id > 0);
 }
 
-#[sqlx::test]
+#[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_get_recipe(pool: PgPool) {
     let ops = RecipeOps::new(Arc::new(pool));
 
@@ -39,7 +40,7 @@ async fn test_get_recipe(pool: PgPool) {
     assert_eq!(created.comment, fetched.comment);
 }
 
-#[sqlx::test]
+#[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_update_recipe(pool: PgPool) {
     let ops = RecipeOps::new(Arc::new(pool));
 
@@ -54,7 +55,7 @@ async fn test_update_recipe(pool: PgPool) {
     assert_eq!(updated.id, recipe.id);
 }
 
-#[sqlx::test]
+#[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_delete_recipe(pool: PgPool) {
     let ops = RecipeOps::new(Arc::new(pool));
 
@@ -67,7 +68,7 @@ async fn test_delete_recipe(pool: PgPool) {
     assert!(result.is_err());
 }
 
-#[sqlx::test]
+#[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_recipe_steps(pool: PgPool) {
     let ops = RecipeOps::new(Arc::new(pool));
 
@@ -112,7 +113,7 @@ async fn test_recipe_steps(pool: PgPool) {
     assert!(steps.is_empty());
 }
 
-#[sqlx::test]
+#[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_meta_recipes(pool: PgPool) {
     let ops = RecipeOps::new(Arc::new(pool));
 
@@ -122,6 +123,7 @@ async fn test_meta_recipes(pool: PgPool) {
             id: -1,
             name: "Child Recipe".to_string(),
             comment: None,
+            owner_id: 1,
         })
         .await
         .expect("Failed to create child recipe");
@@ -131,6 +133,7 @@ async fn test_meta_recipes(pool: PgPool) {
         parent_id: parent_recipe.id,
         child_id: child_recipe.id,
         weight: BigDecimal::from_str("2.0").unwrap(),
+        name: None,
     };
 
     ops.add_meta_ingredient(meta.clone())
@@ -174,6 +177,7 @@ async fn test_recipe_ingredients(pool: PgPool) {
         ingredient_id: 4, // Olive Oil
         amount: BigDecimal::from_str("2.0").unwrap(),
         unit_id: 3, // mL
+        name: None,
     };
 
     ops.add_ingredient(new_ingredient.clone())
@@ -257,12 +261,14 @@ async fn test_update_recipe_entries(pool: PgPool) {
             ingredient_id: 1,              // Pasta
             amount: BigDecimal::from(400), // 400g
             unit_id: 1,                    // grams
+            name: None,
         },
         RecipeIngredient {
             recipe_id: 1,
             ingredient_id: 4,             // Olive Oil
             amount: BigDecimal::from(30), // 30mL
             unit_id: 3,                   // milliliters
+            name: None,
         },
     ];
 
@@ -270,6 +276,7 @@ async fn test_update_recipe_entries(pool: PgPool) {
         parent_id: 1,
         child_id: 3,                                  // Tomato Sauce
         weight: BigDecimal::from_str("0.4").unwrap(), // 400g
+        name: None,
     }];
 
     // Update recipe entries

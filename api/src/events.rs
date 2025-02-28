@@ -106,6 +106,7 @@ async fn update_event(
         event_name: body.name.clone(),
         comment: body.comment.clone(),
         budget,
+        owner_id: -1,
     };
 
     if let Ok(event) = state.food_base.update_event(&event).await {

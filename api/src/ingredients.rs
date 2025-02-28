@@ -79,6 +79,7 @@ async fn update_ingredient(
         name: body.name,
         energy: body.energy,
         comment: body.comment,
+        owner_id: -1,
     };
     match state.food_base.update_ingredient(&ingredient).await {
         Ok(ingredient) => (StatusCode::OK, Json(ingredient)).into_response(),

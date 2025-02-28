@@ -20,6 +20,8 @@ pub struct Event {
         display_with = "crate::util::display_optional_money"
     )]
     pub budget: Option<BigDecimal>,
+    #[tabled(rename = "Owner")]
+    pub owner_id: i64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Tabled)]
@@ -93,6 +95,7 @@ impl FoodBase {
             r#" SELECT event_id as "event_id!",
                     event_name as "event_name!",
                     events.comment as "comment",
+                    events.owner_id,
                     budget as "budget"
                 FROM events LEFT JOIN event_meals USING (event_id)
                 GROUP BY event_id, event_name, events.comment, budget
@@ -110,6 +113,7 @@ impl FoodBase {
             r#" SELECT event_id as "event_id!",
                     event_name as "event_name!",
                     events.comment as "comment",
+                    events.owner_id,
                     budget as "budget"
                 FROM events
             "#
@@ -126,6 +130,7 @@ impl FoodBase {
             r#" SELECT event_id as "event_id!",
                     event_name as "event_name!",
                     events.comment as "comment",
+                    events.owner_id,
                     budget as "budget"
                 FROM events LEFT JOIN event_meals USING (event_id)
                 WHERE event_id = $1 OR event_name = $2
@@ -145,6 +150,7 @@ impl FoodBase {
             r#" SELECT event_id as "event_id!",
                     event_name as "event_name!",
                     events.comment as "comment",
+                    events.owner_id,
                     budget as "budget"
                 FROM events
                 WHERE event_id = $1
@@ -204,8 +210,8 @@ impl FoodBase {
         let event = sqlx::query_as!(
             Event,
             r#"
-                INSERT INTO events (event_name, comment, budget)
-                VALUES ($1, $3, $2)
+                INSERT INTO events (event_name, comment, budget, owner_id)
+                VALUES ($1, $3, $2, -1)
                 RETURNING *
             "#,
             name,

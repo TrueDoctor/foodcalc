@@ -9,7 +9,7 @@ use time::{macros::format_description, OffsetDateTime};
 
 use crate::{
     frontend::{events_tab::event_detail_tab, MResponse},
-    MyAppState,
+    FoodLib, MyAppState,
 };
 
 pub(crate) fn food_prep_router() -> axum::Router<MyAppState> {
@@ -39,11 +39,11 @@ async fn add_food_prep(state: State<MyAppState>, Path(event_id): Path<i32>) -> M
 }
 
 async fn delete_food_prep(
-    state: State<MyAppState>,
+    foodlib: FoodLib,
     Path((event_id, prep_id)): Path<(i32, i32)>,
 ) -> MResponse {
-    state.new_lib().events().delete_food_prep(prep_id).await?;
-    event_detail_tab::event_form(state, Path(event_id)).await
+    foodlib.events().delete_food_prep(prep_id).await?;
+    event_detail_tab::event_form(foodlib, Path(event_id)).await
 }
 
 async fn delete_food_prep_dialog(
@@ -171,10 +171,7 @@ async fn food_prep_form(
     }
 }
 
-async fn save_food_prep(
-    State(state): State<MyAppState>,
-    Form(form): Form<FoodPrepForm>,
-) -> MResponse {
+async fn save_food_prep(foodlib: FoodLib, Form(form): Form<FoodPrepForm>) -> MResponse {
     // Parse dates
     let date_format = format_description!("[year]-[month]-[day]T[hour]:[minute]");
 
@@ -197,8 +194,7 @@ async fn save_food_prep(
     // Create or update prep
     match form.prep_id {
         Some(prep_id) if prep_id > 0 => {
-            state
-                .new_lib()
+            foodlib
                 .events()
                 .update_food_prep(FoodPrep {
                     id: prep_id,
@@ -211,8 +207,7 @@ async fn save_food_prep(
                 .await?;
         }
         _ => {
-            state
-                .new_lib()
+            foodlib
                 .events()
                 .add_food_prep(FoodPrep {
                     id: -1,
@@ -226,7 +221,7 @@ async fn save_food_prep(
         }
     }
 
-    event_detail_tab::event_form(State(state), Path(form.event_id)).await
+    event_detail_tab::event_form(foodlib, Path(form.event_id)).await
 }
 
 fn format_food_prep(event_id: i32, prep: &FoodPrep, recipe: &Recipe) -> Markup {
@@ -262,18 +257,14 @@ fn format_food_prep(event_id: i32, prep: &FoodPrep, recipe: &Recipe) -> Markup {
     }
 }
 
-pub async fn render_food_prep(state: &State<MyAppState>, event_id: i32) -> MResponse {
-    let preps = state
-        .new_lib()
-        .events()
-        .get_food_prep_tasks(event_id)
-        .await?;
+pub async fn render_food_prep(foodlib: FoodLib, event_id: i32) -> MResponse {
+    let preps = foodlib.events().get_food_prep_tasks(event_id).await?;
 
     // Get recipes for all food preps
     let mut recipe_map = std::collections::HashMap::new();
     for prep in &preps {
         if !recipe_map.contains_key(&prep.recipe_id) {
-            if let Ok(recipe) = state.new_lib().recipes().get(prep.recipe_id).await {
+            if let Ok(recipe) = foodlib.recipes().get(prep.recipe_id).await {
                 recipe_map.insert(prep.recipe_id, recipe);
             }
         }

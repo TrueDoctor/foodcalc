@@ -9,6 +9,7 @@ pub struct Event {
     pub name: String,
     pub comment: Option<String>,
     pub budget: Option<BigDecimal>,
+    pub owner_id: i64,
 }
 
 impl Default for Event {
@@ -18,6 +19,7 @@ impl Default for Event {
             name: "Test Event".to_string(),
             comment: Some("Test comment".to_string()),
             budget: None,
+            owner_id: -1,
         }
     }
 }
@@ -29,6 +31,7 @@ pub struct ShoppingTour {
     pub event_id: i32,
     pub tour_date: OffsetDateTime,
     pub store_id: i32,
+    pub store_name: Option<String>,
 }
 
 /// Food preparation task scheduled for an event

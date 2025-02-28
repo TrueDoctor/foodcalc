@@ -1,17 +1,46 @@
 use axum::{
     body::Body, extract::Request, http::Response, middleware::Next, response::IntoResponse,
 };
+use axum_extra::extract::Host;
+use foodlib_new::auth::AuthSession;
+use foodlib_new::user::User;
 use maud::{html, DOCTYPE};
 
 use crate::frontend::home;
 use crate::frontend::CSS_HASH;
 
-pub async fn htmx_middleware(req: Request, next: Next) -> Response<Body> {
+pub async fn htmx_middleware(
+    mut auth: AuthSession,
+    Host(host): Host,
+    req: Request,
+    next: Next,
+) -> Response<Body> {
     let is_htmx = req
         .headers()
         .get("HX-Request")
         .map_or(false, |v| v == "true");
 
+    let (host, _) = host.split_once(':').unwrap_or_default();
+    #[cfg(debug_assertions)]
+    if (host == "127.0.0.1" || host == "localhost")
+        && auth.user.is_none()
+        && !std::env::var("DATABASE_URL")
+            .unwrap()
+            .ends_with("food_calc")
+    {
+        let user = User {
+            username: "test".into(),
+            id: 0,
+            is_admin: true,
+            // TODO: replace this with a better way to handle this
+            password_hash: String::from("password"),
+            ..Default::default()
+        };
+        auth.login(&user).await.unwrap();
+        log::info!("logged in test user");
+        // When the user sends their first request, log them in and retry the request
+        return axum::response::Redirect::to(req.uri().path()).into_response();
+    }
     let response = next.run(req).await;
 
     if is_htmx {
@@ -52,9 +81,12 @@ pub async fn htmx_middleware(req: Request, next: Next) -> Response<Body> {
                     "responseHandling": [
                         {"code":"204", "swap": false},
                         {"code":"[23]..", "swap": true},
+                        {"code":"401", "swap": true},
+                        {"code":"403", "swap": true},
+                        {"code":"404", "swap": true},
                         {"code":"422", "swap": true},
                         {"code":"[45]..", "swap": false, "error":true},
-                        {"code":"...", "swap": true}
+                        {"code":"...", "swap": false}
                     ]
                     }"#;
                     meta name="viewport" content="width=800, initial-scale=1";
@@ -63,7 +95,7 @@ pub async fn htmx_middleware(req: Request, next: Next) -> Response<Body> {
                     bg-light-bg-light text-gray-800
                     dark:bg-dark-bg-dark dark:text-gray-100" {
                     div hx-push-url="true" {
-                        (home::navbar())
+                        (home::navbar(auth.user))
                         div class="flex flex-col items-center justify-center mb-16" {
                             div id="content" class="w-3/4 flex flex-col items-center justify-center" {
                                 (maud::PreEscaped(body))

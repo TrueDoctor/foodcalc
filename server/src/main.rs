@@ -1,6 +1,6 @@
-use std::{env, net::SocketAddr, ops::Deref, time::Duration};
+use std::{env, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
 
-use axum::Router;
+use axum::{Extension, Router};
 use axum_login::{
     tower_sessions::{ExpiredDeletion, Expiry, SessionManagerLayer},
     AuthManagerLayerBuilder,
@@ -13,9 +13,11 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tower_sessions::cookie::Key;
 use tower_sessions_sqlx_store::PostgresStore;
 
-use foodlib::Backend;
+use foodlib_new::auth::AuthBackend;
 mod frontend;
 mod htmx_middleware;
+
+type FoodLib = Extension<foodlib_new::FoodLib>;
 
 #[derive(Clone)]
 pub struct MyAppState {
@@ -82,21 +84,23 @@ async fn main() {
         .with_signed(key);
 
     // Create auth backend and layer
-    let backend = Backend::new(pool.clone());
+    let backend = AuthBackend::new(Arc::new(pool.clone()));
     let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
 
     let state = MyAppState {
         db_connection: FoodBase::new_with_pool(pool),
     };
+    let new_lib = foodlib_new::FoodLib::from_shared(state.pool_arc());
 
     // Combine routes with middleware
     let app = Router::new()
         .merge(frontend::frontend_router())
         .with_state(state)
+        .layer(Extension(new_lib))
+        .layer(axum::middleware::from_fn(htmx_middleware::htmx_middleware))
         .layer(auth_layer)
         .layer(CorsLayer::very_permissive())
-        .layer(TraceLayer::new_for_http())
-        .layer(axum::middleware::from_fn(htmx_middleware::htmx_middleware));
+        .layer(TraceLayer::new_for_http());
 
     println!("Listening on http://localhost:{port}");
 

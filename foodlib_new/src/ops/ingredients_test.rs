@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use crate::{entities::ingredient::*, error::Error, ops::ingredients::IngredientOps};
 
-#[sqlx::test]
+#[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_create_ingredient(pool: sqlx::PgPool) {
     let ops = IngredientOps::new(pool.into());
 
@@ -13,6 +13,7 @@ async fn test_create_ingredient(pool: sqlx::PgPool) {
         name: "Test Ingredient".to_string(),
         energy: BigDecimal::from_str("10.5").unwrap(),
         comment: Some("Test comment".to_string()),
+        owner_id: 1,
     };
 
     let created = ops.create(ingredient.clone()).await.unwrap();
@@ -49,7 +50,7 @@ async fn test_get_by_name(pool: sqlx::PgPool) {
     assert_eq!(ingredient.energy, BigDecimal::from_str("15.7").unwrap());
 
     let err = ops.get_by_name("NonExistentIngredient").await.unwrap_err();
-    assert!(matches!(err, Error::Database(_)));
+    assert!(matches!(err, Error::NotFound { .. }));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -80,6 +81,7 @@ async fn test_delete_ingredient(pool: sqlx::PgPool) {
             name: "Ingredient To Delete".to_string(),
             energy: BigDecimal::from(1),
             comment: None,
+            owner_id: 1,
         })
         .await
         .unwrap();
@@ -122,7 +124,7 @@ async fn test_list_ingredients(pool: sqlx::PgPool) {
 
     // Verify ingredients are sorted by name
     let mut sorted = ingredients.clone();
-    sorted.sort_by(|a, b| a.name.cmp(&b.name));
+    sorted.sort_by(|a, b| a.id.cmp(&b.id));
     assert_eq!(ingredients, sorted);
 }
 

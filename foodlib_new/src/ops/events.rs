@@ -20,13 +20,14 @@ impl EventOps {
         let record = sqlx::query_as!(
             Event,
             r#"
-            INSERT INTO events (event_name, comment, budget)
-            VALUES ($1, $2, $3)
-            RETURNING event_id as id, event_name as name, comment, budget
+            INSERT INTO events (event_name, comment, budget, owner_id)
+            VALUES ($1, $2, $3, $4)
+            RETURNING event_id as id, event_name as name, comment, budget, owner_id
             "#,
             event.name,
             event.comment,
             event.budget,
+            event.owner_id,
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -43,6 +44,7 @@ impl EventOps {
                 event_id as id,
                 event_name as name,
                 comment,
+                owner_id,
                 budget
             FROM events 
             WHERE event_id = $1
@@ -65,13 +67,14 @@ impl EventOps {
             Event,
             r#"
             UPDATE events 
-            SET event_name = $1, comment = $2, budget = $3
-            WHERE event_id = $4
-            RETURNING event_id as id, event_name as name, comment, budget
+            SET event_name = $1, comment = $2, budget = $3, owner_id = $4
+            WHERE event_id = $5
+            RETURNING event_id as id, event_name as name, comment, budget, owner_id
             "#,
             event.name,
             event.comment,
             event.budget,
+            event.owner_id,
             event.id
         )
         .fetch_optional(&*self.pool)
@@ -126,7 +129,7 @@ impl EventOps {
     }
 
     /// Duplicates an event, including all associated data
-    pub async fn duplicate(&self, id: i32) -> Result<i32> {
+    pub async fn duplicate(&self, id: i32, new_owner: i64) -> Result<i32> {
         let mut tx = self.pool.begin().await?;
 
         // Get the event details
@@ -137,6 +140,7 @@ impl EventOps {
                 event_id as id,
                 event_name as name,
                 comment,
+                owner_id,
                 budget
             FROM events 
             WHERE event_id = $1
@@ -152,13 +156,14 @@ impl EventOps {
         let new_event = sqlx::query_as!(
             Event,
             r#"
-            INSERT INTO events (event_name, comment, budget)
-            VALUES ($1, $2, $3)
-            RETURNING event_id as id, event_name as name, comment, budget
+            INSERT INTO events (event_name, comment, budget, owner_id)
+            VALUES ($1, $2, $3, $4)
+            RETURNING event_id as id, event_name as name, comment, budget, owner_id
             "#,
             new_name,
             event.comment,
             event.budget,
+            new_owner,
         )
         .fetch_one(&mut *tx)
         .await?;
@@ -217,8 +222,8 @@ impl EventOps {
         let tours = sqlx::query_as!(
             ShoppingTour,
             r#"
-            SELECT tour_id as id, event_id, tour_date, store_id
-            FROM shopping_tours
+            SELECT tour_id as id, event_id, tour_date, store_id, name as store_name
+            FROM shopping_tours JOIN stores USING(store_id)
             WHERE event_id = $1
             "#,
             id
@@ -308,10 +313,12 @@ impl EventOps {
             SELECT 
                 event_id as id,
                 event_name as name,
-                comment,
+                events.comment,
+                owner_id,
                 budget
-            FROM events 
-            ORDER BY event_name
+            FROM events LEFT JOIN event_meals USING (event_id)
+            GROUP BY event_id, event_name, events.comment, owner_id, budget
+            ORDER BY MIN(start_time) DESC
             "#
         )
         .fetch_all(&*self.pool)
@@ -327,7 +334,7 @@ impl EventOps {
             r#"
             INSERT INTO shopping_tours (event_id, tour_date, store_id)
             VALUES ($1, $2, $3)
-            RETURNING tour_id as id, event_id, tour_date, store_id
+            RETURNING tour_id as id, event_id, tour_date, store_id, (SELECT name FROM stores WHERE store_id = $3) as store_name
             "#,
             tour.event_id,
             tour.tour_date,
@@ -347,11 +354,12 @@ impl EventOps {
             UPDATE shopping_tours
             SET tour_date = $2, store_id = $3
             WHERE tour_id = $1
-            RETURNING tour_id as id, event_id, tour_date, store_id
+            RETURNING tour_id as id, event_id, tour_date, store_id, $4 as store_name
             "#,
             tour.id,
             tour.tour_date,
             tour.store_id,
+            tour.store_name,
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -384,8 +392,8 @@ impl EventOps {
         let records = sqlx::query_as!(
             ShoppingTour,
             r#"
-            SELECT tour_id as id, event_id, tour_date, store_id
-            FROM shopping_tours
+            SELECT tour_id as id, event_id, tour_date, store_id, name as store_name
+            FROM shopping_tours JOIN stores USING(store_id)
             WHERE event_id = $1
             ORDER BY tour_date
             "#,
@@ -402,8 +410,8 @@ impl EventOps {
         let records = sqlx::query_as!(
             ShoppingTour,
             r#"
-            SELECT tour_id as id, event_id, tour_date, store_id
-            FROM shopping_tours
+            SELECT tour_id as id, event_id, tour_date, store_id, name as store_name
+            FROM shopping_tours JOIN stores USING(store_id)
             WHERE tour_id = $1
             ORDER BY tour_date
             "#,
@@ -757,6 +765,7 @@ impl EventOps {
                 e.event_id as id,
                 e.event_name as name,
                 e.comment,
+                e.owner_id,
                 e.budget
             FROM events e
             LEFT JOIN event_meals em ON e.event_id = em.event_id
@@ -781,6 +790,7 @@ impl EventOps {
                 e.event_id as id,
                 e.event_name as name,
                 e.comment,
+                e.owner_id,
                 e.budget
             FROM events e
             LEFT JOIN event_meals em ON e.event_id = em.event_id
@@ -807,6 +817,7 @@ impl EventOps {
                 event_id as id,
                 event_name as name,
                 comment,
+                owner_id,
                 budget
             FROM events
             WHERE LOWER(event_name) LIKE $1

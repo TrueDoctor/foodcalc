@@ -18,6 +18,7 @@ pub struct Recipe {
     pub name: String,
     #[tabled(display_with = "crate::util::display_optional")]
     pub comment: Option<String>,
+    pub owner_id: i64,
 }
 
 impl Display for Recipe {
@@ -164,6 +165,7 @@ impl FoodBase {
                         name,
                         comment,
                         energy,
+                        owner_id: -1,
                     }),
                     amount,
                     unit: Unit {
@@ -209,6 +211,7 @@ impl FoodBase {
                      weight,
                  }| RecipeIngredient {
                     ingredient: RecipeMetaIngredient::MetaRecipe(Recipe {
+                        owner_id: -1,
                         recipe_id,
                         name,
                         comment,

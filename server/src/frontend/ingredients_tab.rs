@@ -1,36 +1,39 @@
-use axum::extract::{Form, Path, State};
-use axum::response::{IntoResponse, Response};
+use crate::FoodLib;
+use axum::extract::{Form, Path};
+use axum::response::IntoResponse;
+use axum::routing::{delete, get, post};
 use axum_login::login_required;
 use bigdecimal::BigDecimal;
-use foodlib::{Backend, Ingredient, IngredientSource, Store};
+use foodlib_new::auth::AuthBackend;
+use foodlib_new::ingredient::IngredientWithSource;
+use foodlib_new::user::User;
+use foodlib_new::{
+    ingredient::{Ingredient, IngredientSource},
+    store::Store,
+};
 use maud::{html, Markup};
 use num::{FromPrimitive, ToPrimitive};
 use serde::Deserialize;
 
-use crate::MyAppState;
-
+use super::{IResponse, MResponse};
 use crate::frontend::LOGIN_URL;
-
-use super::html_error;
+use crate::MyAppState;
 
 pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
     axum::Router::new()
-        .route("/", axum::routing::post(add_ingredient))
-        .route(
-            "/sources/{ingredient}/{sourc}",
-            axum::routing::post(update_source),
-        )
-        .route("/{id}", axum::routing::delete(delete))
-        .route("/edit", axum::routing::get(edit_ingredient_form))
-        .route("/delete/{id}", axum::routing::get(delete_ingredient_form))
+        .route("/", post(update_ingredient))
+        .route("/sources/{ingredient}/{source}", post(update_source))
+        .route("/{id}", delete(delete_ingredient))
+        .route("/edit", get(edit_ingredient_form))
+        .route("/delete/{id}", get(delete_ingredient_form))
         .route(
             "/sources/delete/{ingredient_id}/{source_id}",
-            axum::routing::get(delete_source),
+            get(delete_source),
         )
-        .route_layer(login_required!(Backend, login_url = LOGIN_URL))
-        .route("/sources/{id}", axum::routing::get(sources_table))
-        .route("/search", axum::routing::post(search))
-        .route("/", axum::routing::get(ingredients_view))
+        .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
+        .route("/sources/{id}", get(sources_table))
+        .route("/search", post(search))
+        .route("/", get(ingredients_view))
 }
 
 #[derive(Deserialize)]
@@ -38,55 +41,41 @@ pub struct SearchParameters {
     search: String,
 }
 
-pub async fn search(State(state): State<MyAppState>, query: Form<SearchParameters>) -> Markup {
+pub async fn search(
+    foodlib: FoodLib,
+    user: Option<User>,
+    query: Form<SearchParameters>,
+) -> MResponse {
     let query = query.search.to_lowercase();
-    let ingredients = state
-        .db_connection
-        .get_ingredients()
-        .await
-        .unwrap_or_default();
+    let ingredients = foodlib.ingredients().list_with_sources().await?;
 
     let filtered_ingredients = ingredients
         .iter()
         .filter(|x| x.name.to_lowercase().contains(&query));
 
-    html! {
+    Ok(html! {
         @for ingredient in filtered_ingredients {
-            @let has_sources = state.has_ingredient_sources(ingredient.ingredient_id).await.unwrap_or_default();
-            (format_ingredient(ingredient, has_sources))
+            (format_ingredient(ingredient, user.as_ref()))
         }
-    }
+    })
 }
 
-pub async fn add_ingredient(
-    State(state): State<MyAppState>,
-    form: axum::extract::Form<Ingredient>,
-) -> Response {
-    let ingredient = form.0;
-    let has_sources = state
-        .has_ingredient_sources(ingredient.ingredient_id)
-        .await
-        .unwrap_or_default();
-    if ingredient.ingredient_id == -1 {
-        dbg!("Adding ingredient");
-        match state
-            .add_ingredient(ingredient.name, ingredient.energy, ingredient.comment)
-            .await
-        {
-            Err(_) => html_error("Failed to add ingredient", "/ingredients").into_response(),
-            Ok(_) => (
-                [("HX-Retarget", "#content"), ("HX-Reswap", "innerHTML")],
-                ingredients_view(State(state)).await,
-            )
-                .into_response(),
-        }
+pub async fn update_ingredient(
+    foodlib: FoodLib,
+    user: User,
+    Form(mut ingredient): Form<Ingredient>,
+) -> IResponse {
+    if ingredient.id == -1 {
+        ingredient.owner_id = user.id;
+        foodlib.ingredients().create(ingredient).await?;
+        Ok((
+            [("HX-Retarget", "#content"), ("HX-Reswap", "innerHTML")],
+            ingredients_view(foodlib, Some(user)).await,
+        )
+            .into_response())
     } else {
-        dbg!("Updating ingredient");
-        match state.update_ingredient(&ingredient).await {
-            Err(_) => html_error("Failed to update ingredient", "/ingredients"),
-            Ok(_) => format_ingredient(&ingredient, has_sources),
-        }
-        .into_response()
+        let updated = foodlib.ingredients().update(ingredient).await?;
+        Ok(format_ingredient(&updated.into(), Some(&user)).into_response())
     }
 }
 
@@ -100,74 +89,59 @@ struct SourceData {
 }
 
 async fn update_source(
-    State(state): State<MyAppState>,
+    foodlib: FoodLib,
     Path((ingredient_id, source_id)): Path<(i32, i32)>,
-    form: axum::extract::Form<SourceData>,
-) -> Markup {
-    let ingredient = form.0;
+    form: Form<SourceData>,
+) -> MResponse {
+    let data = form.0;
+
     if source_id == -1 {
-        match state
-            .add_ingredient_source(
-                ingredient_id,
-                ingredient.store_id,
-                ingredient.weight,
-                BigDecimal::from_f64(ingredient.price).unwrap(),
-                ingredient.url,
-                ingredient.comment,
-                0,
-            )
-            .await
-        {
-            Err(_) => html_error("Failed to add ingredient source", "/ingredients"),
-            Ok(_) => sources_table(State(state), Path(ingredient_id)).await,
-        }
-    } else {
+        // Creating a new source
         let source = IngredientSource {
-            ingredient_source_id: source_id,
+            id: -1,
             ingredient_id,
-            store_id: ingredient.store_id,
-            package_size: ingredient.weight,
-            price: BigDecimal::from_f64(ingredient.price).unwrap(),
+            store_id: data.store_id,
+            package_size: data.weight,
+            price: BigDecimal::from_f64(data.price).unwrap(),
             unit_id: 0,
-            url: ingredient.url,
-            comment: ingredient.comment,
+            url: data.url,
+            comment: data.comment,
         };
-        match state.update_ingredient_source(&source).await {
-            Err(_) => html_error("Failed to update ingredient source", "/ingredients"),
-            Ok(_) => sources_table(State(state), Path(ingredient_id)).await,
-        }
+
+        foodlib.ingredients().add_source(source).await?;
+        sources_table(foodlib, Path(ingredient_id)).await
+    } else {
+        // Updating existing source
+        let source = IngredientSource {
+            id: source_id,
+            ingredient_id,
+            store_id: data.store_id,
+            package_size: data.weight,
+            price: BigDecimal::from_f64(data.price).unwrap(),
+            unit_id: 0,
+            url: data.url,
+            comment: data.comment,
+        };
+
+        foodlib.ingredients().update_source(source).await?;
+        sources_table(foodlib, Path(ingredient_id)).await
     }
 }
 
 async fn delete_source(
-    State(state): State<MyAppState>,
+    foodlib: FoodLib,
     Path((ingredient_id, source_id)): Path<(i32, i32)>,
-) -> Markup {
-    match state.delete_ingredient_source(source_id).await {
-        Err(_) => html_error("Failed to delete ingredient source", "/ingredients"),
-        Ok(_) => sources_table(State(state), Path(ingredient_id)).await,
-    }
+) -> MResponse {
+    foodlib.ingredients().delete_source(source_id).await?;
+    sources_table(foodlib, Path(ingredient_id)).await
 }
 
-pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
-    let ingredients = state
-        .db_connection
-        .get_ingredients_has_sources()
+pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
+    let ingredients = foodlib
+        .ingredients()
+        .list_with_sources()
         .await
-        .unwrap_or_default()
-        .iter()
-        .map(|ingredient_has_scource| {
-            (
-                Ingredient {
-                    ingredient_id: ingredient_has_scource.ingredient_id,
-                    name: ingredient_has_scource.name.clone(),
-                    energy: ingredient_has_scource.energy.clone(),
-                    comment: ingredient_has_scource.comment.clone(),
-                },
-                ingredient_has_scource.has_sources.unwrap(),
-            )
-        })
-        .collect::<Vec<(Ingredient, bool)>>();
+        .unwrap_or_default();
 
     html! {
         div id="ingredients"{
@@ -179,9 +153,8 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
                 input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off"
                     autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
                     hx-target="#search-results" hx-indicator=".htmx-indicator";
-
             }
-            (add_ingredient_button())
+            (add_ingredient_button(user.as_ref()))
 
             span class="htmx-indicator" { "Searching..." }
 
@@ -197,7 +170,7 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
                 } }
                 tbody id="search-results" {
                     @for ingredient in ingredients.iter() {
-                        (format_ingredient(&ingredient.0, ingredient.1))
+                        (format_ingredient(ingredient, user.as_ref()))
                     }
                 }
             }
@@ -205,36 +178,47 @@ pub async fn ingredients_view(State(state): State<MyAppState>) -> Markup {
     }
 }
 
-fn add_ingredient_button() -> Markup {
+fn add_ingredient_button(user: Option<&User>) -> Markup {
+    let ingredient: IngredientWithSource = Ingredient {
+        id: -1,
+        name: String::new(),
+        energy: BigDecimal::from(0),
+        comment: None,
+        owner_id: user.map(|x| x.id).unwrap_or(-1),
+    }
+    .into();
     html! {
         div class = "m-2" hx-target="this" id="ingredient--1" {
-            button class="btn bg-light-primary-normal dark:bg-dark-primary-normal" hx-get="/ingredients/edit" hx-swap="innerHTML" { "Add Ingredient (+)" }
+            button class="btn bg-light-primary-normal dark:bg-dark-primary-normal"
+            hx-get="/ingredients/edit"
+            hx-vals=(serde_json::to_string(&ingredient).unwrap())
+            hx-swap="innerHTML" { "Add Ingredient (+)" }
         }
     }
 }
 
-async fn delete(state: State<MyAppState>, id: Path<i32>) -> Markup {
-    match state.delete_ingredient(id.0).await {
-        Ok(_) => ingredients_view(state).await,
-        Err(e) => html_error(&format!("Failed to delete ingredient: {e}"), "/ingredients"),
+async fn delete_ingredient(foodlib: FoodLib, user: User, id: Path<i32>) -> MResponse {
+    if !user.is_admin {
+        return Err(foodlib_new::Error::Forbidden(
+            "You don't have permission to delete ingredients".into(),
+        ));
     }
+    foodlib.ingredients().delete(id.0).await?;
+    Ok(ingredients_view(foodlib, Some(user)).await)
 }
 
-#[axum::debug_handler]
-pub async fn edit_ingredient_form(Form(old): Form<Option<Ingredient>>) -> Markup {
-    let ingredient = old.unwrap_or(Ingredient {
-        ingredient_id: -1,
-        ..Default::default()
-    });
-    let id = ingredient.ingredient_id;
+pub async fn edit_ingredient_form(Form(ingredient): Form<IngredientWithSource>) -> Markup {
+    let id = ingredient.id;
     html! {
         td colspan="6" {
             div class="flex flex-col items-center justify-center w-full" {
                 div class="flex gap-2 w-full" {
+
+                    input type="hidden" name=("owner_id") value=(ingredient.owner_id);
                     input class="text" type="text" name="name" placeholder="Name" value=(ingredient.name) required="required";
                     input class="text shrink" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy (kJ/g)" required="required" value=(ingredient.energy);
                     input class="text grow" type="text" name="comment" placeholder="Comment" value=(ingredient.comment.as_ref().unwrap_or(&String::new()));
-                    input class="text" type="hidden" name="ingredient_id" value=(ingredient.ingredient_id);
+                    input class="text" type="hidden" name="id" value=(ingredient.id);
                     button class="btn btn-primary" hx-include=(format!("closest #ingredient-{}", id)) hx-post="/ingredients" hx-target=(format!("#ingredient-{}", id)) hx-swap="outerHTML" { "Submit" }
                     button class="btn btn-cancel" hx-get="/ingredients" hx-target="#content" { "Cancel" }
                 }
@@ -243,11 +227,10 @@ pub async fn edit_ingredient_form(Form(old): Form<Option<Ingredient>>) -> Markup
     }
 }
 
-async fn delete_ingredient_form(state: State<MyAppState>, id: Path<i32>) -> Markup {
-    let Ok(usages) = state.ingredient_usages(id.0).await else {
-        return html_error("Failed to get ingredient usages", "/ingredients");
-    };
-    html! {
+async fn delete_ingredient_form(foodlib: FoodLib, id: Path<i32>) -> MResponse {
+    let usages = foodlib.ingredients().usages(id.0).await?;
+
+    Ok(html! {
         dialog open="true" class="dialog" id="delete" {
             span {(format!("The ingredient with id {} is used in the following {} recipes", id.0, usages.len()))}
             ul class="list-disc mx-4 m-2" {
@@ -260,27 +243,20 @@ async fn delete_ingredient_form(state: State<MyAppState>, id: Path<i32>) -> Mark
                 button class="btn btn-cancel mx-4" hx-target="#content" hx-delete=(format!("/ingredients/{}",id.0)) { "Confirm Delete" }
             }
         }
-    }
+    })
 }
-async fn sources_table(state: State<MyAppState>, id: Path<i32>) -> Markup {
-    let Ok(sources) = state.get_ingredient_sources(Some(id.0)).await else {
-        return html_error("Failed to fetch ingredient_sources", "/ingredients");
-    };
 
-    let Ok(stores) = state.get_stores().await else {
-        return html_error("Failed to fetch stores", "/ingredients");
-    };
+async fn sources_table(foodlib: FoodLib, id: Path<i32>) -> MResponse {
+    let sources = foodlib.ingredients().get_sources(id.0).await?;
+    let stores = foodlib.stores().list().await?;
+    let ingredient = foodlib.ingredients().get(id.0).await?;
 
-    let Ok(ingredient) = state.get_ingredient(id.0).await else {
-        return html_error("Failed to fetch ingredient", "/ingredients");
-    };
-
-    html! {
-        dialog open="true" class="w-2/3 dialog z-50"  id="popup"{
+    Ok(html! {
+        dialog open="true" class="w-2/3 dialog z-50" id="popup"{
             div class="flex justify-between w-full mb-2" {
                 div class="flex gap-2" {}
                 p class="text-2xl" { (format!("Sources for {}", ingredient.name)) }
-                button  class="btn bg-btn-cancel-normal" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
+                button class="btn bg-btn-cancel-normal" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
             }
             table class="table-fixed" {
                 thead {
@@ -301,7 +277,7 @@ async fn sources_table(state: State<MyAppState>, id: Path<i32>) -> Markup {
                 }
             }
         }
-    }
+    })
 }
 
 fn format_add_ingredient_source(stores: &[Store], ingredient_id: i32) -> Markup {
@@ -315,7 +291,7 @@ fn format_add_ingredient_source(stores: &[Store], ingredient_id: i32) -> Markup 
                         (html! {
                             option
                                 label=(store.name)
-                                value=(store.store_id) {
+                                value=(store.id) {
                                 (store.name)
                             }
                         })
@@ -336,18 +312,18 @@ fn format_ingredient_source(
     stores: &[Store],
     ingredient_id: i32,
 ) -> Markup {
-    let option = |store: &Store, source_store| match store.store_id == source_store {
+    let option = |store: &Store, source_store| match store.id == source_store {
         false => html! {
             option
                 label=(store.name)
-                value=(store.store_id) {
+                value=(store.id) {
                 (store.name)
             }
         },
         true => html! {
             option
                 label=(store.name)
-                value=(store.store_id)
+                value=(store.id)
                 selected {(store.name)}
         },
     };
@@ -364,36 +340,40 @@ fn format_ingredient_source(
             td {input class="text" name="weight" value=(source.package_size);}
             td {input class="text" name="price" value=(source.price.to_f64().unwrap());}
             td {input class="text" name="url" value=(source.url.clone().unwrap_or_default());}
-            td {button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/{}", ingredient_id, source.ingredient_source_id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Update" }}
-            td {button class="btn btn-cancel" hx-get=(format!("/ingredients/sources/delete/{}/{}", ingredient_id, source.ingredient_source_id)) hx-target="#popup" hx-swap="outerHTML" { "Delete" }}
+            td {button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/{}", ingredient_id, source.id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Update" }}
+            td {button class="btn btn-cancel" hx-get=(format!("/ingredients/sources/delete/{}/{}", ingredient_id, source.id)) hx-target="#popup" hx-swap="outerHTML" { "Delete" }}
         }
     }
 }
 
-fn format_ingredient(ingredient: &Ingredient, has_sources: bool) -> Markup {
-    let sources_button_text = if has_sources { "" } else { "⚠️" };
+fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>) -> Markup {
+    let sources_button_text = if ingredient.has_sources { "" } else { "⚠️" };
+    let can_edit = |id: i64| user.is_some_and(|x| x.is_admin || x.id == id);
     html! {
-        tr id=(format!("ingredient-{}", ingredient.ingredient_id)) {
-            td class="text-center opacity-70" { (ingredient.ingredient_id) }
+        tr id=(format!("ingredient-{}", ingredient.id)) {
+            td class="text-center opacity-70" { (ingredient.id) }
             td class="text-center" { (ingredient.name) }
             td class="text-center" { (ingredient.energy) }
             td class="text-center" { (ingredient.comment.as_ref().unwrap_or(&String::new())) }
             td {
-                button class="btn btn-primary"
-                hx-get="/ingredients/edit"
-                hx-target=(format!("#ingredient-{}", ingredient.ingredient_id))
-                hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Edit" }
+                @if can_edit(ingredient.owner_id) {
+                    button class="btn btn-primary"
+                    hx-get="/ingredients/edit"
+                    hx-target=(format!("#ingredient-{}", ingredient.id))
+                    hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Edit" }
+                }
             }
             td {
-                button class="btn btn-cancel"
-                hx-get=(format!("/ingredients/delete/{}", ingredient.ingredient_id))
-                hx-swap="beforebegin" { "Delete" }
+                @if user.is_some_and(|x|x.is_admin) {
+                    button class="btn btn-cancel"
+                    hx-get=(format!("/ingredients/delete/{}", ingredient.id))
+                    hx-swap="beforebegin" { "Delete" }
+                }
             }
             td {
                 button class="btn btn-primary relative"
-                hx-get=(format!("/ingredients/sources/{}", ingredient.ingredient_id))
+                hx-get=(format!("/ingredients/sources/{}", ingredient.id))
                 hx-swap="afterend"
-                // hx-target=(format!("#ingredient-{}", ingredient.ingredient_id))
                 {
                     span class="absolute left-0 transform translate-x-6" { (sources_button_text) }
                     span class="block" { "Sources ▼" }

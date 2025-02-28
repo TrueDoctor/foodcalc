@@ -23,6 +23,7 @@ pub struct Ingredient {
     pub energy: BigDecimal,
     #[tabled(display_with = "crate::util::display_optional")]
     pub comment: Option<String>,
+    pub owner_id: i64,
 }
 
 impl Display for Ingredient {
@@ -51,6 +52,7 @@ impl Ingredient {
             name,
             energy,
             comment,
+            owner_id: -1,
         }
     }
 
@@ -97,6 +99,7 @@ impl IngredientCreate {
             name: self.name.clone(),
             energy: self.energy.clone(),
             comment: self.comment.clone(),
+            owner_id: -1,
         })
     }
 }
@@ -171,6 +174,7 @@ pub struct IngredientHasScource {
     pub name: String,
     pub energy: BigDecimal,
     pub comment: Option<String>,
+    pub owner_id: i64,
     pub has_sources: Option<bool>,
 }
 
@@ -355,7 +359,7 @@ impl FoodBase {
     pub async fn ingredient_usages(&self, ingredient_id: i32) -> eyre::Result<Vec<Recipe>> {
         let record = sqlx::query_as!(
             Recipe,
-            r#" SELECT name, recipes.recipe_id, comment FROM recipe_ingredients
+            r#" SELECT name, recipes.recipe_id, owner_id, comment FROM recipe_ingredients
                 INNER JOIN recipes USING(recipe_id)
                 WHERE ingredient_id = $1
                 GROUP BY recipes.name, recipes.recipe_id, recipes.comment
