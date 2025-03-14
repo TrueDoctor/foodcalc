@@ -207,7 +207,7 @@ async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<i32>) -> MRespo
                         }
                     }
                 }
-                button class="btn btn-primary" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
+                button class="btn btn-primary" hx-trigger="click from:body" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
             }
         }
     })

@@ -68,13 +68,17 @@ async fn shopping_tour_form(
     let stores = state.new_lib().stores().list().await?;
     let inventories = state.new_lib().inventories().list().await?;
 
-    let default_tour = ShoppingTour {
+    let mut default_tour = ShoppingTour {
         event_id,
         id: -1,
         tour_date: OffsetDateTime::now_utc(),
         store_id: 0,
         store_name: None,
     };
+
+    if tour_id != -1 {
+        default_tour = state.new_lib().events().get_shopping_tour(tour_id).await?;
+    }
 
     // If tour_id is provided, get existing tour data
     let (tour, event_inventories, shopping_list) = if tour_id > 0 {
@@ -158,10 +162,9 @@ async fn shopping_tour_form(
                         input type="datetime-local"
                             name="date"
                             class="text"
-                            value=(tour_id.map(|_| tour.tour_date
+                            value= (tour.tour_date
                                 .format(format_description!("[year]-[month]-[day]T[hour]:[minute]"))
                                 .unwrap())
-                                .unwrap_or_default())
                             required;
                     }
 
