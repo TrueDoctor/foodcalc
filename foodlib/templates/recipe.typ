@@ -46,9 +46,9 @@
 ]
 
 #let format_duration(d) = if d < 60 [
-  #{d} min
+  #{calc.round(d, digits: 2)} min
 ] else [
-  #{d/60} h #calc.rem(d,60) min
+  #{calc.floor(d/60)} h #{calc.round(calc.rem(d,60))} min
 ]
 
 #let list_ingredients(ingredients) =  ingredients.map(((ingredient, amount)) => 
