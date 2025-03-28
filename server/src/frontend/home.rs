@@ -29,30 +29,32 @@ pub async fn content(foodlib: FoodLib, user: Option<User>) -> Markup {
     }
 }
 
-pub fn navbar(user: Option<User>) -> Markup {
+pub fn navbar(user: Option<User>, host: &str) -> Markup {
     html! {
-        //Warn if using production database
-        @if std::env::var("DATABASE_URL").unwrap().ends_with("food_calc") {
-            dialog open="true" class="bg-btn-cancel-normal text-white rounded-lg w-full" id="banner" {
-                div class="p-4 flex flex-col items-center justify-center gap-4" {
-                    p class="text-2xl" {
-                        "WARNING: You are using the production database!"
-                    }
-                    p class="text-lg" {
-                        (std::env::var("DATABASE_URL").unwrap())
-                    }
-                    button class="btn bg-black w-1/2" hx-on:click="document.getElementById('banner').remove()" {
-                        "Close"
+        //Warn if using production database for development
+        @if !host.contains("catering.campus-kit.de") {
+            @if std::env::var("DATABASE_URL").unwrap().ends_with("food_calc") {
+                dialog open="true" class="bg-btn-cancel-normal text-white rounded-lg w-full" id="banner" {
+                    div class="p-4 flex flex-col items-center justify-center gap-4" {
+                        p class="text-2xl" {
+                            "WARNING: You are using the production database!"
+                        }
+                        p class="text-lg" {
+                            (std::env::var("DATABASE_URL").unwrap())
+                        }
+                        button class="btn bg-black w-1/2" hx-on:click="document.getElementById('banner').remove()" {
+                            "Close"
+                        }
                     }
                 }
-            }
-        } @else {
-            div class="bg-green-800 text-white p-4 rounded-lg flex items-center justify-between" id="banner"{
-                //print the database url
-                "Database URL: "
-                (std::env::var("DATABASE_URL").unwrap())
-                button class="bg-dark-primary-normal text-white p-2 rounded-lg" hx-on:click="document.getElementById('banner').remove()" {
-                    "Close"
+            } @else {
+                div class="bg-green-800 text-white p-4 rounded-lg flex items-center justify-between" id="banner"{
+                    //print the database url
+                    "Database URL: "
+                    (std::env::var("DATABASE_URL").unwrap())
+                    button class="bg-dark-primary-normal text-white p-2 rounded-lg" hx-on:click="document.getElementById('banner').remove()" {
+                        "Close"
+                    }
                 }
             }
         }
