@@ -301,7 +301,7 @@ async fn update_event(
     event_form(foodlib, event_id).await
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct SourceData {
     ingredient: String,
     store_id: i32,
@@ -320,10 +320,7 @@ async fn update_override(
     let source = sources
         .iter()
         .find(|s| s.store_id == source.store_id)
-        .ok_or(Error::NotFound {
-            entity: "Ingredient Source",
-            id: "-1".into(),
-        })?;
+        .ok_or(Error::Misc("This Source is not defined for this ingredient! \n Add this source to the ingredient in the ingredients tab.".to_string()))?;
     foodlib
         .events()
         .set_source_override(event_id, source.id)
