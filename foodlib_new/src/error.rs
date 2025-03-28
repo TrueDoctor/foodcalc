@@ -140,7 +140,10 @@ pub fn html_error(reason: &str) -> maud::Markup {
 
                 // Error message
                 p class="text-center text-gray-300 dark:text-gray-300 text-lg" {
-                    (reason)
+                    @for line in reason.lines() {
+                        (line)
+                        br;
+                    }
                 }
 
                 // Dismiss button - using the same style as other buttons
