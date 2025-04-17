@@ -71,7 +71,7 @@ pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
                                 input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="number_of_servings" placeholder="Number of servings" required="required";
                                 button class="btn btn-primary" type="submit" hx-post=(format!("/recipes/shopping-list/{}", recipe_id)) hx-target="#shopping-list" { "Shopping list" }
                                 button class="btn btn-primary" type="submit" { "Export" }
-                                button class="btn btn-cancel" hx-trigger="click from:body" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
+                                button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
                             }
                         }
                     div id="shopping-list";
