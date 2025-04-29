@@ -761,7 +761,7 @@ impl EventOps {
         let records = sqlx::query_as!(
             Event,
             r#"
-            SELECT DISTINCT
+            SELECT
                 e.event_id as id,
                 e.event_name as name,
                 e.comment,
@@ -771,7 +771,8 @@ impl EventOps {
             LEFT JOIN event_meals em ON e.event_id = em.event_id
             LEFT JOIN food_prep fp ON e.event_id = fp.event_id
             WHERE em.start_time >= $1 OR fp.prep_date >= $1
-            ORDER BY e.event_name
+            GROUP BY (e.event_id, e.event_name, e.owner_id, e.budget)
+            ORDER BY MIN(em.start_time)
             "#,
             after
         )
