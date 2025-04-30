@@ -1,17 +1,23 @@
-use axum::extract::{Path, State};
+use ::time::OffsetDateTime;
+use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use foodlib_new::meal::Meal;
+use foodlib_new::FoodLib;
 use http::header::CONTENT_TYPE;
 use http::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use sqlx::PgPool;
 use tokio::net::TcpListener;
+use tokio::sync::RwLock;
+use tokio::task;
 
-use foodlib::*;
 use std::collections::HashMap;
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::ops::Deref;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -26,20 +32,186 @@ struct MealStatus {
     recipe: String,
     place: String,
     meal_id: i32,
+    event_id: i32, // Added event_id for cache invalidation
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+struct FullMealStatus {
+    meal_id: i32,
+    status: MealStatus,
+}
+
+// Define the cache structure
 #[derive(Clone)]
-struct ApiState {
-    meal_states: HashMap<i32, MealStatus>,
+struct EventCache {
+    meals: HashMap<i32, Vec<FullMealStatus>>,
+    last_updated: HashMap<i32, Instant>,
+    upcoming_event_id: Option<i32>,
+    last_upcoming_check: Instant,
 }
 
-type AppState = Arc<Mutex<ApiState>>;
+impl EventCache {
+    fn new() -> Self {
+        Self {
+            meals: HashMap::new(),
+            last_updated: HashMap::new(),
+            upcoming_event_id: None,
+            last_upcoming_check: Instant::now(),
+        }
+    }
+
+    fn is_event_cache_valid(&self, event_id: i32, cache_ttl: Duration) -> bool {
+        match self.last_updated.get(&event_id) {
+            Some(time) => time.elapsed() < cache_ttl,
+            None => false,
+        }
+    }
+
+    fn is_upcoming_cache_valid(&self, cache_ttl: Duration) -> bool {
+        self.last_upcoming_check.elapsed() < cache_ttl
+    }
+
+    fn update_event_cache(&mut self, event_id: i32, meals: Vec<FullMealStatus>) {
+        self.meals.insert(event_id, meals);
+        self.last_updated.insert(event_id, Instant::now());
+    }
+
+    fn update_upcoming_event(&mut self, event_id: Option<i32>) {
+        self.upcoming_event_id = event_id;
+        self.last_upcoming_check = Instant::now();
+    }
+
+    fn get_event_meals(&self, event_id: i32) -> Option<&Vec<FullMealStatus>> {
+        self.meals.get(&event_id)
+    }
+}
+
+// Query parameters struct
+#[derive(serde::Deserialize)]
+struct EventQuery {
+    event: Option<i32>,
+}
+
+// Modified AppState to include cache
+#[derive(Clone)]
+struct AppState {
+    meal_states: Arc<RwLock<HashMap<i32, MealStatus>>>,
+    event_cache: Arc<RwLock<EventCache>>,
+    food_lib: Arc<FoodLib>,
+}
 
 fn now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs()
+}
+
+// Background task to refresh the cache
+async fn start_cache_refresh_task(state: AppState, refresh_interval: Duration) {
+    task::spawn(async move {
+        let mut interval = tokio::time::interval(refresh_interval);
+        loop {
+            interval.tick().await;
+            refresh_cache(&state).await;
+        }
+    });
+}
+
+async fn refresh_cache(state: &AppState) {
+    // Refresh the upcoming event
+    let upcoming_event_id = get_upcoming_event(&state.food_lib).await;
+
+    // Update the upcoming event in cache
+    {
+        let mut cache = state.event_cache.write().await;
+        cache.update_upcoming_event(upcoming_event_id);
+    }
+
+    // If we have an upcoming event, make sure its meals are cached
+    if let Some(event_id) = upcoming_event_id {
+        let event_meals = get_event_meals_from_db(&state.food_lib, event_id).await;
+
+        // Process meals with current state and update cache
+        let full_meals = process_meals(
+            event_meals,
+            state.meal_states.write().await.deref(),
+            event_id,
+        );
+        let mut cache = state.event_cache.write().await;
+        cache.update_event_cache(event_id, full_meals);
+    }
+
+    println!("Cache refreshed at {}", OffsetDateTime::now_utc());
+}
+
+// Get the next upcoming event
+async fn get_upcoming_event(food_lib: &FoodLib) -> Option<i32> {
+    match food_lib
+        .events()
+        .get_upcoming_events(OffsetDateTime::now_utc())
+        .await
+    {
+        Ok(events) => events.first().map(|e| e.id),
+        Err(e) => {
+            eprintln!("Error fetching upcoming events: {}", e);
+            None
+        }
+    }
+}
+
+// Get event meals from database
+async fn get_event_meals_from_db(food_lib: &FoodLib, event_id: i32) -> Vec<Meal> {
+    match get_event_meals_internal(food_lib, event_id).await {
+        Ok(meals) => meals,
+        Err(e) => {
+            eprintln!("Error fetching meals for event {}: {}", event_id, e);
+            Vec::new()
+        }
+    }
+}
+
+// Helper to fetch meals from database
+async fn get_event_meals_internal(
+    food_lib: &FoodLib,
+    event_id: i32,
+) -> Result<Vec<Meal>, foodlib_new::Error> {
+    food_lib.meals().get_event_meals(event_id).await
+}
+
+// Process meals with current state
+fn process_meals(
+    meals: Vec<Meal>,
+    meal_states: &HashMap<i32, MealStatus>,
+    event_id: i32,
+) -> Vec<FullMealStatus> {
+    let current_time = now();
+
+    meals
+        .into_iter()
+        .map(|meal| {
+            let status = meal_states.get(&meal.meal_id).cloned().unwrap_or_else(|| {
+                // Default meal status if not in state
+                MealStatus {
+                    start: meal.start_time.unix_timestamp(),
+                    end: meal.end_time.unix_timestamp(),
+                    eta: meal.start_time.unix_timestamp(),
+                    last_modified: current_time,
+                    over: false,
+                    msg: None,
+                    recipe: meal.name.clone(),
+                    place: meal.place.clone(),
+                    meal_id: meal.meal_id,
+                    event_id,
+                }
+            });
+
+            FullMealStatus {
+                meal_id: meal.meal_id,
+                status,
+            }
+        })
+        .collect()
 }
 
 #[tokio::main]
@@ -49,11 +221,11 @@ async fn main() {
     // Get Database Connection
     println!("Setting up Database");
     let database_url = &env::var("DATABASE_URL").expect("DATABASE_URL env var was not set");
-    let food_base = FoodBase::new(database_url)
+    let pg_pool = PgPool::connect(database_url)
         .await
         .expect("Failed to connect to database");
+    let food_lib = FoodLib::new(pg_pool);
 
-    let food_lib = food_base.new_lib();
     println!("Setting up Logging");
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
@@ -64,46 +236,68 @@ async fn main() {
         .allow_origin(Any)
         .allow_headers([CONTENT_TYPE]);
 
-    let mut meal_states = HashMap::new();
+    let meal_states = Arc::new(RwLock::new(HashMap::new()));
+    let event_cache = Arc::new(RwLock::new(EventCache::new()));
+    let food_lib = Arc::new(food_lib);
 
-    let current_time = now();
-    let next_event = food_lib
-        .events()
-        .get_upcoming_events(OffsetDateTime::now_utc())
-        .await
-        // If we don't have any upcoming events, use anything
-        .unwrap_or_default()
-        .first()
-        .map(|e| e.id)
-        .unwrap_or(38);
+    // Initialize the app state
+    let app_state = AppState {
+        meal_states,
+        event_cache,
+        food_lib: food_lib.clone(),
+    };
 
-    let event_meals = get_event_meals(&food_base, next_event).await;
+    // Start the cache refresh task
+    start_cache_refresh_task(app_state.clone(), Duration::from_secs(300)).await;
 
-    for meal in event_meals {
-        println!("Adding Meal {:?}", meal);
-        let to_utc = |time: OffsetDateTime| time.unix_timestamp();
-        println!("{}", to_utc(meal.start));
-        meal_states.insert(
-            meal.meal_id,
-            MealStatus {
-                start: to_utc(meal.start),
-                end: to_utc(meal.end),
-                last_modified: current_time,
-                eta: to_utc(meal.start),
-                msg: None,
-                over: false,
-                recipe: meal.recipe,
-                place: meal.place,
-                meal_id: meal.meal_id,
-            },
+    // Pre-populate meal states from the next event
+    if let Some(next_event) = get_upcoming_event(&food_lib).await {
+        let event_meals = get_event_meals_from_db(&food_lib, next_event).await;
+        let current_time = now();
+
+        for meal in &event_meals {
+            app_state.meal_states.write().await.insert(
+                meal.meal_id,
+                MealStatus {
+                    start: meal.start_time.unix_timestamp(),
+                    end: meal.end_time.unix_timestamp(),
+                    eta: meal.start_time.unix_timestamp(),
+                    last_modified: current_time,
+                    over: false,
+                    msg: None,
+                    recipe: meal.name.clone(),
+                    place: meal.place.clone(),
+                    meal_id: meal.meal_id,
+                    event_id: next_event,
+                },
+            );
+        }
+
+        // Initialize the cache with the upcoming event's meals
+        let full_meals = process_meals(
+            event_meals,
+            app_state.meal_states.read().await.deref(),
+            next_event,
         );
+        app_state
+            .event_cache
+            .write()
+            .await
+            .update_event_cache(next_event, full_meals);
+        app_state
+            .event_cache
+            .write()
+            .await
+            .update_upcoming_event(Some(next_event));
     }
 
     println!("Loading Routes");
-    let app = Router::<AppState>::new()
+    let app = Router::new()
         .route("/", get(get_status))
         .route("/{meal_id}", post(update_status))
-        .with_state(Arc::new(Mutex::new(ApiState { meal_states })))
+        .route("/events", get(get_events))
+        .route("/events/{event_id}", get(get_event_details))
+        .with_state(app_state)
         .layer(TraceLayer::new_for_http())
         .layer(cors);
 
@@ -113,104 +307,207 @@ async fn main() {
     let socket_str = format!("{}:{}", interface, port);
     println!("Starting Server on '{}'", &socket_str);
     let listener = TcpListener::bind(socket_str).await.unwrap();
-    axum::serve(listener, app.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
-#[derive(Clone, Deserialize, Serialize)]
-struct FullMealStatus {
-    meal_id: i32,
-    status: MealStatus,
-}
-async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
-    let mut data = state
-        .lock()
-        .unwrap()
-        .meal_states
-        .iter()
-        .map(|(meal_id, status)| FullMealStatus {
-            meal_id: *meal_id,
-            status: status.clone(),
-        })
-        .collect::<Vec<FullMealStatus>>();
-    data.sort_unstable_by_key(|m| m.status.start);
+// Modified handler for getting status
+#[axum::debug_handler]
+async fn get_status(
+    State(state): State<AppState>,
+    Query(params): Query<EventQuery>,
+) -> impl IntoResponse {
+    // Determine which event to display
+    let event_id = match params.event {
+        Some(id) => id,
+        None => {
+            // Use cached upcoming event or fetch if cache is stale
+            let cache = state.event_cache.read().await;
+            if let Some(id) = cache.upcoming_event_id {
+                if cache.is_upcoming_cache_valid(Duration::from_secs(300)) {
+                    id
+                } else {
+                    drop(cache); // Release lock before async operation
+                    match get_upcoming_event(&state.food_lib).await {
+                        Some(id) => {
+                            let mut cache = state.event_cache.write().await;
+                            cache.update_upcoming_event(Some(id));
+                            id
+                        }
+                        None => {
+                            return (
+                                StatusCode::NOT_FOUND,
+                                Json(Vec::<Vec<FullMealStatus>>::new()),
+                            );
+                        }
+                    }
+                }
+            } else {
+                drop(cache); // Release lock before async operation
+                match get_upcoming_event(&state.food_lib).await {
+                    Some(id) => {
+                        let mut cache = state.event_cache.write().await;
+                        cache.update_upcoming_event(Some(id));
+                        id
+                    }
+                    None => {
+                        return (
+                            StatusCode::NOT_FOUND,
+                            Json(Vec::<Vec<FullMealStatus>>::new()),
+                        );
+                    }
+                }
+            }
+        }
+    };
 
-    // create vec of days with meals
+    // Check if we have a valid cache for this event
+    let cache_ttl = Duration::from_secs(60); // 1 minute TTL
+    let meals = {
+        let cache = state.event_cache.read().await;
+        if cache.is_event_cache_valid(event_id, cache_ttl) {
+            match cache.get_event_meals(event_id) {
+                Some(meals) => meals.clone(),
+                None => Vec::new(),
+            }
+        } else {
+            drop(cache); // Release lock before async operation
+
+            // Fetch meals from database
+            let event_meals = get_event_meals_from_db(&state.food_lib, event_id).await;
+            if event_meals.is_empty() {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(Vec::<Vec<FullMealStatus>>::new()),
+                );
+            }
+
+            // Process and cache meals
+            let full_meals = process_meals(
+                event_meals,
+                state.meal_states.read().await.deref(),
+                event_id,
+            );
+            let mut cache = state.event_cache.write().await;
+            cache.update_event_cache(event_id, full_meals.clone());
+            full_meals
+        }
+    };
+
+    // Group meals by full date (year, month, day)
     let hour = 3600;
-
-    let day = |time| {
-        OffsetDateTime::from_unix_timestamp(time - 3 * hour)
+    let get_date_key = |time: i64| {
+        let dt = OffsetDateTime::from_unix_timestamp(time - 3 * hour)
             .unwrap()
             .to_offset(time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC))
-            .date()
-            .day()
+            .date();
+
+        // Return tuple of (year, month, day) for comparison
+        (dt.year(), dt.month() as i32, dt.day())
     };
-    let Some(first) = data.first() else {
-        return (StatusCode::OK, Json(vec![]));
-    };
-    let mut current_day = day(first.status.start);
+
+    if meals.is_empty() {
+        return (StatusCode::OK, Json(Vec::<Vec<FullMealStatus>>::new()));
+    }
+
+    let mut current_date = get_date_key(meals[0].status.start);
     let mut days = vec![vec![]];
-    for meal in data {
-        let new_day = day(meal.status.start);
-        if new_day == current_day {
+
+    for meal in meals {
+        let new_date = get_date_key(meal.status.start);
+        if new_date == current_date {
             days.last_mut().unwrap().push(meal);
         } else {
-            days.push(vec![meal]); // Clone the meal variable
-            current_day = new_day;
+            days.push(vec![meal]);
+            current_date = new_date;
         }
     }
+
     (StatusCode::OK, Json(days))
 }
 
+// Modified update_status to also update the cache
 async fn update_status(
     State(state): State<AppState>,
     Path(meal_id): Path<i32>,
     Json(mut status): Json<MealStatus>,
 ) -> impl IntoResponse {
-    let mut state = state.lock().unwrap();
+    let mut app_state = state.meal_states.write().await;
     status.last_modified = now();
-    state.meal_states.insert(meal_id, status);
-    let mut meals: Vec<_> = state.meal_states.values().cloned().collect();
+
+    // Get the event_id of the meal
+    let event_id = status.event_id;
+
+    app_state.insert(meal_id, status.clone());
+
+    // Update cache for this event if it exists
+    let mut cache = state.event_cache.write().await;
+    if let Some(meals) = cache.get_event_meals(event_id).cloned() {
+        let updated_meals = meals
+            .into_iter()
+            .map(|mut meal| {
+                if meal.meal_id == meal_id {
+                    meal.status = status.clone();
+                }
+                meal
+            })
+            .collect();
+
+        cache.update_event_cache(event_id, updated_meals);
+    }
+
+    let mut meals: Vec<_> = app_state.values().cloned().collect();
     meals.sort_unstable_by_key(|m| m.start);
     (StatusCode::OK, Json(meals))
 }
 
-#[derive(Debug)]
-struct EventMeal {
-    meal_id: i32,
-    #[allow(unused)]
-    event_id: i32,
-    #[allow(unused)]
-    recipe_id: i32,
-    start: OffsetDateTime,
-    end: OffsetDateTime,
-    recipe: String,
-    place: String,
+// New handler for listing events
+async fn get_events(State(state): State<AppState>) -> impl IntoResponse {
+    match state.food_lib.events().list().await {
+        Ok(events) => {
+            // Map to a simpler format for the frontend
+            let event_list: Vec<serde_json::Value> = events
+                .into_iter()
+                .map(|event| {
+                    serde_json::json!({
+                        "id": event.id,
+                        "name": event.name,
+                    })
+                })
+                .collect();
+
+            (StatusCode::OK, Json(event_list))
+        }
+        Err(e) => {
+            eprintln!("Error fetching events: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Vec::<serde_json::Value>::new()),
+            )
+        }
+    }
 }
 
-async fn get_event_meals(database: &FoodBase, event_id: i32) -> Vec<EventMeal> {
-    let records = sqlx::query_as!(
-        EventMeal,
-        r#" SELECT
-            event_id,
-            meal_id,
-            recipe_id,
-            recipes.name as "recipe",
-            places.name as "place",
-            start_time as start,
-            end_time as end
+// New handler for getting event details
+async fn get_event_details(
+    State(state): State<AppState>,
+    Path(event_id): Path<i32>,
+) -> impl IntoResponse {
+    match state.food_lib.events().get(event_id).await {
+        Ok(event) => {
+            let event_details = serde_json::json!({
+                "id": event.id,
+                "name": event.name,
+                "comment": event.comment,
+            });
 
-            FROM event_meals
-            INNER JOIN recipes USING(recipe_id)
-            INNER JOIN places USING(place_id)
-
-            WHERE event_meals.event_id = $1
-            ORDER BY event_meals.start_time 
-        "#,
-        event_id
-    )
-    .fetch_all(database.pool())
-    .await;
-    records.unwrap()
+            (StatusCode::OK, Json(event_details))
+        }
+        Err(e) => {
+            eprintln!("Error fetching event {}: {}", event_id, e);
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Event not found"})),
+            )
+        }
+    }
 }
