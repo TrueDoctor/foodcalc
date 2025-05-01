@@ -178,7 +178,8 @@ impl FoodBase {
             .map(|sr| sr.subrecipe_id)
             .collect::<Vec<i32>>();
 
-        keys.dedup();
+        let mut seen: HashSet<i32> = HashSet::new();
+        keys.retain(|&x| seen.insert(x));
 
         let mut subrecipe_markdown = Vec::new();
         for subrecipe_id in keys {
@@ -214,7 +215,7 @@ impl FoodBase {
     //    }
 }
 
-fn sort_subrecipes_topologically(subrecipes: &mut Vec<SubRecipe>) {
+fn sort_subrecipes_topologically(subrecipes: &mut [SubRecipe]) {
     subrecipes.sort_by_key(|s| {
         s.subrecipe_hierarchy
             .clone()
