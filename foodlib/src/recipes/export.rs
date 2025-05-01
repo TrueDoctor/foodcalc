@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::RecipeStep;
 
 use bigdecimal::ToPrimitive;
@@ -137,8 +139,11 @@ impl FoodBase {
             .iter()
             .map(|sr| sr.subrecipe_id)
             .collect::<Vec<i32>>();
+
+        let mut seen: HashSet<i32> = HashSet::new();
+        keys.retain(|&x| seen.insert(x));
+
         let mut recipes = Vec::<(Vec<SubRecipe>, Vec<RecipeStep>)>::with_capacity(keys.len());
-        keys.dedup();
         for id in keys {
             let ingredients = subrecipes
                 .iter()
@@ -173,7 +178,8 @@ impl FoodBase {
             .map(|sr| sr.subrecipe_id)
             .collect::<Vec<i32>>();
 
-        keys.dedup();
+        let mut seen: HashSet<i32> = HashSet::new();
+        keys.retain(|&x| seen.insert(x));
 
         let mut subrecipe_markdown = Vec::new();
         for subrecipe_id in keys {
@@ -209,7 +215,7 @@ impl FoodBase {
     //    }
 }
 
-fn sort_subrecipes_topologically(subrecipes: &mut Vec<SubRecipe>) {
+fn sort_subrecipes_topologically(subrecipes: &mut [SubRecipe]) {
     subrecipes.sort_by_key(|s| {
         s.subrecipe_hierarchy
             .clone()
