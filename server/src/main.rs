@@ -47,12 +47,12 @@ async fn main() {
     let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
     fern::Dispatch::new()
         .chain(std::io::stdout())
-        .level_for("axum", log::LevelFilter::Trace)
+        .level_for("axum", log::LevelFilter::Info)
         .level_for("hyper", log::LevelFilter::Info)
         .level_for("mio", log::LevelFilter::Info)
-        .level_for("backend", log::LevelFilter::Trace)
+        .level_for("backend", log::LevelFilter::Info)
         .level_for("sqlx", log::LevelFilter::Trace)
-        .level(log::LevelFilter::Debug)
+        .level(log::LevelFilter::Error)
         .format(move |out, message, record| {
             out.finish(format_args!(
                 "[{}]{}{} {}",

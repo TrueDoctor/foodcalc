@@ -271,18 +271,19 @@ impl MealOps {
             MealIngredient,
             r#"
             SELECT
-                event_ingredients.event_id as "event_id!",
-                event_ingredients.recipe_id as "recipe_id!",
-                event_ingredients.ingredient_id as "ingredient_id!",
-                event_ingredients.ingredient as "ingredient!",
-                event_ingredients.weight as "weight!",
-                event_ingredients.energy as "energy!",
-                event_ingredients.price as "price!",
-                event_ingredients.servings as "servings!",
-                event_ingredients.meal_id as "meal_id!",
-                event_ingredients.subrecipe_hierarchy
+                event_id as "event_id!",
+                recipe_id as "recipe_id!",
+                ingredient_id as "ingredient_id!",
+                ingredient as "ingredient!",
+                weight as "weight!",
+                energy as "energy!",
+                price as "price!",
+                servings as "servings!",
+                meal_id as "meal_id!",
+                subrecipe_hierarchy
             FROM event_ingredients
-            WHERE event_ingredients.meal_id = $1
+            WHERE meal_id = $1
+            ORDER BY weight DESC
             "#,
             meal_id
         )

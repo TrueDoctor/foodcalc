@@ -77,6 +77,15 @@ pub struct ShoppingListItem {
     pub category: Option<String>,
 }
 
+/// Custom type for ingredients without a shopping tour
+#[derive(Debug, Clone)]
+pub struct IngredientWithoutTour {
+    pub ingredient_id: i32,
+    pub ingredient_name: String,
+    pub weight: Option<BigDecimal>,
+    pub store_name: String,
+}
+
 /// Inventory associated with an event
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventInventory {

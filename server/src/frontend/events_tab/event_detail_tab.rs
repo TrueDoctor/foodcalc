@@ -155,6 +155,7 @@ pub async fn event_form(foodlib: FoodLib, Path(event_id): Path<i32>) -> MRespons
                 span class="htmx-indicator" { "Saving\u{a0}…" }
             }
         }
+        (render_ingredients_without_tours(&foodlib, event_id).await?)
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
         }
@@ -195,6 +196,7 @@ pub async fn event_form(foodlib: FoodLib, Path(event_id): Path<i32>) -> MRespons
 
 async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<i32>) -> MResponse {
     let event_meal_ingredients = foodlib.meals().get_meal_ingredients(meal_id.0).await?;
+    let meal = foodlib.meals().get_meal(meal_id.0).await?;
 
     Ok(html! {
         dialog open="true" id="popup" class="w-1/2 dialog" {
@@ -203,11 +205,80 @@ async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<i32>) -> MRespo
                     thead { tr { th { "Ingredient" } th {"Amount"} th {"Energy"} th {"Price"} } }
                     tbody {
                         @for item in event_meal_ingredients {
-                            (format_event_meal_ingredient(&item))
+                            (format_event_meal_ingredient(&item, meal.servings as f64))
                         }
                     }
                 }
                 button class="btn btn-cancel" hx-trigger="click from:body" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
+            }
+        }
+    })
+}
+
+use bigdecimal::BigDecimal;
+use std::collections::HashMap;
+
+// Add this function after the existing render_shopping_tours function
+pub async fn render_ingredients_without_tours(foodlib: &FoodLib, event_id: i32) -> MResponse {
+    // Get all ingredients without a tour
+    let mut uncovered_ingredients = foodlib
+        .events()
+        .get_ingredients_without_tour(event_id)
+        .await?;
+    // Remove water from ingredient list
+    uncovered_ingredients.retain(|i| i.ingredient_id != 4);
+
+    if uncovered_ingredients.is_empty() {
+        return Ok(html! {});
+    }
+
+    // Group by store (when available)
+    let mut by_store: HashMap<String, Vec<String>> = HashMap::new();
+    let mut total_weight = BigDecimal::from(0);
+
+    for ingredient in &uncovered_ingredients {
+        let store_name = ingredient.store_name.clone();
+        by_store.entry(store_name).or_default().push(format!(
+            "{} ({:.2} kg)",
+            ingredient.ingredient_name,
+            ingredient
+                .weight
+                .clone()
+                .unwrap_or(BigDecimal::from_f64(-1.).unwrap())
+        ));
+
+        total_weight += &ingredient.weight.clone().unwrap_or_default();
+    }
+
+    // Sort stores alphabetically for consistent display
+    let mut stores: Vec<_> = by_store.into_iter().collect();
+    stores.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+    Ok(html! {
+        div class="bg-red-100 dark:bg-red-900 p-4 rounded-lg mb-4" {
+            details {
+                summary class="font-bold cursor-pointer" {
+                    span class="text-red-600 dark:text-red-400" { "⚠️ Warning: " }
+                    (format!("{} ingredients ({:.2} kg total) are not covered by any shopping tour",
+                        uncovered_ingredients.len(), total_weight))
+                }
+
+                div class="mt-4 pl-4" {
+                    @for (store, ingredients) in stores {
+                        div class="mb-4" {
+                            h4 class="font-semibold text-lg" { (store) }
+                            ul class="list-disc ml-8" {
+                                @for ingredient in ingredients {
+                                    li { (ingredient) }
+                                }
+                            }
+                        }
+                    }
+
+                    div class="mt-4 text-sm text-gray-700 dark:text-gray-300 p-2 bg-yellow-50 dark:bg-yellow-900 rounded" {
+                        "Add a shopping tour for these ingredients or they won't be included in your shopping lists. If you don't want to use the store for this event, consider adding an ingredient source override."
+                    }
+                }
             }
         }
     })
@@ -262,15 +333,16 @@ pub async fn render_shopping_tours(foodlib: &FoodLib, event_id: i32) -> MRespons
 
 fn format_event_meal_ingredient(
     event_meal_ingredient: &foodlib_new::meal::MealIngredient,
+    portions: f64,
 ) -> Markup {
     let format = |x, unit| html! { td { (&format!("{:.3}{}", x, unit)) } };
 
     html! {
         tr {
             td { (event_meal_ingredient.ingredient) }
-            (format(event_meal_ingredient.weight.to_f64().unwrap_or_default() * 1000., "g"))
-            (format(event_meal_ingredient.energy.to_f64().unwrap_or_default() / 100. , "kj"))
-            (format(event_meal_ingredient.price.to_f64().unwrap_or_default(), "€"))
+            (format(event_meal_ingredient.weight.to_f64().unwrap_or_default() / portions * 1000., "g"))
+            (format(event_meal_ingredient.energy.to_f64().unwrap_or_default() / portions / 100. , "kj"))
+            (format(event_meal_ingredient.price.to_f64().unwrap_or_default() / portions, "€"))
         }
     }
 }

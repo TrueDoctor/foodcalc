@@ -477,6 +477,34 @@ impl EventOps {
         Ok(records)
     }
 
+    /// Gets all ingredients for an event that don't have a shopping tour
+    pub async fn get_ingredients_without_tour(
+        &self,
+        event_id: i32,
+    ) -> Result<Vec<IngredientWithoutTour>> {
+        let items = sqlx::query_as!(
+            IngredientWithoutTour,
+            r#"
+        SELECT 
+            ingredient_id as "ingredient_id!",
+            ingredient as "ingredient_name!",
+            sum(weight) as "weight",
+            coalesce(sn.name, 'No Store') as "store_name!"
+        FROM shopping_tour_ingredients_without_tour
+        LEFT JOIN stores sn USING (store_id)
+        WHERE event_id = $1
+        GROUP BY event_id, ingredient_id, ingredient, store_id, sn.name
+        ORDER BY ingredient
+        "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await
+        .unwrap();
+
+        Ok(items)
+    }
+
     /// Adds a food preparation task
     pub async fn add_food_prep(&self, prep: FoodPrep) -> Result<FoodPrep> {
         let record = sqlx::query_as!(
