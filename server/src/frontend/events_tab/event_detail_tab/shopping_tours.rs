@@ -82,28 +82,13 @@ async fn shopping_tour_form(
 
     // If tour_id is provided, get existing tour data
     let (tour, event_inventories, shopping_list) = if tour_id > 0 {
-        let tours = state
-            .new_lib()
-            .events()
-            .get_shopping_tours(tour_id)
-            .await
-            .unwrap_or_default();
+        let tours = state.new_lib().events().get_shopping_tours(tour_id).await?;
         let tour = tours.first().cloned().unwrap_or(default_tour);
 
         (
             tour,
-            state
-                .new_lib()
-                .events()
-                .get_inventories(event_id)
-                .await
-                .unwrap_or_default(),
-            state
-                .new_lib()
-                .events()
-                .get_shopping_list(tour_id)
-                .await
-                .unwrap_or_default(),
+            state.new_lib().events().get_inventories(event_id).await?,
+            state.new_lib().events().get_shopping_list(tour_id).await?,
         )
     } else {
         (default_tour, vec![], vec![])
@@ -306,7 +291,7 @@ async fn save_tour(foodlib: FoodLib, Form(form): Form<TourForm>) -> MResponse {
 
     // Redirect back to event edit page
     Ok(html! {
-        (event_detail_tab::event_form(foodlib, Path(form.event_id)).await.unwrap_or_default())
+        (event_detail_tab::event_form(foodlib, Path(form.event_id)).await?)
     })
 }
 
@@ -351,12 +336,7 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithN
 }
 
 async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> IResponse {
-    let shopping_list = state
-        .new_lib()
-        .events()
-        .get_shopping_list(tour_id)
-        .await
-        .unwrap_or_default();
+    let shopping_list = state.new_lib().events().get_shopping_list(tour_id).await?;
     let lib = state.db_connection.new_lib();
     let tour = lib.events().get_shopping_tour(tour_id).await?;
 
@@ -364,8 +344,7 @@ async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
         .new_lib()
         .events()
         .get_inventories(tour.event_id)
-        .await
-        .unwrap_or_default();
+        .await?;
     let inventory_items = inventory_items(Some(tour_id), &event_inventories, lib).await;
 
     let mut output = String::new();
@@ -413,7 +392,7 @@ async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
 
 async fn export_metro(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> IResponse {
     let shopping_list = state.new_lib().events().get_shopping_list(tour_id).await?;
-    let sources = state.get_ingredient_sources(None).await.unwrap_or_default();
+    let sources = state.get_ingredient_sources(None).await?;
 
     let lib = state.db_connection.new_lib();
     let tour = lib.events().get_shopping_tour(tour_id).await?;
@@ -422,8 +401,7 @@ async fn export_metro(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
         .new_lib()
         .events()
         .get_inventories(tour.event_id)
-        .await
-        .unwrap_or_default();
+        .await?;
     let inventory_items = inventory_items(Some(tour_id), &event_inventories, lib).await;
 
     let mut output = String::new();
