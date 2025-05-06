@@ -110,23 +110,7 @@ async fn shopping_tour_form(
     };
     let tour_id = if tour_id < 0 { None } else { Some(tour_id) };
 
-    let inventory_items = if tour_id.is_some() {
-        // Get all inventory items for the event
-        let mut all_items = vec![];
-        for inv in &event_inventories {
-            if let Ok(items) = state
-                .new_lib()
-                .inventories()
-                .get_items(inv.inventory_id)
-                .await
-            {
-                all_items.extend(items);
-            }
-        }
-        all_items
-    } else {
-        vec![]
-    };
+    let inventory_items = inventory_items(tour_id, &event_inventories, state.new_lib()).await;
 
     Ok(html! {
         div class="flex-col space-y-4 w-full" {
@@ -260,6 +244,26 @@ async fn shopping_tour_form(
     })
 }
 
+async fn inventory_items(
+    tour_id: Option<i32>,
+    event_inventories: &Vec<foodlib_new::event::EventInventory>,
+    lib: &foodlib_new::FoodLib,
+) -> Vec<InventoryItemWithName> {
+    let inventory_items = if tour_id.is_some() {
+        // Get all inventory items for the event
+        let mut all_items = vec![];
+        for inv in event_inventories {
+            if let Ok(items) = lib.inventories().get_items(inv.inventory_id).await {
+                all_items.extend(items);
+            }
+        }
+        all_items
+    } else {
+        vec![]
+    };
+    inventory_items
+}
+
 async fn save_tour(foodlib: FoodLib, Form(form): Form<TourForm>) -> MResponse {
     // Parse the date
     let primitive_date = time::PrimitiveDateTime::parse(
@@ -321,13 +325,21 @@ fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -
         ""
     }
 }
-
-fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> String {
+fn get_inventory_amount(
+    item: &ShoppingListItem,
+    inventory: &[InventoryItemWithName],
+) -> BigDecimal {
     let inv_amount = inventory
         .iter()
         .filter(|i| i.ingredient_id == item.ingredient_id)
         .map(|i| i.amount.clone())
         .sum::<BigDecimal>();
+
+    inv_amount
+}
+
+fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> String {
+    let inv_amount = get_inventory_amount(item, inventory);
 
     if inv_amount >= item.weight {
         "Available".to_string()
@@ -345,12 +357,22 @@ async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
         .get_shopping_list(tour_id)
         .await
         .unwrap_or_default();
+    let lib = state.db_connection.new_lib();
+    let tour = lib.events().get_shopping_tour(tour_id).await?;
+
+    let event_inventories = state
+        .new_lib()
+        .events()
+        .get_inventories(tour.event_id)
+        .await
+        .unwrap_or_default();
+    let inventory_items = inventory_items(Some(tour_id), &event_inventories, lib).await;
 
     let mut output = String::new();
     let mut current_category = String::new();
 
     for item in shopping_list {
-        let category = item.category.unwrap_or_default();
+        let category = item.category.clone().unwrap_or_default();
         if category != current_category {
             if !current_category.is_empty() {
                 output.push('\n');
@@ -358,9 +380,12 @@ async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
             output.push_str(&format!("=== {} ===\n", category));
             current_category = category;
         }
+        let inv_amount = get_inventory_amount(&item, &inventory_items);
+        let status = if inv_amount > item.weight { "x" } else { " " };
 
         output.push_str(&format!(
-            "[ ] {} - {:.2} kg{}",
+            "[{}] {} - {:.2} kg{}",
+            status,
             item.ingredient_name,
             item.weight,
             if let Some(price) = item.price {
@@ -390,10 +415,25 @@ async fn export_metro(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
     let shopping_list = state.new_lib().events().get_shopping_list(tour_id).await?;
     let sources = state.get_ingredient_sources(None).await.unwrap_or_default();
 
+    let lib = state.db_connection.new_lib();
+    let tour = lib.events().get_shopping_tour(tour_id).await?;
+
+    let event_inventories = state
+        .new_lib()
+        .events()
+        .get_inventories(tour.event_id)
+        .await
+        .unwrap_or_default();
+    let inventory_items = inventory_items(Some(tour_id), &event_inventories, lib).await;
+
     let mut output = String::new();
     output.push_str("Name,Amount,URL\n");
 
     for item in shopping_list {
+        let inv_amount = get_inventory_amount(&item, &inventory_items);
+        if inv_amount > item.weight {
+            continue;
+        }
         // Find source with matching ingredient_id
         if let Some(source) = sources
             .iter()
