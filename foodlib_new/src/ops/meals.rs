@@ -275,9 +275,9 @@ impl MealOps {
                 recipe_id as "recipe_id!",
                 ingredient_id as "ingredient_id!",
                 ingredient as "ingredient!",
-                weight as "weight!",
-                energy as "energy!",
-                price as "price!",
+                coalesce(weight,0) as "weight!",
+                coalesce(energy, 0) as "energy!",
+                coalesce(price, 0) as "price!",
                 servings as "servings!",
                 meal_id as "meal_id!",
                 subrecipe_hierarchy
