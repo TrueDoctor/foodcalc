@@ -30,6 +30,7 @@ struct MealStatus {
     over: bool,
     msg: Option<String>,
     recipe: String,
+    recipe_id: i32,
     place: String,
     meal_id: i32,
     event_id: i32, // Added event_id for cache invalidation
@@ -200,6 +201,7 @@ fn process_meals(
                     over: false,
                     msg: None,
                     recipe: meal.name.clone(),
+                    recipe_id: meal.recipe_id,
                     place: meal.place.clone(),
                     meal_id: meal.meal_id,
                     event_id,
@@ -266,6 +268,7 @@ async fn main() {
                     over: false,
                     msg: None,
                     recipe: meal.name.clone(),
+                    recipe_id: meal.recipe_id,
                     place: meal.place.clone(),
                     meal_id: meal.meal_id,
                     event_id: next_event,

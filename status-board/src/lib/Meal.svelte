@@ -105,7 +105,7 @@
         {meal.recipe} {#if isAdmin}<span class="text-sm text-gray-500">({meal.meal_id})</span>{/if}
       </h3>
       <button 
-        on:click={() => window.open(`http://catering.campus-kit.de/recipes/export_pdf/${meal.meal_id}?energy=3000&number_of_servings=1`, '_blank')}
+        on:click={() => window.open(`http://catering.campus-kit.de/recipes/export_pdf/${meal.recipe_id}?energy=3000&number_of_servings=1`, '_blank')}
         class="bg-unifest-green text-white text-xs px-2 py-1 rounded hover:bg-unifest-green-dark"
       >
         Ingredients
