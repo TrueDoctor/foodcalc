@@ -242,6 +242,11 @@ fn format_food_prep(event_id: i32, prep: &FoodPrep, recipe: &Recipe) -> Markup {
             td { (use_from) }
             td { (use_until) }
             td {
+                form class="m-0" action=(format!("/events/edit/export_food_prep_pdf/{}", prep.id)) {
+                    button class="btn btn-primary" { "Print" }
+                }
+            }
+            td {
                 button class="btn btn-primary"
                     hx-target="#content"
                     hx-push-url="true"
@@ -291,7 +296,9 @@ pub async fn render_food_prep(foodlib: FoodLib, event_id: i32) -> MResponse {
                     th { "Prep Date" }
                     th { "Use From" }
                     th { "Use Until" }
-                    th {} th {}
+                    th {} // Print button
+                    th {} // Edit button
+                    th {} // Delete button
                 }
             }
             tbody {

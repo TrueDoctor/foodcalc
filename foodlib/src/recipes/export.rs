@@ -12,7 +12,7 @@ use super::SubRecipe;
 
 use sqlx::types::BigDecimal;
 
-use crate::FoodBase;
+use crate::{FoodBase, FoodPrep};
 
 pub struct RecipeInfo {
     pub name: String,
@@ -124,6 +124,45 @@ impl FoodBase {
         let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
         let date = meal.start_time.format(&format).unwrap();
         self.fetch_recipes_infos(recipe_id, weight, date).await
+    }
+
+    pub async fn fetch_food_prep_recipe(&self, prep_id: i32) -> eyre::Result<RecipeInfo> {
+        let prep = self.get_food_prep(prep_id).await?;
+        let recipe_id = prep.recipe_id;
+
+        // Get the total weight from prep ingredients
+        let weight = self.get_food_prep_total_weight(prep_id).await?;
+
+        let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
+        let date = prep.prep_date.format(&format).unwrap();
+
+        self.fetch_recipes_infos(recipe_id, weight, date).await
+    }
+
+    async fn get_food_prep_total_weight(&self, prep_id: i32) -> eyre::Result<BigDecimal> {
+        let total_weight = sqlx::query!(
+            r#"
+            SELECT COALESCE(SUM(weight), 0) as "total_weight!"
+            FROM prep_ingredients_with_duplicates
+            WHERE prep_id = $1
+            "#,
+            prep_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+
+        Ok(total_weight.total_weight)
+    }
+
+    async fn get_food_prep(&self, prep_id: i32) -> eyre::Result<FoodPrep> {
+        let prep = sqlx::query_as!(
+            FoodPrep,
+            "SELECT * FROM food_prep WHERE prep_id = $1",
+            prep_id
+        )
+        .fetch_one(&*self.pg_pool)
+        .await?;
+        Ok(prep)
     }
 
     async fn fetch_recipes_infos(

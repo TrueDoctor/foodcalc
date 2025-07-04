@@ -25,12 +25,12 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         .route("/{event_id}", post(update_event))
         .route("/{event_id}/overrides/{source_id}", post(update_override))
         .route("/{event_id}/overrides/{source_id}", delete(delete_override))
-        .route("/export/pdf/{meal_id}", get(export_recipe_pdf))
         .route(
             "/{event_id}/overrides/{source_id}/delete_dialog",
             get(delete_override_dialog),
         )
         .route("/export_pdf/{meal_id}", get(export_recipe_pdf))
+        .route("/export_food_prep_pdf/{prep_id}", get(export_food_prep_pdf))
         .route("/{event_id}", get(event_form))
         .route(
             "/ingredients-per-serving/{meal_id}",
@@ -103,6 +103,34 @@ pub async fn export_recipe_pdf(
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
     let recipe_info = state.fetch_meal_recipe(meal_id).await?;
     let title = recipe_info.name.to_owned();
+    #[cfg(feature = "typst")]
+    let result = foodlib::typst::export_recipes(recipe_info).await;
+    #[cfg(not(feature = "typst"))]
+    let result = Err(foodlib_new::Error::Misc(
+        "Server compiled without typst support".into(),
+    ));
+    let recipe = result?;
+
+    let headers = [
+        (
+            axum::http::header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}.pdf\"", title),
+        ),
+        (
+            axum::http::header::CONTENT_TYPE,
+            "application/pdf".to_string(),
+        ),
+    ];
+    Ok((headers, recipe))
+}
+
+pub async fn export_food_prep_pdf(
+    State(state): State<MyAppState>,
+    Path(prep_id): Path<i32>,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
+    let recipe_info = state.fetch_food_prep_recipe(prep_id).await?;
+    let title = format!("{}_prep", recipe_info.name);
+
     #[cfg(feature = "typst")]
     let result = foodlib::typst::export_recipes(recipe_info).await;
     #[cfg(not(feature = "typst"))]
