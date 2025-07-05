@@ -1,7 +1,7 @@
 use ::time::OffsetDateTime;
 use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use foodlib_new::meal::Meal;
 use foodlib_new::FoodLib;
@@ -42,6 +42,27 @@ struct FullMealStatus {
     status: MealStatus,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+struct FeedbackStatus {
+    feedback_id: i32, // Unique ID for feedback
+    feedback: String,
+    event_id: i32,
+    timestamp: u64,
+    read: bool,
+    assigned_to: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct FeedbackUpdate {
+    read: Option<bool>,
+    assigned_to: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct FeedbackQuery {
+    include_read: Option<bool>,
+}
+
 // Define the cache structure
 #[derive(Clone)]
 struct EventCache {
@@ -49,6 +70,7 @@ struct EventCache {
     last_updated: HashMap<i32, Instant>,
     upcoming_event_id: Option<i32>,
     last_upcoming_check: Instant,
+    feedback: Vec<FeedbackStatus>,
 }
 
 impl EventCache {
@@ -58,6 +80,7 @@ impl EventCache {
             last_updated: HashMap::new(),
             upcoming_event_id: None,
             last_upcoming_check: Instant::now(),
+            feedback: Vec::new(),
         }
     }
 
@@ -240,6 +263,7 @@ async fn main() {
 
     let meal_states = Arc::new(RwLock::new(HashMap::new()));
     let event_cache = Arc::new(RwLock::new(EventCache::new()));
+    let feedback = Arc::new(RwLock::new(Vec::new()));
     let food_lib = Arc::new(food_lib);
 
     // Initialize the app state
@@ -300,6 +324,10 @@ async fn main() {
         .route("/{meal_id}", post(update_status))
         .route("/events", get(get_events))
         .route("/events/{event_id}", get(get_event_details))
+        .route("/feedback", get(get_feedback))
+        .route("/feedback", post(handle_feedback))
+        .route("/feedback/{id}", post(update_feedback))
+        .route("/feedback/{id}", delete(delete_feedback))
         .with_state(app_state)
         .layer(TraceLayer::new_for_http())
         .layer(cors);
@@ -512,5 +540,72 @@ async fn get_event_details(
                 Json(serde_json::json!({"error": "Event not found"})),
             )
         }
+    }
+}
+
+// New handler for processing feedback
+async fn handle_feedback(
+    State(state): State<AppState>,
+    Json(mut feedback): Json<FeedbackStatus>,
+) -> impl IntoResponse {
+    // Placeholder for feedback handling logic
+    println!("Received feedback: {}", feedback.feedback);
+    let mut feedback_list = state.feedback.write().await;
+    feedback.feedback_id = feedback_list.last().map_or(1, |f| f.feedback_id + 1);
+    feedback_list.push(feedback);
+    (StatusCode::OK, Json("Feedback received"))
+}
+
+// New handler for getting feedback
+async fn get_feedback(
+    State(state): State<AppState>,
+    Query(query): Query<FeedbackQuery>,
+) -> impl IntoResponse {
+    let feedback_list = state.feedback.read().await;
+    if !query.include_read.unwrap_or(true) {
+        // If include_read is false, filter out read feedback
+        let unread_feedback: Vec<FeedbackStatus> =
+            feedback_list.iter().filter(|f| !f.read).cloned().collect();
+        return (StatusCode::OK, Json(unread_feedback));
+    }
+    (StatusCode::OK, Json(feedback_list.clone()))
+}
+
+async fn update_feedback(
+    Path(id): Path<i32>,
+    State(state): State<AppState>,
+    Json(update): Json<FeedbackUpdate>,
+) -> impl IntoResponse {
+    let mut feedback_list = state.feedback.write().await;
+    match feedback_list.binary_search_by_key(&id, |f| f.feedback_id) {
+        Ok(idx) => {
+            let feedback = &mut feedback_list[idx];
+            let mut changed = false;
+            if let Some(read) = update.read {
+                feedback.read = read;
+                changed = true;
+            }
+            if let Some(assigned_to) = update.assigned_to {
+                feedback.assigned_to = Some(assigned_to);
+                changed = true;
+            }
+            if changed {
+                (StatusCode::OK, Json("Feedback updated"))
+            } else {
+                (StatusCode::NO_CONTENT, Json("No changes made"))
+            }
+        }
+        Err(_) => (StatusCode::NOT_FOUND, Json("Feedback not found")),
+    }
+}
+
+async fn delete_feedback(Path(id): Path<i32>, State(state): State<AppState>) -> impl IntoResponse {
+    let mut feedback_list = state.feedback.write().await;
+    match feedback_list.binary_search_by_key(&id, |f| f.feedback_id) {
+        Ok(idx) => {
+            feedback_list.remove(idx);
+            (StatusCode::OK, Json("Feedback deleted"))
+        }
+        Err(_) => (StatusCode::NOT_FOUND, Json("Feedback not found")),
     }
 }

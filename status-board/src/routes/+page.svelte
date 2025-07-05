@@ -111,6 +111,9 @@
                     }
                 }
             }
+
+            // Fetch unread feedback count
+            await checkUnreadFeedback();
         } catch (err) {
             // Parse error message to be more user-friendly
             if (err.message.includes('404') || err.message.includes('No meals found')) {
@@ -160,6 +163,74 @@
         if (showPastMeals) return true;
         return isMealActive(meal);
     };
+
+    // New reactive state for feedback form
+    let feedbackText = '';
+    let feedbackStatus = '';  // 'success', 'error', or ''
+    let feedbackMessage = '';
+
+    async function submitFeedback() {
+        feedbackStatus = '';
+        feedbackMessage = '';
+
+        if (feedbackText.trim().length < 10) {
+            feedbackStatus = 'error';
+            feedbackMessage = 'Please enter at least 10 characters of feedback.';
+            return;
+        }
+
+        const payload = {
+            feedback_id: 0, // This will be set by the server
+            feedback: feedbackText.trim(),
+            event_id: eventId ?? -1,
+            timestamp: Math.floor(Date.now() / 1000),
+            read: false,
+            assigned_to: null // Initially no one is assigned
+        };
+
+        try {
+            // Example: POST feedback to /api/feedback (adjust URL as needed)
+            const res = await fetch('/api/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!res.ok) {
+                throw new Error(`Server responded with ${res.status}`);
+            }
+
+            feedbackStatus = 'success';
+            feedbackMessage = 'Thank you for your feedback!';
+            feedbackText = ''; // reset input
+        } catch (err) {
+            feedbackStatus = 'error';
+            feedbackMessage = 'Failed to submit feedback. Please try again later.';
+            console.error('Feedback submission error:', err);
+        }
+    }
+
+    export async function fetchFeedback(includeRead = false) {
+        const url = `/api/feedback${includeRead ? '?include_read=true' : ''}`;
+        const res = await fetch(url);
+        return await res.json();
+    }
+
+    
+    let unreadFeedbackCount = 0;
+
+    async function checkUnreadFeedback() {
+        try {
+            const res = await fetch('/api/feedback?include_read=false'); // or however your API is routed
+            if (!res.ok) {
+                unreadFeedbackCount = 0;
+            }
+            const response = await res.json();
+            unreadFeedbackCount = response.length;
+        } catch (err) {
+            console.error('Failed to check unread feedback:', err);
+        }
+    }
 </script>
 
 <div class="max-w-4xl mx-auto p-4">
@@ -177,6 +248,21 @@
             <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-4">
                 <h2 class="font-bold">ADMIN MODE</h2>
             </div>
+                <div class="flex justify-between items-center mb-4">
+        <a 
+            href="/admin/feedback?admin=true" 
+            class="inline-block text-sm px-4 py-2 rounded-md font-semibold transition 
+                   hover:bg-unifest-green hover:text-white
+                   {unreadFeedbackCount > 0 ? 'bg-blue-100 text-blue-800 border border-blue-800 hover:bg-blue-500 hover:text-white' : 'text-unifest-green-dark border border-unifest-green-dark'}"
+        >
+            Feedback
+            {#if unreadFeedbackCount > 0}
+                <span class="ml-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs">
+                    {unreadFeedbackCount}
+                </span>
+            {/if}
+        </a>
+    </div>
         {/if}
         
         <!-- Event selector - Always show if in admin mode or if we have active events -->
@@ -266,4 +352,30 @@
             {/if}
         </div>
     {/if}
+
+    <!-- Feedback form section -->
+    <section class="mt-12 p-6 border border-gray-300 rounded-md bg-gray-50">
+        <h2 class="text-xl font-semibold mb-4">Send Us Your Feedback</h2>
+        <p class="mb-2 text-gray-700">
+            We appreciate your thoughts and suggestions to improve this page.
+        </p>
+        <textarea
+            class="w-full p-3 border rounded resize-y focus:outline-unifest-green-dark focus:ring-2 focus:ring-unifest-green-dark"
+            rows="4"
+            placeholder="Write your feedback here..."
+            bind:value={feedbackText}
+        ></textarea>
+        {#if feedbackStatus === 'error'}
+            <p class="mt-2 text-red-600 font-semibold">{feedbackMessage}</p>
+        {:else if feedbackStatus === 'success'}
+            <p class="mt-2 text-green-600 font-semibold">{feedbackMessage}</p>
+        {/if}
+        <button
+            on:click={submitFeedback}
+            class="mt-4 bg-unifest-green-dark text-white font-semibold px-4 py-2 rounded hover:bg-unifest-green focus:outline-none focus:ring-2 focus:ring-unifest-green"
+            type="button"
+        >
+            Submit Feedback
+        </button>
+    </section>
 </div>
