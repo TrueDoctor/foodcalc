@@ -196,7 +196,7 @@ fn process_meals(
                 MealStatus {
                     start: meal.start_time.unix_timestamp(),
                     end: meal.end_time.unix_timestamp(),
-                    eta: meal.start_time.unix_timestamp(),
+                    eta: current_time as i64 - 1, // Default to 1 second before current time
                     last_modified: current_time,
                     over: false,
                     msg: None,
@@ -263,7 +263,7 @@ async fn main() {
                 MealStatus {
                     start: meal.start_time.unix_timestamp(),
                     end: meal.end_time.unix_timestamp(),
-                    eta: meal.start_time.unix_timestamp(),
+                    eta: current_time as i64 - 1, // Default to 1 second before current time
                     last_modified: current_time,
                     over: false,
                     msg: None,
