@@ -15,6 +15,7 @@ use tokio::task;
 
 use std::collections::HashMap;
 use std::env;
+use std::io::Write;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -554,7 +555,23 @@ async fn handle_feedback(
     println!("Received feedback: {}", feedback.feedback);
     let mut feedback_list = state.feedback.write().await;
     feedback.feedback_id = feedback_list.last().map_or(1, |f| f.feedback_id + 1);
+    // Log the feedback to a file
+    let log_entry = format!(
+        "{} - Feedback ID: {}, Event ID: {}, Message: {}\n",
+        OffsetDateTime::now_utc(),
+        feedback.feedback_id,
+        feedback.event_id,
+        feedback.feedback
+    );
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open("feedback.log")
+        .expect("Failed to open feedback log file");
+    write!(file, "{}", log_entry).expect("Failed to write to feedback log file");
+
     feedback_list.push(feedback);
+
     (StatusCode::OK, Json("Feedback received"))
 }
 
