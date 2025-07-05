@@ -26,7 +26,7 @@
     etaInput = minutes;
 
     // Convert minutes to seconds and add to current Unix timestamp
-    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const currentTimestamp = Date.now() / 1000;
     meal.eta = currentTimestamp + (minutes * 60);
     meal.over = false;
     
@@ -93,7 +93,7 @@
   
   // Set up timers - use UTC-consistent calculations
   setInterval(() => {
-    current_time = Math.floor(Date.now()/1000);
+    current_time = Date.now()/1000;
     min_til_food = (Math.max(meal.start, meal.eta) - current_time)/60;
   }, 1000);
 </script>
