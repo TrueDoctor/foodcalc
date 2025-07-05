@@ -248,21 +248,20 @@
             <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-4">
                 <h2 class="font-bold">ADMIN MODE</h2>
             </div>
-                <div class="flex justify-between items-center mb-4">
-        <a 
-            href="/admin/feedback?admin=true" 
-            class="inline-block text-sm px-4 py-2 rounded-md font-semibold transition 
-                   hover:bg-unifest-green hover:text-white
-                   {unreadFeedbackCount > 0 ? 'bg-blue-100 text-blue-800 border border-blue-800 hover:bg-blue-500 hover:text-white' : 'text-unifest-green-dark border border-unifest-green-dark'}"
-        >
-            Feedback
-            {#if unreadFeedbackCount > 0}
-                <span class="ml-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs">
-                    {unreadFeedbackCount}
-                </span>
-            {/if}
-        </a>
-    </div>
+            <div class="flex justify-between items-center mb-4">
+                <a 
+                    href="/admin/feedback?admin=true" 
+                    class="inline-block text-sm px-4 py-2 rounded-md font-semibold transition 
+                        {unreadFeedbackCount > 0 ? 'bg-blue-100 text-blue-800 border border-blue-800 hover:bg-blue-500 hover:text-white' : 'text-unifest-green-dark border border-unifest-green-dark hover:bg-unifest-green hover:text-white'}"
+                    >
+                Feedback
+                {#if unreadFeedbackCount > 0}
+                    <span class="ml-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs">
+                        {unreadFeedbackCount}
+                    </span>
+                {/if}
+                </a>
+            </div>
         {/if}
         
         <!-- Event selector - Always show if in admin mode or if we have active events -->

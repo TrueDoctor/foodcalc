@@ -71,7 +71,6 @@ struct EventCache {
     last_updated: HashMap<i32, Instant>,
     upcoming_event_id: Option<i32>,
     last_upcoming_check: Instant,
-    feedback: Vec<FeedbackStatus>,
 }
 
 impl EventCache {
@@ -81,7 +80,6 @@ impl EventCache {
             last_updated: HashMap::new(),
             upcoming_event_id: None,
             last_upcoming_check: Instant::now(),
-            feedback: Vec::new(),
         }
     }
 

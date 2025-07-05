@@ -63,6 +63,15 @@
             <h2 class="font-bold">ADMIN MODE</h2>
         </div>
 
+        <div class="flex justify-between items-center mb-4">
+            <a
+                href="/?admin=true"
+                class="inline-block text-sm px-4 py-2 rounded-md font-semibold transition text-unifest-green-dark border border-unifest-green-dark hover:bg-unifest-green hover:text-white"
+            >
+                Meals
+            </a>
+        </div>
+
         <div class="flex items-center my-2">
             <label class="flex items-center">
                 <input type="checkbox" bind:checked={includeRead} on:change={loadFeedback} class="mr-2 hover:shadow">
