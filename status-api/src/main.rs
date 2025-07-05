@@ -120,6 +120,7 @@ struct EventQuery {
 #[derive(Clone)]
 struct AppState {
     meal_states: Arc<RwLock<HashMap<i32, MealStatus>>>,
+    feedback: Arc<RwLock<Vec<FeedbackStatus>>>,
     event_cache: Arc<RwLock<EventCache>>,
     food_lib: Arc<FoodLib>,
 }
@@ -270,6 +271,7 @@ async fn main() {
     let app_state = AppState {
         meal_states,
         event_cache,
+        feedback,
         food_lib: food_lib.clone(),
     };
 
