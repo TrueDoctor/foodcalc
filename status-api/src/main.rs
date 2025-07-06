@@ -214,7 +214,7 @@ fn process_meals(
     meals
         .into_iter()
         .map(|meal| {
-            let status = meal_states.get(&meal.meal_id).cloned().unwrap_or_else(|| {
+            let mut status = meal_states.get(&meal.meal_id).cloned().unwrap_or_else(|| {
                 // Default meal status if not in state
                 MealStatus {
                     start: meal.start_time.unix_timestamp(),
@@ -230,6 +230,13 @@ fn process_meals(
                     event_id,
                 }
             });
+
+            // set fields that coud have changed
+            status.start = meal.start_time.unix_timestamp();
+            status.end = meal.end_time.unix_timestamp();
+            status.recipe = meal.name.clone();
+            status.recipe_id = meal.recipe_id;
+            status.place = meal.place.clone();
 
             FullMealStatus {
                 meal_id: meal.meal_id,
