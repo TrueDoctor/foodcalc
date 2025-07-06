@@ -4,4 +4,5 @@ tex
 recipes/*.tex
 recipes/out/
 server/node_modules
+status-api/feedback.log
 .env
