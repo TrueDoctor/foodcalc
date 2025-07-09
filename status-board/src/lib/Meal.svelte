@@ -50,7 +50,7 @@
   }
   
   function addETA(minutes) {
-    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const currentTimestamp = Math.floor(Date.now() / 1000) + (2 * 60 * 60); // Add 2 hours to match meal times
     // Add minutes to the current time or existing ETA, whichever is later
     meal.eta = Math.max(meal.eta, currentTimestamp) + (minutes * 60);
     meal.over = false;
