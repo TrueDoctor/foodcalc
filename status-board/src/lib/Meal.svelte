@@ -94,6 +94,8 @@
   // Set up timers - use UTC-consistent calculations
   setInterval(() => {
     current_time = Date.now()/1000;
+    // add 2 hours to the current time to match the meal times
+    current_time += 2 * 60 * 60; // 2 hours in seconds
     min_til_food = (Math.max(meal.start, meal.eta) - current_time)/60;
   }, 1000);
 </script>
