@@ -26,7 +26,7 @@
     etaInput = minutes;
 
     // Convert minutes to seconds and add to current Unix timestamp
-    const currentTimestamp = Date.now() / 1000;
+    const currentTimestamp = Date.now() / 1000 + (2 * 60 * 60); // Add 2 hours to match meal times
     meal.eta = currentTimestamp + (minutes * 60);
     meal.over = false;
     
