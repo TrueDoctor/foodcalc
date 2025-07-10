@@ -1,6 +1,6 @@
 
 // For production deployment
-const API_BASE_URL = 'https://essen.campus-kit.de/api';
+const API_BASE_URL = '/api';
 // For local development
 // const API_BASE_URL = 'http://localhost:8090';
 
@@ -92,7 +92,9 @@ export async function updateMealStatus(mealStatus: MealStatus): Promise<any[]> {
         const statusCopy: MealStatus = { ...mealStatus };
         
         console.log("Updating meal status:", statusCopy);
-        
+
+        statusCopy.eta = Math.round(statusCopy.eta);
+
         const response = await fetch(`${API_BASE_URL}/${statusCopy.meal_id}`, {
             method: 'POST',
             headers: {
