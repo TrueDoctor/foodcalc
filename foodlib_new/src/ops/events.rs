@@ -500,7 +500,7 @@ impl EventOps {
         )
         .fetch_all(&*self.pool)
         .await
-        .unwrap();
+        .unwrap_or_default();
 
         Ok(items)
     }
