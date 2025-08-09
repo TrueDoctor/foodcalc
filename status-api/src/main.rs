@@ -143,30 +143,34 @@ async fn start_cache_refresh_task(state: AppState, refresh_interval: Duration) {
 }
 
 async fn refresh_cache(state: &AppState) {
-    // Refresh the upcoming event
-    let upcoming_event_id = get_upcoming_event(&state.food_lib).await;
+    // Try to acquire write lock on the cache
+    match state.event_cache.try_write() {
+        Ok(mut cache) => {
+            // Refresh the upcoming event
+            let upcoming_event_id = get_upcoming_event(&state.food_lib).await;
+            cache.update_upcoming_event(upcoming_event_id);
 
-    // Update the upcoming event in cache
-    {
-        let mut cache = state.event_cache.write().await;
-        cache.update_upcoming_event(upcoming_event_id);
+            // If we have an upcoming event, make sure its meals are cached
+            if let Some(event_id) = upcoming_event_id {
+                let event_meals = get_event_meals_from_db(&state.food_lib, event_id).await;
+
+                // Process meals with current state and update cache
+                let full_meals = process_meals(
+                    event_meals,
+                    state.meal_states.write().await.deref(),
+                    event_id,
+                );
+                let mut cache = state.event_cache.write().await;
+                cache.update_event_cache(event_id, full_meals);
+            }
+
+            println!("Cache refreshed at {}", OffsetDateTime::now_utc());
+        }
+        Err(_) => {
+            println!("Cache refresh skipped: lock is busy");
+            return;
+        }
     }
-
-    // If we have an upcoming event, make sure its meals are cached
-    if let Some(event_id) = upcoming_event_id {
-        let event_meals = get_event_meals_from_db(&state.food_lib, event_id).await;
-
-        // Process meals with current state and update cache
-        let full_meals = process_meals(
-            event_meals,
-            state.meal_states.write().await.deref(),
-            event_id,
-        );
-        let mut cache = state.event_cache.write().await;
-        cache.update_event_cache(event_id, full_meals);
-    }
-
-    println!("Cache refreshed at {}", OffsetDateTime::now_utc());
 }
 
 // Get the next upcoming event
@@ -336,6 +340,7 @@ async fn main() {
         .route("/feedback", post(handle_feedback))
         .route("/feedback/{id}", post(update_feedback))
         .route("/feedback/{id}", delete(delete_feedback))
+        .route("/refresh", post(trigger_refresh))
         .with_state(app_state)
         .layer(TraceLayer::new_for_http())
         .layer(cors);
@@ -632,4 +637,10 @@ async fn delete_feedback(Path(id): Path<i32>, State(state): State<AppState>) -> 
         }
         Err(_) => (StatusCode::NOT_FOUND, Json("Feedback not found")),
     }
+}
+
+// Handler to manually trigger cache refresh
+async fn trigger_refresh(State(state): State<AppState>) -> impl IntoResponse {
+    refresh_cache(&state).await;
+    (StatusCode::OK, Json("Cache refresh triggered"))
 }
