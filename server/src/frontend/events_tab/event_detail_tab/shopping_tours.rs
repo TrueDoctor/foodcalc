@@ -10,7 +10,7 @@ use foodlib_new::{
     inventory::InventoryItem,
 };
 use maud::{html, Markup};
-use num::ToPrimitive;
+use num::{ToPrimitive, Zero};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
@@ -361,17 +361,23 @@ async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
         }
         let inv_amount = get_inventory_amount(&item, &inventory_items);
         let status = if inv_amount > item.weight { "x" } else { " " };
+        let to_buy = (item.weight.clone() - inv_amount).max(BigDecimal::zero());
+
+        let new_price = item
+            .price
+            .map(|p| (p / item.weight.clone()) * to_buy.clone());
 
         output.push_str(&format!(
-            "[{}] {} - {:.2} kg{}",
+            "[{}] {} - {:.2} kg {} -> {}",
             status,
             item.ingredient_name,
-            item.weight,
-            if let Some(price) = item.price {
+            to_buy,
+            if let Some(price) = new_price {
                 format!(" (€{:.2})", price)
             } else {
                 String::new()
-            }
+            },
+            item.weight
         ));
         output.push('\n');
     }
@@ -412,6 +418,8 @@ async fn export_metro(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
         if inv_amount > item.weight {
             continue;
         }
+        let weight = item.weight - inv_amount;
+
         // Find source with matching ingredient_id
         if let Some(source) = sources
             .iter()
@@ -419,7 +427,7 @@ async fn export_metro(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
         {
             // Round up to next package size
             let packages =
-                (item.weight.to_f64().unwrap() / source.package_size.to_f64().unwrap()).ceil();
+                (weight.to_f64().unwrap() / source.package_size.to_f64().unwrap()).ceil();
             let amount = packages * source.package_size.to_f64().unwrap();
 
             output.push_str(&format!(
