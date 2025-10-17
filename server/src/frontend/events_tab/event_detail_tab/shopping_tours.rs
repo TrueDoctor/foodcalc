@@ -368,7 +368,7 @@ async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
             .map(|p| (p / item.weight.clone()) * to_buy.clone());
 
         output.push_str(&format!(
-            "[{}] {} - {:.2} kg {} -> {}",
+            "[{}] {} - {:.2} kg {} -> {:.2} kg",
             status,
             item.ingredient_name,
             to_buy,
