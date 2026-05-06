@@ -16,12 +16,12 @@ impl InventoryOps {
         let row = sqlx::query_as!(
             Inventory,
             r#"
-            INSERT INTO inventories (name, owner_id)
+            INSERT INTO inventories (name, group_id)
             VALUES ($1, $2)
-            RETURNING inventory_id as "id", name, owner_id
+            RETURNING inventory_id as "id", name, group_id
             "#,
             inventory.name,
-            inventory.owner_id,
+            inventory.group_id,
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -36,7 +36,7 @@ impl InventoryOps {
             UPDATE inventories
             SET name = $1
             WHERE inventory_id = $2
-            RETURNING inventory_id as "id", name, owner_id
+            RETURNING inventory_id as "id", name, group_id
             "#,
             inventory.name,
             inventory.id
@@ -59,7 +59,7 @@ impl InventoryOps {
         let row = sqlx::query_as!(
             Inventory,
             r#"
-            SELECT inventory_id as "id", name, owner_id
+            SELECT inventory_id as "id", name, group_id
             FROM inventories
             WHERE inventory_id = $1
             "#,
@@ -75,7 +75,7 @@ impl InventoryOps {
         let rows = sqlx::query_as!(
             Inventory,
             r#"
-            SELECT inventory_id as "id", name, owner_id
+            SELECT inventory_id as "id", name, group_id
             FROM inventories
             ORDER BY name
             "#

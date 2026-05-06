@@ -394,7 +394,7 @@ async fn update_event(
         name: event_data.name.clone(),
         comment: (!event_data.comment.is_empty()).then(|| event_data.comment.clone()),
         budget,
-        owner_id: 0, // We don't change the owner
+        group_id: 0, // Placeholder; ops-level update ignores group_id
     };
 
     foodlib.events().update(event).await?;

@@ -131,7 +131,7 @@ async fn test_event_crud_operations(pool: PgPool) {
             name: "Test Event".to_string(),
             comment: Some("Test Comment".to_string()),
             budget: Some(BigDecimal::from(500)),
-            owner_id: 1,
+            group_id: 1,
         })
         .await
         .unwrap();

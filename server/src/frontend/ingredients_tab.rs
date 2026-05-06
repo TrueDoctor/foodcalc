@@ -48,7 +48,7 @@ pub async fn search(
     query: Form<SearchParameters>,
 ) -> MResponse {
     let query = query.search.to_lowercase();
-    let ingredients = foodlib.ingredients().list_with_sources().await?;
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref()).await?;
 
     let filtered_ingredients = ingredients
         .iter()
@@ -56,7 +56,7 @@ pub async fn search(
 
     Ok(html! {
         @for ingredient in filtered_ingredients {
-            (format_ingredient(ingredient, user.as_ref()))
+            (format_ingredient(ingredient, user.as_ref(), &user_group_ids))
         }
     })
 }
@@ -66,9 +66,9 @@ pub async fn update_ingredient(
     user: User,
     Form(mut ingredient): Form<Ingredient>,
 ) -> IResponse {
-    // For new ingredients, set the owner to the current user
     if ingredient.id == -1 {
-        ingredient.owner_id = user.id;
+        let group = foodlib.users().get_personal_group(user.id).await?;
+        ingredient.group_id = group.id;
         foodlib.ingredients().create(ingredient).await?;
         Ok((
             [("HX-Retarget", "#content"), ("HX-Reswap", "innerHTML")],
@@ -76,18 +76,19 @@ pub async fn update_ingredient(
         )
             .into_response())
     } else {
-        // Check if user has permission to edit this ingredient
         let existing = foodlib.ingredients().get(ingredient.id).await?;
-        if !can_edit(existing.owner_id, &user) {
+        let user_groups = foodlib.users().get_user_groups(user.id).await?;
+        let user_group_ids: Vec<i32> = user_groups.iter().map(|g| g.id).collect();
+        if !can_edit(existing.group_id, &user_group_ids, &user) {
             return Err(Error::Forbidden(
                 "You don't have permission to edit this ingredient".into(),
             ));
         }
 
-        // Keep the original owner_id - don't allow ownership transfer via form manipulation
-        ingredient.owner_id = existing.owner_id;
+        // Keep the original group_id to prevent ownership transfer via form manipulation
+        ingredient.group_id = existing.group_id;
         let updated = foodlib.ingredients().update(ingredient).await?;
-        Ok(format_ingredient(&updated.into(), Some(&user)).into_response())
+        Ok(format_ingredient(&updated.into(), Some(&user), &user_group_ids).into_response())
     }
 }
 
@@ -106,9 +107,10 @@ async fn update_source(
     Path((ingredient_id, source_id)): Path<(i32, i32)>,
     form: Form<SourceData>,
 ) -> MResponse {
-    // Check if user has permission to edit this ingredient's sources
     let ingredient = foodlib.ingredients().get(ingredient_id).await?;
-    if !can_edit(ingredient.owner_id, &user) {
+    let user_groups = foodlib.users().get_user_groups(user.id).await?;
+    let user_group_ids: Vec<i32> = user_groups.iter().map(|g| g.id).collect();
+    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
         return Err(Error::Forbidden(
             "You don't have permission to edit sources for this ingredient".into(),
         ));
@@ -154,9 +156,10 @@ async fn delete_source(
     user: User,
     Path((ingredient_id, source_id)): Path<(i32, i32)>,
 ) -> MResponse {
-    // Check if user has permission to delete sources for this ingredient
     let ingredient = foodlib.ingredients().get(ingredient_id).await?;
-    if !can_edit(ingredient.owner_id, &user) {
+    let user_groups = foodlib.users().get_user_groups(user.id).await?;
+    let user_group_ids: Vec<i32> = user_groups.iter().map(|g| g.id).collect();
+    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
         return Err(Error::Forbidden(
             "You don't have permission to delete sources for this ingredient".into(),
         ));
@@ -167,9 +170,7 @@ async fn delete_source(
 }
 
 pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
-    let ingredients = foodlib
-        .ingredients()
-        .list_with_sources()
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref())
         .await
         .unwrap_or_default();
 
@@ -200,7 +201,7 @@ pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
                 } }
                 tbody id="search-results" {
                     @for ingredient in ingredients.iter() {
-                        (format_ingredient(ingredient, user.as_ref()))
+                        (format_ingredient(ingredient, user.as_ref(), &user_group_ids))
                     }
                 }
             }
@@ -209,7 +210,6 @@ pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
 }
 
 fn add_ingredient_button(user: Option<&User>) -> Markup {
-    // Only show add button if user is logged in
     if user.is_none() {
         return html! {};
     }
@@ -219,7 +219,7 @@ fn add_ingredient_button(user: Option<&User>) -> Markup {
         name: String::new(),
         energy: BigDecimal::from(0),
         comment: None,
-        owner_id: user.map(|x| x.id).unwrap_or(-1),
+        group_id: -1,
     }
     .into();
     html! {
@@ -250,7 +250,7 @@ pub async fn edit_ingredient_form(Form(ingredient): Form<IngredientWithSource>) 
             div class="flex flex-col items-center justify-center w-full" {
                 div class="flex gap-2 w-full" {
 
-                    input type="hidden" name=("owner_id") value=(ingredient.owner_id);
+                    input type="hidden" name=("group_id") value=(ingredient.group_id);
                     input class="text" type="text" name="name" placeholder="Name" value=(ingredient.name) required="required";
                     input class="text shrink" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy (kJ/g)" required="required" value=(ingredient.energy);
                     input class="text grow" type="text" name="comment" placeholder="Comment" value=(ingredient.comment.as_ref().unwrap_or(&String::new()));
@@ -294,10 +294,21 @@ async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> M
     let stores = foodlib.stores().list().await?;
     let ingredient = foodlib.ingredients().get(id.0).await?;
 
-    // Check if user can edit this ingredient's sources
+    let user_group_ids: Vec<i32> = if let Some(u) = user.as_ref() {
+        foodlib
+            .users()
+            .get_user_groups(u.id)
+            .await
+            .unwrap_or_default()
+            .iter()
+            .map(|g| g.id)
+            .collect()
+    } else {
+        vec![]
+    };
     let can_edit_sources = user
         .as_ref()
-        .map_or(false, |u| can_edit(ingredient.owner_id, u));
+        .map_or(false, |u| can_edit(ingredient.group_id, &user_group_ids, u));
 
     Ok(html! {
         dialog open="true" class="w-2/3 dialog z-50" id="popup"{
@@ -402,14 +413,30 @@ fn format_ingredient_source(
     }
 }
 
-// Helper function to check if a user can edit an ingredient
-fn can_edit(owner_id: i64, user: &User) -> bool {
-    user.is_admin || user.id == owner_id
+fn can_edit(group_id: i32, user_group_ids: &[i32], user: &User) -> bool {
+    user.is_admin || user_group_ids.contains(&group_id)
 }
 
-fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>) -> Markup {
+async fn fetch_ingredients_and_groups(
+    foodlib: &FoodLib,
+    user: Option<&User>,
+) -> Result<(Vec<IngredientWithSource>, Vec<i32>), foodlib_new::Error> {
+    let (ingredients, user_group_ids) = match user {
+        Some(u) if u.is_admin => (foodlib.ingredients().list_with_sources().await?, vec![]),
+        Some(u) => {
+            let groups = foodlib.users().get_user_groups(u.id).await?;
+            let ids: Vec<i32> = groups.iter().map(|g| g.id).collect();
+            let ingredients = foodlib.ingredients().list_with_sources_for_user(u.id).await?;
+            (ingredients, ids)
+        }
+        None => (foodlib.ingredients().list_with_sources().await?, vec![]),
+    };
+    Ok((ingredients, user_group_ids))
+}
+
+fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, user_group_ids: &[i32]) -> Markup {
     let sources_button_text = if ingredient.has_sources { "" } else { "⚠️" };
-    let can_edit_this = user.map_or(false, |u| can_edit(ingredient.owner_id, u));
+    let can_edit_this = user.map_or(false, |u| can_edit(ingredient.group_id, user_group_ids, u));
     let is_admin = user.map_or(false, |u| u.is_admin);
 
     html! {

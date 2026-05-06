@@ -20,14 +20,14 @@ impl EventOps {
         let record = sqlx::query_as!(
             Event,
             r#"
-            INSERT INTO events (event_name, comment, budget, owner_id)
+            INSERT INTO events (event_name, comment, budget, group_id)
             VALUES ($1, $2, $3, $4)
-            RETURNING event_id as id, event_name as name, comment, budget, owner_id
+            RETURNING event_id as id, event_name as name, comment, budget, group_id
             "#,
             event.name,
             event.comment,
             event.budget,
-            event.owner_id,
+            event.group_id,
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -44,7 +44,7 @@ impl EventOps {
                 event_id as id,
                 event_name as name,
                 comment,
-                owner_id,
+                group_id,
                 budget
             FROM events 
             WHERE event_id = $1
@@ -61,20 +61,19 @@ impl EventOps {
         Ok(record)
     }
 
-    /// Updates an existing event
+    /// Updates an existing event (group_id is preserved from DB)
     pub async fn update(&self, event: Event) -> Result<Event> {
         let record = sqlx::query_as!(
             Event,
             r#"
-            UPDATE events 
-            SET event_name = $1, comment = $2, budget = $3, owner_id = $4
-            WHERE event_id = $5
-            RETURNING event_id as id, event_name as name, comment, budget, owner_id
+            UPDATE events
+            SET event_name = $1, comment = $2, budget = $3
+            WHERE event_id = $4
+            RETURNING event_id as id, event_name as name, comment, budget, group_id
             "#,
             event.name,
             event.comment,
             event.budget,
-            event.owner_id,
             event.id
         )
         .fetch_optional(&*self.pool)
@@ -85,6 +84,18 @@ impl EventOps {
         })?;
 
         Ok(record)
+    }
+
+    /// Moves an event to a different group
+    pub async fn set_group(&self, event_id: i32, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE events SET group_id = $1 WHERE event_id = $2"#,
+            group_id,
+            event_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
     }
 
     /// Deletes an event and all associated data
@@ -129,7 +140,7 @@ impl EventOps {
     }
 
     /// Duplicates an event, including all associated data
-    pub async fn duplicate(&self, id: i32, new_owner: i64) -> Result<i32> {
+    pub async fn duplicate(&self, id: i32, new_group_id: i32) -> Result<i32> {
         let mut tx = self.pool.begin().await?;
 
         // Get the event details
@@ -140,7 +151,7 @@ impl EventOps {
                 event_id as id,
                 event_name as name,
                 comment,
-                owner_id,
+                group_id,
                 budget
             FROM events 
             WHERE event_id = $1
@@ -156,14 +167,14 @@ impl EventOps {
         let new_event = sqlx::query_as!(
             Event,
             r#"
-            INSERT INTO events (event_name, comment, budget, owner_id)
+            INSERT INTO events (event_name, comment, budget, group_id)
             VALUES ($1, $2, $3, $4)
-            RETURNING event_id as id, event_name as name, comment, budget, owner_id
+            RETURNING event_id as id, event_name as name, comment, budget, group_id
             "#,
             new_name,
             event.comment,
             event.budget,
-            new_owner,
+            new_group_id,
         )
         .fetch_one(&mut *tx)
         .await?;
@@ -305,7 +316,34 @@ impl EventOps {
         Ok(new_event.id)
     }
 
-    /// Lists all events
+    /// Lists events visible to a user (those whose group the user belongs to)
+    pub async fn list_for_user(&self, user_id: i64) -> Result<Vec<Event>> {
+        let records = sqlx::query_as!(
+            Event,
+            r#"
+            SELECT
+                event_id as id,
+                event_name as name,
+                events.comment,
+                group_id,
+                budget
+            FROM events
+            LEFT JOIN event_meals USING (event_id)
+            WHERE group_id IN (
+                SELECT group_id FROM user_groups WHERE user_id = $1
+            )
+            GROUP BY event_id, event_name, events.comment, group_id, budget
+            ORDER BY MIN(start_time) DESC
+            "#,
+            user_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// Lists all events (admin only)
     pub async fn list(&self) -> Result<Vec<Event>> {
         let records = sqlx::query_as!(
             Event,
@@ -314,10 +352,10 @@ impl EventOps {
                 event_id as id,
                 event_name as name,
                 events.comment,
-                owner_id,
+                group_id,
                 budget
             FROM events LEFT JOIN event_meals USING (event_id)
-            GROUP BY event_id, event_name, events.comment, owner_id, budget
+            GROUP BY event_id, event_name, events.comment, group_id, budget
             ORDER BY MIN(start_time) DESC
             "#
         )
@@ -793,13 +831,13 @@ impl EventOps {
                 e.event_id as id,
                 e.event_name as name,
                 e.comment,
-                e.owner_id,
+                e.group_id,
                 e.budget
             FROM events e
             LEFT JOIN event_meals em ON e.event_id = em.event_id
             LEFT JOIN food_prep fp ON e.event_id = fp.event_id
             WHERE em.start_time >= $1 OR fp.prep_date >= $1
-            GROUP BY (e.event_id, e.event_name, e.owner_id, e.budget)
+            GROUP BY (e.event_id, e.event_name, e.group_id, e.budget)
             ORDER BY MIN(em.start_time)
             "#,
             after
@@ -819,12 +857,12 @@ impl EventOps {
                 e.event_id as id,
                 e.event_name as name,
                 e.comment,
-                e.owner_id,
+                e.group_id,
                 e.budget
             FROM events e
             LEFT JOIN event_meals em ON e.event_id = em.event_id
             LEFT JOIN food_prep fp ON e.event_id = fp.event_id
-            GROUP BY e.event_id, e.event_name, e.comment, e.budget
+            GROUP BY e.event_id, e.event_name, e.comment, e.group_id, e.budget
             HAVING MAX(GREATEST(em.end_time, fp.use_until)) < $1
             ORDER BY e.event_name
             "#,
@@ -846,7 +884,7 @@ impl EventOps {
                 event_id as id,
                 event_name as name,
                 comment,
-                owner_id,
+                group_id,
                 budget
             FROM events
             WHERE LOWER(event_name) LIKE $1

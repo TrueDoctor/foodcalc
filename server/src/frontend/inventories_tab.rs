@@ -216,12 +216,11 @@ pub async fn commit_inventory(
     Form(mut inventory): Form<Inventory>,
 ) -> MResponse {
     if inventory.id < 0 {
-        // Creating new inventory
-        inventory.owner_id = user.id;
+        let group = foodlib.users().get_personal_group(user.id).await?;
+        inventory.group_id = group.id;
         let inventory_id = foodlib.inventories().create(inventory).await?;
         manage_inventory_form(foodlib, inventory_id.id).await
     } else {
-        // Updating existing inventory (keeping existing owner)
         let id = inventory.id;
         foodlib.inventories().update(inventory).await?;
         manage_inventory_form(foodlib, id).await
@@ -232,8 +231,8 @@ pub async fn handle_select(foodlib: FoodLib, header_data: Form<InventoryHeaderDa
     manage_inventory_form(foodlib, header_data.inventory_id).await
 }
 
-pub async fn handle_add_inventory(user: User) -> Markup {
-    add_or_edit_inventory_form(-1, String::new(), user.id)
+pub async fn handle_add_inventory(_user: User) -> Markup {
+    add_or_edit_inventory_form(-1, String::new())
 }
 
 pub async fn handle_delete_inventory(
@@ -250,11 +249,11 @@ pub async fn handle_manage(foodlib: FoodLib, data: Form<InventoryHeaderData>) ->
 
 pub async fn handle_edit_inventory(
     foodlib: FoodLib,
-    user: User,
+    _user: User,
     data: Form<InventoryHeaderData>,
 ) -> Markup {
     let inventory = foodlib.inventories().get(data.inventory_id).await.unwrap();
-    add_or_edit_inventory_form(data.inventory_id, inventory.name, user.id)
+    add_or_edit_inventory_form(data.inventory_id, inventory.name)
 }
 
 pub async fn select_inventory_form(foodlib: FoodLib) -> MResponse {
@@ -348,11 +347,7 @@ pub fn add_ingredient_button(inventory_id: i32, filter: Option<String>) -> Marku
     }
 }
 
-pub fn add_or_edit_inventory_form(
-    inventory_id: i32,
-    inventory_name: String,
-    owner_id: i64,
-) -> Markup {
+pub fn add_or_edit_inventory_form(inventory_id: i32, inventory_name: String) -> Markup {
     html! {
         form hx-put="/inventories/commit" hx-target="this" hx-swap="outerHTML" {
             div class="flex flex-col items-center justify-center gap-5" {
@@ -360,7 +355,7 @@ pub fn add_or_edit_inventory_form(
                     h1 { @if inventory_id > 0 { "Edit inventory" } @else { "Add inventory" } }
                     input type="text" name="name" placeholder="Name" value=(inventory_name) required="required" class="text";
                     input type="hidden" name="id" value=(inventory_id);
-                    input type="hidden" name="owner_id" value=(owner_id);
+                    input type="hidden" name="group_id" value=(-1);
                     button class="btn btn-primary" type="submit" { "Submit" }
                 }
             }

@@ -132,7 +132,7 @@ pub async fn handle_name_change(
             id: data.recipe_id,
             name: data.name,
             comment: Some(data.comment),
-            owner_id: -1, // We don't change the owner
+            group_id: -1, // Placeholder; ops-level update ignores group_id
         })
         .await?;
     Ok(())

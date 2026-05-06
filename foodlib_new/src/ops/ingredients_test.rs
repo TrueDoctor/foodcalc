@@ -13,7 +13,7 @@ async fn test_create_ingredient(pool: sqlx::PgPool) {
         name: "Test Ingredient".to_string(),
         energy: BigDecimal::from_str("10.5").unwrap(),
         comment: Some("Test comment".to_string()),
-        owner_id: 1,
+        group_id: 1,
     };
 
     let created = ops.create(ingredient.clone()).await.unwrap();
@@ -81,7 +81,7 @@ async fn test_delete_ingredient(pool: sqlx::PgPool) {
             name: "Ingredient To Delete".to_string(),
             energy: BigDecimal::from(1),
             comment: None,
-            owner_id: 1,
+            group_id: 1,
         })
         .await
         .unwrap();

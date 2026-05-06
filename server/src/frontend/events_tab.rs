@@ -1,5 +1,6 @@
 use crate::FoodLib;
 use axum::extract::{Form, Path};
+use bigdecimal::FromPrimitive;
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
@@ -31,8 +32,6 @@ pub async fn add_form() -> Markup {
     html! {
         form hx-post="/events/add" hx-target="#content" hx-swap="innerHTML" {
             div class="flex flex-row gap-2" {
-                input type="hidden" id="id" name="id" value="-1";
-                input type="hidden" id="owner_id" name="owner_id" value="-1";
                 input class="text" type="text" id="name" name="name" required="required" placeholder="Event Name";
                 input class="text" type="text" id="budget" name="budget" required="required" placeholder="Budget";
                 input class="text" type="text" id="comment" name="comment" placeholder="Comment";
@@ -42,18 +41,33 @@ pub async fn add_form() -> Markup {
     }
 }
 
+#[derive(Deserialize)]
+pub struct AddEventForm {
+    name: String,
+    budget: Option<f64>,
+    comment: Option<String>,
+}
+
 pub async fn add(
     foodlib: FoodLib,
     user: User,
-    Form(mut event): Form<foodlib_new::event::Event>,
+    Form(form): Form<AddEventForm>,
 ) -> MResponse {
-    event.owner_id = user.id;
+    let group = foodlib.users().get_personal_group(user.id).await?;
+    let event = foodlib_new::event::Event {
+        id: -1,
+        name: form.name,
+        comment: form.comment.filter(|s| !s.is_empty()),
+        budget: form.budget.and_then(bigdecimal::BigDecimal::from_f64),
+        group_id: group.id,
+    };
     foodlib.events().create(event).await?;
-    Ok(event_list(foodlib).await)
+    Ok(event_list(foodlib, user).await)
 }
 
 pub async fn duplicate(foodlib: FoodLib, user: User, Path(event_id): Path<i32>) -> MResponse {
-    let id = foodlib.events().duplicate(event_id, user.id).await?;
+    let group = foodlib.users().get_personal_group(user.id).await?;
+    let id = foodlib.events().duplicate(event_id, group.id).await?;
     event_detail_tab::event_form(foodlib, Path(id)).await
 }
 
@@ -75,13 +89,17 @@ pub async fn delete_dialog(foodlib: FoodLib, Path(event_id): Path<i32>) -> MResp
     })
 }
 
-pub async fn delete(foodlib: FoodLib, Path(event_id): Path<i32>) -> MResponse {
+pub async fn delete(foodlib: FoodLib, user: User, Path(event_id): Path<i32>) -> MResponse {
     foodlib.events().delete(event_id).await?;
-    Ok(event_list(foodlib).await)
+    Ok(event_list(foodlib, user).await)
 }
 
-pub async fn event_list(foodlib: FoodLib) -> Markup {
-    let events = foodlib.events().list().await.unwrap_or_default();
+pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
+    let events = if user.is_admin {
+        foodlib.events().list().await.unwrap_or_default()
+    } else {
+        foodlib.events().list_for_user(user.id).await.unwrap_or_default()
+    };
 
     html! {
         div class="
@@ -99,34 +117,36 @@ pub async fn event_list(foodlib: FoodLib) -> Markup {
             button class="btn btn-primary" hx-put="/events/add" { "Add event (+)" }
         }
         table class="w-full text-inherit table-auto object-center table-fixed" {
-            // We add extra table headers to account for the buttons
             thead { tr { th class="w-1/3" { "Name" } th class="w-1/3" { "Comment" } th {} th {}} }
             tbody id="search-results" {
-                @for recipe in events.iter() {
-                    (format_event(recipe))
+                @for event in events.iter() {
+                    (format_event(event))
                 }
             }
         }
-        //overwrite the default htmx indicator behaviour to swap the text of the button
         style { ("
-                .inverse-htmx-indicator { display: inline; } 
-                .htmx-request .inverse-htmx-indicator {display: none;} 
-                .htmx-request.inverse-htmx-indicator {display: none;} 
+                .inverse-htmx-indicator { display: inline; }
+                .htmx-request .inverse-htmx-indicator {display: none;}
+                .htmx-request.inverse-htmx-indicator {display: none;}
 
-                .my-htmx-indicator { display: none; } 
-                .my-htmx-request .htmx-indicator {display: inline;} 
-                .my-htmx-request.htmx-indicator {display: inline;} 
+                .my-htmx-indicator { display: none; }
+                .my-htmx-request .htmx-indicator {display: inline;}
+                .my-htmx-request.htmx-indicator {display: inline;}
             ") }
     }
 }
 
-pub async fn search(foodlib: FoodLib, query: Form<SearchParameters>) -> Markup {
-    let query = query.search.to_lowercase();
-    let events = foodlib.events().list().await.unwrap_or_default();
+pub async fn search(foodlib: FoodLib, user: User, query: Form<SearchParameters>) -> Markup {
+    let query_str = query.search.to_lowercase();
+    let events = if user.is_admin {
+        foodlib.events().list().await.unwrap_or_default()
+    } else {
+        foodlib.events().list_for_user(user.id).await.unwrap_or_default()
+    };
 
     let filtered_events = events
         .iter()
-        .filter(|x| x.name.to_lowercase().contains(&query));
+        .filter(|x| x.name.to_lowercase().contains(&query_str));
 
     html! {
         @for event in filtered_events {

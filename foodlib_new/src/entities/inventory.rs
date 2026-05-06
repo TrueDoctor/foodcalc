@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct Inventory {
     pub id: i32,
     pub name: String,
-    pub owner_id: i64,
+    pub group_id: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

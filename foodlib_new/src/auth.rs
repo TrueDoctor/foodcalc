@@ -133,7 +133,7 @@ pub async fn register(
 ) -> Result<User> {
     backend
         .user_ops
-        .create_user(User {
+        .create_user_with_personal_group(User {
             id: -1,
             username: credentials.username,
             email,
@@ -142,6 +142,7 @@ pub async fn register(
             created_at: OffsetDateTime::now_local().unwrap_or(OffsetDateTime::now_utc()),
         })
         .await
+        .map(|(user, _group)| user)
         .map_err(Into::into)
 }
 

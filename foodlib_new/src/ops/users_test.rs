@@ -118,20 +118,10 @@ async fn test_user_groups(pool: sqlx::PgPool) {
         .unwrap();
 
     // Create a new group
-    let group = ops
-        .create_group(Group {
-            id: -1,
-            name: "Test Group".to_string(),
-        })
-        .await
-        .unwrap();
+    let group = ops.create_group("Test Group").await.unwrap();
 
     // Add user to group
-    let user_group = UserGroup {
-        user_id: user.id,
-        group_id: group.id,
-    };
-    ops.add_user_to_group(user_group.clone()).await.unwrap();
+    ops.add_user_to_group(user.id, group.id).await.unwrap();
 
     // Verify user is in the group
     let user_groups = ops.get_user_groups(user.id).await.unwrap();

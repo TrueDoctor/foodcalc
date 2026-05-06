@@ -32,13 +32,13 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            INSERT INTO recipes (name, comment, owner_id)
+            INSERT INTO recipes (name, comment, group_id)
             VALUES ($1, $2, $3)
-            RETURNING recipe_id as id, name, comment, owner_id
+            RETURNING recipe_id as id, name, comment, group_id
             "#,
             recipe.name,
             recipe.comment,
-            recipe.owner_id,
+            recipe.group_id,
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -50,7 +50,7 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, owner_id 
+            SELECT recipe_id as id, name, comment, group_id 
             FROM recipes 
             WHERE recipe_id = $1
             "#,
@@ -70,7 +70,7 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, owner_id 
+            SELECT recipe_id as id, name, comment, group_id 
             FROM recipes 
             WHERE name = $1
             "#,
@@ -93,7 +93,7 @@ impl RecipeOps {
             UPDATE recipes 
             SET name = $1, comment = $2
             WHERE recipe_id = $3
-            RETURNING recipe_id as id, name, comment, owner_id
+            RETURNING recipe_id as id, name, comment, group_id
             "#,
             recipe.name,
             recipe.comment,
@@ -146,12 +146,33 @@ impl RecipeOps {
         Ok(())
     }
 
+    /// Lists recipes whose group the user belongs to
+    pub async fn list_for_user(&self, user_id: i64) -> Result<Vec<Recipe>> {
+        let records = sqlx::query_as!(
+            Recipe,
+            r#"
+            SELECT recipe_id as id, name, comment, group_id
+            FROM recipes
+            WHERE group_id IN (
+                SELECT group_id FROM user_groups WHERE user_id = $1
+            )
+            ORDER BY name
+            "#,
+            user_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// Lists all recipes (admin only)
     pub async fn list(&self) -> Result<Vec<Recipe>> {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, owner_id 
-            FROM recipes 
+            SELECT recipe_id as id, name, comment, group_id
+            FROM recipes
             ORDER BY recipe_id
             "#
         )
@@ -512,7 +533,7 @@ impl RecipeOps {
             Recipe,
             r#"
             WITH matching_recipes AS (
-                SELECT r.recipe_id, r.name, r.comment, r.owner_id,
+                SELECT r.recipe_id, r.name, r.comment, r.group_id,
                        COUNT(DISTINCT ri.ingredient_id) as matching_ingredients,
                        (SELECT COUNT(DISTINCT ingredient_id) 
                         FROM recipe_ingredients 
@@ -522,11 +543,11 @@ impl RecipeOps {
                 WHERE ri.ingredient_id = ANY($1)
                 GROUP BY r.recipe_id, r.name, r.comment
             )
-            SELECT 
+            SELECT
                 recipe_id as id,
                 name,
                 comment,
-                owner_id
+                group_id
             FROM matching_recipes
             ORDER BY 
                 matching_ingredients::float / total_ingredients DESC,

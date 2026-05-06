@@ -44,7 +44,7 @@ pub async fn search(
     query: Form<SearchParameters>,
 ) -> MResponse {
     let query = query.search.to_lowercase();
-    let recipes = foodlib.recipes().list().await?;
+    let (recipes, user_group_ids) = fetch_recipes_and_groups(&foodlib, user.as_ref()).await?;
 
     let filtered_recipes = recipes
         .iter()
@@ -53,7 +53,7 @@ pub async fn search(
     Ok(html! {
         (recipe_add_form())
         @for recipe in filtered_recipes {
-            (format_recipe(recipe, user.as_ref()))
+            (format_recipe(recipe, user.as_ref(), &user_group_ids))
         }
     })
 }
@@ -199,7 +199,9 @@ pub async fn delete_recipe(Path(recipe_id): Path<i32>, user: User) -> Markup {
 }
 
 pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
-    let recipes = foodlib.recipes().list().await.unwrap_or_default();
+    let (recipes, user_group_ids) = fetch_recipes_and_groups(&foodlib, user.as_ref())
+        .await
+        .unwrap_or_default();
 
     html! {
         div id="recipes" class="w-full"  {
@@ -213,12 +215,11 @@ pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
                     hx-target="#search-results" hx-indicator=".htmx-indicator";
             }
             table class="w-full text-inherit table-auto object-center table-fixed" {
-                // We add extra table headers to account for the buttons
                 thead { tr { th { "ID" } th { "Name" } th { "Comment" }  th {} th {} th {}} }
                     tbody id="search-results"  {
                         (recipe_add_form())
                         @for recipe in recipes.iter() {
-                            (format_recipe(recipe, user.as_ref()))
+                            (format_recipe(recipe, user.as_ref(), &user_group_ids))
                         }
                     }
                 span class="htmx-indicator" {
@@ -247,24 +248,41 @@ struct NewRecipe {
 }
 
 async fn add_recipe(foodlib: FoodLib, user: User, Form(recipe_data): Form<NewRecipe>) -> MResponse {
+    let group = foodlib.users().get_personal_group(user.id).await?;
     let recipe = Recipe {
         id: -1,
         name: recipe_data.name,
         comment: recipe_data.comment,
-        owner_id: user.id,
+        group_id: group.id,
     };
 
     let created_recipe = foodlib.recipes().create(recipe).await?;
     recipes_edit_tab::recipe_edit_view(foodlib, Path(created_recipe.id)).await
 }
 
-// Helper function to check if a user can edit a recipe
-fn can_edit(owner_id: i64, user: &User) -> bool {
-    user.is_admin || user.id == owner_id
+async fn fetch_recipes_and_groups(
+    foodlib: &FoodLib,
+    user: Option<&User>,
+) -> Result<(Vec<Recipe>, Vec<i32>), foodlib_new::Error> {
+    let (recipes, user_group_ids) = match user {
+        Some(u) if u.is_admin => (foodlib.recipes().list().await?, vec![]),
+        Some(u) => {
+            let groups = foodlib.users().get_user_groups(u.id).await?;
+            let ids: Vec<i32> = groups.iter().map(|g| g.id).collect();
+            let recipes = foodlib.recipes().list_for_user(u.id).await?;
+            (recipes, ids)
+        }
+        None => (foodlib.recipes().list().await?, vec![]),
+    };
+    Ok((recipes, user_group_ids))
 }
 
-fn format_recipe(recipe: &Recipe, user: Option<&User>) -> Markup {
-    let can_edit_this = user.map_or(false, |u| can_edit(recipe.owner_id, u));
+fn can_edit(group_id: i32, user_group_ids: &[i32], user: &User) -> bool {
+    user.is_admin || user_group_ids.contains(&group_id)
+}
+
+fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[i32]) -> Markup {
+    let can_edit_this = user.map_or(false, |u| can_edit(recipe.group_id, user_group_ids, u));
     let is_admin = user.map_or(false, |u| u.is_admin);
 
     html! {
