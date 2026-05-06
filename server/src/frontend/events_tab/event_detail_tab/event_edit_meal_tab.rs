@@ -103,7 +103,7 @@ async fn meal_form(
     if meal_id != -1 {
         meal = state
             .meals()
-            .get_meal(dbg!(meal_id))
+            .get_meal(meal_id)
             .await
             .map_err(|e| html_error(&format!("Failed to fetch meal {e}"), "/events"))?;
     }

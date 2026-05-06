@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 axum = ["dep:axum", "dep:maud"]
-typst = ["comemo", "dep:typst", "typst-as-lib", "typst-pdf"]
+typst = ["dep:comemo", "dep:typst", "dep:typst-as-lib", "dep:typst-pdf"]
 
 [dependencies]
 sqlx.workspace = true

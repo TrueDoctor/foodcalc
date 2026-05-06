@@ -10,14 +10,16 @@ static TEMPLATE_FILE: &str = include_str!("../templates/recipe.typ");
 static FONT: &[u8] = include_bytes!("../fonts/LinLibertine_R.ttf");
 
 fn create_pdf(text: String) -> eyre::Result<Vec<u8>> {
-    let font = Font::new(Bytes::from(FONT), 0).expect("Could not parse font!");
-    let template = TypstTemplate::new(vec![font], format!("{TEMPLATE_FILE}\n{text}"));
+    let font = Font::new(Bytes::from(FONT), 0)
+        .ok_or_else(|| eyre::eyre!("Could not parse font"))?;
+    let template = TypstTemplate::new(vec![font], text);
     let doc = template
         .compile()
         .output
-        .expect("typst::compile() returned an error!");
+        .map_err(|e| eyre::eyre!("typst compile error: {e:?}"))?;
     let options = Default::default();
-    let pdf = typst_pdf::pdf(&doc, &options).expect("Could not generate pdf.");
+    let pdf = typst_pdf::pdf(&doc, &options)
+        .map_err(|e| eyre::eyre!("Could not generate pdf: {e:?}"))?;
     Ok(pdf)
 }
 
@@ -78,8 +80,8 @@ fn format_subrecipe(
         writeln!(
             text,
             r#"("title": "{}", "desc":"{}", "duration": ("fix":{:.3},"var":{:.3})),"#,
-            step.name,
-            step.description,
+            escape_typst_string(&step.name),
+            escape_typst_string(&step.description),
             to_minutes(&step.fixed_duration),
             to_minutes(&step.duration_per_kg) * total_weight.to_f64().unwrap_or_default()
         )?;
@@ -90,6 +92,10 @@ fn format_subrecipe(
 
 fn escape_underscore(s: &str) -> String {
     s.replace('_', " ")
+}
+
+fn escape_typst_string(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn to_minutes(duration: &PgInterval) -> f64 {

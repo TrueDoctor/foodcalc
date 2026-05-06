@@ -475,7 +475,7 @@ impl IngredientOps {
                 IngredientSource,
                 r#"
                 SELECT ingredient_source_id as "id", ingredient_id, store_id, package_size, unit_id, price, url, comment
-                FROM ingredient_sources WHERE ingredient_id = $1 ORDER BY ingredient_id
+                FROM ingredient_sources WHERE ingredient_id = $1 ORDER BY ingredient_source_id
                 "#,
                 id
             )

@@ -130,6 +130,9 @@ impl ExportOps {
 
         let recipe_weight = recipe_stats.weight.ok_or_else(|| Error::NotFound { entity: "recipe_stats.weight", id: recipe_id.to_string() })?;
         let recipe_energy = recipe_stats.energy.ok_or_else(|| Error::NotFound { entity: "recipe_stats.energy", id: recipe_id.to_string() })?;
+        if recipe_energy == BigDecimal::from(0) {
+            return Err(Error::Validation { message: format!("recipe {recipe_id} has zero energy") });
+        }
         Ok(recipe_weight / recipe_energy * energy)
     }
 
