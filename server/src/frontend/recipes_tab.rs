@@ -96,6 +96,7 @@ pub async fn export_recipe_pdf(
     let number_of_servings = form.number_of_servings;
 
     let recipe_info = state
+        .export()
         .fetch_user_input_meal(
             recipe_id,
             number_of_servings as f64,
@@ -105,7 +106,7 @@ pub async fn export_recipe_pdf(
         .await?;
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
-    let result = foodlib::typst::export_recipes(recipe_info).await;
+    let result = foodlib_new::typst::export_recipes(recipe_info).await;
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),
@@ -134,6 +135,7 @@ pub async fn shopping_list(
     let number_of_servings = form.number_of_servings;
 
     let subrecipes = state
+        .export()
         .fetch_subrecipes_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
         .await?;
     let shopping_list = subrecipes

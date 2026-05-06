@@ -6,7 +6,6 @@ use axum_login::{
     AuthManagerLayerBuilder,
 };
 use fern::colors::{Color, ColoredLevelConfig};
-use foodlib::FoodBase;
 use sqlx::postgres::PgPool;
 use time::format_description;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -21,14 +20,14 @@ type FoodLib = Extension<foodlib_new::FoodLib>;
 
 #[derive(Clone)]
 pub struct MyAppState {
-    db_connection: FoodBase,
+    pub db: foodlib_new::FoodLib,
 }
 
 impl Deref for MyAppState {
-    type Target = FoodBase;
+    type Target = foodlib_new::FoodLib;
 
     fn deref(&self) -> &Self::Target {
-        &self.db_connection
+        &self.db
     }
 }
 
@@ -87,10 +86,9 @@ async fn main() {
     let backend = AuthBackend::new(Arc::new(pool.clone()));
     let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
 
-    let state = MyAppState {
-        db_connection: FoodBase::new_with_pool(pool),
-    };
-    let new_lib = foodlib_new::FoodLib::from_shared(state.pool_arc());
+    let lib = foodlib_new::FoodLib::new(pool.clone());
+    let state = MyAppState { db: lib.clone() };
+    let new_lib = lib;
 
     // Combine routes with middleware
     let app = Router::new()

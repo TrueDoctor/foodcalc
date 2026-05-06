@@ -8,11 +8,10 @@ edition = "2021"
 
 [features]
 default = []
-typst = ["foodlib/typst"]
+typst = ["foodlib_new/typst"]
 
 [dependencies]
 axum.workspace = true
-foodlib = { path = "../foodlib" }
 foodlib_new = { path = "../foodlib_new", features = ["axum"] }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 mime_guess = "2"

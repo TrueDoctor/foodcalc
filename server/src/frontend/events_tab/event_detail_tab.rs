@@ -101,10 +101,10 @@ pub async fn export_recipe_pdf(
     State(state): State<MyAppState>,
     Path(meal_id): Path<i32>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let recipe_info = state.fetch_meal_recipe(meal_id).await?;
+    let recipe_info = state.export().fetch_meal_recipe(meal_id).await?;
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
-    let result = foodlib::typst::export_recipes(recipe_info).await;
+    let result = foodlib_new::typst::export_recipes(recipe_info).await;
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),
@@ -128,11 +128,11 @@ pub async fn export_food_prep_pdf(
     State(state): State<MyAppState>,
     Path(prep_id): Path<i32>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let recipe_info = state.fetch_food_prep_recipe(prep_id).await?;
+    let recipe_info = state.export().fetch_food_prep_recipe(prep_id).await?;
     let title = format!("{}_prep", recipe_info.name);
 
     #[cfg(feature = "typst")]
-    let result = foodlib::typst::export_recipes(recipe_info).await;
+    let result = foodlib_new::typst::export_recipes(recipe_info).await;
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),

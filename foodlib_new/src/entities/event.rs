@@ -2,6 +2,14 @@ use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+/// A physical location/place where meals are served
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Place {
+    pub id: i32,
+    pub name: String,
+    pub comment: Option<String>,
+}
+
 /// Represents an event (e.g., dinner, party) with associated meals and planning
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Event {

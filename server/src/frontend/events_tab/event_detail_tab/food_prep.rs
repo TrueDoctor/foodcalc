@@ -53,9 +53,9 @@ async fn delete_food_prep_dialog(
     Path((event_id, prep_id)): Path<(i32, i32)>,
 ) -> MResponse {
     // Get food prep details if possible
-    let prep = state.new_lib().events().get_food_prep(prep_id).await?;
+    let prep = state.events().get_food_prep(prep_id).await?;
     // Get recipe name if possible
-    let recipe = state.new_lib().recipes().get(prep.recipe_id).await?;
+    let recipe = state.recipes().get(prep.recipe_id).await?;
     let recipe_name = recipe.name;
     Ok(html! {
         dialog open="true" class="dialog" id="delete" {
@@ -72,12 +72,11 @@ async fn food_prep_form(
     State(state): State<MyAppState>,
     Path((event_id, prep_id)): Path<(i32, i32)>,
 ) -> Markup {
-    let recipes = state.get_recipes().await.unwrap_or_default();
+    let recipes = state.recipes().list().await.unwrap_or_default();
 
     // If prep_id is provided, get existing prep data
     let prep = if prep_id > 0 {
         state
-            .new_lib()
             .events()
             .get_food_prep(prep_id)
             .await
@@ -121,8 +120,8 @@ async fn food_prep_form(
                     select name="recipe_id" class="text" required {
                         option value="" { "Select recipe..." }
                         @for recipe in recipes {
-                            option value=(recipe.recipe_id)
-                                selected[recipe.recipe_id == prep.recipe_id] {
+                            option value=(recipe.id)
+                                selected[recipe.id == prep.recipe_id] {
                                 (recipe.name)
                             }
                         }
