@@ -8,6 +8,8 @@ pub mod auth;
 pub mod entities;
 pub mod error;
 pub mod ops;
+#[cfg(feature = "typst")]
+pub mod typst;
 
 #[derive(Clone)]
 pub struct FoodLib {
@@ -55,5 +57,13 @@ impl FoodLib {
 
     pub fn stores(&self) -> ops::stores::StoreOps {
         ops::stores::StoreOps::new(self.pool.clone())
+    }
+
+    pub fn export(&self) -> ops::export::ExportOps {
+        ops::export::ExportOps::new(self.pool.clone())
+    }
+
+    pub fn pool_arc(&self) -> Arc<PgPool> {
+        self.pool.clone()
     }
 }

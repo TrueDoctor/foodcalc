@@ -45,6 +45,18 @@ pub struct RecipeStats {
     pub energy: BigDecimal,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubRecipe {
+    pub subrecipe_id: i32,
+    pub recipe: String,
+    pub ingredient: String,
+    pub subrecipe: String,
+    pub weight: BigDecimal,
+    pub is_subrecipe: bool,
+    pub recipe_id: i32,
+    pub subrecipe_hierarchy: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedRecipe {
     pub recipe_id: i32,

@@ -58,7 +58,8 @@ pub async fn update_meal(
             .map_err(|_| StatusCode::BAD_REQUEST)?;
     let result = if meal_id != -1 {
         state
-            .update_single_meal(
+            .meals()
+            .update_meal(
                 meal_id,
                 meal.recipe_id,
                 meal.place_id,
@@ -71,6 +72,7 @@ pub async fn update_meal(
             .await
     } else {
         state
+            .meals()
             .add_meal(
                 event_id,
                 meal.recipe_id,
@@ -93,23 +95,26 @@ async fn meal_form(
     state: State<MyAppState>,
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> Result<Markup, Markup> {
-    let mut meal = foodlib::Meal {
+    let mut meal = foodlib_new::entities::meal::Meal {
         name: "Select Recipe".to_string(),
         place: "Select Place".to_string(),
         ..Default::default()
     };
     if meal_id != -1 {
         meal = state
-            .get_event_meal(dbg!(meal_id))
+            .meals()
+            .get_meal(dbg!(meal_id))
             .await
             .map_err(|e| html_error(&format!("Failed to fetch meal {e}"), "/events"))?;
     }
     let mut recipes = state
-        .get_recipes()
+        .recipes()
+        .list()
         .await
         .map_err(|e| html_error(&format!("Failed to fetch recipes {e}"), "/events"))?;
     recipes.sort_by(|a, b| a.name.cmp(&b.name));
     let mut places = state
+        .events()
         .get_places()
         .await
         .map_err(|e| html_error(&format!("Failed to fetch places {e}"), "/events"))?;
@@ -134,7 +139,7 @@ async fn meal_form(
                     td { select name="recipe_id" class="text" required="required" {
                         @for recipe in recipes {
                             (html! {
-                                option value=(recipe.recipe_id) selected { (recipe.name) }
+                                option value=(recipe.id) selected { (recipe.name) }
                             })
                         }
                         (html! {option value=(meal.recipe_id) selected { (meal.name) }})
@@ -145,7 +150,7 @@ async fn meal_form(
                     td { select name="place_id" class="text" required="required" {
                         @for place in places {
                             (html! {
-                                option value=(place.place_id) selected { (place.name) }
+                                option value=(place.id) selected { (place.name) }
                             })
                         }
                         (html! {option value=(meal.place_id) selected { (meal.place) }})

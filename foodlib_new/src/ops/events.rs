@@ -859,4 +859,14 @@ impl EventOps {
 
         Ok(records)
     }
+
+    pub async fn get_places(&self) -> Result<Vec<crate::entities::event::Place>> {
+        let records = sqlx::query_as!(
+            crate::entities::event::Place,
+            r#"SELECT place_id as id, name, comment FROM places ORDER BY name"#
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(records)
+    }
 }
