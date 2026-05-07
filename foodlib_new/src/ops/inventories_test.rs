@@ -11,7 +11,7 @@ async fn test_create_inventory(pool: sqlx::PgPool) {
     let inventory = Inventory {
         id: -1,
         name: "Test Inventory".to_string(),
-        owner_id: 1,
+        group_id: 1,
     };
 
     let created = ops.create(inventory.clone()).await.unwrap();
@@ -32,7 +32,7 @@ async fn test_update_inventory(pool: sqlx::PgPool) {
         .create(Inventory {
             id: -1,
             name: "Test Inventory".to_string(),
-            owner_id: 1,
+            group_id: 1,
         })
         .await
         .unwrap();
@@ -41,7 +41,7 @@ async fn test_update_inventory(pool: sqlx::PgPool) {
         .update(Inventory {
             id: inventory.id,
             name: "Updated Inventory".to_string(),
-            owner_id: 1,
+            group_id: 1,
         })
         .await
         .unwrap();
@@ -62,7 +62,7 @@ async fn test_delete_inventory(pool: sqlx::PgPool) {
         .create(Inventory {
             id: -1,
             name: "To Delete".to_string(),
-            owner_id: 1,
+            group_id: 1,
         })
         .await
         .unwrap();

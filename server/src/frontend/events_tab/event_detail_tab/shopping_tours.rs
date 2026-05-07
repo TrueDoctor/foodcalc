@@ -4,7 +4,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use bigdecimal::BigDecimal;
-use foodlib_new::{error::Result, inventory::InventoryItemWithName};
+use foodlib_new::{auth_context::AuthCtx, error::Result, inventory::InventoryItemWithName};
 use foodlib_new::{
     event::{ShoppingListItem, ShoppingTour},
     inventory::InventoryItem,
@@ -49,21 +49,33 @@ struct ToggleForm {
     tour_id: i32,
 }
 
-async fn add_shopping_tour(state: State<MyAppState>, Path(event_id): Path<i32>) -> MResponse {
-    shopping_tour_form(state, Path((event_id, -1))).await
+async fn add_shopping_tour(
+    state: State<MyAppState>,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    shopping_tour_form(state, ctx, Path((event_id, -1))).await
 }
-async fn delete_shopping_tour(state: State<MyAppState>, Path(tour_id): Path<i32>) -> MResponse {
-    state
-        .events()
-        .delete_shopping_tour(tour_id)
-        .await?;
+async fn delete_shopping_tour(
+    state: State<MyAppState>,
+    ctx: AuthCtx,
+    Path(tour_id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    state.events().delete_shopping_tour(tour_id).await?;
     Ok(html! {})
 }
 
 async fn shopping_tour_form(
     State(state): State<MyAppState>,
+    ctx: AuthCtx,
     Path((event_id, tour_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    if tour_id > 0 {
+        ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    }
     let stores = state.stores().list().await?;
     let inventories = state.inventories().list().await?;
 
@@ -248,7 +260,17 @@ async fn inventory_items(
     inventory_items
 }
 
-async fn save_tour(foodlib: FoodLib, Form(form): Form<TourForm>) -> MResponse {
+async fn save_tour(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Form(form): Form<TourForm>,
+) -> MResponse {
+    ctx.assert_can_edit_event(form.event_id).await?;
+    if let Some(tour_id) = form.tour_id {
+        if tour_id > 0 {
+            ctx.assert_can_edit_shopping_tour(tour_id).await?;
+        }
+    }
     // Parse the date
     let primitive_date = time::PrimitiveDateTime::parse(
         &form.date,
@@ -290,7 +312,7 @@ async fn save_tour(foodlib: FoodLib, Form(form): Form<TourForm>) -> MResponse {
 
     // Redirect back to event edit page
     Ok(html! {
-        (event_detail_tab::event_form(foodlib, Path(form.event_id)).await?)
+        (event_detail_tab::event_form(foodlib, ctx, Path(form.event_id)).await?)
     })
 }
 
@@ -334,7 +356,12 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithN
     }
 }
 
-async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> IResponse {
+async fn export_plain(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(tour_id): Path<i32>,
+) -> IResponse {
+    ctx.assert_can_edit_shopping_tour(tour_id).await?;
     let shopping_list = state.events().get_shopping_list(tour_id).await?;
     let tour = state.events().get_shopping_tour(tour_id).await?;
 
@@ -390,7 +417,12 @@ async fn export_plain(State(state): State<MyAppState>, Path(tour_id): Path<i32>)
     )))
 }
 
-async fn export_metro(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> IResponse {
+async fn export_metro(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(tour_id): Path<i32>,
+) -> IResponse {
+    ctx.assert_can_edit_shopping_tour(tour_id).await?;
     let shopping_list = state.events().get_shopping_list(tour_id).await?;
     let sources = state.ingredients().list_sources(None).await?;
 
@@ -453,19 +485,26 @@ fn calculate_subtraction(available: &BigDecimal, remaining: &BigDecimal) -> BigD
 
 async fn toggle_inventory(
     State(state): State<MyAppState>,
+    ctx: AuthCtx,
     Path((event_id, inventory_id)): Path<(i32, i32)>,
     Form(form): Form<ToggleForm>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
     if form.checked {
         state.events().add_inventory(event_id, inventory_id).await?;
     } else {
         state.events().remove_inventory(event_id, inventory_id).await?;
     };
 
-    shopping_tour_form(State(state), Path((event_id, form.tour_id))).await
+    shopping_tour_form(State(state), ctx, Path((event_id, form.tour_id))).await
 }
 
-async fn update_inventory(foodlib: FoodLib, Path(tour_id): Path<i32>) -> MResponse {
+async fn update_inventory(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(tour_id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_shopping_tour(tour_id).await?;
     let changes = calculate_inventory_changes(&foodlib.0, tour_id).await?;
     let tour = foodlib.events().get_shopping_tour(tour_id).await?;
 
@@ -481,7 +520,7 @@ async fn update_inventory(foodlib: FoodLib, Path(tour_id): Path<i32>) -> MRespon
     }
 
     // Redirect back to event page
-    event_detail_tab::event_form(foodlib, Path(tour.event_id)).await
+    event_detail_tab::event_form(foodlib, ctx, Path(tour.event_id)).await
 }
 
 /// Calculate inventory changes showing what will be deducted from each inventory
@@ -540,7 +579,12 @@ async fn calculate_inventory_changes(
     Ok(changes)
 }
 
-async fn confirm_update(State(state): State<MyAppState>, Path(tour_id): Path<i32>) -> Markup {
+async fn confirm_update(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(tour_id): Path<i32>,
+) -> Result<Markup> {
+    ctx.assert_can_edit_shopping_tour(tour_id).await?;
     let lib = &state.db;
 
     // Calculate expected changes
@@ -548,7 +592,7 @@ async fn confirm_update(State(state): State<MyAppState>, Path(tour_id): Path<i32
 
     let tour = lib.events().get_shopping_tour(tour_id).await.unwrap();
 
-    html! {
+    Ok(html! {
         div class="flex flex-col space-y-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg" {
             h3 class="text-xl text-red-600 dark:text-red-400" { "Warning!" }
             p class="text-gray-700 dark:text-gray-300 mb-4" {
@@ -601,5 +645,5 @@ async fn confirm_update(State(state): State<MyAppState>, Path(tour_id): Path<i32
                 }
             }
         }
-    }
+    })
 }

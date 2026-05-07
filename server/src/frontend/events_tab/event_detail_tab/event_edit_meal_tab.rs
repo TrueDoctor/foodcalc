@@ -8,6 +8,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use bigdecimal::BigDecimal;
+use foodlib_new::auth_context::AuthCtx;
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
@@ -32,18 +33,26 @@ pub struct MealForm {
 
 pub async fn delete_meal(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_can_edit_meal(meal_id).await?;
     foodlib.meals().remove_meal(meal_id).await?;
-    event_detail_tab::event_form(foodlib, Path(event_id)).await
+    event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
 }
 
 pub async fn update_meal(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     state: State<MyAppState>,
     Path((event_id, meal_id)): Path<(i32, i32)>,
     Form(meal): Form<MealForm>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    if meal_id != -1 {
+        ctx.assert_can_edit_meal(meal_id).await?;
+    }
     let append_start = format!("{}:00-00:00", meal.start_time);
     let start_time = OffsetDateTime::parse(
         &append_start,
@@ -86,15 +95,24 @@ pub async fn update_meal(
             .await
     };
     match result {
-        Ok(_) => event_detail_tab::event_form(foodlib, Path(event_id)).await,
+        Ok(_) => event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await,
         Err(e) => Err(e.into()),
     }
 }
 
 async fn meal_form(
     state: State<MyAppState>,
+    ctx: AuthCtx,
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> Result<Markup, Markup> {
+    ctx.assert_can_edit_event(event_id)
+        .await
+        .map_err(|e| html_error(&format!("{e}"), "/events"))?;
+    if meal_id != -1 {
+        ctx.assert_can_edit_meal(meal_id)
+            .await
+            .map_err(|e| html_error(&format!("{e}"), "/events"))?;
+    }
     let mut meal = foodlib_new::entities::meal::Meal {
         name: "Select Recipe".to_string(),
         place: "Select Place".to_string(),

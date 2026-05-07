@@ -7,7 +7,7 @@ pub struct Ingredient {
     pub name: String,
     pub energy: BigDecimal,
     pub comment: Option<String>,
-    pub owner_id: i64,
+    pub group_id: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -16,7 +16,7 @@ pub struct IngredientWithSource {
     pub name: String,
     pub energy: BigDecimal,
     pub comment: Option<String>,
-    pub owner_id: i64,
+    pub group_id: i32,
     pub has_sources: bool,
 }
 
@@ -27,14 +27,14 @@ impl From<Ingredient> for IngredientWithSource {
             name,
             energy,
             comment,
-            owner_id,
+            group_id,
         } = value;
         Self {
             id,
             name,
             energy,
             comment,
-            owner_id,
+            group_id,
             has_sources: false,
         }
     }

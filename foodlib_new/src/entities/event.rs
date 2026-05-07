@@ -17,7 +17,7 @@ pub struct Event {
     pub name: String,
     pub comment: Option<String>,
     pub budget: Option<BigDecimal>,
-    pub owner_id: i64,
+    pub group_id: i32,
 }
 
 impl Default for Event {
@@ -27,7 +27,7 @@ impl Default for Event {
             name: "Test Event".to_string(),
             comment: Some("Test comment".to_string()),
             budget: None,
-            owner_id: -1,
+            group_id: -1,
         }
     }
 }

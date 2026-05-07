@@ -31,9 +31,9 @@ impl MealOps {
                 places.name as "place!",
                 event_meals.start_time,
                 event_meals.end_time,
-                round(sum(event_ingredients.weight), 2) as "weight!",
-                round(sum(event_ingredients.energy) / event_meals.servings, 0) as "energy!",
-                sum(event_ingredients.price) as "price!",
+                COALESCE(round(sum(event_ingredients.weight), 2), 0) as "weight!",
+                COALESCE(round(sum(event_ingredients.energy) / event_meals.servings, 0), 0) as "energy!",
+                COALESCE(sum(event_ingredients.price), 0) as "price!",
                 event_meals.servings,
                 event_meals.comment
             FROM event_meals
@@ -66,9 +66,9 @@ impl MealOps {
                 places.name as "place!",
                 event_meals.start_time,
                 event_meals.end_time,
-                round(sum(event_ingredients.weight), 2) as "weight!",
-                round(sum(event_ingredients.energy) / event_meals.servings, 0) as "energy!",
-                sum(event_ingredients.price) as "price!",
+                COALESCE(round(sum(event_ingredients.weight), 2), 0) as "weight!",
+                COALESCE(round(sum(event_ingredients.energy) / event_meals.servings, 0), 0) as "energy!",
+                COALESCE(sum(event_ingredients.price), 0) as "price!",
                 event_meals.comment,
                 event_meals.servings
             FROM event_meals

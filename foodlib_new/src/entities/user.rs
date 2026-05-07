@@ -28,6 +28,7 @@ impl Default for User {
 pub struct Group {
     pub id: i32,
     pub name: String,
+    pub is_personal: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

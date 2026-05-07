@@ -4,13 +4,13 @@ use axum::{
     extract::{Form, Path, State},
     routing::{delete, get, post},
 };
-use foodlib_new::{event::FoodPrep, recipe::Recipe};
+use foodlib_new::{auth_context::AuthCtx, event::FoodPrep, recipe::Recipe};
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
 use crate::{
-    frontend::{events_tab::event_detail_tab, MResponse},
+    frontend::{events_tab::event_detail_tab, html_error, MResponse},
     FoodLib, MyAppState,
 };
 
@@ -36,22 +36,32 @@ struct FoodPrepForm {
     use_until: String,
 }
 
-async fn add_food_prep(state: State<MyAppState>, Path(event_id): Path<i32>) -> Markup {
-    food_prep_form(state, Path((event_id, -1))).await
+async fn add_food_prep(
+    state: State<MyAppState>,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+) -> Result<Markup, Markup> {
+    food_prep_form(state, ctx, Path((event_id, -1))).await
 }
 
 async fn delete_food_prep(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path((event_id, prep_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_can_edit_food_prep(prep_id).await?;
     foodlib.events().delete_food_prep(prep_id).await?;
-    event_detail_tab::event_form(foodlib, Path(event_id)).await
+    event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
 }
 
 async fn delete_food_prep_dialog(
     state: State<MyAppState>,
+    ctx: AuthCtx,
     Path((event_id, prep_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_can_edit_food_prep(prep_id).await?;
     // Get food prep details if possible
     let prep = state.events().get_food_prep(prep_id).await?;
     // Get recipe name if possible
@@ -70,8 +80,17 @@ async fn delete_food_prep_dialog(
 
 async fn food_prep_form(
     State(state): State<MyAppState>,
+    ctx: AuthCtx,
     Path((event_id, prep_id)): Path<(i32, i32)>,
-) -> Markup {
+) -> Result<Markup, Markup> {
+    ctx.assert_can_edit_event(event_id)
+        .await
+        .map_err(|e| html_error(&format!("{e}"), "/events"))?;
+    if prep_id > 0 {
+        ctx.assert_can_edit_food_prep(prep_id)
+            .await
+            .map_err(|e| html_error(&format!("{e}"), "/events"))?;
+    }
     let recipes = state.recipes().list().await.unwrap_or_default();
 
     // If prep_id is provided, get existing prep data
@@ -101,7 +120,7 @@ async fn food_prep_form(
 
     let time_format = format_description!("[year]-[month]-[day]T[hour]:[minute]");
 
-    html! {
+    Ok(html! {
         div class="flex-col space-y-4 w-full" {
             h2 class="text-xl" {
                 @if prep_id > 0 {
@@ -169,10 +188,20 @@ async fn food_prep_form(
                 }
             }
         }
-    }
+    })
 }
 
-async fn save_food_prep(foodlib: FoodLib, Form(form): Form<FoodPrepForm>) -> MResponse {
+async fn save_food_prep(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Form(form): Form<FoodPrepForm>,
+) -> MResponse {
+    ctx.assert_can_edit_event(form.event_id).await?;
+    if let Some(prep_id) = form.prep_id {
+        if prep_id > 0 {
+            ctx.assert_can_edit_food_prep(prep_id).await?;
+        }
+    }
     // Parse dates
     let date_format = format_description!("[year]-[month]-[day]T[hour]:[minute]");
 
@@ -222,7 +251,7 @@ async fn save_food_prep(foodlib: FoodLib, Form(form): Form<FoodPrepForm>) -> MRe
         }
     }
 
-    event_detail_tab::event_form(foodlib, Path(form.event_id)).await
+    event_detail_tab::event_form(foodlib, ctx, Path(form.event_id)).await
 }
 
 fn format_food_prep(event_id: i32, prep: &FoodPrep, recipe: &Recipe) -> Markup {

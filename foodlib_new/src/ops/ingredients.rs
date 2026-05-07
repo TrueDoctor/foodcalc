@@ -19,14 +19,14 @@ impl IngredientOps {
         let row = sqlx::query_as!(
             Ingredient,
             r#"
-            INSERT INTO ingredients (name, energy, comment, owner_id)
+            INSERT INTO ingredients (name, energy, comment, group_id)
             VALUES ($1, $2, $3, $4)
-            RETURNING ingredient_id as "id", name, energy, comment, owner_id
+            RETURNING ingredient_id as "id", name, energy, comment, group_id
             "#,
             ingredient.name,
             ingredient.energy,
             ingredient.comment,
-            ingredient.owner_id,
+            ingredient.group_id,
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -42,7 +42,7 @@ impl IngredientOps {
                 ingredient_id as "id", 
                 name, 
                 energy, 
-                owner_id,
+                group_id,
                 comment 
             FROM ingredients 
             WHERE ingredient_id = $1
@@ -63,7 +63,7 @@ impl IngredientOps {
                 ingredient_id as "id", 
                 name, 
                 energy, 
-                owner_id,
+                group_id,
                 comment 
             FROM ingredients 
             WHERE name = $1
@@ -85,7 +85,7 @@ impl IngredientOps {
             SELECT 
                 recipe_id as "id", 
                 name, 
-                owner_id,
+                group_id,
                 comment 
             FROM recipes JOIN recipe_ingredients USING(recipe_id)
             WHERE ingredient_id = $1
@@ -105,7 +105,7 @@ impl IngredientOps {
             UPDATE ingredients
             SET name = $1, energy = $2, comment = $3
             WHERE ingredient_id = $4
-            RETURNING ingredient_id as "id", name, energy, comment, owner_id
+            RETURNING ingredient_id as "id", name, energy, comment, group_id
             "#,
             ingredient.name,
             ingredient.energy,
@@ -116,6 +116,17 @@ impl IngredientOps {
         .await?;
 
         Ok(row)
+    }
+
+    pub async fn set_group(&self, ingredient_id: i32, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE ingredients SET group_id = $1 WHERE ingredient_id = $2"#,
+            group_id,
+            ingredient_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn delete(&self, id: i32) -> Result<()> {
@@ -160,6 +171,45 @@ impl IngredientOps {
         Ok(())
     }
 
+    /// Lists ingredients whose group the user belongs to
+    pub async fn list_for_user(&self, user_id: i64) -> Result<Vec<Ingredient>> {
+        let rows = sqlx::query_as!(
+            Ingredient,
+            r#"
+            SELECT ingredient_id as "id", name, energy, group_id, comment
+            FROM ingredients
+            WHERE group_id IN (
+                SELECT group_id FROM user_groups WHERE user_id = $1
+            )
+            ORDER BY name
+            "#,
+            user_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn list_with_sources_for_user(&self, user_id: i64) -> Result<Vec<IngredientWithSource>> {
+        let rows = sqlx::query_as!(
+            IngredientWithSource,
+            r#"
+            SELECT
+                ingredient_id as "id", name, energy, group_id, comment,
+                exists (select * from ingredient_sources as iss where iss.ingredient_id = ingredients.ingredient_id) as "has_sources!"
+            FROM ingredients
+            WHERE group_id IN (
+                SELECT group_id FROM user_groups WHERE user_id = $1
+            )
+            ORDER BY name
+            "#,
+            user_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(rows)
+    }
+
     pub async fn list(&self) -> Result<Vec<Ingredient>> {
         let rows = sqlx::query_as!(
             Ingredient,
@@ -168,7 +218,7 @@ impl IngredientOps {
                 ingredient_id as "id", 
                 name, 
                 energy, 
-                owner_id,
+                group_id,
                 comment 
             FROM ingredients 
             ORDER BY ingredient_id
@@ -188,7 +238,7 @@ impl IngredientOps {
                 ingredient_id as "id", 
                 name, 
                 energy, 
-                owner_id,
+                group_id,
                 comment,
                 exists (select * from ingredient_sources as iss where iss.ingredient_id = ingredients.ingredient_id) as "has_sources!" 
             FROM ingredients 
