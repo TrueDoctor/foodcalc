@@ -322,7 +322,7 @@ async fn move_ingredient_dialog(
         &ctx,
         ingredient.group_id,
         &format!("/ingredients/move/{id}"),
-        "#ingredients",
+        "#content",
     )
     .await?;
     Ok(html! {

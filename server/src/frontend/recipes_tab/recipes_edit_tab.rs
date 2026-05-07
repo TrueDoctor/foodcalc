@@ -397,7 +397,7 @@ pub async fn recipe_edit_view(
         &ctx,
         recipe.group_id,
         &format!("/recipes/edit/move-group/{recipe_id}"),
-        "#contents",
+        "#content",
     )
     .await?;
 

@@ -280,7 +280,7 @@ async fn handle_move_inventory_dialog(
         &ctx,
         inventory.group_id,
         &format!("/inventories/move/{id}"),
-        "#inventories",
+        "#content",
     )
     .await?;
     Ok(html! {

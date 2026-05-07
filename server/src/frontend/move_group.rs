@@ -39,7 +39,7 @@ pub async fn move_panel(
                 form class="flex flex-row items-center gap-2"
                     hx-post=(endpoint)
                     hx-target=(target_id)
-                    hx-swap="outerHTML" {
+                    hx-swap="innerHTML" {
                     select class="fc-select" name="group_id" required="required" {
                         option value="" { "Move to..." }
                         @for g in &candidates {
