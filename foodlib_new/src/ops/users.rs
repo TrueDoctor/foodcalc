@@ -83,6 +83,67 @@ impl UserOps {
         Ok(())
     }
 
+    /// Deletes a user and their personal group, plus all their group memberships.
+    /// Refuses if the user's personal group still owns any recipes, ingredients,
+    /// inventories, or events.
+    pub async fn delete_user_cascade(&self, id: i64) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        let personal_group_id = sqlx::query_scalar!(
+            r#"
+            SELECT g.id
+            FROM user_groups ug
+            JOIN groups g ON g.id = ug.group_id
+            WHERE ug.user_id = $1 AND g.is_personal = TRUE
+            "#,
+            id
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        if let Some(group_id) = personal_group_id {
+            let owned_count = sqlx::query_scalar!(
+                r#"
+                SELECT
+                    (SELECT COUNT(*) FROM recipes WHERE group_id = $1)
+                  + (SELECT COUNT(*) FROM ingredients WHERE group_id = $1)
+                  + (SELECT COUNT(*) FROM inventories WHERE group_id = $1)
+                  + (SELECT COUNT(*) FROM events WHERE group_id = $1)
+                "#,
+                group_id
+            )
+            .fetch_one(&mut *tx)
+            .await?
+            .unwrap_or(0);
+
+            if owned_count > 0 {
+                return Err(Error::Conflict {
+                    message: format!(
+                        "Cannot delete user: their personal group still owns {owned_count} entities. \
+                         Reassign or delete them first."
+                    ),
+                });
+            }
+        }
+
+        sqlx::query!(r#"DELETE FROM user_groups WHERE user_id = $1"#, id)
+            .execute(&mut *tx)
+            .await?;
+
+        if let Some(group_id) = personal_group_id {
+            sqlx::query!(r#"DELETE FROM groups WHERE id = $1"#, group_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+
+        sqlx::query!(r#"DELETE FROM users WHERE id = $1"#, id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn get_user(&self, id: i64) -> Result<User> {
         let row = sqlx::query_as!(
             User,

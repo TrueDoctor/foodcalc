@@ -109,6 +109,17 @@ impl RecipeOps {
         Ok(record)
     }
 
+    pub async fn set_group(&self, recipe_id: i32, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE recipes SET group_id = $1 WHERE recipe_id = $2"#,
+            group_id,
+            recipe_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn delete(&self, id: i32) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 

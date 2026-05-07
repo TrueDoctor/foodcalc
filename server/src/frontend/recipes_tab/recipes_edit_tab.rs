@@ -5,6 +5,7 @@ use axum::{
 };
 use bigdecimal::BigDecimal;
 use foodlib_new::{
+    auth_context::AuthCtx,
     recipe::{RecipeIngredient, RecipeMetaIngredient, RecipeStep},
     unit::Unit,
 };
@@ -12,7 +13,10 @@ use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgInterval;
 
-use crate::{frontend::MResponse, MyAppState};
+use crate::{
+    frontend::{move_group, MResponse},
+    MyAppState,
+};
 
 pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -40,6 +44,24 @@ pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
         .route("/change-name", put(handle_name_change))
         .route("/change-step", put(handle_step_change))
         .route("/change-step-order", put(handle_step_order_change))
+        .route("/move-group/{recipe_id}", axum::routing::post(handle_move_group))
+}
+
+#[derive(Deserialize)]
+pub struct MoveGroupForm {
+    pub group_id: i32,
+}
+
+async fn handle_move_group(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(recipe_id): Path<i32>,
+    Form(form): Form<MoveGroupForm>,
+) -> MResponse {
+    ctx.assert_can_edit_recipe(recipe_id).await?;
+    move_group::assert_can_move_to(&ctx, form.group_id)?;
+    foodlib.recipes().set_group(recipe_id, form.group_id).await?;
+    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
 #[derive(Deserialize, Debug)]
@@ -124,8 +146,10 @@ fn pg_interval_from_minutes(minutes: f64) -> PgInterval {
 
 pub async fn handle_name_change(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(data): Form<UpdateNameHeader>,
 ) -> Result<(), foodlib_new::Error> {
+    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     foodlib
         .recipes()
         .update(foodlib_new::recipe::Recipe {
@@ -140,8 +164,10 @@ pub async fn handle_name_change(
 
 pub async fn handle_ingredient_change(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let recipe_ingredient = foodlib.recipes().update_ingredient(data.into()).await?;
 
     Ok(recipe_ingredient.format_for_ingredient_table(
@@ -152,8 +178,10 @@ pub async fn handle_ingredient_change(
 
 pub async fn handle_subrecipe_change(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let sub_recipe = foodlib
         .recipes()
         .update_meta_ingredient(data.into())
@@ -164,8 +192,10 @@ pub async fn handle_subrecipe_change(
 
 pub async fn handle_step_change(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let recipe_id = data.recipe_id;
     let step = foodlib.recipes().update_step(data.into()).await?;
 
@@ -174,51 +204,61 @@ pub async fn handle_step_change(
 
 pub async fn handle_step_order_change(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let recipe_id = data.recipe_id;
     foodlib.recipes().update_step(data.into()).await?;
 
-    recipe_edit_view(foodlib, Path(recipe_id)).await
+    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_ingredient_delete(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path((recipe_id, ingredient_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(recipe_id).await?;
     foodlib
         .recipes()
         .delete_ingredient(recipe_id, ingredient_id)
         .await?;
 
-    recipe_edit_view(foodlib, Path(recipe_id)).await
+    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_subrecipe_delete(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path((recipe_id, subrecipe_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(recipe_id).await?;
     foodlib
         .recipes()
         .delete_meta_ingredient(recipe_id, subrecipe_id)
         .await?;
 
-    recipe_edit_view(foodlib, Path(recipe_id)).await
+    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_step_delete(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path((recipe_id, step_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(recipe_id).await?;
     foodlib.recipes().delete_step(recipe_id, step_id).await?;
 
-    recipe_edit_view(foodlib, Path(recipe_id)).await
+    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_ingredient_add(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(mut data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let ingredient = foodlib
         .ingredients()
         .get_by_name(&data.ingredient_name)
@@ -228,31 +268,40 @@ pub async fn handle_ingredient_add(
     data.ingredient_id = ingredient.id;
     foodlib.recipes().add_ingredient(data.into()).await?;
 
-    recipe_edit_view(foodlib, Path(recipe_id)).await
+    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_subrecipe_add(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(mut data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let subrecipe = foodlib.recipes().get_by_name(&data.subrecipe_name).await?;
     let recipe_id = data.recipe_id;
     data.subrecipe_id = subrecipe.id;
     foodlib.recipes().add_meta_ingredient(data.into()).await?;
 
-    recipe_edit_view(foodlib, Path(recipe_id)).await
+    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_step_add(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
+    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let recipe_id = data.recipe_id;
     foodlib.recipes().add_step(data.into()).await?;
-    recipe_edit_view(foodlib, Path(recipe_id)).await
+    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
-pub async fn add_ingredient_form(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+pub async fn add_ingredient_form(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(recipe_id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_recipe(recipe_id).await?;
     let ingredients = foodlib.ingredients().list().await?;
     let unit_types = foodlib.units().list().await?;
 
@@ -280,7 +329,12 @@ pub async fn add_ingredient_form(foodlib: FoodLib, Path(recipe_id): Path<i32>) -
     })
 }
 
-pub async fn add_subrecipe_form(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+pub async fn add_subrecipe_form(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(recipe_id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_recipe(recipe_id).await?;
     let subrecipes = foodlib.recipes().list().await?;
 
     Ok(html! {
@@ -320,7 +374,12 @@ pub async fn add_step_form(Path(recipe_id): Path<i32>) -> Markup {
     }
 }
 
-pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+pub async fn recipe_edit_view(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(recipe_id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_recipe(recipe_id).await?;
     let subrecipes = foodlib.recipes().get_meta_ingredients(recipe_id).await?;
 
     let ingredients = foodlib.recipes().get_ingredients(recipe_id).await?;
@@ -333,6 +392,14 @@ pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> M
         .await
         .unwrap_or_default();
     let recipe = foodlib.recipes().get(recipe_id).await?;
+    let move_panel = move_group::move_panel(
+        &foodlib,
+        &ctx,
+        recipe.group_id,
+        &format!("/recipes/edit/move-group/{recipe_id}"),
+        "#contents",
+    )
+    .await?;
 
     Ok(html! {
         div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full"{
@@ -343,6 +410,8 @@ pub async fn recipe_edit_view(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> M
                     textarea class="text" name="comment" { (recipe.comment.unwrap_or_default()) }
                     button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
             }
+
+            (move_panel)
 
             div class="w-3/4 bg-blue-100 dark:bg-blue-900 p-4 mb-4 rounded-lg" {
                 div class="flex justify-between items-center" {

@@ -5,6 +5,7 @@ use axum::routing::{delete, get, post};
 use axum_login::login_required;
 use bigdecimal::BigDecimal;
 use foodlib_new::auth::AuthBackend;
+use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::ingredient::IngredientWithSource;
 use foodlib_new::user::User;
 use foodlib_new::{
@@ -17,7 +18,7 @@ use num::{FromPrimitive, ToPrimitive};
 use serde::Deserialize;
 
 use super::{IResponse, MResponse};
-use crate::frontend::LOGIN_URL;
+use crate::frontend::{move_group, LOGIN_URL};
 use crate::MyAppState;
 
 pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
@@ -26,6 +27,8 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
         .route("/sources/{ingredient}/{source}", post(update_source))
         .route("/{id}", delete(delete_ingredient))
         .route("/edit", get(edit_ingredient_form))
+        .route("/move/{id}", get(move_ingredient_dialog))
+        .route("/move/{id}", post(move_ingredient))
         .route("/delete/{id}", get(delete_ingredient_form))
         .route(
             "/sources/delete/{ingredient_id}/{source_id}",
@@ -256,6 +259,12 @@ pub async fn edit_ingredient_form(Form(ingredient): Form<IngredientWithSource>) 
                     input class="text grow" type="text" name="comment" placeholder="Comment" value=(ingredient.comment.as_ref().unwrap_or(&String::new()));
                     input class="text" type="hidden" name="id" value=(ingredient.id);
                     button class="btn btn-primary" hx-include=(format!("closest #ingredient-{}", id)) hx-post="/ingredients" hx-target=(format!("#ingredient-{}", id)) hx-swap="outerHTML" { "Submit" }
+                    @if id > 0 {
+                        button class="btn btn-primary" type="button"
+                            hx-get=(format!("/ingredients/move/{id}"))
+                            hx-target="body"
+                            hx-swap="beforeend" { "Move" }
+                    }
                     button class="btn btn-cancel" hx-get="/ingredients" hx-target="#content" { "Cancel" }
                 }
             }
@@ -287,6 +296,49 @@ async fn delete_ingredient_form(foodlib: FoodLib, user: User, id: Path<i32>) -> 
             }
         }
     })
+}
+
+async fn move_ingredient_dialog(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_ingredient(id).await?;
+    let ingredient = foodlib.ingredients().get(id).await?;
+    let panel = move_group::move_panel(
+        &foodlib,
+        &ctx,
+        ingredient.group_id,
+        &format!("/ingredients/move/{id}"),
+        "#move-dialog",
+    )
+    .await?;
+    Ok(html! {
+        dialog open="true" class="dialog" id="move-dialog" {
+            div class="flex flex-col w-full m-2 gap-2" {
+                p class="text-lg font-semibold" { "Move \"" (ingredient.name) "\"" }
+                (panel)
+                button class="btn btn-abort" hx-on:click="document.getElementById('move-dialog').remove()" { "Cancel" }
+            }
+        }
+    })
+}
+
+#[derive(Deserialize)]
+struct MoveIngredientForm {
+    group_id: i32,
+}
+
+async fn move_ingredient(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+    Form(form): Form<MoveIngredientForm>,
+) -> MResponse {
+    ctx.assert_can_edit_ingredient(id).await?;
+    move_group::assert_can_move_to(&ctx, form.group_id)?;
+    foodlib.ingredients().set_group(id, form.group_id).await?;
+    Ok(ingredients_view(foodlib, Some(ctx.user)).await)
 }
 
 async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> MResponse {

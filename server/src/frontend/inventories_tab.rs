@@ -1,12 +1,13 @@
 use crate::FoodLib;
 use axum::{
-    extract::Form,
-    routing::{get, put},
+    extract::{Form, Path},
+    routing::{get, post, put},
 };
 use axum_login::login_required;
 use bigdecimal::BigDecimal;
 use foodlib_new::{
     auth::AuthBackend,
+    auth_context::AuthCtx,
     ingredient::Ingredient,
     inventory::{Inventory, InventoryItem, InventoryItemWithName},
     user::User,
@@ -15,7 +16,7 @@ use maud::{html, Markup};
 use serde::Deserialize;
 
 use super::MResponse;
-use crate::frontend::LOGIN_URL;
+use crate::frontend::{move_group, LOGIN_URL};
 use crate::MyAppState;
 
 pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
@@ -27,6 +28,8 @@ pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
         .route("/select", put(handle_select))
         .route("/manage", put(handle_manage))
         .route("/delete-inventory", put(handle_delete_inventory))
+        .route("/move-inventory", put(handle_move_inventory_dialog))
+        .route("/move/{id}", post(handle_move_inventory))
         .route("/add-ingredient", put(add_ingredient_form))
         .route("/commit-ingredient", put(handle_ingredient_commit))
         .route("/delete-ingredient", put(handle_ingredient_delete))
@@ -114,8 +117,10 @@ impl From<UpdateInventoryItemData> for InventoryItem {
 
 async fn handle_ingredient_change(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(data): Form<UpdateInventoryItemData>,
 ) -> MResponse {
+    ctx.assert_can_edit_inventory(data.inventory_id).await?;
     let item: InventoryItem = data.clone().into();
     let updated = foodlib.inventories().update_item(item).await?;
 
@@ -137,8 +142,10 @@ async fn handle_ingredient_change(
 
 async fn handle_ingredient_delete(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(data): Form<UpdateInventoryItemData>,
 ) -> MResponse {
+    ctx.assert_can_edit_inventory(data.inventory_id).await?;
     foodlib
         .inventories()
         .delete_item(data.inventory_id, data.ingredient_id)
@@ -149,8 +156,10 @@ async fn handle_ingredient_delete(
 
 async fn handle_ingredient_commit(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Form(data): Form<InventoryItemData>,
 ) -> MResponse {
+    ctx.assert_can_edit_inventory(data.inventory_id).await?;
     // Try to find the ingredient by name
     let Ok(ingredient) = foodlib
         .ingredients()
@@ -212,15 +221,16 @@ fn add_ingredient_form_with_header_data(header_data: InventoryHeaderData) -> Mar
 
 pub async fn commit_inventory(
     foodlib: FoodLib,
-    user: User,
+    ctx: AuthCtx,
     Form(mut inventory): Form<Inventory>,
 ) -> MResponse {
     if inventory.id < 0 {
-        let group = foodlib.users().get_personal_group(user.id).await?;
+        let group = foodlib.users().get_personal_group(ctx.user.id).await?;
         inventory.group_id = group.id;
         let inventory_id = foodlib.inventories().create(inventory).await?;
         manage_inventory_form(foodlib, inventory_id.id).await
     } else {
+        ctx.assert_can_edit_inventory(inventory.id).await?;
         let id = inventory.id;
         foodlib.inventories().update(inventory).await?;
         manage_inventory_form(foodlib, id).await
@@ -237,10 +247,68 @@ pub async fn handle_add_inventory(_user: User) -> Markup {
 
 pub async fn handle_delete_inventory(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     data: Form<InventoryHeaderData>,
 ) -> MResponse {
+    ctx.assert_can_edit_inventory(data.inventory_id).await?;
     foodlib.inventories().delete(data.inventory_id).await?;
     select_inventory_form(foodlib).await
+}
+
+async fn handle_move_inventory_dialog(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    data: Form<InventoryHeaderData>,
+) -> MResponse {
+    let id = data.inventory_id;
+    if id <= 0 {
+        return Err(foodlib_new::Error::Validation {
+            message: "Select an inventory first".into(),
+        });
+    }
+    ctx.assert_can_edit_inventory(id).await?;
+    let inventories = foodlib.inventories().list().await?;
+    let inventory = inventories
+        .into_iter()
+        .find(|i| i.id == id)
+        .ok_or(foodlib_new::Error::NotFound {
+            entity: "Inventory",
+            id: id.to_string(),
+        })?;
+    let panel = move_group::move_panel(
+        &foodlib,
+        &ctx,
+        inventory.group_id,
+        &format!("/inventories/move/{id}"),
+        "#move-dialog",
+    )
+    .await?;
+    Ok(html! {
+        dialog open="true" class="dialog" id="move-dialog" {
+            div class="flex flex-col w-full m-2 gap-2" {
+                p class="text-lg font-semibold" { "Move \"" (inventory.name) "\"" }
+                (panel)
+                button class="btn btn-abort" hx-on:click="document.getElementById('move-dialog').remove()" { "Cancel" }
+            }
+        }
+    })
+}
+
+#[derive(Deserialize)]
+struct MoveInventoryForm {
+    group_id: i32,
+}
+
+async fn handle_move_inventory(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+    Form(form): Form<MoveInventoryForm>,
+) -> MResponse {
+    ctx.assert_can_edit_inventory(id).await?;
+    move_group::assert_can_move_to(&ctx, form.group_id)?;
+    foodlib.inventories().set_group(id, form.group_id).await?;
+    manage_inventory_form(foodlib, id).await
 }
 
 pub async fn handle_manage(foodlib: FoodLib, data: Form<InventoryHeaderData>) -> MResponse {
@@ -249,11 +317,12 @@ pub async fn handle_manage(foodlib: FoodLib, data: Form<InventoryHeaderData>) ->
 
 pub async fn handle_edit_inventory(
     foodlib: FoodLib,
-    _user: User,
+    ctx: AuthCtx,
     data: Form<InventoryHeaderData>,
-) -> Markup {
-    let inventory = foodlib.inventories().get(data.inventory_id).await.unwrap();
-    add_or_edit_inventory_form(data.inventory_id, inventory.name)
+) -> MResponse {
+    ctx.assert_can_edit_inventory(data.inventory_id).await?;
+    let inventory = foodlib.inventories().get(data.inventory_id).await?;
+    Ok(add_or_edit_inventory_form(data.inventory_id, inventory.name))
 }
 
 pub async fn select_inventory_form(foodlib: FoodLib) -> MResponse {
@@ -291,6 +360,7 @@ pub async fn manage_inventory_form(foodlib: FoodLib, selected_inventory_id: i32)
                                 }
                             }
                             button hx-put="/inventories/edit-inventory" class="btn btn-primary" hx-target=(["#", INVENTORIES_DIV].concat()) { "Edit Inventory" }
+                            button hx-put="/inventories/move-inventory" class="btn btn-primary" hx-target="body" hx-swap="beforeend" { "Move" }
                             button hx-put="/inventories/delete-inventory" class="btn btn-cancel" hx-target=(["#", INVENTORIES_DIV].concat()) { "Delete Inventory" }
                         }
                         div class="h-10" {}

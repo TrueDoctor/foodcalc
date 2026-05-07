@@ -118,6 +118,17 @@ impl IngredientOps {
         Ok(row)
     }
 
+    pub async fn set_group(&self, ingredient_id: i32, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE ingredients SET group_id = $1 WHERE ingredient_id = $2"#,
+            group_id,
+            ingredient_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn delete(&self, id: i32) -> Result<()> {
         // Start transaction to handle cascading deletes
         let mut tx = self.pool.begin().await?;

@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 #[cfg(feature = "axum")]
 pub mod auth;
+#[cfg(feature = "axum")]
+pub mod auth_context;
 pub mod entities;
 pub mod error;
 pub mod ops;

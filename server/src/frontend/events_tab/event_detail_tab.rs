@@ -5,6 +5,7 @@ use axum::{
 };
 use bigdecimal::ToPrimitive;
 use foodlib_new::{
+    auth_context::AuthCtx,
     error::{Error, Result},
     event::{Event, SourceOverrideView},
     meal::Meal,
@@ -18,7 +19,10 @@ mod event_edit_meal_tab;
 mod food_prep;
 mod shopping_tours;
 
-use crate::{frontend::MResponse, MyAppState};
+use crate::{
+    frontend::{move_group, MResponse},
+    MyAppState,
+};
 
 pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -43,12 +47,32 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         )
         .nest("/shopping_tours", shopping_tours::shopping_tour_router())
         .nest("/food_prep", food_prep::food_prep_router())
+        .route("/move-group/{event_id}", post(handle_move_group))
+}
+
+#[derive(Deserialize)]
+struct MoveGroupForm {
+    group_id: i32,
+}
+
+async fn handle_move_group(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+    Form(form): Form<MoveGroupForm>,
+) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    move_group::assert_can_move_to(&ctx, form.group_id)?;
+    foodlib.events().set_group(event_id, form.group_id).await?;
+    event_form(foodlib, ctx, Path(event_id)).await
 }
 
 pub async fn delete_override_dialog(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path((event_id, source_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
     let overrides = foodlib.events().get_source_overrides(event_id).await?;
     let source = overrides
         .iter()
@@ -71,19 +95,23 @@ pub async fn delete_override_dialog(
 
 pub async fn delete_override(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path((event_id, source_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
     foodlib
         .events()
         .delete_source_override(event_id, source_id)
         .await?;
-    event_form(foodlib, Path(event_id)).await
+    event_form(foodlib, ctx, Path(event_id)).await
 }
 
 pub async fn delete_meal_dialog(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
     let meal = foodlib.meals().get_meal(meal_id).await?;
 
     Ok(html! {
@@ -152,7 +180,8 @@ pub async fn export_food_prep_pdf(
     Ok((headers, recipe))
 }
 
-pub async fn event_form(foodlib: FoodLib, Path(event_id): Path<i32>) -> MResponse {
+pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
     let stores = foodlib.stores().list().await?;
     let overrides = foodlib.events().get_source_overrides(event_id).await?;
     let ingredients = foodlib.ingredients().list().await?;
@@ -169,6 +198,14 @@ pub async fn event_form(foodlib: FoodLib, Path(event_id): Path<i32>) -> MRespons
     };
 
     let event = foodlib.events().get(event_id).await?;
+    let move_panel = move_group::move_panel(
+        &foodlib,
+        &ctx,
+        event.group_id,
+        &format!("/events/edit/move-group/{event_id}"),
+        "#content",
+    )
+    .await?;
 
     Ok(html! {
         div class="flex flex-row items-center justify-center gap-4" id="event_form" {
@@ -183,6 +220,7 @@ pub async fn event_form(foodlib: FoodLib, Path(event_id): Path<i32>) -> MRespons
                 span class="htmx-indicator" { "Saving\u{a0}…" }
             }
         }
+        (move_panel)
         (render_ingredients_without_tours(&foodlib, event_id).await?)
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
@@ -384,9 +422,11 @@ struct EventForm {
 
 async fn update_event(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     event_id: Path<i32>,
     event_data: Form<EventForm>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id.0).await?;
     let budget = event_data.budget.and_then(bigdecimal::BigDecimal::from_f64);
 
     let event = Event {
@@ -398,7 +438,7 @@ async fn update_event(
     };
 
     foodlib.events().update(event).await?;
-    event_form(foodlib, event_id).await
+    event_form(foodlib, ctx, event_id).await
 }
 
 #[derive(Deserialize, Debug)]
@@ -409,9 +449,11 @@ struct SourceData {
 
 async fn update_override(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path((event_id, _ingredient_id)): Path<(i32, i32)>,
     Form(source): Form<SourceData>,
 ) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
     let ingredient = foodlib
         .ingredients()
         .get_by_name(&source.ingredient)
@@ -426,7 +468,7 @@ async fn update_override(
         .set_source_override(event_id, source.id)
         .await?;
 
-    event_form(foodlib, Path(event_id)).await
+    event_form(foodlib, ctx, Path(event_id)).await
 }
 
 fn format_event_source_override(

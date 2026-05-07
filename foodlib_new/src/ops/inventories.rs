@@ -47,6 +47,17 @@ impl InventoryOps {
         Ok(row)
     }
 
+    pub async fn set_group(&self, inventory_id: i32, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE inventories SET group_id = $1 WHERE inventory_id = $2"#,
+            group_id,
+            inventory_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn delete(&self, id: i32) -> Result<()> {
         sqlx::query!(r#"DELETE FROM inventories WHERE inventory_id = $1"#, id)
             .execute(&*self.pool)

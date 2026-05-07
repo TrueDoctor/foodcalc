@@ -3,6 +3,7 @@ use axum::extract::{Form, Path, State};
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
+use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::error::Error;
 use foodlib_new::recipe::Recipe;
 use foodlib_new::user::User;
@@ -247,8 +248,12 @@ struct NewRecipe {
     comment: Option<String>,
 }
 
-async fn add_recipe(foodlib: FoodLib, user: User, Form(recipe_data): Form<NewRecipe>) -> MResponse {
-    let group = foodlib.users().get_personal_group(user.id).await?;
+async fn add_recipe(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Form(recipe_data): Form<NewRecipe>,
+) -> MResponse {
+    let group = foodlib.users().get_personal_group(ctx.user.id).await?;
     let recipe = Recipe {
         id: -1,
         name: recipe_data.name,
@@ -257,7 +262,7 @@ async fn add_recipe(foodlib: FoodLib, user: User, Form(recipe_data): Form<NewRec
     };
 
     let created_recipe = foodlib.recipes().create(recipe).await?;
-    recipes_edit_tab::recipe_edit_view(foodlib, Path(created_recipe.id)).await
+    recipes_edit_tab::recipe_edit_view(foodlib, ctx, Path(created_recipe.id)).await
 }
 
 async fn fetch_recipes_and_groups(

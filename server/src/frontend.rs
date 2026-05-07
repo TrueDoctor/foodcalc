@@ -10,11 +10,13 @@ use crate::MyAppState;
 
 pub type Router = axum::Router<MyAppState>;
 
+pub(crate) mod admin_tab;
 pub(crate) mod events_tab;
 pub(crate) mod home;
 pub(crate) mod ingredients_tab;
 pub(crate) mod inventories_tab;
 pub(crate) mod login_tab;
+pub(crate) mod move_group;
 pub(crate) mod recipes_tab;
 
 pub(crate) const LOGIN_URL: &str = "/auth/login/form";
@@ -23,6 +25,7 @@ pub fn frontend_router() -> Router {
     Router::new()
         .nest("/inventories", inventories_tab::inventories_router())
         .nest("/events", events_tab::events_router())
+        .nest("/admin", admin_tab::admin_router())
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
         .merge(home::home_router())
         .nest("/ingredients", ingredients_tab::ingredients_router())

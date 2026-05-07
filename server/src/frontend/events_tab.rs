@@ -1,6 +1,7 @@
 use crate::FoodLib;
 use axum::extract::{Form, Path};
 use bigdecimal::FromPrimitive;
+use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
@@ -65,13 +66,15 @@ pub async fn add(
     Ok(event_list(foodlib, user).await)
 }
 
-pub async fn duplicate(foodlib: FoodLib, user: User, Path(event_id): Path<i32>) -> MResponse {
-    let group = foodlib.users().get_personal_group(user.id).await?;
+pub async fn duplicate(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    let group = foodlib.users().get_personal_group(ctx.user.id).await?;
     let id = foodlib.events().duplicate(event_id, group.id).await?;
-    event_detail_tab::event_form(foodlib, Path(id)).await
+    event_detail_tab::event_form(foodlib, ctx, Path(id)).await
 }
 
-pub async fn delete_dialog(foodlib: FoodLib, Path(event_id): Path<i32>) -> MResponse {
+pub async fn delete_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
     let event = foodlib.events().get(event_id).await?;
     Ok(html! {
         div class="flex flex-col gap-2" {
@@ -89,9 +92,10 @@ pub async fn delete_dialog(foodlib: FoodLib, Path(event_id): Path<i32>) -> MResp
     })
 }
 
-pub async fn delete(foodlib: FoodLib, user: User, Path(event_id): Path<i32>) -> MResponse {
+pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
     foodlib.events().delete(event_id).await?;
-    Ok(event_list(foodlib, user).await)
+    Ok(event_list(foodlib, ctx.user).await)
 }
 
 pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
