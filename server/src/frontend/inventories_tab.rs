@@ -280,12 +280,13 @@ async fn handle_move_inventory_dialog(
         &ctx,
         inventory.group_id,
         &format!("/inventories/move/{id}"),
-        "#move-dialog",
+        "#inventories",
     )
     .await?;
     Ok(html! {
-        dialog open="true" class="dialog" id="move-dialog" {
-            div class="flex flex-col w-full m-2 gap-2" {
+        dialog open="true" class="dialog fixed top-1/4 left-1/2 -translate-x-1/2 z-50 shadow-xl" id="move-dialog"
+            hx-on::after-request="if(event.detail.successful) this.remove()" {
+            div class="flex flex-col m-2 gap-2 min-w-80" {
                 p class="text-lg font-semibold" { "Move \"" (inventory.name) "\"" }
                 (panel)
                 button class="btn btn-abort" hx-on:click="document.getElementById('move-dialog').remove()" { "Cancel" }

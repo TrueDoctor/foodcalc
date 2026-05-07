@@ -30,18 +30,18 @@ pub async fn move_panel(
         .unwrap_or_else(|| "—".into());
 
     Ok(html! {
-        div class="w-3/4 p-4 mb-4 rounded-lg border" {
-            p class="text-lg font-semibold mb-2" { "Owner group" }
-            p class="mb-2" { "Currently in: " strong { (current_label) } }
+        div class="flex flex-row items-center flex-wrap gap-3 my-2 text-sm opacity-80" {
+            span { "Owner group:" }
+            strong { (current_label) }
             @if candidates.is_empty() {
-                p class="opacity-70" { "No other groups available to move to." }
+                span class="opacity-70" { "(no other groups available)" }
             } @else {
-                form class="flex flex-row gap-2"
+                form class="flex flex-row items-center gap-2"
                     hx-post=(endpoint)
                     hx-target=(target_id)
                     hx-swap="outerHTML" {
-                    select class="fc-select grow" name="group_id" required="required" {
-                        option value="" { "Select target group..." }
+                    select class="fc-select" name="group_id" required="required" {
+                        option value="" { "Move to..." }
                         @for g in &candidates {
                             option value=(g.id) {
                                 (g.name)

@@ -92,6 +92,13 @@ tr:nth-child(odd) {
   @apply w-full;
 }
 
-svg {
+svg:not([class*="text-"]) {
   color: red;
+}
+
+.user-menu > summary {
+  list-style: none;
+}
+.user-menu > summary::-webkit-details-marker {
+  display: none;
 }

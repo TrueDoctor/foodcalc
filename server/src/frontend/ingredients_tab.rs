@@ -43,6 +43,8 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
 #[derive(Deserialize)]
 pub struct SearchParameters {
     search: String,
+    #[serde(default)]
+    mine_only: Option<String>,
 }
 
 pub async fn search(
@@ -50,12 +52,14 @@ pub async fn search(
     user: Option<User>,
     query: Form<SearchParameters>,
 ) -> MResponse {
-    let query = query.search.to_lowercase();
+    let needle = query.search.to_lowercase();
+    let mine_only = query.mine_only.is_some();
     let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref()).await?;
 
-    let filtered_ingredients = ingredients
-        .iter()
-        .filter(|x| x.name.to_lowercase().contains(&query));
+    let filtered_ingredients = ingredients.iter().filter(|x| {
+        x.name.to_lowercase().contains(&needle)
+            && (!mine_only || user_group_ids.contains(&x.group_id))
+    });
 
     Ok(html! {
         @for ingredient in filtered_ingredients {
@@ -179,14 +183,22 @@ pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
 
     html! {
         div id="ingredients"{
-            div class="
+            form id="ingredients-filter" class="
                 flex flex-row items-center justify-stretch
                 mb-2 gap-5 h-10
                 w-full
-                " {
-                input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off"
-                    autofocus="autofocus" hx-post="/ingredients/search" hx-trigger="keyup changed delay:20ms, search"
-                    hx-target="#search-results" hx-indicator=".htmx-indicator";
+                "
+                hx-post="/ingredients/search"
+                hx-trigger="keyup changed delay:20ms from:#search, change from:#mine-only, search"
+                hx-target="#search-results"
+                hx-indicator=".htmx-indicator" {
+                input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off" autofocus="autofocus";
+                @if user.is_some() {
+                    label class="flex items-center gap-2 whitespace-nowrap" {
+                        input type="checkbox" id="mine-only" name="mine_only" value="1";
+                        "Mine only"
+                    }
+                }
             }
             (add_ingredient_button(user.as_ref()))
 
@@ -310,12 +322,13 @@ async fn move_ingredient_dialog(
         &ctx,
         ingredient.group_id,
         &format!("/ingredients/move/{id}"),
-        "#move-dialog",
+        "#ingredients",
     )
     .await?;
     Ok(html! {
-        dialog open="true" class="dialog" id="move-dialog" {
-            div class="flex flex-col w-full m-2 gap-2" {
+        dialog open="true" class="dialog fixed top-1/4 left-1/2 -translate-x-1/2 z-50 shadow-xl" id="move-dialog"
+            hx-on::after-request="if(event.detail.successful) this.remove()" {
+            div class="flex flex-col m-2 gap-2 min-w-80" {
                 p class="text-lg font-semibold" { "Move \"" (ingredient.name) "\"" }
                 (panel)
                 button class="btn btn-abort" hx-on:click="document.getElementById('move-dialog').remove()" { "Cancel" }
@@ -473,15 +486,16 @@ async fn fetch_ingredients_and_groups(
     foodlib: &FoodLib,
     user: Option<&User>,
 ) -> Result<(Vec<IngredientWithSource>, Vec<i32>), foodlib_new::Error> {
-    let (ingredients, user_group_ids) = match user {
-        Some(u) if u.is_admin => (foodlib.ingredients().list_with_sources().await?, vec![]),
-        Some(u) => {
-            let groups = foodlib.users().get_user_groups(u.id).await?;
-            let ids: Vec<i32> = groups.iter().map(|g| g.id).collect();
-            let ingredients = foodlib.ingredients().list_with_sources_for_user(u.id).await?;
-            (ingredients, ids)
-        }
-        None => (foodlib.ingredients().list_with_sources().await?, vec![]),
+    let ingredients = foodlib.ingredients().list_with_sources().await?;
+    let user_group_ids = match user {
+        Some(u) => foodlib
+            .users()
+            .get_user_groups(u.id)
+            .await?
+            .into_iter()
+            .map(|g| g.id)
+            .collect(),
+        None => vec![],
     };
     Ok((ingredients, user_group_ids))
 }

@@ -27,6 +27,8 @@ pub(crate) fn events_router() -> axum::Router<MyAppState> {
 #[derive(Deserialize)]
 pub struct SearchParameters {
     search: String,
+    #[serde(default)]
+    mine_only: Option<String>,
 }
 
 pub async fn add_form() -> Markup {
@@ -99,22 +101,23 @@ pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -
 }
 
 pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
-    let events = if user.is_admin {
-        foodlib.events().list().await.unwrap_or_default()
-    } else {
-        foodlib.events().list_for_user(user.id).await.unwrap_or_default()
-    };
+    let events = foodlib.events().list().await.unwrap_or_default();
+    let _ = &user;
 
     html! {
-        div class="
+        form id="events-filter" class="
             flex flex-row items-center justify-stretch
             mb-2 gap-5 h-10
             w-full
-            " {
-            input class="grow text h-full" type="search" placeholder="Search for event" id="search" name="search" autocomplete="off"
-                autofocus="autofocus" hx-post="/events/search" hx-trigger="keyup changed delay:20ms, search"
-                hx-target="#search-results";
-
+            "
+            hx-post="/events/search"
+            hx-trigger="keyup changed delay:20ms from:#search, change from:#mine-only, search"
+            hx-target="#search-results" {
+            input class="grow text h-full" type="search" placeholder="Search for event" id="search" name="search" autocomplete="off" autofocus="autofocus";
+            label class="flex items-center gap-2 whitespace-nowrap" {
+                input type="checkbox" id="mine-only" name="mine_only" value="1";
+                "Mine only"
+            }
         }
         div class = "grow-0 h-full m-2"
             hx-target="this"  hx-swap="outerHTML" {
@@ -142,15 +145,21 @@ pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
 
 pub async fn search(foodlib: FoodLib, user: User, query: Form<SearchParameters>) -> Markup {
     let query_str = query.search.to_lowercase();
-    let events = if user.is_admin {
-        foodlib.events().list().await.unwrap_or_default()
-    } else {
-        foodlib.events().list_for_user(user.id).await.unwrap_or_default()
-    };
+    let mine_only = query.mine_only.is_some();
+    let events = foodlib.events().list().await.unwrap_or_default();
+    let user_group_ids: Vec<i32> = foodlib
+        .users()
+        .get_user_groups(user.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|g| g.id)
+        .collect();
 
-    let filtered_events = events
-        .iter()
-        .filter(|x| x.name.to_lowercase().contains(&query_str));
+    let filtered_events = events.iter().filter(|x| {
+        x.name.to_lowercase().contains(&query_str)
+            && (!mine_only || user_group_ids.contains(&x.group_id))
+    });
 
     html! {
         @for event in filtered_events {

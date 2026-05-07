@@ -37,6 +37,8 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
 #[derive(Deserialize)]
 pub struct SearchParameters {
     search: String,
+    #[serde(default)]
+    mine_only: Option<String>,
 }
 
 pub async fn search(
@@ -44,12 +46,14 @@ pub async fn search(
     user: Option<User>,
     query: Form<SearchParameters>,
 ) -> MResponse {
-    let query = query.search.to_lowercase();
+    let needle = query.search.to_lowercase();
+    let mine_only = query.mine_only.is_some();
     let (recipes, user_group_ids) = fetch_recipes_and_groups(&foodlib, user.as_ref()).await?;
 
-    let filtered_recipes = recipes
-        .iter()
-        .filter(|x| x.name.to_lowercase().contains(&query));
+    let filtered_recipes = recipes.iter().filter(|x| {
+        x.name.to_lowercase().contains(&needle)
+            && (!mine_only || user_group_ids.contains(&x.group_id))
+    });
 
     Ok(html! {
         (recipe_add_form())
@@ -206,14 +210,22 @@ pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
 
     html! {
         div id="recipes" class="w-full"  {
-            div class="
+            form id="recipes-filter" class="
                 flex flex-row items-center justify-stretch
                 mb-2 gap-5 h-10
                 w-full
-                " {
-                input class="grow text h-full" type="search" placeholder="Search for recipe" id="search" name="search" autocomplete="off"
-                    autofocus="autofocus" hx-post="/recipes/search" hx-trigger="keyup changed delay:100ms, search"
-                    hx-target="#search-results" hx-indicator=".htmx-indicator";
+                "
+                hx-post="/recipes/search"
+                hx-trigger="keyup changed delay:100ms from:#search, change from:#mine-only, search"
+                hx-target="#search-results"
+                hx-indicator=".htmx-indicator" {
+                input class="grow text h-full" type="search" placeholder="Search for recipe" id="search" name="search" autocomplete="off" autofocus="autofocus";
+                @if user.is_some() {
+                    label class="flex items-center gap-2 whitespace-nowrap" {
+                        input type="checkbox" id="mine-only" name="mine_only" value="1";
+                        "Mine only"
+                    }
+                }
             }
             table class="w-full text-inherit table-auto object-center table-fixed" {
                 thead { tr { th { "ID" } th { "Name" } th { "Comment" }  th {} th {} th {}} }
@@ -269,15 +281,16 @@ async fn fetch_recipes_and_groups(
     foodlib: &FoodLib,
     user: Option<&User>,
 ) -> Result<(Vec<Recipe>, Vec<i32>), foodlib_new::Error> {
-    let (recipes, user_group_ids) = match user {
-        Some(u) if u.is_admin => (foodlib.recipes().list().await?, vec![]),
-        Some(u) => {
-            let groups = foodlib.users().get_user_groups(u.id).await?;
-            let ids: Vec<i32> = groups.iter().map(|g| g.id).collect();
-            let recipes = foodlib.recipes().list_for_user(u.id).await?;
-            (recipes, ids)
-        }
-        None => (foodlib.recipes().list().await?, vec![]),
+    let recipes = foodlib.recipes().list().await?;
+    let user_group_ids = match user {
+        Some(u) => foodlib
+            .users()
+            .get_user_groups(u.id)
+            .await?
+            .into_iter()
+            .map(|g| g.id)
+            .collect(),
+        None => vec![],
     };
     Ok((recipes, user_group_ids))
 }

@@ -37,6 +37,14 @@ async fn main() {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL env var was not set");
     let pool = PgPool::connect(&database_url).await.unwrap();
 
+    // Materialized view that powers ingredient unit conversions. It must be
+    // refreshed after the data is loaded (e.g. from a snapshot) for derived
+    // weights/energies to be non-NULL in the event_ingredients view chain.
+    sqlx::query("REFRESH MATERIALIZED VIEW conversions")
+        .execute(&pool)
+        .await
+        .expect("failed to refresh conversions materialized view");
+
     let port = &env::var("PORT").unwrap_or("3000".to_string());
     let colors = ColoredLevelConfig::new()
         .debug(Color::Magenta)
