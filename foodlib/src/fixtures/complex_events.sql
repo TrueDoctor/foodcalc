@@ -1,14 +1,14 @@
 -- Complex event scenarios
 -- Event 1: Multi-day festival with multiple shopping tours and shared prep tasks
-INSERT INTO events (event_id, event_name, comment, budget, owner_id) VALUES
+INSERT INTO events (event_id, event_name, comment, budget, group_id) VALUES
     (100, 'Summer Festival', 'Three day festival', 1000.00, 1);
 
 -- Event 2: Weekly meal prep
-INSERT INTO events (event_id, event_name, comment, budget, owner_id) VALUES
+INSERT INTO events (event_id, event_name, comment, budget, group_id) VALUES
     (101, 'Week 28 Meal Prep', 'Weekly meal preparation', 200.00, 1);
 
 -- Add some additional recipes
-INSERT INTO recipes (recipe_id, name, comment, owner_id) VALUES
+INSERT INTO recipes (recipe_id, name, comment, group_id) VALUES
     (100, 'Basic Tomato Sauce Base', 'Base sauce for multiple dishes', 1),
     (101, 'Festival Pasta', 'Large batch pasta dish', 1),
     (102, 'Weekly Lunch Box', 'Meal prep standard', 1);
@@ -56,7 +56,7 @@ INSERT INTO shopping_tours (tour_id, event_id, tour_date, store_id) VALUES
     (102, 101, '2024-07-07 09:00:00+00', 1);  -- Weekly prep shopping at Local Grocery
 
 -- Additional test inventory
-INSERT INTO inventories (inventory_id, name, owner_id) VALUES
+INSERT INTO inventories (inventory_id, name, group_id) VALUES
     (100, 'Festival Storage', 1);
 
 -- Event inventory association

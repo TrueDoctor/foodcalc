@@ -12,8 +12,18 @@ INSERT INTO users (id, username, email, password_hash, is_admin, created_at) VAL
   (1, 'admin', 'admin@example.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG', true, '2024-12-04 00:00:00+00'),
   (2, 'user', 'user@example.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG', false, '2024-12-04 00:00:00+00');
 
+-- Personal groups (one per user, mirrors the group_ownership migration)
+INSERT INTO groups (id, name, is_personal) VALUES
+  (1, 'admin', TRUE),
+  (2, 'user', TRUE);
+
+-- User group assignments
+INSERT INTO user_groups (user_id, group_id) VALUES
+  (1, 1),  -- admin in personal group
+  (2, 2);  -- user in personal group
+
 -- Ingredients with energy in kJ/g
-INSERT INTO ingredients (ingredient_id, name, energy, comment, owner_id) VALUES 
+INSERT INTO ingredients (ingredient_id, name, energy, comment, group_id) VALUES
   (1, 'Pasta', 15.7, 'Dried pasta', 1),
   (2, 'Tomato', 0.18, 'Fresh tomatoes', 1),
   (3, 'Garlic', 1.49, 'Fresh garlic', 1),
@@ -118,7 +128,7 @@ INSERT INTO ingredient_sources (ingredient_source_id, ingredient_id, store_id, p
   (9, 9, 1, 0.250, 0, 3.99, NULL, '250g butter block');
 
 -- Basic recipes
-INSERT INTO recipes (recipe_id, name, comment, owner_id) VALUES
+INSERT INTO recipes (recipe_id, name, comment, group_id) VALUES
   (1, 'Simple Pasta', 'Quick weeknight dinner', 1),
   (2, 'Basic Cake', 'Classic vanilla cake', 1),
   (3, 'Tomato Sauce', 'Basic sauce for pasta', 2);
@@ -148,7 +158,7 @@ INSERT INTO places (place_id, name, comment) VALUES
   (2, 'Backup Kitchen', 'Secondary cooking area');
 
 -- Events
-INSERT INTO events (event_id, event_name, comment, budget, owner_id) VALUES
+INSERT INTO events (event_id, event_name, comment, budget, group_id) VALUES
   (1, 'Family Dinner', 'Weekly family meal', 50.00, 1),
   (2, 'Birthday Party', 'Birthday celebration', 100.00, 2);
 
@@ -158,7 +168,7 @@ INSERT INTO event_meals (event_id, recipe_id, place_id, comment, energy_per_serv
   (2, 2, 1, 'Birthday cake', 1800, 12, '2024-12-04 14:00:00+00', '2024-12-04 15:00:00+00');
 
 -- Inventories
-INSERT INTO inventories (inventory_id, name, owner_id) VALUES
+INSERT INTO inventories (inventory_id, name, group_id) VALUES
   (1, 'Main Pantry', 1),
   (2, 'Backup Storage', 2);
 
@@ -198,16 +208,6 @@ INSERT INTO steps (step_id, step_order, step_name, step_description, fixed_durat
   -- Tomato Sauce
   (8, 1, 'Prep Ingredients', 'Dice tomatoes and mince garlic', '00:10:00', '00:05:00', 3),
   (9, 2, 'Cook Sauce', 'Simmer all ingredients', '00:20:00', '00:15:00', 3);
-
--- Groups
-INSERT INTO groups (id, name) VALUES
-  (1, 'Administrators'),
-  (2, 'Users');
-
--- User group assignments
-INSERT INTO user_groups (user_id, group_id) VALUES
-  (1, 1),  -- admin in Administrators group
-  (2, 2);  -- user in Users group
 
 
 -- Reset all sequences to max values
