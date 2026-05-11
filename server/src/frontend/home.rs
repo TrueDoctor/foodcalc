@@ -3,7 +3,7 @@ use foodlib_new::user::User;
 use maud::{html, Markup};
 
 use crate::{
-    frontend::{ingredients_tab::ingredients_view, LOGIN_URL},
+    frontend::{ingredients_tab::render_ingredients_view, LOGIN_URL},
     FoodLib,
 };
 
@@ -23,7 +23,7 @@ pub async fn content(foodlib: FoodLib, user: Option<User>) -> Markup {
     html! {
         div class="flex flex-col items-center justify-center mb-16" {
             div id="content" class="w-3/4 flex flex-col items-center justify-center" {
-                (ingredients_view(foodlib, user).await)
+                (render_ingredients_view(foodlib, user).await)
             }
         }
     }

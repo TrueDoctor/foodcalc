@@ -37,3 +37,4 @@ serde_json = "1"
 tower-sessions = { version = "0.14.0", features = ["signed"] }
 tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
 hyper = "*"
+urlencoding = "2"

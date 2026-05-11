@@ -1,5 +1,6 @@
 use crate::FoodLib;
-use axum::extract::{Form, Path};
+use axum::extract::{Form, Path, Query};
+use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
@@ -36,36 +37,27 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
         )
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
         .route("/sources/{id}", get(sources_table))
-        .route("/search", post(search))
         .route("/", get(ingredients_view))
 }
 
-#[derive(Deserialize)]
-pub struct SearchParameters {
-    search: String,
+#[derive(Deserialize, Default, Clone)]
+pub struct IngredientFilters {
     #[serde(default)]
-    mine_only: Option<String>,
+    pub search: String,
+    #[serde(default)]
+    pub mine_only: Option<String>,
 }
 
-pub async fn search(
-    foodlib: FoodLib,
-    user: Option<User>,
-    query: Form<SearchParameters>,
-) -> MResponse {
-    let needle = query.search.to_lowercase();
-    let mine_only = query.mine_only.is_some();
-    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref()).await?;
+impl IngredientFilters {
+    fn mine_only(&self) -> bool {
+        self.mine_only.is_some()
+    }
+}
 
-    let filtered_ingredients = ingredients.iter().filter(|x| {
-        x.name.to_lowercase().contains(&needle)
-            && (!mine_only || user_group_ids.contains(&x.group_id))
-    });
-
-    Ok(html! {
-        @for ingredient in filtered_ingredients {
-            (format_ingredient(ingredient, user.as_ref(), &user_group_ids))
-        }
-    })
+fn is_htmx(headers: &HeaderMap) -> bool {
+    headers
+        .get("HX-Request")
+        .map_or(false, |v| v == "true")
 }
 
 pub async fn update_ingredient(
@@ -79,7 +71,7 @@ pub async fn update_ingredient(
         foodlib.ingredients().create(ingredient).await?;
         Ok((
             [("HX-Retarget", "#content"), ("HX-Reswap", "innerHTML")],
-            ingredients_view(foodlib, Some(user)).await,
+            render_ingredients_view(foodlib, Some(user)).await,
         )
             .into_response())
     } else {
@@ -176,31 +168,99 @@ async fn delete_source(
     sources_table(foodlib, Some(user), Path(ingredient_id)).await
 }
 
-pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
+/// Route handler for `GET /ingredients`. Reads filters from the query so the
+/// URL is shareable; returns just the filtered `<tbody>` for HX requests
+/// (triggered by the filter form below) and the full page otherwise.
+pub async fn ingredients_view(
+    foodlib: FoodLib,
+    user: Option<User>,
+    headers: HeaderMap,
+    Query(filters): Query<IngredientFilters>,
+) -> Markup {
     let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref())
         .await
         .unwrap_or_default();
+    let filtered = filter_ingredients(&ingredients, &filters, &user_group_ids);
 
+    if is_htmx(&headers) {
+        ingredient_rows(&filtered, user.as_ref(), &user_group_ids)
+    } else {
+        render_ingredients_page(&filtered, user.as_ref(), &user_group_ids, &filters)
+    }
+}
+
+/// Render the full ingredients page. Used both by the route handler (on
+/// non-HX requests) and by mutation handlers that want to return the user
+/// to a fresh page; mutations don't preserve filter state today.
+pub async fn render_ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref())
+        .await
+        .unwrap_or_default();
+    let filters = IngredientFilters::default();
+    let filtered = filter_ingredients(&ingredients, &filters, &user_group_ids);
+    render_ingredients_page(&filtered, user.as_ref(), &user_group_ids, &filters)
+}
+
+fn filter_ingredients<'a>(
+    ingredients: &'a [IngredientWithSource],
+    filters: &IngredientFilters,
+    user_group_ids: &[i32],
+) -> Vec<&'a IngredientWithSource> {
+    let needle = filters.search.to_lowercase();
+    let mine_only = filters.mine_only();
+    ingredients
+        .iter()
+        .filter(|x| {
+            x.name.to_lowercase().contains(&needle)
+                && (!mine_only || user_group_ids.contains(&x.group_id))
+        })
+        .collect()
+}
+
+fn ingredient_rows(
+    ingredients: &[&IngredientWithSource],
+    user: Option<&User>,
+    user_group_ids: &[i32],
+) -> Markup {
+    html! {
+        @for ingredient in ingredients {
+            (format_ingredient(ingredient, user, user_group_ids))
+        }
+    }
+}
+
+fn render_ingredients_page(
+    ingredients: &[&IngredientWithSource],
+    user: Option<&User>,
+    user_group_ids: &[i32],
+    filters: &IngredientFilters,
+) -> Markup {
+    let search_value = filters.search.clone();
+    let mine_checked = filters.mine_only();
     html! {
         div id="ingredients"{
+            // Filter form is a GET targeting this same page. Each input change
+            // re-issues GET /ingredients?... with hx-replace-url so the URL
+            // bar tracks the filter state without polluting history.
             form id="ingredients-filter" class="
                 flex flex-row items-center justify-stretch
                 mb-2 gap-5 h-10
                 w-full
                 "
-                hx-post="/ingredients/search"
+                hx-get="/ingredients"
                 hx-trigger="keyup changed delay:20ms from:#search, change from:#mine-only, search"
                 hx-target="#search-results"
+                hx-replace-url="true"
                 hx-indicator=".htmx-indicator" {
-                input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off" autofocus="autofocus";
+                input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off" autofocus="autofocus" value=(search_value);
                 @if user.is_some() {
                     label class="flex items-center gap-2 whitespace-nowrap" {
-                        input type="checkbox" id="mine-only" name="mine_only" value="1";
+                        input type="checkbox" id="mine-only" name="mine_only" value="1" checked[mine_checked];
                         "Mine only"
                     }
                 }
             }
-            (add_ingredient_button(user.as_ref()))
+            (add_ingredient_button(user))
 
             span class="htmx-indicator" { "Searching..." }
 
@@ -215,9 +275,7 @@ pub async fn ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
                     th class="w-1/6" {}
                 } }
                 tbody id="search-results" {
-                    @for ingredient in ingredients.iter() {
-                        (format_ingredient(ingredient, user.as_ref(), &user_group_ids))
-                    }
+                    (ingredient_rows(ingredients, user, user_group_ids))
                 }
             }
         }
@@ -255,7 +313,7 @@ async fn delete_ingredient(foodlib: FoodLib, user: User, id: Path<i32>) -> MResp
         ));
     }
     foodlib.ingredients().delete(id.0).await?;
-    Ok(ingredients_view(foodlib, Some(user)).await)
+    Ok(render_ingredients_view(foodlib, Some(user)).await)
 }
 
 pub async fn edit_ingredient_form(Form(ingredient): Form<IngredientWithSource>) -> Markup {
@@ -351,7 +409,7 @@ async fn move_ingredient(
     ctx.assert_can_edit_ingredient(id).await?;
     move_group::assert_can_move_to(&ctx, form.group_id)?;
     foodlib.ingredients().set_group(id, form.group_id).await?;
-    Ok(ingredients_view(foodlib, Some(ctx.user)).await)
+    Ok(render_ingredients_view(foodlib, Some(ctx.user)).await)
 }
 
 async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> MResponse {

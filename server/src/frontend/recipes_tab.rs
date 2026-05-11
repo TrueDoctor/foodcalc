@@ -22,11 +22,7 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
         .route("/delete/{recipe_id}", get(delete_recipe))
         .route("/delete_nqa/{recipe_id}", delete(delete_recipe_nqa))
         .nest("/edit/", recipes_edit_tab::recipes_edit_router())
-        .route_layer(login_required!(
-            AuthBackend,
-            login_url = LOGIN_URL,
-            redirect_field = "protected"
-        ))
+        .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
         .route("/search", post(search))
         .route("/shopping-list/{recipe_id}", post(shopping_list))
         .route("/export/{recipe_id}", get(export_recipe))

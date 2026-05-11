@@ -27,6 +27,7 @@ pub async fn htmx_middleware(
         && !std::env::var("DATABASE_URL")
             .unwrap()
             .ends_with("food_calc")
+        && std::env::var("DISABLE_AUTO_LOGIN").ok().as_deref() != Some("1")
     {
         let user = User {
             username: "test".into(),
@@ -44,6 +45,29 @@ pub async fn htmx_middleware(
     let response = next.run(req).await;
 
     if is_htmx {
+        // axum_login's login_required! emits a 307 Location: /auth/login/form?next=...
+        // on the wire; htmx does not follow that as a navigation, it would try to
+        // swap the redirect body. Translate it into HX-Redirect so the browser
+        // does a full page load to the login form (which preserves the `next`).
+        let status = response.status();
+        if status == axum::http::StatusCode::TEMPORARY_REDIRECT
+            || status == axum::http::StatusCode::SEE_OTHER
+            || status == axum::http::StatusCode::FOUND
+        {
+            if let Some(location) = response
+                .headers()
+                .get(axum::http::header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+            {
+                let mut builder = Response::builder()
+                    .status(axum::http::StatusCode::OK)
+                    .header("HX-Redirect", location);
+                if let Some(h) = builder.headers_mut() {
+                    h.insert("content-type", "text/html; charset=utf-8".parse().unwrap());
+                }
+                return builder.body(Body::empty()).unwrap();
+            }
+        }
         response
     } else {
         // Only wrap HTML responses
