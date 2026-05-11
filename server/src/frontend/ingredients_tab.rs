@@ -262,8 +262,6 @@ fn render_ingredients_page(
                     }
                 }
             }
-            (add_ingredient_button(user))
-
             span class="htmx-indicator" { "Searching..." }
 
             table class="table-fixed"{
@@ -277,6 +275,9 @@ fn render_ingredients_page(
                     th class="w-1/6" {}
                 } }
                 tbody id="search-results" {
+                    @if user.is_some() {
+                        (ingredient_add_row())
+                    }
                     (ingredient_rows(ingredients, user, user_group_ids))
                 }
             }
@@ -284,25 +285,31 @@ fn render_ingredients_page(
     }
 }
 
-fn add_ingredient_button(user: Option<&User>) -> Markup {
-    if user.is_none() {
-        return html! {};
-    }
-
-    let ingredient: IngredientWithSource = Ingredient {
-        id: -1,
-        name: String::new(),
-        energy: BigDecimal::from(0),
-        comment: None,
-        group_id: -1,
-    }
-    .into();
+/// First-row inline add. Rendered when the user is logged in; the server
+/// picks the user's personal group on submit, so no group field needed here.
+/// After a successful POST the entire page is re-rendered (server retargets
+/// to #content) which restores a fresh empty add-row, and the after-request
+/// handler refocuses the name input so the user can keep adding.
+fn ingredient_add_row() -> Markup {
     html! {
-        div class = "m-2" hx-target="this" id="ingredient--1" {
-            button class="btn bg-light-primary-normal dark:bg-dark-primary-normal"
-            hx-get="/ingredients/edit"
-            hx-vals=(serde_json::to_string(&ingredient).unwrap())
-            hx-swap="innerHTML" { "Add Ingredient (+)" }
+        tr id="ingredient--1" {
+            input type="hidden" name="id" value="-1";
+            input type="hidden" name="group_id" value="-1";
+            td class="text-center opacity-70" { "+" }
+            td { input class="text" type="text" name="name" placeholder="Name" required="required"; }
+            td { input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="kJ/g" required="required"; }
+            td { input class="text" type="text" name="comment" placeholder="Comment"; }
+            td {
+                button class="btn btn-primary"
+                    hx-post="/ingredients"
+                    hx-include="closest tr"
+                    hx-target="#ingredient--1"
+                    hx-swap="outerHTML"
+                    hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#ingredient--1 input[name=name]');if(i)i.focus();}"
+                    { "Add" }
+            }
+            td {}
+            td {}
         }
     }
 }

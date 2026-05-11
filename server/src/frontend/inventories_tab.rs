@@ -129,6 +129,7 @@ fn render_list(inventories: &[Inventory], open: &[i32], filter: &str) -> Markup 
                     group: 'inventory-items',
                     draggable: '.item-row',
                     filter: '.add-row',
+                    preventOnFilter: false,
                     ghostClass: 'fc-ghost',
                     chosenClass: 'fc-chosen',
                     dragClass: 'fc-drag',
@@ -294,42 +295,43 @@ async fn render_contents(foodlib: &FoodLib, inventory_id: i32, filter: &str) -> 
                 tbody id=(format!("inv-{}-items", inventory_id))
                     class="inventory-items"
                     data-inventory-id=(inventory_id) {
+                    (add_item_row(inventory_id))
                     @for item in &items {
                         (item_row(inventory_id, item))
                     }
-                    (add_item_row(inventory_id))
                 }
             }
         }
     })
 }
 
-/// Permanent last row of each inventory's items table — a small inline form
-/// for adding a new item. After a successful add, we refocus the name input so
-/// the user can rattle off entries without reaching for the mouse.
+/// Permanent first row of each inventory's items table — an inline form for
+/// adding a new item. After a successful add, we refocus the name input so
+/// the user can rattle off entries without reaching for the mouse. Uses
+/// `hx-include="closest tr"` so the button collects the row's inputs without
+/// needing a separate `<form>` element (which previously left the inputs in
+/// an inactive state until the button was clicked).
 fn add_item_row(inventory_id: i32) -> Markup {
-    let form_id = format!("inv-{}-add", inventory_id);
     html! {
-        tr class="add-row" data-sortable-ignore="true" {
+        tr class="add-row" data-sortable-ignore="true" data-inv-id=(inventory_id) {
             td {
-                input type="text" form=(form_id) name="ingredient_name"
+                input type="text" name="ingredient_name"
                     list=(format!("ingredients-{}", inventory_id))
                     placeholder="Add ingredient..." class="text w-full" required="required";
             }
             td {
-                input type="number" form=(form_id) name="amount"
+                input type="number" name="amount"
                     step="0.001" min="0" placeholder="kg"
                     class="text w-full" required="required";
             }
             td {
-                form id=(form_id)
+                button type="button" class="btn btn-primary w-full"
                     hx-post=(format!("/inventories/{}/items", inventory_id))
+                    hx-include="closest tr"
                     hx-target=(format!("#inv-{}-contents", inventory_id))
                     hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){const inp=document.querySelector(`#inv-${this.dataset.invId}-items input[name=ingredient_name]`); inp && inp.focus();}"
-                    data-inv-id=(inventory_id) {
-                    button type="submit" class="btn btn-primary w-full" { "Add" }
-                }
+                    hx-on::after-request=(format!("if(event.detail.successful){{const inp=document.querySelector('#inv-{}-items input[name=ingredient_name]'); inp && inp.focus();}}", inventory_id))
+                    { "Add" }
             }
         }
     }
