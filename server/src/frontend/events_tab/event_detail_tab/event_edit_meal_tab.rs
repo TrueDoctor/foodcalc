@@ -3,7 +3,7 @@ use crate::{
     FoodLib, MyAppState,
 };
 use axum::{
-    extract::{Form, Path, State},
+    extract::{Form, Path, Query, State},
     http::StatusCode,
     routing::{delete, get, post},
 };
@@ -100,10 +100,18 @@ pub async fn update_meal(
     }
 }
 
+#[derive(Deserialize, Default)]
+pub struct MealPrefill {
+    recipe_id: Option<i32>,
+    start_time: Option<String>,
+    servings: Option<i32>,
+}
+
 async fn meal_form(
     state: State<MyAppState>,
     ctx: AuthCtx,
     Path((event_id, meal_id)): Path<(i32, i32)>,
+    Query(prefill): Query<MealPrefill>,
 ) -> Result<Markup, Markup> {
     ctx.assert_can_edit_event(event_id)
         .await
@@ -124,6 +132,26 @@ async fn meal_form(
             .get_meal(meal_id)
             .await
             .map_err(|e| html_error(&format!("Failed to fetch meal {e}"), "/events"))?;
+    } else {
+        if let Some(rid) = prefill.recipe_id {
+            if let Ok(r) = state.recipes().get(rid).await {
+                meal.recipe_id = r.id;
+                meal.name = r.name;
+            }
+        }
+        if let Some(s) = prefill.servings {
+            meal.servings = s;
+        }
+        if let Some(ref st) = prefill.start_time {
+            if let Ok(dt) = time::PrimitiveDateTime::parse(
+                st,
+                format_description!("[year]-[month]-[day]T[hour]:[minute]"),
+            ) {
+                let parsed = dt.assume_utc();
+                meal.start_time = parsed;
+                meal.end_time = parsed + time::Duration::hours(1);
+            }
+        }
     }
     let mut recipes = state
         .recipes()

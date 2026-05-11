@@ -48,7 +48,6 @@ async fn users_view(foodlib: FoodLib, ctx: AuthCtx) -> MResponse {
             }
             div id="admin-users" class="w-full max-w-3xl" {
                 (user_list(&users))
-                (create_user_form())
             }
             div id="user-detail" class="w-full max-w-3xl" {}
         }
@@ -65,6 +64,7 @@ fn user_list(users: &[User]) -> Markup {
                 th class="w-24" { "Manage" }
             } }
             tbody {
+                (create_user_row())
                 @for u in users {
                     tr id=(format!("user-{}", u.id)) {
                         td { (u.username) }
@@ -80,24 +80,32 @@ fn user_list(users: &[User]) -> Markup {
     }
 }
 
-fn create_user_form() -> Markup {
+/// First-row inline add. Password and admin-toggle share one column to fit
+/// the 4-column layout. Handler returns the whole `#admin-users` block, so
+/// a fresh empty add-row appears automatically and the username input is
+/// refocused for rapid entry.
+fn create_user_row() -> Markup {
     html! {
-        form class="flex flex-col gap-2 mb-4 p-4 border rounded"
-            hx-post="/admin/users"
-            hx-target="#admin-users"
-            hx-swap="outerHTML" {
-            p class="text-xl" { "Create user" }
-            div class="flex flex-row gap-2" {
-                input class="text grow" type="text" name="username" placeholder="Username" required="required";
-                input class="text grow" type="email" name="email" placeholder="Email" required="required";
-            }
-            div class="flex flex-row gap-2" {
-                input class="text grow" type="password" name="password" placeholder="Password" required="required";
-                label class="flex items-center gap-2" {
-                    input type="checkbox" name="is_admin" value="true";
-                    "Admin"
+        tr id="user--1" {
+            td { input class="text w-full" type="text" name="username" placeholder="Username" required="required"; }
+            td { input class="text w-full" type="email" name="email" placeholder="Email" required="required"; }
+            td {
+                div class="flex flex-col gap-1" {
+                    input class="text w-full" type="password" name="password" placeholder="Password" required="required";
+                    label class="flex items-center gap-1 text-sm" {
+                        input type="checkbox" name="is_admin" value="true";
+                        "Admin"
+                    }
                 }
-                button class="btn btn-primary" type="submit" { "Create" }
+            }
+            td {
+                button class="btn btn-primary"
+                    hx-post="/admin/users"
+                    hx-include="closest tr"
+                    hx-target="#admin-users"
+                    hx-swap="outerHTML"
+                    hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#user--1 input[name=username]');if(i)i.focus();}"
+                    { "Create" }
             }
         }
     }
@@ -142,7 +150,6 @@ async fn create_user(
     Ok(html! {
         div id="admin-users" class="w-full max-w-3xl" {
             (user_list(&users))
-            (create_user_form())
         }
     })
 }
@@ -206,6 +213,23 @@ async fn render_user_detail(foodlib: &foodlib_new::FoodLib, user_id: i64) -> MRe
                 table class="w-full text-inherit table-auto" {
                     thead { tr { th { "Name" } th class="w-24" { "Type" } th class="w-24" { "Remove" } } }
                     tbody {
+                        tr id="add-group" {
+                            td colspan="2" {
+                                select class="fc-select w-full" name="group_id" required="required" {
+                                    option value="" { "Select group to add..." }
+                                    @for g in &candidate_groups {
+                                        option value=(g.id) { (g.name) }
+                                    }
+                                }
+                            }
+                            td {
+                                button class="btn btn-primary"
+                                    hx-post=(format!("/admin/users/{}/groups", user.id))
+                                    hx-include="closest tr"
+                                    hx-target="#user-detail"
+                                    hx-swap="outerHTML" { "Add" }
+                            }
+                        }
                         @for g in &user_groups {
                             tr id=(format!("user-{}-group-{}", user.id, g.id)) {
                                 td { (g.name) }
@@ -221,18 +245,6 @@ async fn render_user_detail(foodlib: &foodlib_new::FoodLib, user_id: i64) -> MRe
                             }
                         }
                     }
-                }
-                form class="flex flex-row gap-2 mt-2"
-                    hx-post=(format!("/admin/users/{}/groups", user.id))
-                    hx-target="#user-detail"
-                    hx-swap="outerHTML" {
-                    select class="fc-select grow" name="group_id" required="required" {
-                        option value="" { "Select group to add..." }
-                        @for g in &candidate_groups {
-                            option value=(g.id) { (g.name) }
-                        }
-                    }
-                    button class="btn btn-primary" type="submit" { "Add to group" }
                 }
             }
 

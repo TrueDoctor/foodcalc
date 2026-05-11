@@ -186,6 +186,28 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
     let overrides = foodlib.events().get_source_overrides(event_id).await?;
     let ingredients = foodlib.ingredients().list().await?;
     let meals = foodlib.meals().get_event_meals(event_id).await?;
+    let mut recipes = foodlib.recipes().list().await?;
+    recipes.sort_by(|a, b| a.name.cmp(&b.name));
+    // Default start-time for the inline meal add-row: latest meal's start_time
+    // if any, otherwise "now". Saves the user retyping when adding meals
+    // back-to-back.
+    let default_meal_start = meals
+        .iter()
+        .map(|m| m.start_time)
+        .max()
+        .unwrap_or_else(time::OffsetDateTime::now_utc);
+    // Default date for tour + food-prep add-rows: a day before the earliest
+    // meal (or food prep), so shopping/prep naturally precedes consumption.
+    // Falls back to "now" when nothing is scheduled yet.
+    let preps = foodlib.events().get_food_prep_tasks(event_id).await?;
+    let earliest = meals
+        .iter()
+        .map(|m| m.start_time)
+        .chain(preps.iter().map(|p| p.prep_date))
+        .min();
+    let default_shop_date = earliest
+        .map(|t| t - time::Duration::days(1))
+        .unwrap_or_else(time::OffsetDateTime::now_utc);
 
     // Create a dummy source for the "add new" row
     let dummy_source = SourceOverrideView {
@@ -225,14 +247,10 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
         }
-        div class="flex flex-row items-center justify-center mb-2" {
-            button class="btn btn-primary" hx-target="#content"
-                hx-push-url="true"
-                hx-get=(format!("/events/edit/event_edit_meal/{}/-1", event_id)) {"Add Meal"}
-        }
         table class="w-full text-inherit table-auto object-center mb-2 table-fixed" {
             thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} }  }
             tbody class="text-center" {
+                (meal_add_row(event_id, &recipes, default_meal_start))
                 @for meal in meals {
                     (format_event_meal(event_id, &meal))
                 }
@@ -243,8 +261,8 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
                 option value=(ingredient.name) {}
             }
         }
-        (render_shopping_tours(&foodlib, event_id).await?)
-        (food_prep::render_food_prep(foodlib, event_id).await?)
+        (render_shopping_tours(&foodlib, event_id, &stores, default_shop_date).await?)
+        (food_prep::render_food_prep(foodlib, event_id, default_shop_date).await?)
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Ingredient Sources Overrides" }
         }
@@ -350,19 +368,17 @@ pub async fn render_ingredients_without_tours(foodlib: &FoodLib, event_id: i32) 
     })
 }
 
-pub async fn render_shopping_tours(foodlib: &FoodLib, event_id: i32) -> MResponse {
+pub async fn render_shopping_tours(
+    foodlib: &FoodLib,
+    event_id: i32,
+    stores: &[foodlib_new::store::Store],
+    default_date: time::OffsetDateTime,
+) -> MResponse {
     let tours = foodlib.events().get_shopping_tours(event_id).await?;
 
     Ok(html! {
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Shopping Tours" }
-        }
-        div class="flex flex-row items-center justify-center mb-2" {
-            button class="btn btn-primary"
-                hx-get=(format!("/events/edit/shopping_tours/add/{}", event_id))
-                hx-swap="innerHtml show:window:top"
-                hx-push-url="true"
-                hx-target="#content" { "Add Shopping Tour" }
         }
         table class="w-full text-inherit table-auto object-center table-fixed" {
             thead {
@@ -373,6 +389,7 @@ pub async fn render_shopping_tours(foodlib: &FoodLib, event_id: i32) -> MRespons
                 }
             }
             tbody {
+                (tour_add_row(event_id, stores, default_date))
                 @for tour in tours {
                     tr {
                         td { (tour.tour_date.format(&time::format_description::parse("[day].[month] [hour]:[minute]").unwrap()).unwrap()) }
@@ -395,6 +412,40 @@ pub async fn render_shopping_tours(foodlib: &FoodLib, event_id: i32) -> MRespons
             }
         }
     })
+}
+
+/// Inline add-row for shopping tours. All fields fit in the row, so submit
+/// directly — no detail-page round-trip. Editing an existing tour still goes
+/// through the detail page (it carries the shopping-list + inventory UI).
+fn tour_add_row(
+    event_id: i32,
+    stores: &[foodlib_new::store::Store],
+    default_date: time::OffsetDateTime,
+) -> Markup {
+    let url = format!("/events/edit/shopping_tours/create_inline/{}", event_id);
+    let date_value = default_date
+        .format(format_description!("[year]-[month]-[day]T[hour]:[minute]"))
+        .unwrap_or_default();
+    html! {
+        tr id="tour--1" {
+            td { input class="text w-full" type="datetime-local" name="date" value=(date_value) required="required"; }
+            td {
+                select name="store_id" class="text w-full" required="required" {
+                    option value="" { "Select store..." }
+                    @for s in stores {
+                        option value=(s.id) { (s.name) }
+                    }
+                }
+            }
+            td {} td {}
+            td {
+                button class="btn btn-primary" type="button"
+                    hx-post=(url)
+                    hx-include="closest tr"
+                    hx-target="#content" { "Add" }
+            }
+        }
+    }
 }
 
 fn format_event_meal_ingredient(
@@ -513,6 +564,43 @@ fn format_event_source_override(
             td { (button) }
             td { @if source_override.ingredient_id != -1 {
                 button class="btn btn-cancel" hx-get=(format!("/events/edit/{}/overrides/{}/delete_dialog", source_override.event_id, source_override.source_id)) hx-target="this" hx-swap="outerHTML" { "Delete" } }}
+        }
+    }
+}
+
+/// Inline add-row for meals. The visible columns mirror the table; the Add
+/// button navigates (push-url) to the meal-detail page with the typed values
+/// prepopulated via querystring, so the user can fill the remaining required
+/// fields (place, end_time, energy, comment) before saving.
+fn meal_add_row(
+    event_id: i32,
+    recipes: &[foodlib_new::recipe::Recipe],
+    default_start: time::OffsetDateTime,
+) -> Markup {
+    let url = format!("/events/edit/event_edit_meal/{}/-1", event_id);
+    let start_value = default_start
+        .format(format_description!("[year]-[month]-[day]T[hour]:[minute]"))
+        .unwrap_or_default();
+    html! {
+        tr id="meal--1" {
+            td {
+                select name="recipe_id" class="text w-full" required="required" {
+                    option value="" { "Select recipe..." }
+                    @for r in recipes {
+                        option value=(r.id) { (r.name) }
+                    }
+                }
+            }
+            td { input class="text w-full" type="datetime-local" name="start_time" value=(start_value); }
+            td { input class="text w-full" type="number" name="servings" min="1" placeholder="Servings"; }
+            td {} td {} td {} td {} td {} td {}
+            td {
+                button class="btn btn-primary" type="button"
+                    hx-get=(url)
+                    hx-include="closest tr"
+                    hx-target="#content"
+                    hx-push-url="true" { "Add" }
+            }
         }
     }
 }

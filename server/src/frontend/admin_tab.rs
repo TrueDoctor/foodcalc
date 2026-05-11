@@ -69,7 +69,6 @@ async fn groups_view(foodlib: FoodLib, ctx: AuthCtx) -> MResponse {
             }
             div id="admin-groups" class="w-full max-w-3xl" {
                 (group_list(&visible))
-                (create_group_form())
             }
         }
     })
@@ -80,6 +79,7 @@ fn group_list(groups: &[Group]) -> Markup {
         table class="w-full text-inherit table-auto object-center table-fixed mb-4" {
             thead { tr { th class="w-1/2" { "Name" } th { "Members" } th { "Delete" } } }
             tbody {
+                (create_group_row())
                 @if groups.is_empty() {
                     tr { td colspan="3" class="text-center opacity-70" { "No shared groups yet" } }
                 }
@@ -102,14 +102,23 @@ fn group_list(groups: &[Group]) -> Markup {
     }
 }
 
-fn create_group_form() -> Markup {
+/// First-row inline add for the groups table. The handler returns a fresh
+/// `#admin-groups` block (which re-renders the table including a new empty
+/// add-row), so no after-request focus handler is needed — the input is
+/// already empty and present in the new DOM.
+fn create_group_row() -> Markup {
     html! {
-        form class="flex flex-row gap-2"
-            hx-post="/admin/groups"
-            hx-target="#admin-groups"
-            hx-swap="outerHTML" {
-            input class="text grow" type="text" name="name" placeholder="New group name" required="required";
-            button class="btn btn-primary" type="submit" { "Create group" }
+        tr id="group--1" {
+            td { input class="text w-full" type="text" name="name" placeholder="New group name" required="required"; }
+            td colspan="2" {
+                button class="btn btn-primary"
+                    hx-post="/admin/groups"
+                    hx-include="closest tr"
+                    hx-target="#admin-groups"
+                    hx-swap="outerHTML"
+                    hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#group--1 input[name=name]');if(i)i.focus();}"
+                    { "Create group" }
+            }
         }
     }
 }
@@ -145,7 +154,6 @@ async fn create_group(
     Ok(html! {
         div id="admin-groups" class="w-full max-w-3xl" {
             (group_list(&visible))
-            (create_group_form())
         }
     })
 }

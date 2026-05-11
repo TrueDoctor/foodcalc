@@ -17,7 +17,6 @@ pub(crate) fn events_router() -> axum::Router<MyAppState> {
         .route("/", axum::routing::get(event_list))
         .route("/delete/{event_id}", axum::routing::get(delete_dialog))
         .route("/delete/{event_id}", axum::routing::delete(delete))
-        .route("/add", axum::routing::put(add_form))
         .route("/add", axum::routing::post(add))
         .route("/duplicate/{event_id}", axum::routing::post(duplicate))
         .nest("/edit", event_detail_tab::event_detail_router())
@@ -29,19 +28,6 @@ pub struct SearchParameters {
     search: String,
     #[serde(default)]
     mine_only: Option<String>,
-}
-
-pub async fn add_form() -> Markup {
-    html! {
-        form hx-post="/events/add" hx-target="#content" hx-swap="innerHTML" {
-            div class="flex flex-row gap-2" {
-                input class="text" type="text" id="name" name="name" required="required" placeholder="Event Name";
-                input class="text" type="text" id="budget" name="budget" required="required" placeholder="Budget";
-                input class="text" type="text" id="comment" name="comment" placeholder="Comment";
-                button class="btn btn-primary" type="submit" { "Add event" }
-            }
-        }
-    }
 }
 
 #[derive(Deserialize)]
@@ -66,6 +52,28 @@ pub async fn add(
     };
     foodlib.events().create(event).await?;
     Ok(event_list(foodlib, user).await)
+}
+
+/// Inline add-row for events. Visible columns mirror the table (name +
+/// comment); budget sits in the column normally used for Edit, with the Add
+/// button in the next cell. Submitting refreshes the whole `#content`, so a
+/// fresh empty add-row reappears for rapid entry.
+fn event_add_row() -> Markup {
+    html! {
+        tr id="event--1" {
+            td { input class="text w-full" type="text" name="name" placeholder="Event name" required="required"; }
+            td { input class="text w-full" type="text" name="comment" placeholder="Comment"; }
+            td { input class="text w-full" type="number" step="0.01" min="0" name="budget" placeholder="Budget"; }
+            td colspan="2" {
+                button class="btn btn-primary"
+                    hx-post="/events/add"
+                    hx-include="closest tr"
+                    hx-target="#content"
+                    hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#event--1 input[name=name]');if(i)i.focus();}"
+                    { "Add" }
+            }
+        }
+    }
 }
 
 pub async fn duplicate(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
@@ -119,13 +127,10 @@ pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
                 "Mine only"
             }
         }
-        div class = "grow-0 h-full m-2"
-            hx-target="this"  hx-swap="outerHTML" {
-            button class="btn btn-primary" hx-put="/events/add" { "Add event (+)" }
-        }
         table class="w-full text-inherit table-auto object-center table-fixed" {
-            thead { tr { th class="w-1/3" { "Name" } th class="w-1/3" { "Comment" } th {} th {}} }
+            thead { tr { th class="w-1/3" { "Name" } th class="w-1/3" { "Comment" } th {} th {} th {}} }
             tbody id="search-results" {
+                (event_add_row())
                 @for event in events.iter() {
                     (format_event(event))
                 }
@@ -162,6 +167,7 @@ pub async fn search(foodlib: FoodLib, user: User, query: Form<SearchParameters>)
     });
 
     html! {
+        (event_add_row())
         @for event in filtered_events {
             (format_event(event))
         }

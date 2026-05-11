@@ -129,6 +129,9 @@ fn render_list(inventories: &[Inventory], open: &[i32], filter: &str) -> Markup 
                     group: 'inventory-items',
                     draggable: '.item-row',
                     filter: '.add-row',
+                    // Without this, Sortable preventDefaults mousedown on
+                    // filtered rows, which stops the inline-add inputs from
+                    // ever receiving focus.
                     preventOnFilter: false,
                     ghostClass: 'fc-ghost',
                     chosenClass: 'fc-chosen',
@@ -285,9 +288,11 @@ async fn render_contents(foodlib: &FoodLib, inventory_id: i32, filter: &str) -> 
 
     Ok(html! {
         div class="flex flex-col gap-2 w-full" {
+            // Each option carries the ingredient id so the add-row's JS handler
+            // can resolve the typed name to an id without a server round-trip.
             datalist id=(format!("ingredients-{}", inventory_id)) {
                 @for ing in &ingredients {
-                    option value=(ing.name) {}
+                    option value=(ing.name) data-id=(ing.id) {}
                 }
             }
             table class="w-full text-inherit table-auto" {
@@ -306,18 +311,36 @@ async fn render_contents(foodlib: &FoodLib, inventory_id: i32, filter: &str) -> 
 }
 
 /// Permanent first row of each inventory's items table — an inline form for
-/// adding a new item. After a successful add, we refocus the name input so
-/// the user can rattle off entries without reaching for the mouse. Uses
-/// `hx-include="closest tr"` so the button collects the row's inputs without
-/// needing a separate `<form>` element (which previously left the inputs in
-/// an inactive state until the button was clicked).
+/// adding a new item. Uses the standardized id-based sentinel:
+/// - The visible name input is matched against the datalist's `data-id`
+///   attribute to populate a hidden `ingredient_id`.
+/// - `setCustomValidity` marks the name input invalid whenever it doesn't
+///   match a datalist option, so the browser blocks submit with a native
+///   tooltip; the button additionally calls `reportValidity()` on click so
+///   the message is shown immediately rather than only on blur.
 fn add_item_row(inventory_id: i32) -> Markup {
+    let list_id = format!("ingredients-{}", inventory_id);
+    // Inline handler: resolves the typed name to an ingredient id by looking
+    // up the matching `<option data-id>` in the associated datalist. Runs on
+    // input AND change so paste/autocomplete-pick keep the hidden id in sync.
+    // Also toggles the input's custom validity so the browser blocks submit
+    // when the name doesn't match any known ingredient.
+    let resolve_id = format!(
+        "const o=document.querySelector('#{list} option[value='+JSON.stringify(this.value)+']'); const tr=this.closest('tr'); tr.querySelector('input[name=ingredient_id]').value = o ? o.dataset.id : '-1'; this.setCustomValidity(o ? '' : 'Pick an ingredient from the list');",
+        list = list_id
+    );
+    // Gate the htmx request on the name input's validity. Without this,
+    // hx-post fires regardless of the form's validation state.
+    let validate_on_click = "const tr=this.closest('tr'); const ni=tr.querySelector('input[name=ingredient_name]'); if(!ni.reportValidity()){event.preventDefault(); event.stopPropagation(); return;}";
     html! {
         tr class="add-row" data-sortable-ignore="true" data-inv-id=(inventory_id) {
+            input type="hidden" name="ingredient_id" value="-1";
             td {
                 input type="text" name="ingredient_name"
-                    list=(format!("ingredients-{}", inventory_id))
-                    placeholder="Add ingredient..." class="text w-full" required="required";
+                    list=(list_id)
+                    placeholder="Add ingredient..." class="text w-full" required="required"
+                    hx-on:input=(resolve_id)
+                    hx-on:change=(resolve_id);
             }
             td {
                 input type="number" name="amount"
@@ -330,6 +353,7 @@ fn add_item_row(inventory_id: i32) -> Markup {
                     hx-include="closest tr"
                     hx-target=(format!("#inv-{}-contents", inventory_id))
                     hx-swap="innerHTML"
+                    hx-on:click=(validate_on_click)
                     hx-on::after-request=(format!("if(event.detail.successful){{const inp=document.querySelector('#inv-{}-items input[name=ingredient_name]'); inp && inp.focus();}}", inventory_id))
                     { "Add" }
             }
@@ -483,7 +507,7 @@ async fn execute_move(
 
 #[derive(Deserialize)]
 struct AddItemForm {
-    ingredient_name: String,
+    ingredient_id: i32,
     amount: BigDecimal,
 }
 
@@ -494,21 +518,20 @@ async fn add_item(
     Form(form): Form<AddItemForm>,
 ) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
-    let Ok(ingredient) = foodlib
-        .ingredients()
-        .get_by_name(&form.ingredient_name)
-        .await
-    else {
+    // -1 means the client-side datalist match failed (user typed a name with
+    // no matching ingredient). Bail out without mutating; the unchanged
+    // contents render keeps their input where it is so they can correct it.
+    if form.ingredient_id < 0 {
         return render_contents(&foodlib, id, "").await;
-    };
+    }
 
     let items = foodlib.inventories().get_items(id).await?;
     let item = InventoryItem {
         inventory_id: id,
-        ingredient_id: ingredient.id,
+        ingredient_id: form.ingredient_id,
         amount: form.amount,
     };
-    if items.iter().any(|x| x.ingredient_id == ingredient.id) {
+    if items.iter().any(|x| x.ingredient_id == form.ingredient_id) {
         foodlib.inventories().update_item(item).await?;
     } else {
         foodlib.inventories().add_item(item).await?;

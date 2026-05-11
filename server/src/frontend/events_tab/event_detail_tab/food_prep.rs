@@ -17,6 +17,7 @@ use crate::{
 pub(crate) fn food_prep_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/add/{event_id}", get(add_food_prep))
+        .route("/create_inline/{event_id}", post(create_inline))
         .route("/edit/{event_id}/{prep_id}", get(food_prep_form))
         .route("/save", post(save_food_prep))
         .route("/delete/{event_id}/{prep_id}", delete(delete_food_prep))
@@ -24,6 +25,45 @@ pub(crate) fn food_prep_router() -> axum::Router<MyAppState> {
             "/delete_dialog/{event_id}/{prep_id}",
             get(delete_food_prep_dialog),
         )
+}
+
+#[derive(Deserialize)]
+struct InlinePrepForm {
+    recipe_id: i32,
+    prep_date: String,
+    use_from: Option<String>,
+    use_until: String,
+}
+
+async fn create_inline(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+    Form(form): Form<InlinePrepForm>,
+) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    let prep_date =
+        super::shopping_tours::parse_datetime_local(&form.prep_date)?;
+    let use_from = form
+        .use_from
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(super::shopping_tours::parse_datetime_local)
+        .transpose()?;
+    let use_until =
+        super::shopping_tours::parse_datetime_local(&form.use_until)?;
+    foodlib
+        .events()
+        .add_food_prep(FoodPrep {
+            id: -1,
+            event_id,
+            recipe_id: form.recipe_id,
+            prep_date,
+            use_from,
+            use_until,
+        })
+        .await?;
+    event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
 }
 
 #[derive(Deserialize)]
@@ -293,7 +333,11 @@ fn format_food_prep(event_id: i32, prep: &FoodPrep, recipe: &Recipe) -> Markup {
     }
 }
 
-pub async fn render_food_prep(foodlib: FoodLib, event_id: i32) -> MResponse {
+pub async fn render_food_prep(
+    foodlib: FoodLib,
+    event_id: i32,
+    default_date: time::OffsetDateTime,
+) -> MResponse {
     let preps = foodlib.events().get_food_prep_tasks(event_id).await?;
 
     // Get recipes for all food preps
@@ -305,17 +349,12 @@ pub async fn render_food_prep(foodlib: FoodLib, event_id: i32) -> MResponse {
             }
         }
     }
+    let mut all_recipes = foodlib.recipes().list().await.unwrap_or_default();
+    all_recipes.sort_by(|a, b| a.name.cmp(&b.name));
 
     Ok(html! {
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Food Preparation" }
-        }
-        div class="flex flex-row items-center justify-center mb-2" {
-            button class="btn btn-primary"
-                hx-get=(format!("/events/edit/food_prep/add/{}", event_id))
-                hx-swap="innerHtml"
-                hx-push-url="true"
-                hx-target="#content" { "Add Food Prep" }
         }
         table class="w-full text-inherit table-auto object-center table-fixed" {
             thead {
@@ -330,6 +369,7 @@ pub async fn render_food_prep(foodlib: FoodLib, event_id: i32) -> MResponse {
                 }
             }
             tbody {
+                (food_prep_add_row(event_id, &all_recipes, default_date))
                 @for prep in preps {
                     @if let Some(recipe) = recipe_map.get(&prep.recipe_id) {
                         (format_food_prep(event_id, &prep, recipe))
@@ -338,4 +378,44 @@ pub async fn render_food_prep(foodlib: FoodLib, event_id: i32) -> MResponse {
             }
         }
     })
+}
+
+/// Inline add-row for food prep. All fields fit, so submit directly via POST.
+/// Editing still uses the detail page (consistency with shopping tours).
+/// Both `prep_date` and `use_until` default to the supplied date so the user
+/// never submits an ambiguous empty `datetime-local` (which browsers serialize
+/// as `""` when the time portion is blank).
+fn food_prep_add_row(
+    event_id: i32,
+    recipes: &[Recipe],
+    default_date: time::OffsetDateTime,
+) -> Markup {
+    let url = format!("/events/edit/food_prep/create_inline/{}", event_id);
+    let fmt = format_description!("[year]-[month]-[day]T[hour]:[minute]");
+    let prep_value = default_date.format(fmt).unwrap_or_default();
+    let until_value = (default_date + time::Duration::days(1))
+        .format(fmt)
+        .unwrap_or_default();
+    html! {
+        tr id="food-prep--1" {
+            td {
+                select name="recipe_id" class="text w-full" required="required" {
+                    option value="" { "Select recipe..." }
+                    @for r in recipes {
+                        option value=(r.id) { (r.name) }
+                    }
+                }
+            }
+            td { input class="text w-full" type="datetime-local" name="prep_date" value=(prep_value) required="required"; }
+            td { input class="text w-full" type="datetime-local" name="use_from"; }
+            td { input class="text w-full" type="datetime-local" name="use_until" value=(until_value) required="required"; }
+            td {} td {}
+            td {
+                button class="btn btn-primary" type="button"
+                    hx-post=(url)
+                    hx-include="closest tr"
+                    hx-target="#content" { "Add" }
+            }
+        }
+    }
 }

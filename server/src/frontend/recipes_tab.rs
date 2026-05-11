@@ -52,7 +52,9 @@ pub async fn search(
     });
 
     Ok(html! {
-        (recipe_add_form())
+        @if user.is_some() {
+            (recipe_add_row())
+        }
         @for recipe in filtered_recipes {
             (format_recipe(recipe, user.as_ref(), &user_group_ids))
         }
@@ -226,7 +228,9 @@ pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
             table class="w-full text-inherit table-auto object-center table-fixed" {
                 thead { tr { th { "ID" } th { "Name" } th { "Comment" }  th {} th {} th {}} }
                     tbody id="search-results"  {
-                        (recipe_add_form())
+                        @if user.is_some() {
+                            (recipe_add_row())
+                        }
                         @for recipe in recipes.iter() {
                             (format_recipe(recipe, user.as_ref(), &user_group_ids))
                         }
@@ -239,13 +243,24 @@ pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
     }
 }
 
-fn recipe_add_form() -> Markup {
+/// First-row inline add. On success, `add_recipe` returns the recipe-edit
+/// view (retargeted to #content) so the user lands in the editor — no need
+/// to refocus the name input here.
+fn recipe_add_row() -> Markup {
     html! {
-        tr id="add"  { td {  }
+        tr id="recipe--1" {
+            input type="hidden" name="id" value="-1";
+            input type="hidden" name="group_id" value="-1";
+            td class="text-center opacity-70" { "+" }
             td { input class="grow text" type="text" name="name" placeholder="Recipe name" required="required"; }
             td { input class="grow text" type="text" name="comment" placeholder="Comment"; }
-            td { button class="btn btn-primary" hx-include="[name='name'],[name='comment']" hx-target="#content" hx-post="/recipes" { "Add" } }
-            td {} td {} td { div id="dialog"; }
+            td {
+                button class="btn btn-primary"
+                    hx-post="/recipes"
+                    hx-include="closest tr"
+                    hx-target="#content" { "Add" }
+            }
+            td {} td {} td {}
         }
     }
 }

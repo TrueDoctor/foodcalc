@@ -22,6 +22,7 @@ use crate::{
 pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/add/{event_id}", get(add_shopping_tour))
+        .route("/create_inline/{event_id}", post(create_inline))
         .route("/edit/{event_id}/{tour_id}", get(shopping_tour_form))
         .route("/save", post(save_tour))
         .route("/export/{tour_id}/plain", get(export_plain))
@@ -57,6 +58,51 @@ async fn add_shopping_tour(
     ctx.assert_can_edit_event(event_id).await?;
     shopping_tour_form(state, ctx, Path((event_id, -1))).await
 }
+#[derive(Deserialize)]
+struct InlineTourForm {
+    store_id: i32,
+    date: String,
+}
+
+async fn create_inline(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+    Form(form): Form<InlineTourForm>,
+) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    let tour_date = parse_datetime_local(&form.date)?;
+    foodlib
+        .events()
+        .add_shopping_tour(ShoppingTour {
+            id: -1,
+            event_id,
+            tour_date,
+            store_id: form.store_id,
+            store_name: None,
+        })
+        .await?;
+    event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
+}
+
+/// Parse a `datetime-local` value, accepting a date-only string (e.g.
+/// "2026-05-12") by defaulting the time to 00:00. Browsers may submit either
+/// the full `YYYY-MM-DDTHH:MM` form or just `YYYY-MM-DD` depending on whether
+/// the user filled in the time portion.
+pub(crate) fn parse_datetime_local(s: &str) -> Result<OffsetDateTime> {
+    let normalized = if s.len() == 10 {
+        format!("{}T00:00", s)
+    } else {
+        s.to_string()
+    };
+    let dt = time::PrimitiveDateTime::parse(
+        &normalized,
+        format_description!("[year]-[month]-[day]T[hour]:[minute]"),
+    )
+    .map_err(|e| foodlib_new::Error::Misc(e.to_string()))?;
+    Ok(dt.assume_utc())
+}
+
 async fn delete_shopping_tour(
     state: State<MyAppState>,
     ctx: AuthCtx,

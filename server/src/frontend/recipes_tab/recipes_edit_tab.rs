@@ -21,12 +21,10 @@ use crate::{
 pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/{recipe_id}", axum::routing::get(recipe_edit_view))
-        .route("/add-ingredient/{recipe_id}", put(add_ingredient_form))
-        .route("/add-subrecipe/{recipe_id}", put(add_subrecipe_form))
-        .route("/add-step/{recipe_id}", put(add_step_form))
         .route("/commit-ingredient", put(handle_ingredient_add))
         .route("/commit-subrecipe", put(handle_subrecipe_add))
         .route("/commit-step", put(handle_step_add))
+        .route("/reorder-step", put(handle_step_reorder))
         .route(
             "/delete-ingredient/{recipe_id}/{ingredient_id}",
             delete(handle_ingredient_delete),
@@ -43,7 +41,6 @@ pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
         .route("/change-subrecipe", put(handle_subrecipe_change))
         .route("/change-name", put(handle_name_change))
         .route("/change-step", put(handle_step_change))
-        .route("/change-step-order", put(handle_step_order_change))
         .route("/move-group/{recipe_id}", axum::routing::post(handle_move_group))
 }
 
@@ -202,16 +199,35 @@ pub async fn handle_step_change(
     Ok(step.format_for_step_table(recipe_id))
 }
 
-pub async fn handle_step_order_change(
+/// DnD reorder. Reads only the new `step_order` (client-computed midpoint)
+/// and persists it; leaves all other step fields untouched by loading the
+/// step and mutating just the order before update.
+#[derive(Deserialize)]
+struct ReorderStepForm {
+    recipe_id: i32,
+    step_id: i32,
+    step_order: f64,
+}
+
+async fn handle_step_reorder(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Form(data): Form<UpdateRecipeStepHeader>,
-) -> MResponse {
-    ctx.assert_can_edit_recipe(data.recipe_id).await?;
-    let recipe_id = data.recipe_id;
-    foodlib.recipes().update_step(data.into()).await?;
-
-    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
+    Form(form): Form<ReorderStepForm>,
+) -> Result<(), foodlib_new::Error> {
+    ctx.assert_can_edit_recipe(form.recipe_id).await?;
+    let mut step = foodlib
+        .recipes()
+        .get_steps(form.recipe_id)
+        .await?
+        .into_iter()
+        .find(|s| s.id == form.step_id)
+        .ok_or_else(|| foodlib_new::Error::NotFound {
+            entity: "RecipeStep",
+            id: form.step_id.to_string(),
+        })?;
+    step.order = form.step_order;
+    foodlib.recipes().update_step(step).await?;
+    Ok(())
 }
 
 pub async fn handle_ingredient_delete(
@@ -288,87 +304,92 @@ pub async fn handle_subrecipe_add(
 pub async fn handle_step_add(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Form(data): Form<UpdateRecipeStepHeader>,
+    Form(mut data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
     ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let recipe_id = data.recipe_id;
+    // Order is no longer user-supplied — append after the current max.
+    let existing = foodlib.recipes().get_steps(recipe_id).await?;
+    data.step_order = existing
+        .iter()
+        .map(|s| s.order)
+        .fold(0.0_f64, f64::max)
+        + 1.0;
     foodlib.recipes().add_step(data.into()).await?;
     recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
-pub async fn add_ingredient_form(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(recipe_id): Path<i32>,
-) -> MResponse {
-    ctx.assert_can_edit_recipe(recipe_id).await?;
-    let ingredients = foodlib.ingredients().list().await?;
-    let unit_types = foodlib.units().list().await?;
-
-    Ok(html! {
-        form hx-put="/recipes/edit/commit-ingredient" hx-swap="outerHTML" hx-target="#contents" {
-            datalist id=("ingredient_data_list") {
-                @for ingredient in ingredients {
-                    option value=(ingredient.name) { }
-                }
-            }
-            div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
-                h1 { "Add ingredient" }
-                input type="hidden" name=("recipe_id") value=(recipe_id);
-                input type="hidden" name=("ingredient_id") value=(-1);
-                input class="text" type="text" list=("ingredient_data_list") name=("ingredient_name") placeholder="Ingredient" required="required";
-                input class="text" type="text" name=("ingredient_amount") placeholder="Amount" value="" required="required";
-                select class=("unit fc-select") name="ingredient_unit_id" required="required" {
-                    @for unit in unit_types {
-                        option value=(unit.id) { (unit.name) }
-                    }
-                }
-                button class="btn btn-primary" type="submit" { "Submit" }
-            }
-        }
-    })
-}
-
-pub async fn add_subrecipe_form(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(recipe_id): Path<i32>,
-) -> MResponse {
-    ctx.assert_can_edit_recipe(recipe_id).await?;
-    let subrecipes = foodlib.recipes().list().await?;
-
-    Ok(html! {
-        form hx-put="/recipes/edit/commit-subrecipe" hx-swap="outerHTML" hx-target="#contents" {
-            datalist id=("subrecipe_data_list") {
-                @for subrecipe in subrecipes {
-                    option value=(subrecipe.name) { }
-                }
-            }
-            div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
-                h1 { "Add Subrecipe" }
-                input type="hidden" name=("recipe_id") value=(recipe_id);
-                input type="hidden" name=("subrecipe_id") value=(-1);
-                input class="text" type="text" list=("subrecipe_data_list") name=("subrecipe_name") placeholder="Subrecipe" required="required";
-                input class="text" type="text" name=("subrecipe_amount") placeholder="Amount (kg)" value="" required="required";
-                button class="btn btn-primary" type="submit" { "Submit" }
-            }
-        }
-    })
-}
-
-pub async fn add_step_form(Path(recipe_id): Path<i32>) -> Markup {
+/// First-row inline add for the recipe-ingredients table. Sentinel id -1; the
+/// commit handler looks the ingredient up by name (since users pick from the
+/// datalist) and rewrites the id before insert.
+fn recipe_ingredient_add_row(
+    recipe_id: i32,
+    all_ingredients: &[foodlib_new::ingredient::Ingredient],
+    unit_types: &[Unit],
+) -> Markup {
+    let list_id = format!("ingredient-add-datalist-{}", recipe_id);
     html! {
-        form id="test5" hx-put="/recipes/edit/commit-step" hx-swap="outerHTML" hx-target="#contents" {
-            div class="flex flex-row items-center justify-center mb-2 gap-5 h-10 w-full"{
-                h1 { "Add Step" }
-                input type="hidden" name=("recipe_id") value=(recipe_id);
-                input type="hidden" name=("step_id") value=(-1);
-                input class="text" type="text" name=("step_order") placeholder="Order" value="" required="required";
-                input class="text" type="text" name=("step_name") placeholder="Name" value="" required="required";
-                input class="text" type="text" name=("step_description") placeholder="Description" value="";
-                input class="text" type="text" name=("fixed_duration_minutes") placeholder="Fixed Duration in Minutes" value="" required="required";
-                input class="text" type="text" name=("duration_per_kg_minutes") placeholder="Duration per kg in Minutes" value="" required="required";
-                button class="btn btn-primary" type="submit" { "Submit" }
+        tr id="recipe-ingredient--1" {
+            input type="hidden" name="recipe_id" value=(recipe_id);
+            input type="hidden" name="ingredient_id" value="-1";
+            datalist id=(list_id) {
+                @for ing in all_ingredients { option value=(ing.name) {} }
+            }
+            td {
+                input class="text w-full" type="text" list=(list_id)
+                    name="ingredient_name" placeholder="Ingredient" required="required";
+            }
+            td {
+                input class="text w-full" type="text" name="ingredient_amount"
+                    placeholder="Amount" required="required";
+            }
+            td {
+                select class="unit fc-select w-full" name="ingredient_unit_id" required="required" {
+                    @for unit in unit_types { option value=(unit.id) { (unit.name) } }
+                }
+            }
+            td {
+                button class="btn btn-primary"
+                    hx-put="/recipes/edit/commit-ingredient"
+                    hx-include="closest tr"
+                    hx-target="#contents"
+                    hx-swap="outerHTML" { "Add" }
+            }
+        }
+    }
+}
+
+/// First-row inline add for the recipe-subrecipes table. Sentinel id -1; the
+/// commit handler resolves the subrecipe id by name lookup.
+fn recipe_subrecipe_add_row(
+    recipe_id: i32,
+    all_recipes: &[foodlib_new::recipe::Recipe],
+) -> Markup {
+    let list_id = format!("subrecipe-add-datalist-{}", recipe_id);
+    html! {
+        tr id="recipe-subrecipe--1" {
+            input type="hidden" name="recipe_id" value=(recipe_id);
+            input type="hidden" name="subrecipe_id" value="-1";
+            datalist id=(list_id) {
+                @for r in all_recipes {
+                    @if r.id != recipe_id { option value=(r.name) {} }
+                }
+            }
+            td {
+                input class="text w-full" type="text" list=(list_id)
+                    name="subrecipe_name" placeholder="Subrecipe" required="required";
+            }
+            td {
+                input class="text w-full" type="text" name="subrecipe_amount"
+                    placeholder="Amount (kg)" required="required";
+            }
+            td { "kg" }
+            td {
+                button class="btn btn-primary"
+                    hx-put="/recipes/edit/commit-subrecipe"
+                    hx-include="closest tr"
+                    hx-target="#contents"
+                    hx-swap="outerHTML" { "Add" }
             }
         }
     }
@@ -383,6 +404,8 @@ pub async fn recipe_edit_view(
     let subrecipes = foodlib.recipes().get_meta_ingredients(recipe_id).await?;
 
     let ingredients = foodlib.recipes().get_ingredients(recipe_id).await?;
+    let all_ingredients = foodlib.ingredients().list().await?;
+    let all_recipes = foodlib.recipes().list().await?;
     let unit_types = foodlib.units().list().await?;
     let steps = foodlib.recipes().get_steps(recipe_id).await?;
     // The stats might not exist yet if we are creating a new recipe
@@ -423,55 +446,128 @@ pub async fn recipe_edit_view(
                 }
             }
 
-            div id="styling-bullshit" class="mb-6 mt-6 w-1/4" {
-                form hx-put=(format!("/recipes/edit/add-subrecipe/{}", recipe_id)) hx-swap="outerHTML" hx-target="#styling-bullshit" class="w-full flex flex-col items-center justify-center pb-4" {
-                    input type="hidden" name=("recipe_id") value=(recipe_id);
-                    button type="submit" class="btn btn-primary"  { "Add Subrecipe (+)" }
-                }
-            }
-
-
             span class="htmx-indicator" { "Saving\u{a0}…" }
 
-            @if !subrecipes.is_empty() {
-                div id=("meta-ingredients") class="w-3/4" {
-                    table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
-                        thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
-                        tbody { @for item in subrecipes { (item.format_for_subrecipe_table()) } }
+            div id="meta-ingredients" class="w-3/4 mt-6" {
+                h3 class="text-lg font-semibold mb-2" { "Subrecipes" }
+                table class="text-inherit table-auto object-center table-fixed w-full" {
+                    thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
+                    tbody {
+                        (recipe_subrecipe_add_row(recipe_id, &all_recipes))
+                        @for item in subrecipes { (item.format_for_subrecipe_table()) }
                     }
                 }
             }
 
-            form hx-put=(format!("/recipes/edit/add-ingredient/{}", recipe_id)) hx-swap="outerHTML" class="w-1/4 mt-6 flex flex-col items-center justify-center" {
-                input type="hidden" name=("recipe_id") value=(recipe_id);
-                button type="submit" class="btn btn-primary"  { "Add Ingredient (+)" }
-            }
-
-            @if !ingredients.is_empty() {
-                div id=("ingredients") class="w-3/4" {
-                    table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
-                        thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
-                        tbody { @for item in ingredients { (item.format_for_ingredient_table(unit_types.clone(), recipe_id,)) } }
+            div id="ingredients" class="w-3/4 mt-6" {
+                h3 class="text-lg font-semibold mb-2" { "Ingredients" }
+                table class="text-inherit table-auto object-center table-fixed w-full" {
+                    thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
+                    tbody {
+                        (recipe_ingredient_add_row(recipe_id, &all_ingredients, &unit_types))
+                        @for item in ingredients { (item.format_for_ingredient_table(unit_types.clone(), recipe_id,)) }
                     }
                 }
             }
 
-            form hx-put=(format!("/recipes/edit/add-step/{}", recipe_id)) hx-swap="outerHTML" class="w-1/4 mt-6 flex flex-col items-center justify-center" {
-                input type="hidden" name=("recipe_id") value=(recipe_id);
-                button type="submit" class="btn btn-primary"  { "Add Step (+)" }
-            }
-
-            @if !steps.is_empty() {
-                div id=("steps") class="w-3/4" {
-                    table class="text-inherit table-auto object-center table-fixed" padding="0 0.5em" display="block" max-height="60vh" overflow-y="scroll" {
-                        thead { tr { th { "Order" } th { "Name" } th { "Description" } th { "Duration"} th { "Duration per kg" } th { "Delete" } } }
-                        tbody { @for item in steps { (item.format_for_step_table(recipe_id)) } }
+            div id="steps" class="w-3/4 mt-6" {
+                h3 class="text-lg font-semibold mb-2" { "Steps" }
+                table class="text-inherit table-auto object-center table-fixed w-full" {
+                    thead { tr {
+                        th class="w-8" {}
+                        th { "Name" }
+                        th { "Description" }
+                        th { "Duration" }
+                        th { "Duration per kg" }
+                        th { "Delete" }
+                    } }
+                    tbody id="steps-tbody" class="recipe-steps" data-recipe-id=(recipe_id) {
+                        (recipe_step_add_row(recipe_id))
+                        @for item in &steps { (item.format_for_step_table(recipe_id)) }
                     }
                 }
             }
+            (steps_dnd_script(recipe_id))
             span class="htmx-indicator" { "Saving..." }
         }
     })
+}
+
+/// Inline JS that wires SortableJS to the steps tbody. On drop, computes the
+/// midpoint of the new neighbours' `data-step-order` values (or +1 at the
+/// end / -1 at the beginning) and PUTs it to /reorder-step. Uses Sortable's
+/// own drag handle (the `.step-drag-handle` cell) so the row inputs stay
+/// editable.
+fn steps_dnd_script(recipe_id: i32) -> Markup {
+    html! {
+        script {
+            (maud::PreEscaped(format!(r#"
+            (function() {{
+                const tbody = document.getElementById('steps-tbody');
+                if (!tbody || !window.Sortable || tbody.dataset.sortableReady === '1') return;
+                tbody.dataset.sortableReady = '1';
+                Sortable.create(tbody, {{
+                    draggable: '.step-row',
+                    handle: '.step-drag-handle',
+                    filter: '.add-row',
+                    preventOnFilter: false,
+                    ghostClass: 'fc-ghost',
+                    chosenClass: 'fc-chosen',
+                    dragClass: 'fc-drag',
+                    animation: 150,
+                    onEnd: function(evt) {{
+                        const row = evt.item;
+                        const stepId = row.dataset.stepId;
+                        if (!stepId) return;
+                        const siblings = Array.from(tbody.querySelectorAll('.step-row'));
+                        const idx = siblings.indexOf(row);
+                        const prev = siblings[idx - 1];
+                        const next = siblings[idx + 1];
+                        const prevOrder = prev ? parseFloat(prev.dataset.stepOrder) : null;
+                        const nextOrder = next ? parseFloat(next.dataset.stepOrder) : null;
+                        let newOrder;
+                        if (prevOrder === null && nextOrder === null) newOrder = 1.0;
+                        else if (prevOrder === null) newOrder = nextOrder - 1.0;
+                        else if (nextOrder === null) newOrder = prevOrder + 1.0;
+                        else newOrder = (prevOrder + nextOrder) / 2.0;
+                        row.dataset.stepOrder = newOrder;
+                        const hidden = row.querySelector('input[name=step_order]');
+                        if (hidden) hidden.value = newOrder;
+                        htmx.ajax('PUT', '/recipes/edit/reorder-step', {{
+                            target: '#contents',
+                            swap: 'none',
+                            values: {{ recipe_id: {recipe_id}, step_id: stepId, step_order: newOrder }}
+                        }});
+                    }}
+                }});
+            }})();
+            "#)))
+        }
+    }
+}
+
+/// First-row inline add for the steps table. Order is computed server-side
+/// (max existing + 1.0); the form-supplied step_order=0 is ignored.
+fn recipe_step_add_row(recipe_id: i32) -> Markup {
+    html! {
+        tr id="recipe-step--1" class="add-row" {
+            input type="hidden" name="recipe_id" value=(recipe_id);
+            input type="hidden" name="step_id" value="-1";
+            input type="hidden" name="step_order" value="0";
+            td {}
+            td { input class="text w-full" type="text" name="step_name" placeholder="Name" required="required"; }
+            td { input class="text w-full" type="text" name="step_description" placeholder="Description"; }
+            td { input class="text w-full" type="text" name="fixed_duration_minutes" placeholder="Fixed (min)" required="required"; }
+            td { input class="text w-full" type="text" name="duration_per_kg_minutes" placeholder="Per kg (min)" required="required"; }
+            td {
+                button class="btn btn-primary"
+                    hx-put="/recipes/edit/commit-step"
+                    hx-include="closest tr"
+                    hx-target="#contents"
+                    hx-swap="outerHTML" { "Add" }
+            }
+        }
+    }
 }
 
 pub trait IngredientTableFormattable {
@@ -541,12 +637,11 @@ impl StepTableFormattable for RecipeStep {
     fn format_for_step_table(&self, recipe_id: i32) -> Markup {
         let form_id = format!("step-{}-form", self.id);
         html! {
-            tr id=(format!("step-{}", self.id)) style="text-align:center"{
-                td style="text-align:left" {
-                    input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
-                    input class=(form_id) type="hidden" name=("step_id") value=(self.id);
-                    input class=(format!("text {}",form_id)) name="step_order" value=(self.order) required="required" hx-put="/recipes/edit/change-step-order" hx-target="#contents" hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator";
-                }
+            tr id=(format!("step-{}", self.id)) class="step-row" data-step-id=(self.id) data-step-order=(self.order) style="text-align:center"{
+                input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
+                input class=(form_id) type="hidden" name=("step_id") value=(self.id);
+                input class=(form_id) type="hidden" name=("step_order") value=(self.order);
+                td class="step-drag-handle text-center cursor-grab opacity-60 select-none" title="Drag to reorder" { "⋮⋮" }
                 td { input class=(format!("text {}",form_id)) name=("step_name") value=(self.name) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
                 td { input class=(format!("text {}",form_id)) name="step_description" value=(self.description) hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
                 td { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
