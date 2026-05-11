@@ -27,8 +27,6 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
         .route("/sources/{ingredient}/{source}", post(update_source))
         .route("/{id}", delete(delete_ingredient))
         .route("/edit", get(edit_ingredient_form))
-        .route("/move/{id}", get(move_ingredient_dialog))
-        .route("/move/{id}", post(move_ingredient))
         .route("/delete/{id}", get(delete_ingredient_form))
         .route(
             "/sources/delete/{ingredient_id}/{source_id}",
@@ -56,32 +54,37 @@ impl IngredientFilters {
 
 pub async fn update_ingredient(
     foodlib: FoodLib,
-    user: User,
+    ctx: AuthCtx,
     Form(mut ingredient): Form<Ingredient>,
 ) -> IResponse {
     if ingredient.id == -1 {
-        let group = foodlib.users().get_personal_group(user.id).await?;
+        let group = foodlib.users().get_personal_group(ctx.user.id).await?;
         ingredient.group_id = group.id;
         foodlib.ingredients().create(ingredient).await?;
         Ok((
             [("HX-Retarget", "#content"), ("HX-Reswap", "innerHTML")],
-            render_ingredients_view(foodlib, Some(user)).await,
+            render_ingredients_view(foodlib, Some(ctx.user)).await,
         )
             .into_response())
     } else {
         let existing = foodlib.ingredients().get(ingredient.id).await?;
-        let user_groups = foodlib.users().get_user_groups(user.id).await?;
-        let user_group_ids: Vec<i32> = user_groups.iter().map(|g| g.id).collect();
-        if !can_edit(existing.group_id, &user_group_ids, &user) {
+        if !can_edit(existing.group_id, &ctx.group_ids, &ctx.user) {
             return Err(Error::Forbidden(
                 "You don't have permission to edit this ingredient".into(),
             ));
         }
 
-        // Keep the original group_id to prevent ownership transfer via form manipulation
+        let target_group = ingredient.group_id;
         ingredient.group_id = existing.group_id;
+        if existing.group_id != target_group {
+            move_group::assert_can_move_to(&ctx, target_group)?;
+        }
         let updated = foodlib.ingredients().update(ingredient).await?;
-        Ok(format_ingredient(&updated.into(), Some(&user), &user_group_ids).into_response())
+        if existing.group_id != target_group {
+            foodlib.ingredients().set_group(updated.id, target_group).await?;
+        }
+        let refreshed = foodlib.ingredients().get(updated.id).await?;
+        Ok(format_ingredient(&refreshed.into(), Some(&ctx.user), &ctx.group_ids).into_response())
     }
 }
 
@@ -325,30 +328,36 @@ async fn delete_ingredient(foodlib: FoodLib, user: User, id: Path<i32>) -> MResp
     Ok(render_ingredients_view(foodlib, Some(user)).await)
 }
 
-pub async fn edit_ingredient_form(Form(ingredient): Form<IngredientWithSource>) -> Markup {
+pub async fn edit_ingredient_form(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Form(ingredient): Form<IngredientWithSource>,
+) -> MResponse {
     let id = ingredient.id;
-    html! {
+    let owner_select = if id > 0 {
+        Some(move_group::owner_select(&foodlib, &ctx, ingredient.group_id).await?)
+    } else {
+        None
+    };
+    Ok(html! {
         td colspan="6" {
             div class="flex flex-col items-center justify-center w-full" {
-                div class="flex gap-2 w-full" {
-
-                    input type="hidden" name=("group_id") value=(ingredient.group_id);
+                div class="flex gap-2 w-full items-center" {
+                    @if let Some(owner_select) = owner_select {
+                        (owner_select)
+                    } @else {
+                        input type="hidden" name="group_id" value=(ingredient.group_id);
+                    }
                     input class="text" type="text" name="name" placeholder="Name" value=(ingredient.name) required="required";
                     input class="text shrink" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy (kJ/g)" required="required" value=(ingredient.energy);
                     input class="text grow" type="text" name="comment" placeholder="Comment" value=(ingredient.comment.as_ref().unwrap_or(&String::new()));
                     input class="text" type="hidden" name="id" value=(ingredient.id);
                     button class="btn btn-primary" hx-include=(format!("closest #ingredient-{}", id)) hx-post="/ingredients" hx-target=(format!("#ingredient-{}", id)) hx-swap="outerHTML" { "Submit" }
-                    @if id > 0 {
-                        button class="btn btn-primary" type="button"
-                            hx-get=(format!("/ingredients/move/{id}"))
-                            hx-target="body"
-                            hx-swap="beforeend" { "Move" }
-                    }
                     button class="btn btn-cancel" hx-get="/ingredients" hx-target="#content" { "Cancel" }
                 }
             }
         }
-    }
+    })
 }
 
 async fn delete_ingredient_form(foodlib: FoodLib, user: User, id: Path<i32>) -> MResponse {
@@ -375,50 +384,6 @@ async fn delete_ingredient_form(foodlib: FoodLib, user: User, id: Path<i32>) -> 
             }
         }
     })
-}
-
-async fn move_ingredient_dialog(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(id): Path<i32>,
-) -> MResponse {
-    ctx.assert_can_edit_ingredient(id).await?;
-    let ingredient = foodlib.ingredients().get(id).await?;
-    let panel = move_group::move_panel(
-        &foodlib,
-        &ctx,
-        ingredient.group_id,
-        &format!("/ingredients/move/{id}"),
-        "#content",
-    )
-    .await?;
-    Ok(html! {
-        dialog open="true" class="dialog fixed top-1/4 left-1/2 -translate-x-1/2 z-50 shadow-xl" id="move-dialog"
-            hx-on::after-request="if(event.detail.successful) this.remove()" {
-            div class="flex flex-col m-2 gap-2 min-w-80" {
-                p class="text-lg font-semibold" { "Move \"" (ingredient.name) "\"" }
-                (panel)
-                button class="btn btn-abort" hx-on:click="document.getElementById('move-dialog').remove()" { "Cancel" }
-            }
-        }
-    })
-}
-
-#[derive(Deserialize)]
-struct MoveIngredientForm {
-    group_id: i32,
-}
-
-async fn move_ingredient(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(id): Path<i32>,
-    Form(form): Form<MoveIngredientForm>,
-) -> MResponse {
-    ctx.assert_can_edit_ingredient(id).await?;
-    move_group::assert_can_move_to(&ctx, form.group_id)?;
-    foodlib.ingredients().set_group(id, form.group_id).await?;
-    Ok(render_ingredients_view(foodlib, Some(ctx.user)).await)
 }
 
 async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> MResponse {

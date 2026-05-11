@@ -5,57 +5,6 @@ use foodlib_new::{
 };
 use maud::{html, Markup};
 
-/// Renders a "Move to group" panel for an entity.
-///
-/// `endpoint` is the POST URL that handles the move (form data: `group_id`).
-/// `target_id` is the htmx target to swap on success — usually the entity's
-/// edit-view container.
-pub async fn move_panel(
-    foodlib: &foodlib_new::FoodLib,
-    ctx: &AuthCtx,
-    current_group_id: i32,
-    endpoint: &str,
-    target_id: &str,
-) -> Result<Markup> {
-    let candidates = candidate_groups(foodlib, ctx, current_group_id).await?;
-    let current = foodlib.users().get_group(current_group_id).await.ok();
-    let current_label = current
-        .map(|g| {
-            if g.is_personal {
-                format!("{} (personal)", g.name)
-            } else {
-                g.name
-            }
-        })
-        .unwrap_or_else(|| "—".into());
-
-    Ok(html! {
-        div class="flex flex-row items-center flex-wrap gap-3 my-2 text-sm opacity-80" {
-            span { "Owner group:" }
-            strong { (current_label) }
-            @if candidates.is_empty() {
-                span class="opacity-70" { "(no other groups available)" }
-            } @else {
-                form class="flex flex-row items-center gap-2"
-                    hx-post=(endpoint)
-                    hx-target=(target_id)
-                    hx-swap="innerHTML" {
-                    select class="fc-select" name="group_id" required="required" {
-                        option value="" { "Move to..." }
-                        @for g in &candidates {
-                            option value=(g.id) {
-                                (g.name)
-                                @if g.is_personal { " (personal)" }
-                            }
-                        }
-                    }
-                    button class="btn btn-primary" type="submit" { "Move" }
-                }
-            }
-        }
-    })
-}
-
 /// Groups the user could plausibly move an entity into:
 /// - Admins: every group except the current one
 /// - Members: every group they belong to except the current one
@@ -73,6 +22,47 @@ async fn candidate_groups(
         .into_iter()
         .filter(|g| g.id != current_group_id)
         .collect())
+}
+
+/// Renders a labelled "Owner:" dropdown meant to be embedded inside a larger
+/// form (e.g. the event metadata form). Submits no button of its own — the
+/// surrounding form's save action picks up `group_id`. Falls back to a plain
+/// read-only label when the user has no other groups to move into.
+pub async fn owner_select(
+    foodlib: &foodlib_new::FoodLib,
+    ctx: &AuthCtx,
+    current_group_id: i32,
+) -> Result<Markup> {
+    let candidates = candidate_groups(foodlib, ctx, current_group_id).await?;
+    let current = foodlib.users().get_group(current_group_id).await.ok();
+    let current_label = current
+        .as_ref()
+        .map(|g| {
+            if g.is_personal {
+                format!("{} (personal)", g.name)
+            } else {
+                g.name.clone()
+            }
+        })
+        .unwrap_or_else(|| "—".into());
+
+    Ok(html! {
+        label for="group_id" { "Owner:" }
+        @if candidates.is_empty() {
+            span { (current_label) }
+            input type="hidden" name="group_id" value=(current_group_id);
+        } @else {
+            select class="fc-select" name="group_id" required="required" {
+                option value=(current_group_id) selected { (current_label) }
+                @for g in &candidates {
+                    option value=(g.id) {
+                        (g.name)
+                        @if g.is_personal { " (personal)" }
+                    }
+                }
+            }
+        }
+    })
 }
 
 /// Authorizes a move request: the user must already have access to the source

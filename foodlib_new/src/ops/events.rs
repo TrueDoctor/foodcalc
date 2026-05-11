@@ -633,6 +633,63 @@ impl EventOps {
         Ok(record)
     }
 
+    /// Shifts every dated row attached to `event_id` by the delta that takes
+    /// the earliest meal's start_time to `new_first_meal_start`. Returns the
+    /// applied delta. No-op (returns `Duration::ZERO`) when the event has no
+    /// meals — without a meal there is no anchor to shift from.
+    pub async fn shift_event_times(
+        &self,
+        event_id: i32,
+        new_first_meal_start: OffsetDateTime,
+    ) -> Result<time::Duration> {
+        let mut tx = self.pool.begin().await?;
+
+        let earliest: Option<OffsetDateTime> = sqlx::query_scalar!(
+            "SELECT MIN(start_time) FROM event_meals WHERE event_id = $1",
+            event_id,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let Some(earliest) = earliest else {
+            return Ok(time::Duration::ZERO);
+        };
+        let delta = new_first_meal_start - earliest;
+        if delta.is_zero() {
+            return Ok(delta);
+        }
+
+        // Postgres `interval` round-trips from time::Duration via sqlx, and
+        // `NULL + interval` is `NULL`, so nullable columns (`use_from`) need
+        // no special-casing.
+        sqlx::query!(
+            "UPDATE event_meals SET start_time = start_time + $2, end_time = end_time + $2 WHERE event_id = $1",
+            event_id,
+            delta as _,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            "UPDATE food_prep SET prep_date = prep_date + $2, use_from = use_from + $2, use_until = use_until + $2 WHERE event_id = $1",
+            event_id,
+            delta as _,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            "UPDATE shopping_tours SET tour_date = tour_date + $2 WHERE event_id = $1",
+            event_id,
+            delta as _,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(delta)
+    }
+
     /// Deletes a food preparation task
     pub async fn delete_food_prep(&self, id: i32) -> Result<()> {
         let result = sqlx::query!("DELETE FROM food_prep WHERE prep_id = $1", id)

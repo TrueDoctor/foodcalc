@@ -47,23 +47,23 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         )
         .nest("/shopping_tours", shopping_tours::shopping_tour_router())
         .nest("/food_prep", food_prep::food_prep_router())
-        .route("/move-group/{event_id}", post(handle_move_group))
+        .route("/shift/{event_id}", post(handle_shift_times))
 }
 
 #[derive(Deserialize)]
-struct MoveGroupForm {
-    group_id: i32,
+struct ShiftTimesForm {
+    new_first_meal_start: String,
 }
 
-async fn handle_move_group(
+async fn handle_shift_times(
     foodlib: FoodLib,
     ctx: AuthCtx,
     Path(event_id): Path<i32>,
-    Form(form): Form<MoveGroupForm>,
+    Form(form): Form<ShiftTimesForm>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
-    move_group::assert_can_move_to(&ctx, form.group_id)?;
-    foodlib.events().set_group(event_id, form.group_id).await?;
+    let target = shopping_tours::parse_datetime_local(&form.new_first_meal_start)?;
+    foodlib.events().shift_event_times(event_id, target).await?;
     event_form(foodlib, ctx, Path(event_id)).await
 }
 
@@ -220,29 +220,36 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
     };
 
     let event = foodlib.events().get(event_id).await?;
-    let move_panel = move_group::move_panel(
-        &foodlib,
-        &ctx,
-        event.group_id,
-        &format!("/events/edit/move-group/{event_id}"),
-        "#content",
-    )
-    .await?;
+    let owner_select = move_group::owner_select(&foodlib, &ctx, event.group_id).await?;
 
+    let first_meal_start = meals.iter().map(|m| m.start_time).min();
     Ok(html! {
-        div class="flex flex-row items-center justify-center gap-4" id="event_form" {
-            label for="name" { "Name:" };
-            input name="name" class="text" type="text" value=(&event.name);
-            label for="comment" { "Comment:" };
-            input name="comment" class="text" type="text" value=(&event.comment.unwrap_or_default());
-            label for="budget" { "Budget:" };
-            input name="budget" class="text" type="text" value=(event.budget.and_then(|x|x.to_f64()).unwrap_or(0.));
-            div class="flex flex-row items-center justify-center gap-4" {
-                button class="btn btn-primary" hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
+        section class="w-full flex flex-col gap-3 p-4 mb-4 rounded-lg border border-gray-700" {
+            div class="flex flex-row items-center justify-center flex-wrap gap-x-4 gap-y-2" id="event_form" {
+                label for="name" { "Name:" };
+                input name="name" class="text !w-auto" type="text" value=(&event.name);
+                label for="comment" { "Comment:" };
+                input name="comment" class="text !w-auto" type="text" value=(&event.comment.unwrap_or_default());
+                label for="budget" { "Budget:" };
+                input name="budget" class="text !w-auto w-24" type="text" value=(event.budget.and_then(|x|x.to_f64()).unwrap_or(0.));
+                (owner_select)
+                button class="btn btn-primary !w-auto" hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
                 span class="htmx-indicator" { "Saving\u{a0}…" }
             }
+            @if let Some(first_meal_start) = first_meal_start {
+                @let shift_value = first_meal_start
+                    .format(format_description!("[year]-[month]-[day]T[hour]:[minute]"))
+                    .unwrap_or_default();
+                form class="flex flex-row items-center justify-center flex-wrap gap-2"
+                    hx-post=(format!("/events/edit/shift/{}", event_id))
+                    hx-target="#content" {
+                    label class="whitespace-nowrap" for="new_first_meal_start" { "Shift first meal to:" }
+                    input class="text !w-auto" type="datetime-local" name="new_first_meal_start"
+                        value=(shift_value) required="required";
+                    button class="btn btn-primary !w-auto" type="submit" { "Shift all times" }
+                }
+            }
         }
-        (move_panel)
         (render_ingredients_without_tours(&foodlib, event_id).await?)
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
@@ -469,6 +476,7 @@ struct EventForm {
     name: String,
     comment: String,
     budget: Option<f64>,
+    group_id: i32,
 }
 
 async fn update_event(
@@ -478,6 +486,10 @@ async fn update_event(
     event_data: Form<EventForm>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id.0).await?;
+    let current = foodlib.events().get(event_id.0).await?;
+    if current.group_id != event_data.group_id {
+        move_group::assert_can_move_to(&ctx, event_data.group_id)?;
+    }
     let budget = event_data.budget.and_then(bigdecimal::BigDecimal::from_f64);
 
     let event = Event {
@@ -489,6 +501,14 @@ async fn update_event(
     };
 
     foodlib.events().update(event).await?;
+
+    if current.group_id != event_data.group_id {
+        foodlib
+            .events()
+            .set_group(event_id.0, event_data.group_id)
+            .await?;
+    }
+
     event_form(foodlib, ctx, event_id).await
 }
 

@@ -41,24 +41,6 @@ pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
         .route("/change-subrecipe", put(handle_subrecipe_change))
         .route("/change-name", put(handle_name_change))
         .route("/change-step", put(handle_step_change))
-        .route("/move-group/{recipe_id}", axum::routing::post(handle_move_group))
-}
-
-#[derive(Deserialize)]
-pub struct MoveGroupForm {
-    pub group_id: i32,
-}
-
-async fn handle_move_group(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(recipe_id): Path<i32>,
-    Form(form): Form<MoveGroupForm>,
-) -> MResponse {
-    ctx.assert_can_edit_recipe(recipe_id).await?;
-    move_group::assert_can_move_to(&ctx, form.group_id)?;
-    foodlib.recipes().set_group(recipe_id, form.group_id).await?;
-    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
 
 #[derive(Deserialize, Debug)]
@@ -66,6 +48,7 @@ pub struct UpdateNameHeader {
     pub recipe_id: i32,
     pub name: String,
     pub comment: String,
+    pub group_id: i32,
 }
 
 #[derive(Deserialize, Debug)]
@@ -147,6 +130,10 @@ pub async fn handle_name_change(
     Form(data): Form<UpdateNameHeader>,
 ) -> Result<(), foodlib_new::Error> {
     ctx.assert_can_edit_recipe(data.recipe_id).await?;
+    let current = foodlib.recipes().get(data.recipe_id).await?;
+    if current.group_id != data.group_id {
+        move_group::assert_can_move_to(&ctx, data.group_id)?;
+    }
     foodlib
         .recipes()
         .update(foodlib_new::recipe::Recipe {
@@ -156,6 +143,9 @@ pub async fn handle_name_change(
             group_id: -1, // Placeholder; ops-level update ignores group_id
         })
         .await?;
+    if current.group_id != data.group_id {
+        foodlib.recipes().set_group(data.recipe_id, data.group_id).await?;
+    }
     Ok(())
 }
 
@@ -415,14 +405,7 @@ pub async fn recipe_edit_view(
         .await
         .unwrap_or_default();
     let recipe = foodlib.recipes().get(recipe_id).await?;
-    let move_panel = move_group::move_panel(
-        &foodlib,
-        &ctx,
-        recipe.group_id,
-        &format!("/recipes/edit/move-group/{recipe_id}"),
-        "#content",
-    )
-    .await?;
+    let owner_select = move_group::owner_select(&foodlib, &ctx, recipe.group_id).await?;
 
     Ok(html! {
         div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full"{
@@ -431,10 +414,9 @@ pub async fn recipe_edit_view(
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     input class="text" type="text" name="name" value=(recipe.name) required="required";
                     textarea class="text" name="comment" { (recipe.comment.unwrap_or_default()) }
+                    div class="flex flex-row items-center gap-2" { (owner_select) }
                     button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
             }
-
-            (move_panel)
 
             div class="w-3/4 bg-blue-100 dark:bg-blue-900 p-4 mb-4 rounded-lg" {
                 div class="flex justify-between items-center" {

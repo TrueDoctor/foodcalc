@@ -25,7 +25,6 @@ pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
         .route("/{id}/edit", get(edit_row))
         .route("/{id}/row", get(render_row))
         .route("/{id}/contents", get(contents_view))
-        .route("/{id}/move", get(move_dialog).post(execute_move))
         .route("/{id}/items", post(add_item))
         .route(
             "/{id}/items/{ingredient_id}",
@@ -238,11 +237,7 @@ fn render_row_markup(inv: &Inventory, open: bool, filter: &str) -> Markup {
                     button type="button" class="btn btn-primary"
                         hx-get=(format!("/inventories/{}/edit", inv.id))
                         hx-target=(format!("#{}", row_id))
-                        hx-swap="outerHTML" { "Rename" }
-                    button type="button" class="btn btn-primary"
-                        hx-get=(format!("/inventories/{}/move", inv.id))
-                        hx-target="body"
-                        hx-swap="beforeend" { "Move" }
+                        hx-swap="outerHTML" { "Edit" }
                     button type="button" class="btn btn-cancel"
                         hx-delete=(format!("/inventories/{}", inv.id))
                         hx-target="#inventories"
@@ -413,6 +408,7 @@ async fn create_inventory(
 #[derive(Deserialize)]
 struct RenameForm {
     name: String,
+    group_id: i32,
 }
 
 async fn rename_inventory(
@@ -423,25 +419,35 @@ async fn rename_inventory(
 ) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
     let mut inv = foodlib.inventories().get(id).await?;
+    let target_group = form.group_id;
+    if inv.group_id != target_group {
+        move_group::assert_can_move_to(&ctx, target_group)?;
+    }
     inv.name = form.name;
     foodlib.inventories().update(inv.clone()).await?;
+    if inv.group_id != target_group {
+        foodlib.inventories().set_group(id, target_group).await?;
+        inv.group_id = target_group;
+    }
     Ok(render_row_markup(&inv, false, ""))
 }
 
 async fn edit_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<i32>) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
     let inv = foodlib.inventories().get(id).await?;
+    let owner_select = move_group::owner_select(&foodlib, &ctx, inv.group_id).await?;
     let row_id = format!("inv-{}", inv.id);
     Ok(html! {
         details id=(row_id) class="border rounded-lg p-2" open {
             summary class="cursor-pointer" {
-                form class="flex flex-row items-center gap-2"
+                form class="flex flex-row items-center gap-2 flex-wrap"
                     hx-put=(format!("/inventories/{}", inv.id))
                     hx-target=(format!("#{}", row_id))
                     hx-swap="outerHTML" {
-                    input type="text" name="name" value=(inv.name) required="required" class="text grow";
-                    button type="submit" class="btn btn-primary" { "Save" }
-                    button type="button" class="btn btn-cancel"
+                    input type="text" name="name" value=(inv.name) required="required" class="text !w-auto grow";
+                    div class="flex flex-row items-center gap-2" { (owner_select) }
+                    button type="submit" class="btn btn-primary !w-auto" { "Save" }
+                    button type="button" class="btn btn-cancel !w-auto"
                         hx-get=(format!("/inventories/{}/row", inv.id))
                         hx-target=(format!("#{}", row_id))
                         hx-swap="outerHTML" { "Cancel" }
@@ -460,49 +466,6 @@ async fn delete_inventory(
     foodlib.inventories().delete(id).await?;
     let inventories = foodlib.inventories().list().await?;
     Ok(render_list(&inventories, &[], ""))
-}
-
-async fn move_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<i32>) -> MResponse {
-    ctx.assert_can_edit_inventory(id).await?;
-    let inv = foodlib.inventories().get(id).await?;
-    let panel = move_group::move_panel(
-        &foodlib,
-        &ctx,
-        inv.group_id,
-        &format!("/inventories/{}/move", id),
-        "#content",
-    )
-    .await?;
-    Ok(html! {
-        dialog open="true" class="dialog fixed top-1/4 left-1/2 -translate-x-1/2 z-50 shadow-xl"
-            id="move-dialog"
-            hx-on::after-request="if(event.detail.successful) this.remove()" {
-            div class="flex flex-col m-2 gap-2 min-w-80" {
-                p class="text-lg font-semibold" { "Move \"" (inv.name) "\"" }
-                (panel)
-                button type="button" class="btn btn-abort"
-                    hx-on:click="document.getElementById('move-dialog').remove()" { "Cancel" }
-            }
-        }
-    })
-}
-
-#[derive(Deserialize)]
-struct MoveInventoryForm {
-    group_id: i32,
-}
-
-async fn execute_move(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(id): Path<i32>,
-    Form(form): Form<MoveInventoryForm>,
-) -> MResponse {
-    ctx.assert_can_edit_inventory(id).await?;
-    move_group::assert_can_move_to(&ctx, form.group_id)?;
-    foodlib.inventories().set_group(id, form.group_id).await?;
-    let inventories = foodlib.inventories().list().await?;
-    Ok(render_list(&inventories, &[id], ""))
 }
 
 #[derive(Deserialize)]
