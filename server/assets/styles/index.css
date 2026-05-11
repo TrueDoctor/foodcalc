@@ -102,3 +102,17 @@ svg:not([class*="text-"]) {
 .user-menu > summary::-webkit-details-marker {
   display: none;
 }
+
+.item-row {
+  cursor: grab;
+}
+.fc-ghost {
+  @apply opacity-40 bg-blue-100 dark:bg-blue-900;
+}
+.fc-chosen {
+  cursor: grabbing;
+}
+.fc-drag {
+  @apply shadow-lg;
+  opacity: 0.85;
+}

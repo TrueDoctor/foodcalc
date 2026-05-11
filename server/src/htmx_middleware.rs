@@ -99,6 +99,7 @@ pub async fn htmx_middleware(
                     title { "Foodcalc" }
                     link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x)));
                     script src="/static/htmxv2.0.4.js" {}
+                    script src="/static/sortable.js" {}
                     meta name="htmx-config" content=r#"{
                     "scrollBehavior":"smooth",
                     "responseHandling": [

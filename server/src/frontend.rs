@@ -33,6 +33,7 @@ pub fn frontend_router() -> Router {
         .nest("/auth", login_tab::login_router())
         .route("/static/{*-style.css}", get(static_style))
         .route("/static/htmxv2.0.4.js", get(static_htmx))
+        .route("/static/sortable.js", get(static_sortable))
 }
 
 thread_local! {
@@ -56,6 +57,14 @@ async fn static_htmx() -> impl IntoResponse {
     Response::builder()
         .header("Content-Type", "text/javascript")
         .body(htmx.to_owned())
+        .unwrap()
+}
+
+async fn static_sortable() -> impl IntoResponse {
+    let js = include_str!("../assets/Sortable-1.15.6.min.js");
+    Response::builder()
+        .header("Content-Type", "text/javascript")
+        .body(js.to_owned())
         .unwrap()
 }
 pub type MResponse = foodlib_new::Result<Markup>;

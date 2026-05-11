@@ -31,6 +31,10 @@ pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
             "/{id}/items/{ingredient_id}",
             put(update_item_amount).delete(delete_item),
         )
+        .route(
+            "/{id}/items/{ingredient_id}/move-to/{to_id}",
+            post(move_item),
+        )
 }
 
 fn is_htmx(headers: &HeaderMap) -> bool {
@@ -83,9 +87,9 @@ async fn list_view(
 
 fn render_list(inventories: &[Inventory], open: &[i32], filter: &str) -> Markup {
     html! {
-        // Tiny client helper: when a <details> on this page toggles, keep the
-        // ?open= URL param in sync so refresh/share preserves expansion state.
-        // Defined once per render; idempotent.
+        // Inline page glue: <details> URL-sync + Sortable.js wiring. Defined
+        // once per list render; the htmx:load handler is idempotent so re-runs
+        // on lazy-loaded contents reinitialise just the new tbodies.
         script {
             (maud::PreEscaped(r#"
             window.fcUpdateOpenParam = function(rowId, isOpen) {
@@ -98,6 +102,65 @@ fn render_list(inventories: &[Inventory], open: &[i32], filter: &str) -> Markup 
                 else url.searchParams.delete('open');
                 history.replaceState(null, '', url.toString());
             };
+
+            // Track which <details> were closed when a drag started so we can
+            // restore them on dragend. While dragging, force all open so they
+            // are valid drop targets.
+            window.fcSavedOpen = window.fcSavedOpen || null;
+            function fcOpenAllForDrag() {
+                if (window.fcSavedOpen) return;
+                window.fcSavedOpen = [];
+                document.querySelectorAll('#inventories details').forEach(d => {
+                    window.fcSavedOpen.push([d, d.open]);
+                    d.open = true;
+                });
+            }
+            function fcRestoreOpen() {
+                if (!window.fcSavedOpen) return;
+                window.fcSavedOpen.forEach(([d, was]) => { d.open = was; });
+                window.fcSavedOpen = null;
+            }
+
+            window.fcInitSortable = function(tbody) {
+                if (!tbody || tbody.dataset.sortableReady === '1') return;
+                if (!window.Sortable) return;
+                tbody.dataset.sortableReady = '1';
+                Sortable.create(tbody, {
+                    group: 'inventory-items',
+                    draggable: '.item-row',
+                    filter: '.add-row',
+                    ghostClass: 'fc-ghost',
+                    chosenClass: 'fc-chosen',
+                    dragClass: 'fc-drag',
+                    animation: 150,
+                    delay: 150,
+                    delayOnTouchOnly: true,
+                    onStart: fcOpenAllForDrag,
+                    onEnd: fcRestoreOpen,
+                    onAdd: function(evt) {
+                        const item = evt.item;
+                        const fromId = evt.from.dataset.inventoryId;
+                        const toId = evt.to.dataset.inventoryId;
+                        const ingredientId = item.dataset.ingredientId;
+                        if (!fromId || !toId || !ingredientId) return;
+                        // Revert the visual move; the server response will
+                        // OOB-swap both source and destination contents.
+                        evt.from.appendChild(item);
+                        htmx.ajax(
+                            'POST',
+                            `/inventories/${fromId}/items/${ingredientId}/move-to/${toId}`,
+                            { target: `#inv-${toId}-contents`, swap: 'innerHTML' }
+                        );
+                    }
+                });
+            };
+
+            document.body.addEventListener('htmx:load', function(evt) {
+                const root = evt.detail.elt || document;
+                root.querySelectorAll('tbody.inventory-items').forEach(window.fcInitSortable);
+            });
+            // Also run once now for any items already in the DOM.
+            document.querySelectorAll('tbody.inventory-items').forEach(window.fcInitSortable);
             "#))
         }
         div id="inventories" class="w-full flex flex-col gap-2" {
@@ -221,40 +284,53 @@ async fn render_contents(foodlib: &FoodLib, inventory_id: i32, filter: &str) -> 
 
     Ok(html! {
         div class="flex flex-col gap-2 w-full" {
-            (add_item_form(inventory_id))
             datalist id=(format!("ingredients-{}", inventory_id)) {
                 @for ing in &ingredients {
                     option value=(ing.name) {}
                 }
             }
-            @if items.is_empty() {
-                p class="opacity-70 text-sm" { "Empty." }
-            } @else {
-                table class="w-full text-inherit table-auto" {
-                    thead { tr { th { "Name" } th class="w-32" { "Amount (kg)" } th class="w-16" {} } }
-                    tbody id=(format!("inv-{}-items", inventory_id)) {
-                        @for item in &items {
-                            (item_row(inventory_id, item))
-                        }
+            table class="w-full text-inherit table-auto" {
+                thead { tr { th { "Name" } th class="w-32" { "Amount (kg)" } th class="w-16" {} } }
+                tbody id=(format!("inv-{}-items", inventory_id))
+                    class="inventory-items"
+                    data-inventory-id=(inventory_id) {
+                    @for item in &items {
+                        (item_row(inventory_id, item))
                     }
+                    (add_item_row(inventory_id))
                 }
             }
         }
     })
 }
 
-fn add_item_form(inventory_id: i32) -> Markup {
+/// Permanent last row of each inventory's items table — a small inline form
+/// for adding a new item. After a successful add, we refocus the name input so
+/// the user can rattle off entries without reaching for the mouse.
+fn add_item_row(inventory_id: i32) -> Markup {
+    let form_id = format!("inv-{}-add", inventory_id);
     html! {
-        form class="flex flex-row items-center gap-2"
-            hx-post=(format!("/inventories/{}/items", inventory_id))
-            hx-target=(format!("#inv-{}-contents", inventory_id))
-            hx-swap="innerHTML" {
-            input type="text" name="ingredient_name"
-                list=(format!("ingredients-{}", inventory_id))
-                placeholder="Ingredient" class="text" required="required";
-            input type="number" name="amount" step="0.001" min="0" placeholder="Amount (kg)"
-                class="text w-32" required="required";
-            button type="submit" class="btn btn-primary" { "Add" }
+        tr class="add-row" data-sortable-ignore="true" {
+            td {
+                input type="text" form=(form_id) name="ingredient_name"
+                    list=(format!("ingredients-{}", inventory_id))
+                    placeholder="Add ingredient..." class="text w-full" required="required";
+            }
+            td {
+                input type="number" form=(form_id) name="amount"
+                    step="0.001" min="0" placeholder="kg"
+                    class="text w-full" required="required";
+            }
+            td {
+                form id=(form_id)
+                    hx-post=(format!("/inventories/{}/items", inventory_id))
+                    hx-target=(format!("#inv-{}-contents", inventory_id))
+                    hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful){const inp=document.querySelector(`#inv-${this.dataset.invId}-items input[name=ingredient_name]`); inp && inp.focus();}"
+                    data-inv-id=(inventory_id) {
+                    button type="submit" class="btn btn-primary w-full" { "Add" }
+                }
+            }
         }
     }
 }
@@ -262,7 +338,9 @@ fn add_item_form(inventory_id: i32) -> Markup {
 fn item_row(inventory_id: i32, item: &InventoryItemWithName) -> Markup {
     let row_id = format!("inv-{}-item-{}", inventory_id, item.ingredient_id);
     html! {
-        tr id=(row_id) {
+        tr id=(row_id)
+            class="item-row"
+            data-ingredient-id=(item.ingredient_id) {
             td { (item.name) }
             td {
                 input type="number" step="0.001" min="0" value=(item.amount.round(3))
@@ -475,6 +553,61 @@ async fn delete_item(
         .delete_item(id, ingredient_id)
         .await?;
     render_contents(&foodlib, id, "").await
+}
+
+/// Move (drag-and-drop) an item from one inventory to another. The whole
+/// amount transfers. If the destination already has that ingredient the
+/// amounts are summed. Response is the destination contents plus an
+/// `hx-swap-oob` block that updates the source inventory's contents in the
+/// same response — no second round trip.
+async fn move_item(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path((from_id, ingredient_id, to_id)): Path<(i32, i32, i32)>,
+) -> MResponse {
+    if from_id == to_id {
+        return render_contents(&foodlib, to_id, "").await;
+    }
+    ctx.assert_can_edit_inventory(from_id).await?;
+    ctx.assert_can_edit_inventory(to_id).await?;
+
+    let source_items = foodlib.inventories().get_items(from_id).await?;
+    let Some(source_item) = source_items.iter().find(|x| x.ingredient_id == ingredient_id) else {
+        return render_contents(&foodlib, to_id, "").await;
+    };
+    let amount_to_move = source_item.amount.clone();
+
+    let dest_items = foodlib.inventories().get_items(to_id).await?;
+    let merged_amount = dest_items
+        .iter()
+        .find(|x| x.ingredient_id == ingredient_id)
+        .map(|x| x.amount.clone() + amount_to_move.clone())
+        .unwrap_or(amount_to_move);
+
+    let dest_has = dest_items.iter().any(|x| x.ingredient_id == ingredient_id);
+    let dest_item = InventoryItem {
+        inventory_id: to_id,
+        ingredient_id,
+        amount: merged_amount,
+    };
+    if dest_has {
+        foodlib.inventories().update_item(dest_item).await?;
+    } else {
+        foodlib.inventories().add_item(dest_item).await?;
+    }
+    foodlib.inventories().delete_item(from_id, ingredient_id).await?;
+
+    let source_contents = render_contents(&foodlib, from_id, "").await?;
+    let dest_contents = render_contents(&foodlib, to_id, "").await?;
+
+    Ok(html! {
+        (dest_contents)
+        // Out-of-band: replace the source inventory's contents in the same response.
+        div id=(format!("inv-{}-contents", from_id))
+            hx-swap-oob="innerHTML" {
+            (source_contents)
+        }
+    })
 }
 
 // Kept for unrelated callers that re-use the datalist of ingredients.

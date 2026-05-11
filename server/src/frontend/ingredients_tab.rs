@@ -1,6 +1,5 @@
 use crate::FoodLib;
 use axum::extract::{Form, Path, Query};
-use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
@@ -38,6 +37,7 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
         .route("/sources/{id}", get(sources_table))
         .route("/", get(ingredients_view))
+        .route("/rows", get(ingredient_rows_view))
 }
 
 #[derive(Deserialize, Default, Clone)]
@@ -52,12 +52,6 @@ impl IngredientFilters {
     fn mine_only(&self) -> bool {
         self.mine_only.is_some()
     }
-}
-
-fn is_htmx(headers: &HeaderMap) -> bool {
-    headers
-        .get("HX-Request")
-        .map_or(false, |v| v == "true")
 }
 
 pub async fn update_ingredient(
@@ -168,25 +162,33 @@ async fn delete_source(
     sources_table(foodlib, Some(user), Path(ingredient_id)).await
 }
 
-/// Route handler for `GET /ingredients`. Reads filters from the query so the
-/// URL is shareable; returns just the filtered `<tbody>` for HX requests
-/// (triggered by the filter form below) and the full page otherwise.
+/// Route handler for `GET /ingredients`. Always returns the full page shell;
+/// the filter form refreshes only the rows via `GET /ingredients/rows`. URL
+/// is shareable — query params drive the initial filter state on full loads.
 pub async fn ingredients_view(
     foodlib: FoodLib,
     user: Option<User>,
-    headers: HeaderMap,
     Query(filters): Query<IngredientFilters>,
 ) -> Markup {
     let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref())
         .await
         .unwrap_or_default();
     let filtered = filter_ingredients(&ingredients, &filters, &user_group_ids);
+    render_ingredients_page(&filtered, user.as_ref(), &user_group_ids, &filters)
+}
 
-    if is_htmx(&headers) {
-        ingredient_rows(&filtered, user.as_ref(), &user_group_ids)
-    } else {
-        render_ingredients_page(&filtered, user.as_ref(), &user_group_ids, &filters)
-    }
+/// Returns just the filtered `<tr>` rows for the filter form to swap into
+/// `#search-results`. Same query-param shape as `ingredients_view`.
+pub async fn ingredient_rows_view(
+    foodlib: FoodLib,
+    user: Option<User>,
+    Query(filters): Query<IngredientFilters>,
+) -> Markup {
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref())
+        .await
+        .unwrap_or_default();
+    let filtered = filter_ingredients(&ingredients, &filters, &user_group_ids);
+    ingredient_rows(&filtered, user.as_ref(), &user_group_ids)
 }
 
 /// Render the full ingredients page. Used both by the route handler (on
@@ -247,10 +249,10 @@ fn render_ingredients_page(
                 mb-2 gap-5 h-10
                 w-full
                 "
-                hx-get="/ingredients"
+                hx-get="/ingredients/rows"
                 hx-trigger="keyup changed delay:20ms from:#search, change from:#mine-only, search"
                 hx-target="#search-results"
-                hx-replace-url="true"
+                hx-on::after-request="if(event.detail.successful){const fd=new FormData(this);const qs=new URLSearchParams();for(const [k,v] of fd){if(v) qs.set(k,v);}const q=qs.toString();history.replaceState(null,'','/ingredients'+(q?'?'+q:''));}"
                 hx-indicator=".htmx-indicator" {
                 input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off" autofocus="autofocus" value=(search_value);
                 @if user.is_some() {
