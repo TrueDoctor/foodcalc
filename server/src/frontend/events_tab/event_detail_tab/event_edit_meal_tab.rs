@@ -23,7 +23,7 @@ pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
 #[derive(Clone, PartialEq, Deserialize)]
 pub struct MealForm {
     pub recipe_id: i32,
-    pub place_id: i32,
+    pub place_id: Option<i32>,
     pub start_time: String,
     pub end_time: String,
     pub energy: BigDecimal,
@@ -65,13 +65,19 @@ pub async fn update_meal(
     let end_time =
         OffsetDateTime::parse(&append_end, &time::format_description::well_known::Rfc3339)
             .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let place_id = meal.place_id.filter(|&id| id > 0).ok_or_else(|| {
+        foodlib_new::Error::Validation {
+            message: "Please select a place for the meal.".into(),
+        }
+    })?;
+
     let result = if meal_id != -1 {
         state
             .meals()
             .update_meal(
                 meal_id,
                 meal.recipe_id,
-                meal.place_id,
+                place_id,
                 start_time,
                 end_time,
                 meal.energy,
@@ -85,7 +91,7 @@ pub async fn update_meal(
             .add_meal(
                 event_id,
                 meal.recipe_id,
-                meal.place_id,
+                place_id,
                 start_time,
                 end_time,
                 meal.energy,
@@ -183,23 +189,18 @@ async fn meal_form(
                 tr {
                     td { "Recipe" }
                     td { select name="recipe_id" class="text" required="required" {
-                        @for recipe in recipes {
-                            (html! {
-                                option value=(recipe.id) selected { (recipe.name) }
-                            })
+                        @for recipe in &recipes {
+                            option value=(recipe.id) selected[recipe.id == meal.recipe_id] { (recipe.name) }
                         }
-                        (html! {option value=(meal.recipe_id) selected { (meal.name) }})
                     } }
                 }
                 tr {
                     td { "Place" }
                     td { select name="place_id" class="text" required="required" {
-                        @for place in places {
-                            (html! {
-                                option value=(place.id) selected { (place.name) }
-                            })
+                        option value="" { "Select place..." }
+                        @for place in &places {
+                            option value=(place.id) selected[place.id == meal.place_id] { (place.name) }
                         }
-                        (html! {option value=(meal.place_id) selected { (meal.place) }})
                     } }
                 }
                 tr {

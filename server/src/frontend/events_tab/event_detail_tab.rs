@@ -628,10 +628,17 @@ fn meal_add_row(
 fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
     let format = |label: &'static str, x, unit| html! { td data-label=(label) { (&format!("{:.3}{}", x, unit)) } };
     let time_format = format_description!("[day].[month] [hour]:[minute]");
+    let comment = event_meal.comment.as_deref().unwrap_or("").trim().to_string();
 
     html! {
         tr {
-            td data-label="Recipe" { (event_meal.name) }
+            td data-label="Recipe" {
+                (event_meal.name)
+                @if !comment.is_empty() {
+                    br;
+                    span class="text-sm opacity-60 italic" { (comment) }
+                }
+            }
             td data-label="Start Time" { (event_meal.start_time.format(&time_format).unwrap()) }
             td data-label="Servings" { (event_meal.servings) }
             (format("Energy", event_meal.energy.to_f64().unwrap_or_default(), "kj"))
