@@ -129,6 +129,20 @@
             isLoading = false;
         }
     }
+
+    async function triggerServerRefresh() {
+        try {
+            const res = await fetch('/api/refresh', { method: 'POST' });
+            if (!res.ok) {
+                throw new Error(`Server responded with ${res.status}`);
+            }
+            // Optionally, you can show a success message or refresh data
+            await fetchData();
+        } catch (err) {
+            console.error('Failed to trigger server refresh:', err);
+        }
+    }
+        
     
     function changeEvent(newEventId) {
         // Navigate to the selected event or home page if empty
@@ -261,6 +275,12 @@
                     </span>
                 {/if}
                 </a>
+                <button 
+                    on:click={triggerServerRefresh} 
+                    class="bg-unifest-green-dark text-white px-4 py-2 rounded hover:bg-unifest-green focus:outline-none focus:ring-2 focus:ring-unifest-green"
+                >
+                    Refresh Server
+                </button>
             </div>
         {/if}
         
