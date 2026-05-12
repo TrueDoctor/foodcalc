@@ -113,7 +113,14 @@ pub async fn htmx_middleware(
                         {"code":"...", "swap": false}
                     ]
                     }"#;
-                    meta name="viewport" content="width=800, initial-scale=1";
+                    meta name="viewport" content="width=device-width, initial-scale=1";
+                    script { (maud::PreEscaped(r#"
+                        document.addEventListener('htmx:afterSettle', function() {
+                            document.querySelectorAll('details.fc-dropdown[open]').forEach(function(d) {
+                                d.removeAttribute('open');
+                            });
+                        });
+                    "#)) }
                 }
                     body class="
                     bg-light-bg-light text-gray-800
@@ -121,7 +128,7 @@ pub async fn htmx_middleware(
                     div  {
                         (home::navbar(auth.user, host))
                         div class="flex flex-col items-center justify-center mb-16" {
-                            div id="content" class="w-3/4 flex flex-col items-center justify-center" {
+                            div id="content" class="w-full px-2 sm:px-4 lg:w-3/4 lg:px-0 flex flex-col items-center justify-center" {
                                 (maud::PreEscaped(body))
                             }
                         }

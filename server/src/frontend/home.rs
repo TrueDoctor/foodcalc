@@ -22,7 +22,7 @@ pub async fn home_view(user: Option<User>, foodlib: FoodLib) -> impl IntoRespons
 pub async fn content(foodlib: FoodLib, user: Option<User>) -> Markup {
     html! {
         div class="flex flex-col items-center justify-center mb-16" {
-            div id="content" class="w-3/4 flex flex-col items-center justify-center" {
+            div id="content" class="w-full px-2 sm:px-4 lg:w-3/4 lg:px-0 flex flex-col items-center justify-center" {
                 (render_ingredients_view(foodlib, user).await)
             }
         }
@@ -50,15 +50,36 @@ pub fn navbar(user: Option<User>, host: &str) -> Markup {
             }
         }
 
-        div class="flex justify-end mx-16 mt-2" {
+        div class="flex justify-end mx-2 sm:mx-8 lg:mx-16 mt-2" {
             (user_menu(user.as_ref()))
         }
 
-        div class="
-            flex items-center justify-between flex-wrap
+        // Mobile: collapsible hamburger menu
+        details class="sm:hidden
             bg-navbar text-white
-            mx-16 my-4
+            mx-2 my-4
             rounded-xl shadow-xl overflow-hidden
+        " {
+            summary class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none" {
+                svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="h-5 w-5 text-white" {
+                    path fill="currentColor" d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" {}
+                }
+                span { "Menu" }
+            }
+            div class="flex flex-col" {
+                (navbutton("Ingredients", "/ingredients"))
+                (navbutton("Recipes", "/recipes"))
+                @if user.is_some() {
+                    (navbutton("Events", "/events"))
+                    (navbutton("Inventories", "/inventories"))
+                }
+            }
+        }
+        // Desktop: always-visible nav bar
+        div class="hidden sm:flex items-center justify-between
+            bg-navbar text-white
+            mx-8 lg:mx-16 my-4
+            rounded-xl shadow-xl
         " {
             (navbutton("Ingredients", "/ingredients"))
             (navbutton("Recipes", "/recipes"))
@@ -74,7 +95,7 @@ fn user_menu(user: Option<&User>) -> Markup {
     html! {
         @match user {
             Some(u) => {
-                details class="user-menu relative" {
+                details class="user-menu fc-dropdown relative" {
                     summary class="flex items-center gap-2 cursor-pointer list-none
                         bg-navbar text-white
                         transition ease-in-out duration-200
@@ -120,8 +141,8 @@ fn user_menu(user: Option<&User>) -> Markup {
 fn navbutton(text: &str, link: &str) -> Markup {
     html! {
         a hx-get=(link) hx-target="#content" hx-push-url="true" class="flex flex-col items-center grow
-            transition ease-in-out transition duration-200 ease-in-out
-            rounded-xl p-6
+            transition ease-in-out duration-200
+            rounded-xl p-3 sm:p-6
             hover:shadow-inner hover:bg-blue-800" { (text) }
     }
 }

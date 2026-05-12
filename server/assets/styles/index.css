@@ -17,12 +17,12 @@ td {
   @apply p-2;
 }
 
-tr:nth-child(even) { 
+tr:nth-child(even) {
   @apply bg-light-bg-light rounded-lg;
   @apply dark:bg-dark-bg-light;
 }
 
-tr:nth-child(odd) { 
+tr:nth-child(odd) {
   @apply bg-light-bg-dark rounded-lg;
   @apply dark:bg-dark-bg-dark;
 }
@@ -33,7 +33,6 @@ tr:nth-child(odd) {
   @apply dark:bg-gray-900 border-gray-500;
   @apply border-solid border-2 rounded-md;
   @apply p-2;
-  @apply w-full;
 }
 
 .dialog {
@@ -59,36 +58,46 @@ tr:nth-child(odd) {
 .btn-primary {
 	@apply bg-light-primary-normal text-white;
 	@apply dark:bg-dark-primary-normal;
-  @apply w-full;
 }
 .btn-primary:hover {
 	@apply bg-light-primary-hover;
 	@apply dark:bg-dark-primary-hover;
-  @apply w-full;
 }
 
 .btn-success {
 	@apply bg-btn-success-normal text-white;
-  @apply w-full;
 }
 
 .btn-success:hover {
 	@apply bg-btn-success-hover;
-  @apply w-full;
 }
 
 .btn-cancel {
 	@apply bg-btn-cancel-normal text-white;
-  @apply w-full;
 }
 
 .btn-abort {
 	@apply bg-gray-700 text-white;
-  @apply w-full;
 }
 
 .btn-cancel:hover {
 	@apply bg-btn-cancel-hover;
+}
+
+/* Inputs and buttons inside table cells fill the cell — preserves the
+   original intent without baking w-full into every button globally.
+   Also covers buttons nested inside a <form> within a <td>. */
+td > .text,
+td > .btn,
+td > .btn-primary,
+td > .btn-success,
+td > .btn-cancel,
+td > .btn-abort,
+td > form > .btn,
+td > form > .btn-primary,
+td > form > .btn-success,
+td > form > .btn-cancel,
+td > form > .btn-abort {
   @apply w-full;
 }
 
@@ -103,6 +112,10 @@ svg:not([class*="text-"]) {
   display: none;
 }
 
+details[open] > summary .inv-chevron {
+  transform: rotate(-180deg);
+}
+
 .item-row {
   cursor: grab;
 }
@@ -115,4 +128,43 @@ svg:not([class*="text-"]) {
 .fc-drag {
   @apply shadow-lg;
   opacity: 0.85;
+}
+
+/* Navbar: on sm+ always show nav-links regardless of <details> open state.
+   We override the browser's native details-collapse by making the details
+   element a plain block and forcing its child content visible. */
+
+/* Responsive card tables: below sm breakpoint, rows become stacked cards */
+@media (max-width: 639px) {
+  table.responsive-card,
+  table.responsive-card thead,
+  table.responsive-card tbody,
+  table.responsive-card tr,
+  table.responsive-card td,
+  table.responsive-card th {
+    display: block;
+    width: 100% !important;
+  }
+
+  table.responsive-card thead {
+    display: none;
+  }
+
+  table.responsive-card tr {
+    @apply rounded-lg p-2 mb-2 border border-gray-300 dark:border-gray-700;
+  }
+
+  table.responsive-card td[data-label]::before {
+    content: attr(data-label) ": ";
+    @apply font-semibold;
+  }
+
+  table.responsive-card td.no-label::before {
+    content: none;
+  }
+
+  /* Hide cells that have no content to show on mobile */
+  table.responsive-card td.hide-empty:empty {
+    display: none;
+  }
 }

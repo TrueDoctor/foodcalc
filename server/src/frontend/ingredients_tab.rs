@@ -267,11 +267,12 @@ fn render_ingredients_page(
             }
             span class="htmx-indicator" { "Searching..." }
 
-            table class="table-fixed"{
+            table class="table-fixed responsive-card"{
+                @let is_admin = user.map_or(false, |u| u.is_admin);
                 thead { tr class="p-2" {
-                    th class="w-1/12" { "ID" }
+                    @if is_admin { th class="w-1/12" { "ID" } }
                     th class="w-1/4" { "Name" }
-                    th class="w-1/8" { "Energy" }
+                    th class="w-1/8" { "Energy (kJ/g)" }
                     th class="w-1/8" { "Comment" }
                     th {}
                     th {}
@@ -298,11 +299,11 @@ fn ingredient_add_row() -> Markup {
         tr id="ingredient--1" {
             input type="hidden" name="id" value="-1";
             input type="hidden" name="group_id" value="-1";
-            td class="text-center opacity-70" { "+" }
-            td { input class="text" type="text" name="name" placeholder="Name" required="required"; }
-            td { input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="kJ/g" required="required"; }
-            td { input class="text" type="text" name="comment" placeholder="Comment"; }
-            td {
+            td class="text-center opacity-70 no-label" { "+" }
+            td data-label="Name" { input class="text" type="text" name="name" placeholder="Name" required="required"; }
+            td data-label="Energy (kJ/g)" { input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="kJ/g" required="required"; }
+            td data-label="Comment" { input class="text" type="text" name="comment" placeholder="Comment"; }
+            td class="no-label" {
                 button class="btn btn-primary"
                     hx-post="/ingredients"
                     hx-include="closest tr"
@@ -311,8 +312,8 @@ fn ingredient_add_row() -> Markup {
                     hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#ingredient--1 input[name=name]');if(i)i.focus();}"
                     { "Add" }
             }
-            td {}
-            td {}
+            td class="no-label" {}
+            td class="no-label" {}
         }
     }
 }
@@ -342,7 +343,7 @@ pub async fn edit_ingredient_form(
     Ok(html! {
         td colspan="6" {
             div class="flex flex-col items-center justify-center w-full" {
-                div class="flex gap-2 w-full items-center" {
+                div class="flex flex-col sm:flex-row gap-2 w-full sm:items-center" {
                     @if let Some(owner_select) = owner_select {
                         (owner_select)
                     } @else {
@@ -408,7 +409,7 @@ async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> M
         .map_or(false, |u| can_edit(ingredient.group_id, &user_group_ids, u));
 
     Ok(html! {
-        dialog open="true" class="w-2/3 dialog z-50" id="popup"{
+        dialog open="true" class="w-[95%] sm:w-2/3 dialog z-50" id="popup"{
             div class="flex justify-between w-full mb-2" {
                 div class="flex gap-2" {}
                 p class="text-2xl" { (format!("Sources for {}", ingredient.name)) }
@@ -537,13 +538,20 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, use
     let can_edit_this = user.map_or(false, |u| can_edit(ingredient.group_id, user_group_ids, u));
     let is_admin = user.map_or(false, |u| u.is_admin);
 
+    let comment = ingredient.comment.as_deref().unwrap_or("").trim().to_string();
+
     html! {
         tr id=(format!("ingredient-{}", ingredient.id)) {
-            td class="text-center opacity-70" { (ingredient.id) }
-            td class="text-center" { (ingredient.name) }
-            td class="text-center" { (ingredient.energy) }
-            td class="text-center" { (ingredient.comment.as_ref().unwrap_or(&String::new())) }
-            td {
+            @if is_admin {
+                td class="text-center opacity-70" data-label="ID" { (ingredient.id) }
+            }
+            td class="text-center" data-label="Name" { (ingredient.name) }
+            td class="text-center" data-label="Energy (kJ/g)" { (ingredient.energy) }
+            td class=(if comment.is_empty() { "text-center no-label" } else { "text-center" })
+               data-label=(if comment.is_empty() { "" } else { "Comment" }) {
+                (comment)
+            }
+            td class="no-label" {
                 @if can_edit_this {
                     button class="btn btn-primary"
                     hx-get="/ingredients/edit"
@@ -551,14 +559,14 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, use
                     hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Edit" }
                 }
             }
-            td {
+            td class="no-label" {
                 @if is_admin {
                     button class="btn btn-cancel"
                     hx-get=(format!("/ingredients/delete/{}", ingredient.id))
                     hx-swap="beforebegin" { "Delete" }
                 }
             }
-            td {
+            td class="no-label" {
                 button class="btn btn-primary relative"
                 hx-get=(format!("/ingredients/sources/{}", ingredient.id))
                 hx-swap="afterend"

@@ -305,16 +305,16 @@ fn format_food_prep(event_id: i32, prep: &FoodPrep, recipe: &Recipe) -> Markup {
 
     html! {
         tr {
-            td { (recipe.name) }
-            td { (prep_date) }
-            td { (use_from) }
-            td { (use_until) }
-            td {
+            td data-label="Recipe" { (recipe.name) }
+            td data-label="Prep Date" { (prep_date) }
+            td data-label="Use From" { (use_from) }
+            td data-label="Use Until" { (use_until) }
+            td class="no-label" {
                 form class="m-0" action=(format!("/events/edit/export_food_prep_pdf/{}", prep.id)) {
                     button class="btn btn-primary" { "Print" }
                 }
             }
-            td {
+            td class="no-label" {
                 button class="btn btn-primary"
                     hx-target="#content"
                     hx-push-url="true"
@@ -322,7 +322,7 @@ fn format_food_prep(event_id: i32, prep: &FoodPrep, recipe: &Recipe) -> Markup {
                     "Edit"
                 }
             }
-            td {
+            td class="no-label" {
                 button class="btn btn-cancel"
                     hx-target="#content"
                     hx-get=(format!("/events/edit/food_prep/delete_dialog/{}/{}", event_id, prep.id)) {
@@ -356,16 +356,14 @@ pub async fn render_food_prep(
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Food Preparation" }
         }
-        table class="w-full text-inherit table-auto object-center table-fixed" {
+        table class="w-full text-inherit table-auto object-center responsive-card" {
             thead {
                 tr {
                     th { "Recipe" }
                     th { "Prep Date" }
                     th { "Use From" }
                     th { "Use Until" }
-                    th {} // Print button
-                    th {} // Edit button
-                    th {} // Delete button
+                    th {} th {} th {}
                 }
             }
             tbody {
@@ -398,7 +396,7 @@ fn food_prep_add_row(
         .unwrap_or_default();
     html! {
         tr id="food-prep--1" {
-            td {
+            td data-label="Recipe" {
                 select name="recipe_id" class="text w-full" required="required" {
                     option value="" { "Select recipe..." }
                     @for r in recipes {
@@ -406,11 +404,11 @@ fn food_prep_add_row(
                     }
                 }
             }
-            td { input class="text w-full" type="datetime-local" name="prep_date" value=(prep_value) required="required"; }
-            td { input class="text w-full" type="datetime-local" name="use_from"; }
-            td { input class="text w-full" type="datetime-local" name="use_until" value=(until_value) required="required"; }
-            td {} td {}
-            td {
+            td data-label="Prep Date" { input class="text w-full" type="datetime-local" name="prep_date" value=(prep_value) required="required"; }
+            td data-label="Use From" { input class="text w-full" type="datetime-local" name="use_from"; }
+            td data-label="Use Until" { input class="text w-full" type="datetime-local" name="use_until" value=(until_value) required="required"; }
+            td class="no-label" {} td class="no-label" {}
+            td class="no-label" {
                 button class="btn btn-primary" type="button"
                     hx-post=(url)
                     hx-include="closest tr"

@@ -76,7 +76,7 @@ async fn groups_view(foodlib: FoodLib, ctx: AuthCtx) -> MResponse {
 
 fn group_list(groups: &[Group]) -> Markup {
     html! {
-        table class="w-full text-inherit table-auto object-center table-fixed mb-4" {
+        table class="w-full text-inherit table-auto object-center responsive-card mb-4" {
             thead { tr { th class="w-1/2" { "Name" } th { "Members" } th { "Delete" } } }
             tbody {
                 (create_group_row())
@@ -85,11 +85,11 @@ fn group_list(groups: &[Group]) -> Markup {
                 }
                 @for group in groups {
                     tr id=(format!("group-{}", group.id)) {
-                        td { (group.name) }
-                        td { button class="btn btn-primary"
+                        td data-label="Name" { (group.name) }
+                        td class="no-label" { button class="btn btn-primary"
                             hx-get=(format!("/admin/groups/{}/members", group.id))
                             hx-target="#group-detail" { "Manage" } }
-                        td { button class="btn btn-cancel"
+                        td class="no-label" { button class="btn btn-cancel"
                             hx-delete=(format!("/admin/groups/{}", group.id))
                             hx-target=(format!("#group-{}", group.id))
                             hx-swap="outerHTML"
@@ -189,7 +189,7 @@ async fn render_group_detail(foodlib: &foodlib_new::FoodLib, group: Group) -> MR
     Ok(html! {
         div id="group-detail" class="w-full mt-6 border-t pt-4" {
             p class="text-2xl mb-2" { "Members of \"" (group.name) "\"" }
-            table class="w-full text-inherit table-auto mb-4" {
+            table class="w-full text-inherit table-auto responsive-card mb-4" {
                 thead { tr { th { "Username" } th { "Email" } th { "Remove" } } }
                 tbody id=(format!("group-{}-members", group.id)) {
                     @if members.is_empty() {
@@ -197,9 +197,9 @@ async fn render_group_detail(foodlib: &foodlib_new::FoodLib, group: Group) -> MR
                     }
                     @for u in &members {
                         tr id=(format!("group-{}-member-{}", group.id, u.id)) {
-                            td { (u.username) }
-                            td { (u.email) }
-                            td { button class="btn btn-cancel"
+                            td data-label="Username" { (u.username) }
+                            td data-label="Email" { (u.email) }
+                            td class="no-label" { button class="btn btn-cancel"
                                 hx-delete=(format!("/admin/groups/{}/members/{}", group.id, u.id))
                                 hx-target=(format!("#group-{}-member-{}", group.id, u.id))
                                 hx-swap="outerHTML" { "Remove" } }

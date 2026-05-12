@@ -225,8 +225,12 @@ pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
                     }
                 }
             }
-            table class="w-full text-inherit table-auto object-center table-fixed" {
-                thead { tr { th { "ID" } th { "Name" } th { "Comment" }  th {} th {} th {}} }
+            table class="w-full text-inherit table-auto object-center responsive-card" {
+                @let is_admin = user.as_ref().map_or(false, |u| u.is_admin);
+                thead { tr {
+                    @if is_admin { th { "ID" } }
+                    th { "Name" } th { "Comment" } th {} th {} th {}
+                } }
                     tbody id="search-results"  {
                         @if user.is_some() {
                             (recipe_add_row())
@@ -251,16 +255,16 @@ fn recipe_add_row() -> Markup {
         tr id="recipe--1" {
             input type="hidden" name="id" value="-1";
             input type="hidden" name="group_id" value="-1";
-            td class="text-center opacity-70" { "+" }
-            td { input class="grow text" type="text" name="name" placeholder="Recipe name" required="required"; }
-            td { input class="grow text" type="text" name="comment" placeholder="Comment"; }
-            td {
+            td class="text-center opacity-70 no-label" { "+" }
+            td data-label="Name" { input class="grow text" type="text" name="name" placeholder="Recipe name" required="required"; }
+            td data-label="Comment" { input class="grow text" type="text" name="comment" placeholder="Comment"; }
+            td class="no-label" {
                 button class="btn btn-primary"
                     hx-post="/recipes"
                     hx-include="closest tr"
                     hx-target="#content" { "Add" }
             }
-            td {} td {} td {}
+            td class="no-label" {} td class="no-label" {} td class="no-label" {}
         }
     }
 }
@@ -313,24 +317,30 @@ fn can_edit(group_id: i32, user_group_ids: &[i32], user: &User) -> bool {
 fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[i32]) -> Markup {
     let can_edit_this = user.map_or(false, |u| can_edit(recipe.group_id, user_group_ids, u));
     let is_admin = user.map_or(false, |u| u.is_admin);
+    let comment = recipe.comment.as_deref().unwrap_or("").trim().to_string();
 
     html! {
         tr id=(format!("recipe-{}", recipe.id)) {
-            td { (recipe.id) }
-            td { (recipe.name) }
-            td class="text-center" { (recipe.comment.clone().unwrap_or_default()) }
-            td {
+            @if is_admin {
+                td data-label="ID" { (recipe.id) }
+            }
+            td data-label="Name" { (recipe.name) }
+            td data-label=(if comment.is_empty() { "" } else { "Comment" })
+               class=(if comment.is_empty() { "no-label" } else { "" }) {
+                (comment)
+            }
+            td class="no-label" {
                 @if can_edit_this {
                     button class="btn btn-primary" type="button" hx-push-url="true" hx-target="#content"  hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" }
                 }
             }
-            td {
+            td class="no-label" {
                 @if is_admin {
                     button class="btn btn-cancel"  type="button" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.id)) { "Delete" }
                 }
             }
-            td { button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.id)) hx-swap="afterend" { "Export" } }
-            td { div id="dialog"; }
+            td class="no-label" { button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.id)) hx-swap="afterend" { "Export" } }
+            td class="no-label" { div id="dialog"; }
         }
     }
 }

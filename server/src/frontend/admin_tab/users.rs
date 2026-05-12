@@ -56,7 +56,7 @@ async fn users_view(foodlib: FoodLib, ctx: AuthCtx) -> MResponse {
 
 fn user_list(users: &[User]) -> Markup {
     html! {
-        table class="w-full text-inherit table-auto object-center table-fixed mb-4" {
+        table class="w-full text-inherit table-auto object-center responsive-card mb-4" {
             thead { tr {
                 th { "Username" }
                 th { "Email" }
@@ -67,10 +67,10 @@ fn user_list(users: &[User]) -> Markup {
                 (create_user_row())
                 @for u in users {
                     tr id=(format!("user-{}", u.id)) {
-                        td { (u.username) }
-                        td { (u.email) }
-                        td class="text-center" { @if u.is_admin { "✓" } @else { "" } }
-                        td { button class="btn btn-primary"
+                        td data-label="Username" { (u.username) }
+                        td data-label="Email" { (u.email) }
+                        td data-label="Admin" class="text-center" { @if u.is_admin { "✓" } @else { "" } }
+                        td class="no-label" { button class="btn btn-primary"
                             hx-get=(format!("/admin/users/{}", u.id))
                             hx-target="#user-detail" { "Manage" } }
                     }
@@ -87,25 +87,23 @@ fn user_list(users: &[User]) -> Markup {
 fn create_user_row() -> Markup {
     html! {
         tr id="user--1" {
-            td { input class="text w-full" type="text" name="username" placeholder="Username" required="required"; }
-            td { input class="text w-full" type="email" name="email" placeholder="Email" required="required"; }
-            td {
-                div class="flex flex-col gap-1" {
-                    input class="text w-full" type="password" name="password" placeholder="Password" required="required";
-                    label class="flex items-center gap-1 text-sm" {
+            td colspan="4" {
+                div class="flex flex-row flex-wrap gap-2 items-center" {
+                    input class="text grow" type="text" name="username" placeholder="Username" required="required";
+                    input class="text grow" type="email" name="email" placeholder="Email" required="required";
+                    input class="text grow" type="password" name="password" placeholder="Password" required="required";
+                    label class="flex items-center gap-1 text-sm whitespace-nowrap" {
                         input type="checkbox" name="is_admin" value="true";
                         "Admin"
                     }
+                    button class="btn btn-primary"
+                        hx-post="/admin/users"
+                        hx-include="closest tr"
+                        hx-target="#admin-users"
+                        hx-swap="outerHTML"
+                        hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#user--1 input[name=username]');if(i)i.focus();}"
+                        { "Create" }
                 }
-            }
-            td {
-                button class="btn btn-primary"
-                    hx-post="/admin/users"
-                    hx-include="closest tr"
-                    hx-target="#admin-users"
-                    hx-swap="outerHTML"
-                    hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#user--1 input[name=username]');if(i)i.focus();}"
-                    { "Create" }
             }
         }
     }
@@ -210,7 +208,7 @@ async fn render_user_detail(foodlib: &foodlib_new::FoodLib, user_id: i64) -> MRe
 
             div class="mb-4" {
                 p class="text-xl mb-2" { "Group memberships" }
-                table class="w-full text-inherit table-auto" {
+                table class="w-full text-inherit table-auto responsive-card" {
                     thead { tr { th { "Name" } th class="w-24" { "Type" } th class="w-24" { "Remove" } } }
                     tbody {
                         tr id="add-group" {
@@ -232,9 +230,9 @@ async fn render_user_detail(foodlib: &foodlib_new::FoodLib, user_id: i64) -> MRe
                         }
                         @for g in &user_groups {
                             tr id=(format!("user-{}-group-{}", user.id, g.id)) {
-                                td { (g.name) }
-                                td { @if g.is_personal { "personal" } @else { "shared" } }
-                                td {
+                                td data-label="Name" { (g.name) }
+                                td data-label="Type" { @if g.is_personal { "personal" } @else { "shared" } }
+                                td class="no-label" {
                                     @if !g.is_personal {
                                         button class="btn btn-cancel"
                                             hx-delete=(format!("/admin/users/{}/groups/{}", user.id, g.id))

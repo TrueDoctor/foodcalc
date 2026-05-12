@@ -325,20 +325,20 @@ fn recipe_ingredient_add_row(
             datalist id=(list_id) {
                 @for ing in all_ingredients { option value=(ing.name) {} }
             }
-            td {
+            td data-label="Name" {
                 input class="text w-full" type="text" list=(list_id)
                     name="ingredient_name" placeholder="Ingredient" required="required";
             }
-            td {
+            td data-label="Amount" {
                 input class="text w-full" type="text" name="ingredient_amount"
                     placeholder="Amount" required="required";
             }
-            td {
+            td data-label="Unit" {
                 select class="unit fc-select w-full" name="ingredient_unit_id" required="required" {
                     @for unit in unit_types { option value=(unit.id) { (unit.name) } }
                 }
             }
-            td {
+            td class="no-label" {
                 button class="btn btn-primary"
                     hx-put="/recipes/edit/commit-ingredient"
                     hx-include="closest tr"
@@ -365,16 +365,16 @@ fn recipe_subrecipe_add_row(
                     @if r.id != recipe_id { option value=(r.name) {} }
                 }
             }
-            td {
+            td data-label="Name" {
                 input class="text w-full" type="text" list=(list_id)
                     name="subrecipe_name" placeholder="Subrecipe" required="required";
             }
-            td {
+            td data-label="Amount (kg)" {
                 input class="text w-full" type="text" name="subrecipe_amount"
                     placeholder="Amount (kg)" required="required";
             }
-            td { "kg" }
-            td {
+            td data-label="Unit" { "kg" }
+            td class="no-label" {
                 button class="btn btn-primary"
                     hx-put="/recipes/edit/commit-subrecipe"
                     hx-include="closest tr"
@@ -409,7 +409,7 @@ pub async fn recipe_edit_view(
 
     Ok(html! {
         div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full"{
-            div id=("recipe-information") class="w-3/4" {
+            div id=("recipe-information") class="w-full sm:w-3/4" {
                 form hx-put="/recipes/edit/change-name" hx-indicator=".htmx-indicator" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     input class="text" type="text" name="name" value=(recipe.name) required="required";
@@ -418,7 +418,7 @@ pub async fn recipe_edit_view(
                     button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
             }
 
-            div class="w-3/4 bg-blue-100 dark:bg-blue-900 p-4 mb-4 rounded-lg" {
+            div class="w-full sm:w-3/4 bg-blue-100 dark:bg-blue-900 p-4 mb-4 rounded-lg" {
                 div class="flex justify-between items-center" {
                     h3 class="text-lg font-semibold" { "Recipe Weight Diagnostics" }
                     div class="text-right" {
@@ -430,9 +430,9 @@ pub async fn recipe_edit_view(
 
             span class="htmx-indicator" { "Saving\u{a0}…" }
 
-            div id="meta-ingredients" class="w-3/4 mt-6" {
+            div id="meta-ingredients" class="w-full sm:w-3/4 mt-6" {
                 h3 class="text-lg font-semibold mb-2" { "Subrecipes" }
-                table class="text-inherit table-auto object-center table-fixed w-full" {
+                table class="text-inherit table-auto object-center responsive-card w-full" {
                     thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
                     tbody {
                         (recipe_subrecipe_add_row(recipe_id, &all_recipes))
@@ -441,9 +441,9 @@ pub async fn recipe_edit_view(
                 }
             }
 
-            div id="ingredients" class="w-3/4 mt-6" {
+            div id="ingredients" class="w-full sm:w-3/4 mt-6" {
                 h3 class="text-lg font-semibold mb-2" { "Ingredients" }
-                table class="text-inherit table-auto object-center table-fixed w-full" {
+                table class="text-inherit table-auto object-center responsive-card w-full" {
                     thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
                     tbody {
                         (recipe_ingredient_add_row(recipe_id, &all_ingredients, &unit_types))
@@ -452,9 +452,9 @@ pub async fn recipe_edit_view(
                 }
             }
 
-            div id="steps" class="w-3/4 mt-6" {
+            div id="steps" class="w-full sm:w-3/4 mt-6" {
                 h3 class="text-lg font-semibold mb-2" { "Steps" }
-                table class="text-inherit table-auto object-center table-fixed w-full" {
+                table class="text-inherit table-auto object-center responsive-card w-full" {
                     thead { tr {
                         th class="w-8" {}
                         th { "Name" }
@@ -536,12 +536,12 @@ fn recipe_step_add_row(recipe_id: i32) -> Markup {
             input type="hidden" name="recipe_id" value=(recipe_id);
             input type="hidden" name="step_id" value="-1";
             input type="hidden" name="step_order" value="0";
-            td {}
-            td { input class="text w-full" type="text" name="step_name" placeholder="Name" required="required"; }
-            td { input class="text w-full" type="text" name="step_description" placeholder="Description"; }
-            td { input class="text w-full" type="text" name="fixed_duration_minutes" placeholder="Fixed (min)" required="required"; }
-            td { input class="text w-full" type="text" name="duration_per_kg_minutes" placeholder="Per kg (min)" required="required"; }
-            td {
+            td class="no-label" {}
+            td data-label="Name" { input class="text w-full" type="text" name="step_name" placeholder="Name" required="required"; }
+            td data-label="Description" { input class="text w-full" type="text" name="step_description" placeholder="Description"; }
+            td data-label="Duration (min)" { input class="text w-full" type="text" name="fixed_duration_minutes" placeholder="Fixed (min)" required="required"; }
+            td data-label="Per kg (min)" { input class="text w-full" type="text" name="duration_per_kg_minutes" placeholder="Per kg (min)" required="required"; }
+            td class="no-label" {
                 button class="btn btn-primary"
                     hx-put="/recipes/edit/commit-step"
                     hx-include="closest tr"
@@ -567,16 +567,16 @@ impl IngredientTableFormattable for RecipeIngredient {
             .unwrap_or(&unit_types[0]);
         html! {
             tr id=(format!("ingredient-{}", ingredient_id)) style="text-align:center"{ // TODO: Put into form
-                td style="text-align:left" {
+                td data-label="Name" style="text-align:left" {
                     input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
                     input class=(form_id) type="hidden" name=("ingredient_id") value=(ingredient_id);
                     input class=(form_id) type="hidden" name=("ingredient_name") value=(self.name.clone().unwrap_or_default());
                     div class=(format!("w-full {}",form_id)) name=("ingredient") { (self.name.clone().unwrap_or_default()) }
                 }
-                td { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-target=(format!("#ingredient-{}", ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML"; }
-                td { select class=(format!("unit {} fc-select",form_id)) name="ingredient_unit_id" selected=(unit.name) hx-target=(format!("#ingredient-{}", ingredient_id)) hx-swap="outerHTML" required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-include=(format!(".{}", form_id)) { @for unit in unit_types {
+                td data-label="Amount" { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-target=(format!("#ingredient-{}", ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML"; }
+                td data-label="Unit" { select class=(format!("unit {} fc-select",form_id)) name="ingredient_unit_id" selected=(unit.name) hx-target=(format!("#ingredient-{}", ingredient_id)) hx-swap="outerHTML" required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-include=(format!(".{}", form_id)) { @for unit in unit_types {
                     @if unit.id == self.unit_id { option value=(unit.id) selected { (unit.name) } } @else { option value=(unit.id) { (unit.name) } } } } }
-                td { button class="btn btn-cancel" hx-target="#contents" hx-delete=(format!("/recipes/edit/delete-ingredient/{recipe_id}/{ingredient_id}"))  { "Delete" } }
+                td class="no-label" { button class="btn btn-cancel" hx-target="#contents" hx-delete=(format!("/recipes/edit/delete-ingredient/{recipe_id}/{ingredient_id}"))  { "Delete" } }
             }
         }
     }
@@ -596,16 +596,16 @@ impl SubRecipeTableFormattable for RecipeMetaIngredient {
         let name = self.name.clone().unwrap_or_default();
         html! {
             tr id=(format!("subrecipe-{}", subrecipe_id)) style="text-align:center"{ // TODO: Put into form
-                td style="text-align:left" {
+                td data-label="Name" style="text-align:left" {
                     input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
                     input class=(form_id) type="hidden" name=("subrecipe_id") value=(subrecipe_id);
                     input class=(form_id) type="hidden" name=("subrecipe_name") value=(name);
                     input class=(form_id) type="hidden" name=("subrecipe_unit_id") value=(0);
                     div class=(format!("w-full {}",form_id)) name=("subrecipe") { a hx-target="#content" hx-get=(format!("/recipes/edit/{}", subrecipe_id)) { (name) } }
                 }
-                td { input class=(format!("text {}",form_id)) name="subrecipe_amount" value=(amount) required="required" hx-put="/recipes/edit/change-subrecipe" hx-target=(format!("#subrecipe-{}", subrecipe_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-indicator=".htmx-indicator" hx-swap="outerHTML"; }
-                td { "kg" }
-                td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-subrecipe/{}/{}", recipe_id, subrecipe_id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
+                td data-label="Amount (kg)" { input class=(format!("text {}",form_id)) name="subrecipe_amount" value=(amount) required="required" hx-put="/recipes/edit/change-subrecipe" hx-target=(format!("#subrecipe-{}", subrecipe_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-indicator=".htmx-indicator" hx-swap="outerHTML"; }
+                td data-label="Unit" { "kg" }
+                td class="no-label" { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-subrecipe/{}/{}", recipe_id, subrecipe_id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
             }
         }
     }
@@ -623,12 +623,12 @@ impl StepTableFormattable for RecipeStep {
                 input class=(form_id) type="hidden" name=("recipe_id") value=(recipe_id);
                 input class=(form_id) type="hidden" name=("step_id") value=(self.id);
                 input class=(form_id) type="hidden" name=("step_order") value=(self.order);
-                td class="step-drag-handle text-center cursor-grab opacity-60 select-none" title="Drag to reorder" { "⋮⋮" }
-                td { input class=(format!("text {}",form_id)) name=("step_name") value=(self.name) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { input class=(format!("text {}",form_id)) name="step_description" value=(self.description) hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-step/{}/{}", recipe_id, self.id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
+                td class="step-drag-handle no-label text-center cursor-grab opacity-60 select-none" title="Drag to reorder" { "⋮⋮" }
+                td data-label="Name" { input class=(format!("text {}",form_id)) name=("step_name") value=(self.name) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td data-label="Description" { input class=(format!("text {}",form_id)) name="step_description" value=(self.description) hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td data-label="Duration (min)" { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td data-label="Per kg (min)" { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td class="no-label" { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-step/{}/{}", recipe_id, self.id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
             }
         }
     }

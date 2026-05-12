@@ -61,10 +61,10 @@ pub async fn add(
 fn event_add_row() -> Markup {
     html! {
         tr id="event--1" {
-            td { input class="text w-full" type="text" name="name" placeholder="Event name" required="required"; }
-            td { input class="text w-full" type="text" name="comment" placeholder="Comment"; }
-            td { input class="text w-full" type="number" step="0.01" min="0" name="budget" placeholder="Budget"; }
-            td colspan="2" {
+            td data-label="Name" { input class="text w-full" type="text" name="name" placeholder="Event name" required="required"; }
+            td data-label="Comment" { input class="text w-full" type="text" name="comment" placeholder="Comment"; }
+            td data-label="Budget" { input class="text w-full" type="number" step="0.01" min="0" name="budget" placeholder="Budget"; }
+            td class="no-label" colspan="2" {
                 button class="btn btn-primary"
                     hx-post="/events/add"
                     hx-include="closest tr"
@@ -127,8 +127,8 @@ pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
                 "Mine only"
             }
         }
-        table class="w-full text-inherit table-auto object-center table-fixed" {
-            thead { tr { th class="w-1/3" { "Name" } th class="w-1/3" { "Comment" } th {} th {} th {}} }
+        table class="w-full text-inherit table-auto object-center responsive-card" {
+            thead { tr { th { "Name" } th { "Comment" } th {} th {} th {}} }
             tbody id="search-results" {
                 (event_add_row())
                 @for event in events.iter() {
@@ -178,14 +178,14 @@ fn format_event(event: &foodlib_new::event::Event) -> Markup {
     html! {
         tr id=(format!("event-{}", event.id)) {
             @let indicator_id = format!("indicator-{}", event.id);
-            td { (event.name) }
-            td class="text-center" { (event.comment.clone().unwrap_or_default()) }
-            td { button class="btn btn-primary" hx-target="#content" hx-push-url="true" hx-get=(format!("/events/edit/{}", event.id)) {"Edit"} }
-            td { button class="btn btn-primary" hx-target="#content" hx-indicator=("#".to_owned() + &indicator_id) hx-post=(format!("/events/duplicate/{}", event.id)) hx-swap="innerHTML show:window:top" {
+            td data-label="Name" { (event.name) }
+            td data-label="Comment" { (event.comment.clone().unwrap_or_default()) }
+            td class="no-label" { button class="btn btn-primary" hx-target="#content" hx-push-url="true" hx-get=(format!("/events/edit/{}", event.id)) {"Edit"} }
+            td class="no-label" { button class="btn btn-primary" hx-target="#content" hx-indicator=("#".to_owned() + &indicator_id) hx-post=(format!("/events/duplicate/{}", event.id)) hx-swap="innerHTML show:window:top" {
             span id=(indicator_id) class="inverse-htmx-indicator" { "Duplicate" }
             span id=(indicator_id) class="my-htmx-indicator" { "Duplicating..." }
             } }
-            td { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/delete/{}", event.id) ) {"Delete"} }
+            td class="no-label" { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/delete/{}", event.id) ) {"Delete"} }
         }
     }
 }

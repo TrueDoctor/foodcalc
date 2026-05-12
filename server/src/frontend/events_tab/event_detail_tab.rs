@@ -227,13 +227,13 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
         section class="w-full flex flex-col gap-3 p-4 mb-4 rounded-lg border border-gray-700" {
             div class="flex flex-row items-center justify-center flex-wrap gap-x-4 gap-y-2" id="event_form" {
                 label for="name" { "Name:" };
-                input name="name" class="text !w-auto" type="text" value=(&event.name);
+                input name="name" class="text " type="text" value=(&event.name);
                 label for="comment" { "Comment:" };
-                input name="comment" class="text !w-auto" type="text" value=(&event.comment.unwrap_or_default());
+                input name="comment" class="text " type="text" value=(&event.comment.unwrap_or_default());
                 label for="budget" { "Budget:" };
-                input name="budget" class="text !w-auto w-24" type="text" value=(event.budget.and_then(|x|x.to_f64()).unwrap_or(0.));
+                input name="budget" class="text  w-24" type="text" value=(event.budget.and_then(|x|x.to_f64()).unwrap_or(0.));
                 (owner_select)
-                button class="btn btn-primary !w-auto" hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
+                button class="btn btn-primary " hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
                 span class="htmx-indicator" { "Saving\u{a0}…" }
             }
             @if let Some(first_meal_start) = first_meal_start {
@@ -244,9 +244,9 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
                     hx-post=(format!("/events/edit/shift/{}", event_id))
                     hx-target="#content" {
                     label class="whitespace-nowrap" for="new_first_meal_start" { "Shift first meal to:" }
-                    input class="text !w-auto" type="datetime-local" name="new_first_meal_start"
+                    input class="text " type="datetime-local" name="new_first_meal_start"
                         value=(shift_value) required="required";
-                    button class="btn btn-primary !w-auto" type="submit" { "Shift all times" }
+                    button class="btn btn-primary " type="submit" { "Shift all times" }
                 }
             }
         }
@@ -254,8 +254,8 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
         }
-        table class="w-full text-inherit table-auto object-center mb-2 table-fixed" {
-            thead { tr { th { "Recipe" } th {"Start Time"} th { "servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} }  }
+        table class="w-full text-inherit table-auto object-center mb-2 responsive-card" {
+            thead { tr { th { "Recipe" } th {"Start Time"} th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} }  }
             tbody class="text-center" {
                 (meal_add_row(event_id, &recipes, default_meal_start))
                 @for meal in meals {
@@ -273,8 +273,8 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Ingredient Sources Overrides" }
         }
-        table class="w-full text-inherit table-auto object-center table-fixed" {
-            thead { tr { th class="w-1/3" { "Ingredient" } th class="w-1/3" {"Store"} th {} th {} }  }
+        table class="w-full text-inherit table-auto object-center responsive-card" {
+            thead { tr { th { "Ingredient" } th {"Store"} th {} th {} }  }
             tbody {
                 (format_event_source_override(&dummy_source, &stores))
                 @for over in overrides {
@@ -387,28 +387,28 @@ pub async fn render_shopping_tours(
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Shopping Tours" }
         }
-        table class="w-full text-inherit table-auto object-center table-fixed" {
+        table class="w-full text-inherit table-auto object-center responsive-card" {
             thead {
                 tr {
                     th { "Date" }
                     th { "Store" }
-                    th {} th {} th {}
+                    th {} th {}
                 }
             }
             tbody {
                 (tour_add_row(event_id, stores, default_date))
                 @for tour in tours {
                     tr {
-                        td { (tour.tour_date.format(&time::format_description::parse("[day].[month] [hour]:[minute]").unwrap()).unwrap()) }
-                        td { (tour.store_name.clone().unwrap_or_default()) }
-                        td {
+                        td data-label="Date" { (tour.tour_date.format(&time::format_description::parse("[day].[month] [hour]:[minute]").unwrap()).unwrap()) }
+                        td data-label="Store" { (tour.store_name.clone().unwrap_or_default()) }
+                        td class="no-label" {
                             button class="btn btn-primary"
                                 hx-get=(format!("/events/edit/shopping_tours/edit/{}/{}", event_id, tour.id))
                                 hx-swap="innerHtml show:window:top"
                                 hx-push-url="true"
                                 hx-target="#content" { "Edit" }
                         }
-                        td {
+                        td class="no-label" {
                             button class="btn btn-cancel"
                                 hx-delete=(format!("/events/edit/shopping_tours/{}", tour.id))
                                 hx-swap="delete"
@@ -435,8 +435,8 @@ fn tour_add_row(
         .unwrap_or_default();
     html! {
         tr id="tour--1" {
-            td { input class="text w-full" type="datetime-local" name="date" value=(date_value) required="required"; }
-            td {
+            td data-label="Date" { input class="text w-full" type="datetime-local" name="date" value=(date_value) required="required"; }
+            td data-label="Store" {
                 select name="store_id" class="text w-full" required="required" {
                     option value="" { "Select store..." }
                     @for s in stores {
@@ -444,8 +444,8 @@ fn tour_add_row(
                     }
                 }
             }
-            td {} td {}
-            td {
+            td class="no-label" {}
+            td class="no-label" {
                 button class="btn btn-primary" type="button"
                     hx-post=(url)
                     hx-include="closest tr"
@@ -573,16 +573,16 @@ fn format_event_source_override(
 
     html! {
         tr {
-            td { input name="ingredient" class="text" type="text" list="ingredients" value=(source_override.ingredient_name) placeholder="Ingredient Name" required="true"; }
-            td {
+            td data-label="Ingredient" { input name="ingredient" class="text" type="text" list="ingredients" value=(source_override.ingredient_name) placeholder="Ingredient Name" required="true"; }
+            td data-label="Store" {
                 select name="store_id" id="stores" required="true" class="text" {
                     @for store in stores {
                         (option(store, source_override.store_id))
                     }
                 }
             }
-            td { (button) }
-            td { @if source_override.ingredient_id != -1 {
+            td class="no-label" { (button) }
+            td class="no-label" { @if source_override.ingredient_id != -1 {
                 button class="btn btn-cancel" hx-get=(format!("/events/edit/{}/overrides/{}/delete_dialog", source_override.event_id, source_override.source_id)) hx-target="this" hx-swap="outerHTML" { "Delete" } }}
         }
     }
@@ -603,7 +603,7 @@ fn meal_add_row(
         .unwrap_or_default();
     html! {
         tr id="meal--1" {
-            td {
+            td data-label="Recipe" {
                 select name="recipe_id" class="text w-full" required="required" {
                     option value="" { "Select recipe..." }
                     @for r in recipes {
@@ -611,10 +611,10 @@ fn meal_add_row(
                     }
                 }
             }
-            td { input class="text w-full" type="datetime-local" name="start_time" value=(start_value); }
-            td { input class="text w-full" type="number" name="servings" min="1" placeholder="Servings"; }
-            td {} td {} td {} td {} td {} td {}
-            td {
+            td data-label="Start Time" { input class="text w-full" type="datetime-local" name="start_time" value=(start_value); }
+            td data-label="Servings" { input class="text w-full" type="number" name="servings" min="1" placeholder="Servings"; }
+            td class="no-label" {} td class="no-label" {} td class="no-label" {} td class="no-label" {} td class="no-label" {} td class="no-label" {}
+            td class="no-label" {
                 button class="btn btn-primary" type="button"
                     hx-get=(url)
                     hx-include="closest tr"
@@ -626,24 +626,24 @@ fn meal_add_row(
 }
 
 fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
-    let format = |x, unit| html! { td { (&format!("{:.3}{}", x, unit)) } };
+    let format = |label: &'static str, x, unit| html! { td data-label=(label) { (&format!("{:.3}{}", x, unit)) } };
     let time_format = format_description!("[day].[month] [hour]:[minute]");
 
     html! {
         tr {
-            td { (event_meal.name) }
-            td { (event_meal.start_time.format(&time_format).unwrap()) }
-            td { (event_meal.servings) }
-            (format(event_meal.energy.to_f64().unwrap_or_default(), "kj"))
-            (format(event_meal.weight.to_f64().unwrap_or_default() / event_meal.servings as f64 * 1000., "g"))
-            (format(event_meal.price.to_f64().unwrap_or_default() / event_meal.servings as f64, "€"))
-            td { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ingredients per serving"} }
-            td { form class="m-0" action=(format!("/events/edit/export_pdf/{}", event_meal.meal_id)) { button class="btn btn-primary" {"Print"} } }
-            td { button class="btn btn-primary"
+            td data-label="Recipe" { (event_meal.name) }
+            td data-label="Start Time" { (event_meal.start_time.format(&time_format).unwrap()) }
+            td data-label="Servings" { (event_meal.servings) }
+            (format("Energy", event_meal.energy.to_f64().unwrap_or_default(), "kj"))
+            (format("Weight", event_meal.weight.to_f64().unwrap_or_default() / event_meal.servings as f64 * 1000., "g"))
+            (format("Price", event_meal.price.to_f64().unwrap_or_default() / event_meal.servings as f64, "€"))
+            td class="no-label" { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ing./serving"} }
+            td class="no-label" { form class="m-0" action=(format!("/events/edit/export_pdf/{}", event_meal.meal_id)) { button class="btn btn-primary" {"Print"} } }
+            td class="no-label" { button class="btn btn-primary"
                 hx-target="#content"
                 hx-push-url="true"
                 hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
-            td { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/edit/delete/{}/{}", event_id, event_meal.meal_id)) {"Delete"} }
+            td class="no-label" { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/edit/delete/{}/{}", event_id, event_meal.meal_id)) {"Delete"} }
         }
     }
 }

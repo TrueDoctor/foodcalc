@@ -228,11 +228,19 @@ fn render_row_markup(inv: &Inventory, open: bool, filter: &str) -> Markup {
     };
 
     html! {
-        details id=(row_id) class="border rounded-lg p-2 bg-light-bg-light dark:bg-dark-bg-dark"
+        details id=(row_id) class="border rounded-lg bg-light-bg-light dark:bg-dark-bg-dark"
             open[open]
             hx-on:toggle="window.fcUpdateOpenParam && window.fcUpdateOpenParam(this.id, this.open)" {
-            summary class="flex flex-row items-center justify-between cursor-pointer gap-3" {
-                span class="font-medium" { (inv.name) }
+            summary class="flex flex-row items-center justify-between cursor-pointer gap-3 p-2
+                hover:bg-light-primary-normal hover:text-white dark:hover:bg-dark-primary-normal
+                rounded-lg transition-colors duration-150 list-none" {
+                div class="flex items-center gap-2" {
+                    svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"
+                        class="h-3 w-3 text-current transition-transform duration-200 inv-chevron" {
+                        path fill="currentColor" d="M137.4 374.6c12.5 12.5 32.8 12.5 45.3 0l128-128c9.2-9.2 11.9-22.9 6.9-34.9s-16.6-19.8-29.6-19.8L32 192c-12.9 0-24.6 7.8-29.6 19.8s-2.2 25.7 6.9 34.9l128 128z" {}
+                    }
+                    span class="font-medium" { (inv.name) }
+                }
                 div class="flex flex-row gap-2" onclick="event.stopPropagation()" {
                     button type="button" class="btn btn-primary"
                         hx-get=(format!("/inventories/{}/edit", inv.id))
@@ -244,7 +252,7 @@ fn render_row_markup(inv: &Inventory, open: bool, filter: &str) -> Markup {
                         hx-confirm="Delete this inventory?" { "Delete" }
                 }
             }
-            div id=(contents_id) class="mt-2"
+            div id=(contents_id) class="mt-2 px-2 pb-2"
                 hx-get=(contents_url)
                 hx-trigger=(hx_trigger)
                 hx-swap="innerHTML" {
@@ -290,8 +298,8 @@ async fn render_contents(foodlib: &FoodLib, inventory_id: i32, filter: &str) -> 
                     option value=(ing.name) data-id=(ing.id) {}
                 }
             }
-            table class="w-full text-inherit table-auto" {
-                thead { tr { th { "Name" } th class="w-32" { "Amount (kg)" } th class="w-16" {} } }
+            table class="w-full text-inherit table-auto responsive-card" {
+                thead { tr { th class="py-2" { "Name" } th class="w-32 py-2 whitespace-nowrap" { "Amount (kg)" } th class="w-16 py-2" {} } }
                 tbody id=(format!("inv-{}-items", inventory_id))
                     class="inventory-items"
                     data-inventory-id=(inventory_id) {
@@ -330,19 +338,19 @@ fn add_item_row(inventory_id: i32) -> Markup {
     html! {
         tr class="add-row" data-sortable-ignore="true" data-inv-id=(inventory_id) {
             input type="hidden" name="ingredient_id" value="-1";
-            td {
+            td data-label="Name" {
                 input type="text" name="ingredient_name"
                     list=(list_id)
                     placeholder="Add ingredient..." class="text w-full" required="required"
                     hx-on:input=(resolve_id)
                     hx-on:change=(resolve_id);
             }
-            td {
+            td data-label="Amount (kg)" {
                 input type="number" name="amount"
                     step="0.001" min="0" placeholder="kg"
                     class="text w-full" required="required";
             }
-            td {
+            td class="no-label" {
                 button type="button" class="btn btn-primary w-full"
                     hx-post=(format!("/inventories/{}/items", inventory_id))
                     hx-include="closest tr"
@@ -362,8 +370,8 @@ fn item_row(inventory_id: i32, item: &InventoryItemWithName) -> Markup {
         tr id=(row_id)
             class="item-row"
             data-ingredient-id=(item.ingredient_id) {
-            td { (item.name) }
-            td {
+            td data-label="Name" { (item.name) }
+            td data-label="Amount (kg)" {
                 input type="number" step="0.001" min="0" value=(item.amount.round(3))
                     class="text w-full"
                     name="amount"
@@ -372,7 +380,7 @@ fn item_row(inventory_id: i32, item: &InventoryItemWithName) -> Markup {
                     hx-target=(format!("#{}", row_id))
                     hx-swap="outerHTML";
             }
-            td {
+            td class="no-label" {
                 button type="button" class="btn btn-cancel"
                     hx-delete=(format!("/inventories/{}/items/{}", inventory_id, item.ingredient_id))
                     hx-target=(format!("#inv-{}-contents", inventory_id))
@@ -444,10 +452,10 @@ async fn edit_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<i32>) -> MRespo
                     hx-put=(format!("/inventories/{}", inv.id))
                     hx-target=(format!("#{}", row_id))
                     hx-swap="outerHTML" {
-                    input type="text" name="name" value=(inv.name) required="required" class="text !w-auto grow";
+                    input type="text" name="name" value=(inv.name) required="required" class="text grow";
                     div class="flex flex-row items-center gap-2" { (owner_select) }
-                    button type="submit" class="btn btn-primary !w-auto" { "Save" }
-                    button type="button" class="btn btn-cancel !w-auto"
+                    button type="submit" class="btn btn-primary" { "Save" }
+                    button type="button" class="btn btn-cancel"
                         hx-get=(format!("/inventories/{}/row", inv.id))
                         hx-target=(format!("#{}", row_id))
                         hx-swap="outerHTML" { "Cancel" }
