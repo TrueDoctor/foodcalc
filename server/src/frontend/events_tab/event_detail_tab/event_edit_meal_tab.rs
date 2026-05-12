@@ -197,7 +197,6 @@ async fn meal_form(
                 tr {
                     td { "Place" }
                     td { select name="place_id" class="text" required="required" {
-                        // option value="0" { "-" }
                         @for place in &places {
                             option value=(place.id) selected[place.id == meal.place_id] { (place.name) }
                         }

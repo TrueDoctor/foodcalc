@@ -36,6 +36,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         .route("/export_pdf/{meal_id}", get(export_recipe_pdf))
         .route("/export_food_prep_pdf/{prep_id}", get(export_food_prep_pdf))
         .route("/{event_id}", get(event_form))
+        .route("/{event_id}/meals", get(render_meals_table))
         .route(
             "/ingredients-per-serving/{meal_id}",
             get(ingredients_per_serving),
@@ -65,6 +66,30 @@ async fn handle_shift_times(
     let target = shopping_tours::parse_datetime_local(&form.new_first_meal_start)?;
     foodlib.events().shift_event_times(event_id, target).await?;
     event_form(foodlib, ctx, Path(event_id)).await
+}
+
+async fn render_meals_table(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    let meals = foodlib.meals().get_event_meals(event_id).await?;
+    let mut recipes = foodlib.recipes().list().await?;
+    recipes.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let default_meal_start = meals
+        .iter()
+        .map(|m| m.start_time)
+        .max()
+        .unwrap_or_else(time::OffsetDateTime::now_utc);
+
+    Ok(html! {
+        (meal_add_row(event_id, &recipes, default_meal_start))
+        @for meal in meals {
+            (format_event_meal(event_id, &meal))
+        }
+    })
 }
 
 pub async fn delete_override_dialog(
@@ -256,10 +281,11 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
         }
         table class="w-full text-inherit table-auto object-center mb-2 responsive-card" {
             thead { tr { th { "Recipe" } th {"Start Time"} th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} }  }
-            tbody class="text-center" {
-                (meal_add_row(event_id, &recipes, default_meal_start))
-                @for meal in meals {
-                    (format_event_meal(event_id, &meal))
+            tbody class="text-center stagger-table-transition" id="meals-tbody" hx-get=(format!("/events/edit/{}/meals", event_id)) hx-trigger="load" hx-swap="innerHTML transition:true" {
+                tr class="text-center" {
+                    td colspan="10" class="py-4" {
+                        span class="htmx-indicator" { "Loading meals…" }
+                    }
                 }
             }
         }
@@ -602,7 +628,7 @@ fn meal_add_row(
         .format(format_description!("[year]-[month]-[day]T[hour]:[minute]"))
         .unwrap_or_default();
     html! {
-        tr id="meal--1" {
+        tr class="meal-row" id="meal--1" {
             td data-label="Recipe" {
                 select name="recipe_id" class="text w-full" required="required" {
                     option value="" { "Select recipe..." }
@@ -631,7 +657,7 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
     let comment = event_meal.comment.as_deref().unwrap_or("").trim().to_string();
 
     html! {
-        tr {
+        tr class="meal-row" {
             td data-label="Recipe" {
                 (event_meal.name)
                 @if !comment.is_empty() {
