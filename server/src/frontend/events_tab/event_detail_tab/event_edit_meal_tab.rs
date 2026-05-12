@@ -65,7 +65,7 @@ pub async fn update_meal(
     let end_time =
         OffsetDateTime::parse(&append_end, &time::format_description::well_known::Rfc3339)
             .map_err(|_| StatusCode::BAD_REQUEST)?;
-    let place_id = meal.place_id.filter(|&id| id > 0).ok_or_else(|| {
+    let place_id = meal.place_id.filter(|&id| id >= 0).ok_or_else(|| {
         foodlib_new::Error::Validation {
             message: "Please select a place for the meal.".into(),
         }
@@ -197,7 +197,7 @@ async fn meal_form(
                 tr {
                     td { "Place" }
                     td { select name="place_id" class="text" required="required" {
-                        option value="" { "Select place..." }
+                        // option value="0" { "-" }
                         @for place in &places {
                             option value=(place.id) selected[place.id == meal.place_id] { (place.name) }
                         }
