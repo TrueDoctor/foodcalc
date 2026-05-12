@@ -409,21 +409,20 @@ async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> M
         .map_or(false, |u| can_edit(ingredient.group_id, &user_group_ids, u));
 
     Ok(html! {
-        dialog open="true" class="w-[95%] sm:w-2/3 dialog z-50" id="popup"{
-            div class="flex justify-between w-full mb-2" {
-                div class="flex gap-2" {}
-                p class="text-2xl" { (format!("Sources for {}", ingredient.name)) }
-                button class="btn bg-btn-cancel-normal" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
+        dialog open="true" class="dialog z-50" id="popup" {
+            div class="flex justify-between items-center w-full mb-3 gap-2" {
+                p class="text-xl font-semibold" { "Sources: " (ingredient.name) }
+                button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" { "Close" }
             }
-            table class="table-fixed" {
+            table class="w-full responsive-card" {
                 thead {
                     tr {
                         th { "Store" }
                         th { "Weight (kg)" }
                         th { "Price (€)" }
-                        th { "Url" }
-                        th {}
-                        th {}
+                        th { "URL" }
+                        th class="no-label" {}
+                        th class="no-label" {}
                     }
                 }
                 tbody {
@@ -442,26 +441,20 @@ async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> M
 fn format_add_ingredient_source(stores: &[Store], ingredient_id: i32) -> Markup {
     html! {
         tr {
-            td {
+            td data-label="Store" {
                 label for="stores" style="display:none" { "Pick a Store" }
                 select name="store_id" id="stores" required="true" class="text w-full" {
-                    option label="Pick a Store" value="" { "Pick a Store" }
+                    option value="" { "Pick a Store" }
                     @for store in stores {
-                        (html! {
-                            option
-                                label=(store.name)
-                                value=(store.id) {
-                                (store.name)
-                            }
-                        })
+                        option value=(store.id) { (store.name) }
                     }
                 }
             }
-            td {input class="text" name="weight" placeholder="Weight (kg)";}
-            td {input class="text" name="price" placeholder="Price (€)";}
-            td {input class="text" name="url" placeholder="Url";}
-            td {button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/-1", ingredient_id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Add" }}
-            td {}
+            td data-label="Weight (kg)" { input class="text" name="weight" placeholder="Weight (kg)"; }
+            td data-label="Price (€)" { input class="text" name="price" placeholder="Price (€)"; }
+            td data-label="URL" { input class="text" name="url" placeholder="URL"; }
+            td class="no-label" { button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/-1", ingredient_id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Add" } }
+            td class="no-label" {}
         }
     }
 }
@@ -489,7 +482,7 @@ fn format_ingredient_source(
     };
     html! {
         tr {
-            td {
+            td data-label="Store" {
                 label for="stores" style="display:none" { "Pick a Store" }
                 select name="store_id" id="stores" required="true" class="text w-full" disabled[!can_edit] {
                     @for store in stores {
@@ -497,15 +490,15 @@ fn format_ingredient_source(
                     }
                 }
             }
-            td {input class="text" name="weight" value=(source.package_size) disabled[!can_edit];}
-            td {input class="text" name="price" value=(source.price.to_f64().unwrap()) disabled[!can_edit];}
-            td {input class="text" name="url" value=(source.url.clone().unwrap_or_default()) disabled[!can_edit];}
+            td data-label="Weight (kg)" { input class="text" name="weight" value=(source.package_size) disabled[!can_edit]; }
+            td data-label="Price (€)" { input class="text" name="price" value=(source.price.to_f64().unwrap()) disabled[!can_edit]; }
+            td data-label="URL" { input class="text" name="url" value=(source.url.clone().unwrap_or_default()) disabled[!can_edit]; }
             @if can_edit {
-                td {button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/{}", ingredient_id, source.id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Update" }}
-                td {button class="btn btn-cancel" hx-get=(format!("/ingredients/sources/delete/{}/{}", ingredient_id, source.id)) hx-target="#popup" hx-swap="outerHTML" { "Delete" }}
+                td class="no-label" { button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/{}", ingredient_id, source.id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Update" } }
+                td class="no-label" { button class="btn btn-cancel" hx-get=(format!("/ingredients/sources/delete/{}/{}", ingredient_id, source.id)) hx-target="#popup" hx-swap="outerHTML" { "Delete" } }
             } @else {
-                td {}
-                td {}
+                td class="no-label" {}
+                td class="no-label" {}
             }
         }
     }
@@ -563,13 +556,15 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, use
                 @if is_admin {
                     button class="btn btn-cancel"
                     hx-get=(format!("/ingredients/delete/{}", ingredient.id))
-                    hx-swap="beforebegin" { "Delete" }
+                    hx-target="#content"
+                    hx-swap="afterbegin" { "Delete" }
                 }
             }
             td class="no-label" {
                 button class="btn btn-primary relative"
                 hx-get=(format!("/ingredients/sources/{}", ingredient.id))
-                hx-swap="afterend"
+                hx-target="#content"
+                hx-swap="afterbegin"
                 {
                     span class="absolute left-0 transform translate-x-6" { (sources_button_text) }
                     span class="block" { "Sources ▼" }

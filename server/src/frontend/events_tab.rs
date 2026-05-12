@@ -110,7 +110,22 @@ pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -
 
 pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
     let events = foodlib.events().list().await.unwrap_or_default();
-    let _ = &user;
+    let user_group_ids: Vec<i32> = foodlib
+        .users()
+        .get_user_groups(user.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|g| g.id)
+        .collect();
+    let visible_events: Vec<_> = if user.is_admin {
+        events.iter().collect()
+    } else {
+        events
+            .iter()
+            .filter(|e| user_group_ids.contains(&e.group_id))
+            .collect()
+    };
 
     html! {
         form id="events-filter" class="
@@ -122,16 +137,18 @@ pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
             hx-trigger="keyup changed delay:20ms from:#search, change from:#mine-only, search"
             hx-target="#search-results" {
             input class="grow text h-full" type="search" placeholder="Search for event" id="search" name="search" autocomplete="off" autofocus="autofocus";
-            label class="flex items-center gap-2 whitespace-nowrap" {
-                input type="checkbox" id="mine-only" name="mine_only" value="1";
-                "Mine only"
+            @if user.is_admin {
+                label class="flex items-center gap-2 whitespace-nowrap" {
+                    input type="checkbox" id="mine-only" name="mine_only" value="1";
+                    "Mine only"
+                }
             }
         }
         table class="w-full text-inherit table-auto object-center responsive-card" {
             thead { tr { th { "Name" } th { "Comment" } th {} th {} th {}} }
             tbody id="search-results" {
                 (event_add_row())
-                @for event in events.iter() {
+                @for event in visible_events.iter() {
                     (format_event(event))
                 }
             }
@@ -163,6 +180,7 @@ pub async fn search(foodlib: FoodLib, user: User, query: Form<SearchParameters>)
 
     let filtered_events = events.iter().filter(|x| {
         x.name.to_lowercase().contains(&query_str)
+            && (user.is_admin || user_group_ids.contains(&x.group_id))
             && (!mine_only || user_group_ids.contains(&x.group_id))
     });
 
