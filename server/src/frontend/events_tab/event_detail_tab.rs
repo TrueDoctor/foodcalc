@@ -35,6 +35,9 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         )
         .route("/export_pdf/{meal_id}", get(export_recipe_pdf))
         .route("/export_food_prep_pdf/{prep_id}", get(export_food_prep_pdf))
+        .route("/dish_labels/{event_id}", get(export_dish_labels_flat))
+        .route("/dish_labels_tent/{event_id}", get(export_dish_labels_tent))
+        .route("/allergen_overview/{event_id}", get(export_event_allergens))
         .route("/{event_id}", get(event_form))
         .route("/{event_id}/meals", get(render_meals_table))
         .route(
@@ -205,6 +208,101 @@ pub async fn export_food_prep_pdf(
     Ok((headers, recipe))
 }
 
+pub async fn export_dish_labels_flat(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
+    ctx.assert_can_edit_event(event_id).await?;
+    dish_labels_response(&state, event_id, "flat").await
+}
+
+pub async fn export_dish_labels_tent(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
+    ctx.assert_can_edit_event(event_id).await?;
+    dish_labels_response(&state, event_id, "tent").await
+}
+
+async fn dish_labels_response(
+    state: &MyAppState,
+    event_id: i32,
+    layout_key: &'static str,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
+    let info = state.export().fetch_event_allergens(event_id).await?;
+    let filename = format!("{}_dish_labels_{}", sanitize_filename(&info.event_name), layout_key);
+
+    #[cfg(feature = "typst")]
+    let result = {
+        let layout = match layout_key {
+            "tent" => foodlib_new::typst::DishLabelLayout::Tent,
+            _ => foodlib_new::typst::DishLabelLayout::Flat,
+        };
+        foodlib_new::typst::export_dish_labels(info, layout).await
+    };
+    #[cfg(not(feature = "typst"))]
+    let _ = layout_key;
+    #[cfg(not(feature = "typst"))]
+    let result = Err(foodlib_new::Error::Misc(
+        "Server compiled without typst support".into(),
+    ));
+    let pdf = result.map_err(|e| foodlib_new::Error::Misc(e.to_string()))?;
+
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}.pdf\""),
+            ),
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/pdf".to_string(),
+            ),
+        ],
+        pdf,
+    ))
+}
+
+pub async fn export_event_allergens(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
+    ctx.assert_can_edit_event(event_id).await?;
+    let info = state.export().fetch_event_allergens(event_id).await?;
+    let filename = format!("{}_allergene", sanitize_filename(&info.event_name));
+
+    #[cfg(feature = "typst")]
+    let result = foodlib_new::typst::export_event_allergens(info).await;
+    #[cfg(not(feature = "typst"))]
+    let result = Err(foodlib_new::Error::Misc(
+        "Server compiled without typst support".into(),
+    ));
+    let pdf = result.map_err(|e| foodlib_new::Error::Misc(e.to_string()))?;
+
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}.pdf\""),
+            ),
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/pdf".to_string(),
+            ),
+        ],
+        pdf,
+    ))
+}
+
+fn sanitize_filename(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect()
+}
+
 pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
     let stores = foodlib.stores().list().await?;
@@ -276,6 +374,14 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
             }
         }
         (render_ingredients_without_tours(&foodlib, event_id).await?)
+        div class="flex flex-col items-center gap-2 mb-3 mt-3 p-3 rounded-lg border border-gray-700" {
+            p class="text-lg font-semibold" { "Allergen exports" }
+            div class="flex flex-row flex-wrap gap-2 justify-center" {
+                a class="btn btn-primary" target="_blank" href=(format!("/events/edit/allergen_overview/{}", event_id)) { "Event overview (PDF)" }
+                a class="btn btn-primary" target="_blank" href=(format!("/events/edit/dish_labels/{}", event_id)) { "Dish labels — flat (6 / page)" }
+                a class="btn btn-primary" target="_blank" href=(format!("/events/edit/dish_labels_tent/{}", event_id)) { "Dish labels — tent (fold)" }
+            }
+        }
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
         }

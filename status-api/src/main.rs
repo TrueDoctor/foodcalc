@@ -35,6 +35,32 @@ struct MealStatus {
     place: String,
     meal_id: i32,
     event_id: i32, // Added event_id for cache invalidation
+    /// Canonical property names (e.g. "milch", "gluten"). `~spuren-X` prefixed entries
+    /// indicate "may contain X" warnings.
+    #[serde(default)]
+    allergens: Vec<String>,
+    /// Derived dietary flags computed from `allergens`.
+    #[serde(default)]
+    dietary: DietaryStatus,
+}
+
+#[derive(Clone, Copy, Default, Deserialize, Serialize)]
+struct DietaryStatus {
+    vegan: bool,
+    vegetarian: bool,
+    lactose_free: bool,
+    gluten_free: bool,
+}
+
+impl From<foodlib_new::allergen::DietaryFlags> for DietaryStatus {
+    fn from(d: foodlib_new::allergen::DietaryFlags) -> Self {
+        Self {
+            vegan: d.vegan,
+            vegetarian: d.vegetarian,
+            lactose_free: d.lactose_free,
+            gluten_free: d.gluten_free,
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -155,12 +181,14 @@ async fn refresh_cache(state: &AppState) {
     // If we have an upcoming event, make sure its meals are cached
     if let Some(event_id) = upcoming_event_id {
         let event_meals = get_event_meals_from_db(&state.food_lib, event_id).await;
+        let allergens = fetch_allergens_for_meals(&state.food_lib, &event_meals).await;
 
         // Process meals with current state and update cache
         let full_meals = process_meals(
             event_meals,
             state.meal_states.write().await.deref(),
             event_id,
+            &allergens,
         );
         let mut cache = state.event_cache.write().await;
         cache.update_event_cache(event_id, full_meals);
@@ -203,17 +231,61 @@ async fn get_event_meals_internal(
     food_lib.meals().get_event_meals(event_id).await
 }
 
+/// Fetch (allergens, dietary) per recipe for all distinct recipe_ids in `meals`.
+/// On any per-recipe error we substitute an empty entry — best-effort, never fail
+/// the cache refresh because of allergen data.
+async fn fetch_allergens_for_meals(
+    food_lib: &FoodLib,
+    meals: &[Meal],
+) -> HashMap<i32, (Vec<String>, DietaryStatus)> {
+    use std::collections::HashSet;
+    let recipe_ids: HashSet<i32> = meals.iter().map(|m| m.recipe_id).collect();
+    let mut out = HashMap::new();
+    for recipe_id in recipe_ids {
+        let props = food_lib
+            .properties()
+            .get_recipe_properties(recipe_id)
+            .await
+            .map(|rp| rp.properties)
+            .unwrap_or_default();
+        // Split into contains/may, compact each separately (drop subsumed children),
+        // then merge back with `~spuren-` prefix preserved on may-contains.
+        let mut contains: Vec<String> = Vec::new();
+        let mut may: Vec<String> = Vec::new();
+        for p in &props {
+            let lower = p.name.to_lowercase();
+            if let Some(rest) = lower.strip_prefix("~spuren-") {
+                may.push(rest.to_string());
+            } else {
+                contains.push(lower);
+            }
+        }
+        contains.sort(); contains.dedup();
+        may.sort(); may.dedup();
+        let contains = foodlib_new::ops::allergens::compact_allergen_set(&contains);
+        let may = foodlib_new::ops::allergens::compact_allergen_set(&may);
+        let mut names: Vec<String> = contains;
+        names.extend(may.into_iter().map(|s| format!("~spuren-{s}")));
+        let dietary = foodlib_new::ops::allergens::dietary_flags(&props).into();
+        out.insert(recipe_id, (names, dietary));
+    }
+    out
+}
+
 // Process meals with current state
 fn process_meals(
     meals: Vec<Meal>,
     meal_states: &HashMap<i32, MealStatus>,
     event_id: i32,
+    allergens: &HashMap<i32, (Vec<String>, DietaryStatus)>,
 ) -> Vec<FullMealStatus> {
     let current_time = now();
 
     meals
         .into_iter()
         .map(|meal| {
+            let (recipe_allergens, recipe_dietary) =
+                allergens.get(&meal.recipe_id).cloned().unwrap_or_default();
             let mut status = meal_states.get(&meal.meal_id).cloned().unwrap_or_else(|| {
                 // Default meal status if not in state
                 MealStatus {
@@ -228,6 +300,8 @@ fn process_meals(
                     place: meal.place.clone(),
                     meal_id: meal.meal_id,
                     event_id,
+                    allergens: recipe_allergens.clone(),
+                    dietary: recipe_dietary,
                 }
             });
 
@@ -237,6 +311,8 @@ fn process_meals(
             status.recipe = meal.name.clone();
             status.recipe_id = meal.recipe_id;
             status.place = meal.place.clone();
+            status.allergens = recipe_allergens;
+            status.dietary = recipe_dietary;
 
             FullMealStatus {
                 meal_id: meal.meal_id,
@@ -287,9 +363,12 @@ async fn main() {
     // Pre-populate meal states from the next event
     if let Some(next_event) = get_upcoming_event(&food_lib).await {
         let event_meals = get_event_meals_from_db(&food_lib, next_event).await;
+        let allergens = fetch_allergens_for_meals(&food_lib, &event_meals).await;
         let current_time = now();
 
         for meal in &event_meals {
+            let (recipe_allergens, recipe_dietary) =
+                allergens.get(&meal.recipe_id).cloned().unwrap_or_default();
             app_state.meal_states.write().await.insert(
                 meal.meal_id,
                 MealStatus {
@@ -304,6 +383,8 @@ async fn main() {
                     place: meal.place.clone(),
                     meal_id: meal.meal_id,
                     event_id: next_event,
+                    allergens: recipe_allergens,
+                    dietary: recipe_dietary,
                 },
             );
         }
@@ -313,6 +394,7 @@ async fn main() {
             event_meals,
             app_state.meal_states.read().await.deref(),
             next_event,
+            &allergens,
         );
         app_state
             .event_cache
@@ -421,10 +503,12 @@ async fn get_status(
             }
 
             // Process and cache meals
+            let allergens = fetch_allergens_for_meals(&state.food_lib, &event_meals).await;
             let full_meals = process_meals(
                 event_meals,
                 state.meal_states.read().await.deref(),
                 event_id,
+                &allergens,
             );
             let mut cache = state.event_cache.write().await;
             cache.update_event_cache(event_id, full_meals.clone());

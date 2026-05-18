@@ -3,9 +3,38 @@
 
   let eta_update_variants = [5, 10, 15, 30];
   let eta_add_variants = [1, 2, 5, 10];
-  
+
   import { page } from '$app/stores';
   import { updateMealStatus, formatTime } from '$lib/api.ts';
+
+  // German display labels for canonical allergen names. Anything not in the
+  // map gets a capitalized fallback so unknown labels still read reasonably.
+  const ALLERGEN_DE = {
+    milch: 'Milch', gluten: 'Gluten', weizen: 'Weizen', eier: 'Eier',
+    soja: 'Soja', erdnüsse: 'Erdnüsse', schalenfrüchte: 'Schalenfrüchte',
+    sesamsamen: 'Sesam', sellerie: 'Sellerie', senf: 'Senf',
+    lupine: 'Lupine', 'schwefeldioxid & sulfite': 'Sulfite', fisch: 'Fisch',
+    schwein: 'Schwein', fleisch: 'Fleisch', milchprodukt: 'Milchprodukt',
+    käse: 'Käse', 'ei-produkt': 'Ei-Produkt', krebstiere: 'Krebstiere',
+    weichtiere: 'Weichtiere', gelatine: 'Gelatine',
+  };
+
+  function pretty(name) {
+    if (name in ALLERGEN_DE) return ALLERGEN_DE[name];
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  // Split `meal.allergens` (an array of canonical names) into Contains and
+  // MayContain lists. `~spuren-X` is the may-contain convention.
+  $: contains = (meal.allergens ?? [])
+    .filter(n => !n.startsWith('~spuren-'))
+    .map(pretty)
+    .sort();
+  $: mayContain = (meal.allergens ?? [])
+    .filter(n => n.startsWith('~spuren-'))
+    .map(n => pretty(n.slice('~spuren-'.length)))
+    .sort();
+  $: dietary = meal.dietary ?? { vegan: false, vegetarian: false, lactose_free: false, gluten_free: false };
 
   // Fix admin mode to be case insensitive
   const adminPassword = $page.url.searchParams.get('admin');
@@ -122,6 +151,34 @@
     </div>
   </div>
   
+  {#if dietary.vegan || dietary.vegetarian || dietary.lactose_free || dietary.gluten_free || contains.length > 0 || mayContain.length > 0}
+    <div class="mt-2 mb-1 text-sm">
+      <div class="flex flex-wrap gap-1 mb-1">
+        {#if dietary.vegan}
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-300">vegan</span>
+        {:else if dietary.vegetarian}
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-lime-100 text-lime-800 border border-lime-300">vegetarisch</span>
+        {/if}
+        {#if dietary.lactose_free}
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">laktosefrei</span>
+        {/if}
+        {#if dietary.gluten_free}
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-300">glutenfrei</span>
+        {/if}
+      </div>
+      {#if contains.length > 0}
+        <p class="text-gray-700">
+          <span class="font-semibold">Enthält:</span> {contains.join(', ')}
+        </p>
+      {/if}
+      {#if mayContain.length > 0}
+        <p class="text-xs italic text-gray-500">
+          Kann Spuren von {mayContain.join(', ')} enthalten.
+        </p>
+      {/if}
+    </div>
+  {/if}
+
   <div class="mt-2">
     <div class="flex items-center mt-1">
       <span class="text-base font-medium">Status:</span>

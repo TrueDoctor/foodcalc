@@ -337,7 +337,7 @@ pub struct Store {
     pub country: String,
     pub store_id: String,
     pub supplier: Supplier,
-    pub selling_price_info: SellingPriceInfo,
+    pub selling_price_info: Option<SellingPriceInfo>,
     pub possible_delivery_modes: PossibleDeliveryModes,
     pub selected_delivery_mode: String,
     pub selected_fulfillment_type: String,
@@ -368,7 +368,7 @@ pub struct PossibleFulfillmentTypes {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PossibleFulfillmentTypesStore {
-    pub selling_price_info: SellingPriceInfo,
+    pub selling_price_info: Option<SellingPriceInfo>,
     pub relative_leadtime: Option<serde_json::Value>,
     pub anonymous_flags: AnonymousFlags,
     pub fulfillment_store_id: String,
@@ -475,6 +475,7 @@ pub enum UnitOfMeasure {
     #[serde(rename = "GRM")]
     GRM,
     #[serde(rename = "g")]
+    #[serde(alias = "Gramm")]
     Gramm,
     #[serde(rename = "µg")]
     Microgramm,
@@ -489,7 +490,10 @@ pub enum UnitOfMeasure {
     #[serde(rename = "kcal")]
     Kcal,
     #[serde(rename = "ml")]
+    #[serde(alias = "Milliliter")]
     Milliliter,
+    #[serde(untagged)]
+    Other(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -518,6 +522,8 @@ pub enum FeatureMetaInfo {
     Header,
     #[serde(rename = "")]
     Empty,
+    #[serde(untagged)]
+    Other(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -526,6 +532,8 @@ pub enum ValueType {
     Text,
     #[serde(rename = "NUMBER")]
     Number,
+    #[serde(untagged)]
+    Other(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

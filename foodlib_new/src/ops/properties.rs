@@ -164,82 +164,69 @@ impl PropertyOps {
         &self,
         ingredient_id: i32,
     ) -> Result<IngredientProperties> {
-        let rows = sqlx::query!(
+        let ingredient_name: String = sqlx::query_scalar!(
+            r#"SELECT name FROM ingredients WHERE ingredient_id = $1"#,
+            ingredient_id
+        )
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or_else(|| Error::NotFound {
+            entity: "ingredient",
+            id: ingredient_id.to_string(),
+        })?;
+
+        let properties = sqlx::query_as!(
+            Property,
             r#"
-            SELECT 
-                i.ingredient_id,
-                i.name as ingredient_name,
-                fp.property_id as "property_id!",
-                fp.name as "property_name!"
-            FROM ingredients i
-            LEFT JOIN ingredient_properties ip ON ip.ingredient_id = i.ingredient_id
-            LEFT JOIN food_properties fp ON fp.property_id = ip.property_id
-            WHERE i.ingredient_id = $1
+            SELECT fp.property_id as "id", fp.name
+            FROM ingredient_properties ip
+            JOIN food_properties fp ON fp.property_id = ip.property_id
+            WHERE ip.ingredient_id = $1
+            ORDER BY fp.name
             "#,
             ingredient_id
         )
         .fetch_all(&*self.pool)
         .await?;
 
-        if rows.is_empty() {
-            return Err(Error::NotFound {
-                entity: "ingredient",
-                id: ingredient_id.to_string(),
-            });
-        }
-
-        let properties = rows
-            .iter()
-            .map(|row| Property {
-                id: row.property_id,
-                name: row.property_name.clone(),
-            })
-            .collect();
-
         Ok(IngredientProperties {
             ingredient_id,
-            ingredient_name: rows[0].ingredient_name.clone(),
+            ingredient_name,
             properties,
         })
     }
 
     // Recipe property analysis
     pub async fn get_recipe_properties(&self, recipe_id: i32) -> Result<RecipeProperties> {
-        let rows = sqlx::query!(
+        let recipe_name: String = sqlx::query_scalar!(
+            r#"SELECT name FROM recipes WHERE recipe_id = $1"#,
+            recipe_id
+        )
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or_else(|| Error::NotFound {
+            entity: "recipe",
+            id: recipe_id.to_string(),
+        })?;
+
+        let properties = sqlx::query_as!(
+            Property,
             r#"
-        SELECT DISTINCT
-            r.recipe_id,
-            r.recipe as "recipe_name!",
-            fp.property_id as "property_id!",
-            fp.name as "property_name!"
-        FROM resolved_recipes r
-        JOIN ingredient_properties ip ON ip.ingredient_id = r.ingredient_id
-        JOIN food_properties fp ON fp.property_id = ip.property_id
-        WHERE r.recipe_id = $1
-        "#,
+            SELECT DISTINCT fp.property_id as "id", fp.name
+            FROM resolved_recipes r
+            JOIN ingredient_properties ip ON ip.ingredient_id = r.ingredient_id
+            JOIN food_properties fp ON fp.property_id = ip.property_id
+            WHERE r.recipe_id = $1
+            ORDER BY fp.name
+            "#,
             recipe_id
         )
         .fetch_all(&*self.pool)
         .await?;
 
-        if rows.is_empty() {
-            return Err(Error::NotFound {
-                entity: "recipe",
-                id: recipe_id.to_string(),
-            });
-        }
-
-        let properties = rows
-            .iter()
-            .map(|row| Property {
-                id: row.property_id,
-                name: row.property_name.clone(),
-            })
-            .collect();
-
         Ok(RecipeProperties {
             recipe_id,
-            recipe_name: rows[0].recipe_name.clone(),
+            recipe_name,
             properties,
         })
     }

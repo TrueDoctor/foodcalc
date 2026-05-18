@@ -30,6 +30,8 @@ pub(crate) fn admin_router() -> axum::Router<MyAppState> {
             "/groups/{group_id}/members/{user_id}",
             delete(remove_member),
         )
+        .route("/metro-sync", get(metro_sync_view))
+        .route("/metro-sync", post(metro_sync_run))
         .nest("/users", users::users_router())
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
 }
@@ -271,4 +273,100 @@ async fn remove_member(
         .remove_user_from_group(user_id, group_id)
         .await?;
     Ok(html! {})
+}
+
+async fn metro_sync_view(ctx: AuthCtx) -> MResponse {
+    if !ctx.user.is_admin {
+        return Err(Error::Forbidden(
+            "Only admins can trigger Metro sync".into(),
+        ));
+    }
+    Ok(html! {
+        div class="flex flex-col items-center w-full" {
+            div class="flex justify-center w-full mb-4" {
+                p class="text-3xl" { "Metro Sync" }
+            }
+            div class="w-full max-w-3xl flex flex-col gap-4" {
+                p class="opacity-80" {
+                    "Fetches all Metro-linked ingredient sources, updates prices, "
+                    "categories, and classified allergen properties."
+                }
+                form id="metro-sync-result" class="flex flex-col gap-2" {
+                    label class="flex items-center gap-2 text-sm opacity-80" {
+                        input type="checkbox" name="wipe_existing" value="1";
+                        "Wipe existing properties for Metro-sourced ingredients before applying new ones"
+                        " (useful while iterating on the classifier — manually-curated tags on "
+                        "non-Metro ingredients are preserved)"
+                    }
+                    div class="flex flex-row items-center gap-3" {
+                        button class="btn btn-primary"
+                            hx-post="/admin/metro-sync"
+                            hx-include="closest form"
+                            hx-target="#metro-sync-result"
+                            hx-swap="innerHTML"
+                            hx-indicator="#metro-sync-spinner"
+                            hx-disabled-elt="this" {
+                            "Run Metro sync"
+                        }
+                        span id="metro-sync-spinner" class="htmx-indicator opacity-70" {
+                            "Syncing… this may take a minute"
+                        }
+                    }
+                }
+            }
+        }
+    })
+}
+
+#[derive(Deserialize)]
+struct MetroSyncForm {
+    #[serde(default)]
+    wipe_existing: Option<String>,
+}
+
+async fn metro_sync_run(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Form(form): Form<MetroSyncForm>,
+) -> MResponse {
+    if !ctx.user.is_admin {
+        return Err(Error::Forbidden(
+            "Only admins can trigger Metro sync".into(),
+        ));
+    }
+    let opts = foodlib_new::ops::metro_sync::SyncOptions {
+        wipe_existing: form.wipe_existing.is_some(),
+    };
+    let report = foodlib.metro_sync().sync_with(None, opts).await?;
+    Ok(html! {
+        div class="flex flex-col gap-2 p-4 border rounded" {
+            p class="text-xl font-semibold" { "Sync complete" }
+            ul class="list-disc pl-6" {
+                li { "URLs scanned: " (report.urls_total) }
+                li { "Articles fetched: " (report.articles_fetched) }
+                li { "Prices updated: " (report.prices_updated) }
+                @if report.allergens_wiped > 0 {
+                    li { "Properties wiped before resync: " (report.allergens_wiped) }
+                }
+                li { "Allergen properties applied: " (report.allergens_applied) }
+            }
+            @if !report.failures.is_empty() {
+                details class="mt-2" {
+                    summary class="cursor-pointer text-yellow-600 dark:text-yellow-400" {
+                        (report.failures.len()) " failure(s) (click to expand)"
+                    }
+                    ul class="list-disc pl-6 mt-2 text-sm opacity-80" {
+                        @for f in &report.failures {
+                            li { (f) }
+                        }
+                    }
+                }
+            }
+            button class="btn btn-primary mt-2"
+                hx-get="/admin/metro-sync"
+                hx-target="#content" {
+                "Run again"
+            }
+        }
+    })
 }

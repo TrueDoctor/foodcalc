@@ -115,6 +115,8 @@ fn user_menu(user: Option<&User>) -> Markup {
                         @if u.is_admin {
                             a hx-get="/admin/users" hx-target="#content" hx-push-url="true"
                                 class="block px-4 py-3 cursor-pointer hover:bg-blue-800" { "Users" }
+                            a hx-get="/admin/metro-sync" hx-target="#content" hx-push-url="true"
+                                class="block px-4 py-3 cursor-pointer hover:bg-blue-800" { "Metro Sync" }
                         }
                         a hx-get="/auth/logout" hx-target="#content"
                             class="block px-4 py-3 cursor-pointer hover:bg-blue-800 border-t border-blue-900" { "Log out" }

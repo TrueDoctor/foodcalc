@@ -1,3 +1,4 @@
+pub mod allergen;
 pub mod event;
 pub mod ingredient;
 pub mod inventory;

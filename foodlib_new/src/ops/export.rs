@@ -1,3 +1,5 @@
+use crate::entities::allergen::DietaryFlags;
+use crate::entities::property::Property;
 use crate::entities::recipe::{RecipeStep, SubRecipe};
 use crate::error::{Error, Result};
 use bigdecimal::BigDecimal;
@@ -10,6 +12,30 @@ pub struct RecipeInfo {
     pub name: String,
     pub date: String,
     pub subrecipes: Vec<(Vec<SubRecipe>, Vec<RecipeStep>)>,
+    /// Aggregated allergen properties from all ingredients (including subrecipes).
+    pub properties: Vec<Property>,
+    /// Derived dietary flags computed from `properties` via `allergens::dietary_flags`.
+    pub dietary: DietaryFlags,
+}
+
+/// Lighter-weight summary for dish labels and event overviews — just identity + allergens.
+#[derive(Debug, Clone)]
+pub struct MealAllergenInfo {
+    pub meal_id: i32,
+    pub recipe_id: i32,
+    pub recipe_name: String,
+    pub place: String,
+    pub servings: i32,
+    pub start_time: time::OffsetDateTime,
+    pub properties: Vec<Property>,
+    pub dietary: DietaryFlags,
+}
+
+#[derive(Debug, Clone)]
+pub struct EventAllergenInfo {
+    pub event_id: i32,
+    pub event_name: String,
+    pub meals: Vec<MealAllergenInfo>,
 }
 
 pub struct ExportOps {
@@ -22,14 +48,30 @@ impl ExportOps {
     }
 
     pub async fn fetch_meal_recipe(&self, meal_id: i32) -> Result<RecipeInfo> {
-        let meal = crate::ops::meals::MealOps::new(self.pool.clone())
-            .get_meal(meal_id)
-            .await?;
-        let recipe_id = meal.recipe_id;
-        let weight = meal.weight;
+        // Avoid `MealOps::get_meal` which aggregates over `event_ingredients` (a deep
+        // recursive view) — that query takes ~3 minutes on this DB. We only need
+        // recipe_id, start_time, and a scaling weight; weight is derived from
+        // `servings * energy_per_serving / recipe_energy`, identical to what the
+        // heavy aggregate computes but reading only `event_meals` + `recipe_stats`.
+        let row = sqlx::query!(
+            r#"
+            SELECT recipe_id, start_time, servings, energy_per_serving
+            FROM event_meals
+            WHERE meal_id = $1
+            "#,
+            meal_id
+        )
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "Meal",
+            id: meal_id.to_string(),
+        })?;
+        let total_energy = BigDecimal::from(row.servings) * row.energy_per_serving;
+        let weight = self.calc_energy_to_weight(row.recipe_id, total_energy).await?;
         let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
-        let date = meal.start_time.format(&format).unwrap();
-        self.fetch_recipe_info(recipe_id, weight, date).await
+        let date = row.start_time.format(&format).unwrap();
+        self.fetch_recipe_info(row.recipe_id, weight, date).await
     }
 
     pub async fn fetch_food_prep_recipe(&self, prep_id: i32) -> Result<RecipeInfo> {
@@ -170,10 +212,80 @@ impl ExportOps {
             .subrecipe
             .clone();
 
+        let properties = crate::ops::properties::PropertyOps::new(self.pool.clone())
+            .get_recipe_properties(recipe_id)
+            .await?
+            .properties;
+        let dietary = crate::ops::allergens::dietary_flags(&properties);
+
         Ok(RecipeInfo {
             name,
             date,
             subrecipes: recipes,
+            properties,
+            dietary,
+        })
+    }
+
+    /// Fetch the allergen/dietary summary for every meal of an event, used to
+    /// render dish labels and the event-wide allergen overview.
+    pub async fn fetch_event_allergens(&self, event_id: i32) -> Result<EventAllergenInfo> {
+        let event_name = sqlx::query_scalar!(
+            r#"SELECT event_name FROM events WHERE event_id = $1"#,
+            event_id
+        )
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or_else(|| Error::NotFound {
+            entity: "event",
+            id: event_id.to_string(),
+        })?;
+
+        let rows = sqlx::query!(
+            r#"
+            SELECT
+                em.meal_id as "meal_id!",
+                em.recipe_id,
+                r.name as recipe_name,
+                p.name as place,
+                em.servings,
+                em.start_time as "start_time: time::OffsetDateTime"
+            FROM event_meals em
+            JOIN recipes r ON r.recipe_id = em.recipe_id
+            JOIN places p ON p.place_id = em.place_id
+            WHERE em.event_id = $1
+            ORDER BY em.start_time, r.name
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let property_ops = crate::ops::properties::PropertyOps::new(self.pool.clone());
+        let mut meals = Vec::with_capacity(rows.len());
+        for row in rows {
+            let properties = property_ops
+                .get_recipe_properties(row.recipe_id)
+                .await
+                .map(|rp| rp.properties)
+                .unwrap_or_default();
+            let dietary = crate::ops::allergens::dietary_flags(&properties);
+            meals.push(MealAllergenInfo {
+                meal_id: row.meal_id,
+                recipe_id: row.recipe_id,
+                recipe_name: row.recipe_name,
+                place: row.place,
+                servings: row.servings,
+                start_time: row.start_time,
+                properties,
+                dietary,
+            });
+        }
+
+        Ok(EventAllergenInfo {
+            event_id,
+            event_name,
+            meals,
         })
     }
 }

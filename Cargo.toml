@@ -2,6 +2,7 @@
 resolver = "2"
 members = ["metro-scrape", "server", "status-api", "foodlib_new"]
 default-members = ["server", "foodlib_new"]
+exclude = ["foodlib", "cli-client", "api"]
 
 [workspace.dependencies]
 sqlx = { version = "0.8", features = [

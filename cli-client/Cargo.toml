@@ -7,13 +7,20 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.2.7", features = ["derive"] }
-dotenv = { workspace = true }
+dotenv = "0.15.0"
 foodlib = { path = "../foodlib" }
-time = { workspace = true, features = ["parsing"] }
-sqlx = { workspace = true }
-tokio = { workspace = true }
+time = { version = "0.3", features = ["serde", "parsing", "local-offset"] }
+sqlx = { version = "0.8", features = [
+    "postgres",
+    "time",
+    "macros",
+    "migrate",
+    "uuid",
+    "runtime-tokio-rustls",
+    "bigdecimal",
+] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 tabled = "0.14.0"
 humantime = "2.1.0"
 chrono = "0.4"
 dateparser = "0.2.1"
-

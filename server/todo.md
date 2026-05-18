@@ -1,0 +1,5 @@
+- [x] Fix failing tests
+- [x] Consistently use editable last row pattern for adding new elements to tables
+- [x] Duplicate event should support start date
+- [ ] Show ids for admin users but not for anyone else
+- [ ] Allergene parsing

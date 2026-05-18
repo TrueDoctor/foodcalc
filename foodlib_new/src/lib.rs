@@ -65,6 +65,18 @@ impl FoodLib {
         ops::export::ExportOps::new(self.pool.clone())
     }
 
+    pub fn properties(&self) -> ops::properties::PropertyOps {
+        ops::properties::PropertyOps::new(self.pool.clone())
+    }
+
+    pub fn allergens(&self) -> ops::allergens::AllergenOps {
+        ops::allergens::AllergenOps::new(self.pool.clone())
+    }
+
+    pub fn metro_sync(&self) -> ops::metro_sync::MetroSyncOps {
+        ops::metro_sync::MetroSyncOps::new(self.pool.clone())
+    }
+
     pub fn pool_arc(&self) -> Arc<PgPool> {
         self.pool.clone()
     }

@@ -32,8 +32,13 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
             "/sources/delete/{ingredient_id}/{source_id}",
             get(delete_source),
         )
+        .route(
+            "/properties/{ingredient_id}/{property_id}",
+            delete(delete_property),
+        )
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
         .route("/sources/{id}", get(sources_table))
+        .route("/properties/{id}", get(properties_dialog))
         .route("/", get(ingredients_view))
         .route("/rows", get(ingredient_rows_view))
 }
@@ -276,6 +281,7 @@ fn render_ingredients_page(
                     th class="w-1/8" { "Comment" }
                     th {}
                     th {}
+                    th class="w-1/6" {}
                     th class="w-1/6" {}
                 } }
                 tbody id="search-results" {
@@ -569,6 +575,13 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, use
                     span class="absolute left-0 transform translate-x-6" { (sources_button_text) }
                     span class="block" { "Sources ▼" }
                 }
+            }
+            td class="no-label" {
+                button class="btn btn-primary"
+                hx-get=(format!("/ingredients/properties/{}", ingredient.id))
+                hx-target="#content"
+                hx-swap="afterbegin"
+                { "Allergens ▼" }
             }
         }
     }

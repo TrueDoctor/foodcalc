@@ -512,6 +512,11 @@ impl FoodBase {
                 .next()
                 .ok_or(eyre::eyre!("Store not found for id {}", s.ingredient_id))?
                 .selling_price_info
+                .as_ref()
+                .ok_or(eyre::eyre!(
+                    "No price info for id {} (unauthenticated session?)",
+                    s.ingredient_id
+                ))?
                 .gross_price;
             let weight = &bundle.gross_weight;
             let category = bundle

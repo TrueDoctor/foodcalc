@@ -1,5 +1,7 @@
+pub mod allergens;
 pub mod export;
 pub mod ingredients;
+pub mod metro_sync;
 pub mod properties;
 pub mod recipes;
 pub mod stores;
