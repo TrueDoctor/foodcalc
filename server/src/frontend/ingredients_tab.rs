@@ -282,7 +282,6 @@ fn render_ingredients_page(
                     th {}
                     th {}
                     th class="w-1/6" {}
-                    th class="w-1/6" {}
                 } }
                 tbody id="search-results" {
                     @if user.is_some() {
@@ -444,6 +443,134 @@ async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> M
     })
 }
 
+async fn properties_dialog(foodlib: FoodLib, user: Option<User>, id: Path<i32>) -> MResponse {
+    let props = foodlib.properties().get_ingredient_properties(id.0).await?;
+    let ingredient = foodlib.ingredients().get(id.0).await?;
+
+    let user_group_ids: Vec<i32> = if let Some(u) = user.as_ref() {
+        foodlib
+            .users()
+            .get_user_groups(u.id)
+            .await
+            .unwrap_or_default()
+            .iter()
+            .map(|g| g.id)
+            .collect()
+    } else {
+        vec![]
+    };
+    let can_edit = user
+        .as_ref()
+        .map_or(false, |u| can_edit(ingredient.group_id, &user_group_ids, u));
+
+    // Group properties by source kind for readability.
+    let mut category: Vec<&foodlib_new::property::Property> = Vec::new();
+    let mut contains: Vec<&foodlib_new::property::Property> = Vec::new();
+    let mut may_contain: Vec<&foodlib_new::property::Property> = Vec::new();
+    for p in &props.properties {
+        if p.name.starts_with("~spuren-") {
+            may_contain.push(p);
+        } else {
+            // We don't have provenance stored, so we can't separate Category from Contains here.
+            // Group everything non-trace into one "Direct properties" bucket.
+            contains.push(p);
+        }
+    }
+    let _ = &mut category; // suppress unused
+
+    fn pretty(name: &str) -> String {
+        let stripped = name.strip_prefix("~spuren-").unwrap_or(name);
+        let mut chars = stripped.chars();
+        match chars.next() {
+            Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+            None => String::new(),
+        }
+    }
+
+    Ok(html! {
+        dialog open="true" class="dialog z-50" id="popup" {
+            div class="flex justify-between items-center w-full mb-3 gap-2" {
+                p class="text-xl font-semibold" { "Allergens: " (ingredient.name) }
+                button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" { "Close" }
+            }
+            @if props.properties.is_empty() {
+                p class="text-center opacity-70 py-4" { "No allergens tagged on this ingredient." }
+            } @else {
+                @if !contains.is_empty() {
+                    div class="mb-4" {
+                        p class="font-semibold mb-2" { "Enthält / Direct properties" }
+                        ul class="list-disc pl-6 flex flex-col gap-1" {
+                            @for p in &contains {
+                                li class="flex items-center justify-between gap-2" {
+                                    span { (pretty(&p.name)) }
+                                    @if can_edit {
+                                        button class="btn btn-cancel"
+                                            hx-delete=(format!("/ingredients/properties/{}/{}", ingredient.id, p.id))
+                                            hx-target="#popup"
+                                            hx-swap="outerHTML"
+                                            hx-confirm=(format!("Remove `{}` from {}?", p.name, ingredient.name))
+                                            { "Remove" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                @if !may_contain.is_empty() {
+                    div class="mb-4" {
+                        p class="font-semibold mb-2" { "Spuren / May contain" }
+                        ul class="list-disc pl-6 flex flex-col gap-1" {
+                            @for p in &may_contain {
+                                li class="flex items-center justify-between gap-2" {
+                                    span { (pretty(&p.name)) }
+                                    @if can_edit {
+                                        button class="btn btn-cancel"
+                                            hx-delete=(format!("/ingredients/properties/{}/{}", ingredient.id, p.id))
+                                            hx-target="#popup"
+                                            hx-swap="outerHTML"
+                                            hx-confirm=(format!("Remove `{}` from {}?", p.name, ingredient.name))
+                                            { "Remove" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            p class="text-xs opacity-60 mt-3" {
+                "Tags are populated by the Metro sync from product allergen disclosures. "
+                "Manual removals here are NOT preserved across re-syncs unless you skip the wipe option."
+            }
+        }
+    })
+}
+
+async fn delete_property(
+    foodlib: FoodLib,
+    user: User,
+    Path((ingredient_id, property_id)): Path<(i32, i32)>,
+) -> MResponse {
+    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
+    let user_group_ids: Vec<i32> = foodlib
+        .users()
+        .get_user_groups(user.id)
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(|g| g.id)
+        .collect();
+    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
+        return Err(foodlib_new::Error::Forbidden(
+            "You don't have permission to edit this ingredient".into(),
+        ));
+    }
+    foodlib
+        .properties()
+        .remove_from_ingredient(ingredient_id, property_id)
+        .await?;
+    properties_dialog(foodlib, Some(user), Path(ingredient_id)).await
+}
+
 fn format_add_ingredient_source(stores: &[Store], ingredient_id: i32) -> Markup {
     html! {
         tr {
@@ -544,7 +671,19 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, use
             @if is_admin {
                 td class="text-center opacity-70" data-label="ID" { (ingredient.id) }
             }
-            td class="text-center" data-label="Name" { (ingredient.name) }
+            td class="text-center" data-label="Name" {
+                span class="inline-flex items-center gap-1" {
+                    (ingredient.name)
+                    button class="opacity-60 hover:opacity-100 cursor-pointer text-blue-600 dark:text-blue-400"
+                        hx-get=(format!("/ingredients/properties/{}", ingredient.id))
+                        hx-target="#content"
+                        hx-swap="afterbegin"
+                        title="View allergens"
+                        type="button"
+                        style="background: none; border: none; padding: 0; font-size: 0.85em;"
+                        { "ⓘ" }
+                }
+            }
             td class="text-center" data-label="Energy (kJ/g)" { (ingredient.energy) }
             td class=(if comment.is_empty() { "text-center no-label" } else { "text-center" })
                data-label=(if comment.is_empty() { "" } else { "Comment" }) {
@@ -575,13 +714,6 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, use
                     span class="absolute left-0 transform translate-x-6" { (sources_button_text) }
                     span class="block" { "Sources ▼" }
                 }
-            }
-            td class="no-label" {
-                button class="btn btn-primary"
-                hx-get=(format!("/ingredients/properties/{}", ingredient.id))
-                hx-target="#content"
-                hx-swap="afterbegin"
-                { "Allergens ▼" }
             }
         }
     }

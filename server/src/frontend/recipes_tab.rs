@@ -27,6 +27,7 @@ pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
         .route("/shopping-list/{recipe_id}", post(shopping_list))
         .route("/export/{recipe_id}", get(export_recipe))
         .route("/export_pdf/{recipe_id}", get(export_recipe_pdf))
+        .route("/allergens/{recipe_id}", get(allergens_dialog))
         .route("/", get(recipes_view))
 }
 
@@ -324,7 +325,19 @@ fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[i32]) -
             @if is_admin {
                 td data-label="ID" { (recipe.id) }
             }
-            td data-label="Name" { (recipe.name) }
+            td data-label="Name" {
+                span class="inline-flex items-center gap-1" {
+                    (recipe.name)
+                    button class="opacity-60 hover:opacity-100 cursor-pointer text-blue-600 dark:text-blue-400"
+                        hx-get=(format!("/recipes/allergens/{}", recipe.id))
+                        hx-target="#content"
+                        hx-swap="afterbegin"
+                        title="View allergens"
+                        type="button"
+                        style="background: none; border: none; padding: 0; font-size: 0.85em;"
+                        { "ⓘ" }
+                }
+            }
             td data-label=(if comment.is_empty() { "" } else { "Comment" })
                class=(if comment.is_empty() { "no-label" } else { "" }) {
                 (comment)
@@ -343,4 +356,86 @@ fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[i32]) -
             td class="no-label" { div id="dialog"; }
         }
     }
+}
+
+fn pretty_property(name: &str) -> String {
+    let stripped = name.strip_prefix("~spuren-").unwrap_or(name);
+    let mut chars = stripped.chars();
+    match chars.next() {
+        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}
+
+async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+    let rp = foodlib.properties().get_recipe_properties(recipe_id).await?;
+    let dietary = foodlib_new::ops::allergens::dietary_flags(&rp.properties);
+
+    let mut contains_lower: Vec<String> = Vec::new();
+    let mut may_lower: Vec<String> = Vec::new();
+    for p in &rp.properties {
+        let lower = p.name.to_lowercase();
+        if let Some(rest) = lower.strip_prefix("~spuren-") {
+            may_lower.push(rest.to_string());
+        } else {
+            contains_lower.push(lower);
+        }
+    }
+    contains_lower.sort();
+    contains_lower.dedup();
+    may_lower.sort();
+    may_lower.dedup();
+    let contains = foodlib_new::ops::allergens::compact_allergen_set(&contains_lower);
+    let may_contain = foodlib_new::ops::allergens::compact_allergen_set(&may_lower);
+
+    Ok(html! {
+        dialog open="true" class="dialog z-50" id="popup" {
+            div class="flex justify-between items-center w-full mb-3 gap-2" {
+                p class="text-xl font-semibold" { "Allergens: " (rp.recipe_name) }
+                button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" { "Close" }
+            }
+
+            // Dietary flag badges. Same visual idiom as the PDF.
+            div class="flex flex-wrap gap-2 mb-4" {
+                @if dietary.vegan {
+                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800 border border-green-300" { "vegan" }
+                } @else if dietary.vegetarian {
+                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-lime-100 text-lime-800 border border-lime-300" { "vegetarisch" }
+                }
+                @if dietary.lactose_free {
+                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800 border border-blue-300" { "laktosefrei" }
+                }
+                @if dietary.gluten_free {
+                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800 border border-purple-300" { "glutenfrei" }
+                }
+                @if !dietary.vegetarian && !dietary.lactose_free && !dietary.gluten_free {
+                    span class="text-sm opacity-70" { "No dietary flags apply." }
+                }
+            }
+
+            @if contains.is_empty() && may_contain.is_empty() {
+                p class="text-center opacity-70 py-4" { "Keine deklarationspflichtigen Allergene." }
+            } @else {
+                @if !contains.is_empty() {
+                    div class="mb-4" {
+                        p class="font-semibold mb-2" { "Enthält" }
+                        p { (contains.iter().map(|s| pretty_property(s)).collect::<Vec<_>>().join(", ")) }
+                    }
+                }
+                @if !may_contain.is_empty() {
+                    div class="mb-4" {
+                        p class="font-semibold mb-2" { "Kann Spuren enthalten" }
+                        p class="text-sm italic opacity-80" {
+                            (may_contain.iter().map(|s| pretty_property(s)).collect::<Vec<_>>().join(", "))
+                        }
+                    }
+                }
+            }
+
+            p class="text-xs opacity-60 mt-3" {
+                "Aggregated from all ingredients in this recipe (including subrecipes). "
+                "To remove specific tags, edit the source ingredients."
+            }
+        }
+    })
 }
