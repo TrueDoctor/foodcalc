@@ -18,6 +18,31 @@ pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
         .route("/{event_id}/{meal_id}", post(update_meal))
         .route("/{event_id}/{meal_id}", get(meal_form))
         .route("/{event_id}/{meal_id}", delete(delete_meal))
+        .route("/{meal_id}/price", get(meal_price_cell))
+        .route("/{meal_id}/price_per_serving", get(meal_price_per_serving_cell))
+}
+
+async fn meal_price_cell(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(meal_id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_meal(meal_id).await?;
+    let price = foodlib.meals().get_meal_price(meal_id).await?;
+    Ok(html! { (price.round(2).to_string()) "€" })
+}
+
+async fn meal_price_per_serving_cell(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(meal_id): Path<i32>,
+) -> MResponse {
+    use bigdecimal::ToPrimitive;
+    ctx.assert_can_edit_meal(meal_id).await?;
+    let meal = foodlib.meals().get_meal(meal_id).await?;
+    let price = foodlib.meals().get_meal_price(meal_id).await?;
+    let per_serving = price.to_f64().unwrap_or_default() / meal.servings as f64;
+    Ok(html! { (format!("{:.3}€", per_serving)) })
 }
 
 #[derive(Clone, PartialEq, Deserialize)]
@@ -224,7 +249,11 @@ async fn meal_form(
                 }
                 tr {
                     td { "Price" }
-                    td { (meal.price.round(2).to_string()) "€" }
+                    @if meal_id != -1 {
+                        td hx-get=(format!("/events/edit/event_edit_meal/{}/price", meal_id)) hx-trigger="load" hx-swap="innerHTML" { "…" }
+                    } @else {
+                        td { "—" }
+                    }
                 }
                 tr {
                     td { "Servings" }

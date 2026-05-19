@@ -18,6 +18,10 @@ impl MealOps {
     }
 
     /// Get all meals for a given event.
+    ///
+    /// `weight` is derived from `recipe_stats` (cheap). `price` is returned as 0 —
+    /// it requires the deep `event_ingredients` aggregate and should be fetched
+    /// separately per meal via [`Self::get_meal_price`] (e.g. lazy-loaded over HTMX).
     pub async fn get_event_meals(&self, event_id: i32) -> Result<Vec<Meal>> {
         let meals = sqlx::query_as!(
             Meal,
@@ -31,17 +35,16 @@ impl MealOps {
                 places.name as "place!",
                 event_meals.start_time,
                 event_meals.end_time,
-                COALESCE(round(sum(event_ingredients.weight), 2), 0) as "weight!",
-                COALESCE(round(sum(event_ingredients.energy) / event_meals.servings, 0), 0) as "energy!",
-                COALESCE(sum(event_ingredients.price), 0) as "price!",
+                COALESCE(round(recipe_stats.weight * event_meals.energy_per_serving * event_meals.servings / NULLIF(recipe_stats.energy, 0), 2), 0) as "weight!",
+                event_meals.energy_per_serving as "energy!",
+                0::numeric as "price!",
                 event_meals.servings,
                 event_meals.comment
             FROM event_meals
-            LEFT JOIN event_ingredients ON event_meals.meal_id = event_ingredients.meal_id
             LEFT JOIN recipes ON event_meals.recipe_id = recipes.recipe_id
             LEFT JOIN places ON event_meals.place_id = places.place_id
+            LEFT JOIN recipe_stats ON event_meals.recipe_id = recipe_stats.recipe_id
             WHERE event_meals.event_id = $1
-            GROUP BY event_meals.meal_id, recipes.name, places.name, event_meals.servings
             ORDER BY event_meals.start_time
             "#,
             event_id
@@ -53,6 +56,14 @@ impl MealOps {
     }
 
     /// Get a single meal by its ID.
+    ///
+    /// `weight` is derived from `recipe_stats` (recipe weight scaled by the meal's
+    /// energy multiplier), avoiding the per-event-ingredient aggregate which goes
+    /// through the deep `event_ingredients` recursive view.
+    ///
+    /// `price` is returned as 0 — it is event-source-specific and requires the
+    /// expensive aggregate. Callers that need the price should fetch it separately
+    /// via [`Self::get_meal_price`] (e.g. lazy-loaded over HTMX).
     pub async fn get_meal(&self, meal_id: i32) -> Result<Meal> {
         let meal = sqlx::query_as!(
             Meal,
@@ -66,17 +77,16 @@ impl MealOps {
                 places.name as "place!",
                 event_meals.start_time,
                 event_meals.end_time,
-                COALESCE(round(sum(event_ingredients.weight), 2), 0) as "weight!",
-                COALESCE(round(sum(event_ingredients.energy) / event_meals.servings, 0), 0) as "energy!",
-                COALESCE(sum(event_ingredients.price), 0) as "price!",
+                COALESCE(round(recipe_stats.weight * event_meals.energy_per_serving * event_meals.servings / NULLIF(recipe_stats.energy, 0), 2), 0) as "weight!",
+                event_meals.energy_per_serving as "energy!",
+                0::numeric as "price!",
                 event_meals.comment,
                 event_meals.servings
             FROM event_meals
-            LEFT JOIN event_ingredients ON event_meals.meal_id = event_ingredients.meal_id
             LEFT JOIN recipes ON event_meals.recipe_id = recipes.recipe_id
             LEFT JOIN places ON event_meals.place_id = places.place_id
+            LEFT JOIN recipe_stats ON event_meals.recipe_id = recipe_stats.recipe_id
             WHERE event_meals.meal_id = $1
-            GROUP BY event_meals.meal_id, recipes.name, places.name, event_meals.servings
             "#,
             meal_id
         )
@@ -87,6 +97,52 @@ impl MealOps {
             entity: "Meal",
             id: meal_id.to_string(),
         })
+    }
+
+    /// Compute the total price for a single meal.
+    ///
+    /// This goes through `event_ingredients` (the deep recursive view) for one
+    /// meal. Calling this once per meal is **much** more expensive than calling
+    /// [`Self::get_event_meal_prices`] once for the whole event, because the
+    /// recursive view is re-evaluated per call.
+    pub async fn get_meal_price(&self, meal_id: i32) -> Result<BigDecimal> {
+        let row = sqlx::query!(
+            r#"
+            SELECT COALESCE(sum(price), 0) as "price!"
+            FROM event_ingredients
+            WHERE meal_id = $1
+            "#,
+            meal_id
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+
+        Ok(row.price)
+    }
+
+    /// Compute total prices for every meal in an event in a single query.
+    ///
+    /// Much cheaper than calling [`Self::get_meal_price`] N times: the
+    /// `event_ingredients` recursive view is evaluated once for the event and
+    /// the result is aggregated per meal, instead of redone for each meal_id.
+    pub async fn get_event_meal_prices(
+        &self,
+        event_id: i32,
+    ) -> Result<Vec<(i32, BigDecimal)>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT em.meal_id as "meal_id!", COALESCE(sum(ei.price), 0) as "price!"
+            FROM event_meals em
+            LEFT JOIN event_ingredients ei ON ei.meal_id = em.meal_id
+            WHERE em.event_id = $1
+            GROUP BY em.meal_id
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|r| (r.meal_id, r.price)).collect())
     }
 
     /// Get all meals.

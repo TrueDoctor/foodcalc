@@ -39,7 +39,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         .route("/dish_labels_tent/{event_id}", get(export_dish_labels_tent))
         .route("/allergen_overview/{event_id}", get(export_event_allergens))
         .route("/{event_id}", get(event_form))
-        .route("/{event_id}/meals", get(render_meals_table))
+        .route("/{event_id}/meal-prices", get(render_meal_prices))
         .route(
             "/ingredients-per-serving/{meal_id}",
             get(ingredients_per_serving),
@@ -71,26 +71,32 @@ async fn handle_shift_times(
     event_form(foodlib, ctx, Path(event_id)).await
 }
 
-async fn render_meals_table(
+
+async fn render_meal_prices(
     foodlib: FoodLib,
     ctx: AuthCtx,
     Path(event_id): Path<i32>,
 ) -> MResponse {
+    use bigdecimal::ToPrimitive;
+    use std::collections::HashMap;
+
     ctx.assert_can_edit_event(event_id).await?;
     let meals = foodlib.meals().get_event_meals(event_id).await?;
-    let mut recipes = foodlib.recipes().list().await?;
-    recipes.sort_by(|a, b| a.name.cmp(&b.name));
-
-    let default_meal_start = meals
-        .iter()
-        .map(|m| m.start_time)
-        .max()
-        .unwrap_or_else(time::OffsetDateTime::now_utc);
+    let prices = foodlib.meals().get_event_meal_prices(event_id).await?;
+    let price_by_meal: HashMap<i32, f64> = prices
+        .into_iter()
+        .map(|(id, p)| (id, p.to_f64().unwrap_or_default()))
+        .collect();
 
     Ok(html! {
-        (meal_add_row(event_id, &recipes, default_meal_start))
-        @for meal in meals {
-            (format_event_meal(event_id, &meal))
+        @for meal in &meals {
+            @let per_serving = price_by_meal.get(&meal.meal_id).copied().unwrap_or(0.0)
+                / meal.servings as f64;
+            // hx-swap-oob targets the placeholder by id; the outer element is
+            // discarded by HTMX once the swap completes.
+            td id=(format!("meal-price-{}", meal.meal_id)) hx-swap-oob="true" data-label="Price" {
+                (format!("{:.3}€", per_serving))
+            }
         }
     })
 }
@@ -387,12 +393,12 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
         }
         table class="w-full text-inherit table-auto object-center mb-2 responsive-card" {
             thead { tr { th { "Recipe" } th {"Start Time"} th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} }  }
-            tbody class="text-center stagger-table-transition" id="meals-tbody" hx-get=(format!("/events/edit/{}/meals", event_id)) hx-trigger="load" hx-swap="innerHTML transition:true" {
-                tr class="text-center" {
-                    td colspan="10" class="py-4" {
-                        span class="htmx-indicator" { "Loading meals…" }
-                    }
+            tbody class="text-center" id="meals-tbody" {
+                (meal_add_row(event_id, &recipes, default_meal_start))
+                @for meal in &meals {
+                    (format_event_meal(event_id, meal))
                 }
+                tr hx-get=(format!("/events/edit/{}/meal-prices", event_id)) hx-trigger="load" hx-swap="delete" {}
             }
         }
         datalist id="ingredients" {
@@ -775,7 +781,7 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
             td data-label="Servings" { (event_meal.servings) }
             (format("Energy", event_meal.energy.to_f64().unwrap_or_default(), "kj"))
             (format("Weight", event_meal.weight.to_f64().unwrap_or_default() / event_meal.servings as f64 * 1000., "g"))
-            (format("Price", event_meal.price.to_f64().unwrap_or_default() / event_meal.servings as f64, "€"))
+            td data-label="Price" id=(format!("meal-price-{}", event_meal.meal_id)) { "…" }
             td class="no-label" { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ing./serving"} }
             td class="no-label" { form class="m-0" action=(format!("/events/edit/export_pdf/{}", event_meal.meal_id)) { button class="btn btn-primary" {"Print"} } }
             td class="no-label" { button class="btn btn-primary"
