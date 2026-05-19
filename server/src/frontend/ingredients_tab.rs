@@ -280,12 +280,14 @@ fn render_ingredients_page(
                     th class="w-1/8" { "Energy (kJ/g)" }
                     th class="w-1/8" { "Comment" }
                     th {}
-                    th {}
+                    @if is_admin {
+                        th {}
+                    }
                     th class="w-1/6" {}
                 } }
                 tbody id="search-results" {
                     @if user.is_some() {
-                        (ingredient_add_row())
+                        (ingredient_add_row(user, user_group_ids))
                     }
                     (ingredient_rows(ingredients, user, user_group_ids))
                 }
@@ -299,12 +301,15 @@ fn render_ingredients_page(
 /// After a successful POST the entire page is re-rendered (server retargets
 /// to #content) which restores a fresh empty add-row, and the after-request
 /// handler refocuses the name input so the user can keep adding.
-fn ingredient_add_row() -> Markup {
+fn ingredient_add_row(user: Option<&User>, _user_group_ids: &[i32]) -> Markup {
+    let is_admin = user.map_or(false, |u| u.is_admin);
     html! {
         tr id="ingredient--1" {
             input type="hidden" name="id" value="-1";
             input type="hidden" name="group_id" value="-1";
-            td class="text-center opacity-70 no-label" { "+" }
+            @if is_admin {
+                td class="text-center opacity-70 no-label" { "+" }
+            }
             td data-label="Name" { input class="text" type="text" name="name" placeholder="Name" required="required"; }
             td data-label="Energy (kJ/g)" { input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="kJ/g" required="required"; }
             td data-label="Comment" { input class="text" type="text" name="comment" placeholder="Comment"; }
@@ -697,8 +702,8 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, use
                     hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Edit" }
                 }
             }
-            td class="no-label" {
-                @if is_admin {
+            @if is_admin {
+                td class="no-label" {
                     button class="btn btn-cancel"
                     hx-get=(format!("/ingredients/delete/{}", ingredient.id))
                     hx-target="#content"

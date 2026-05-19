@@ -54,7 +54,7 @@ pub async fn search(
 
     Ok(html! {
         @if user.is_some() {
-            (recipe_add_row())
+            (recipe_add_row(user.as_ref().map_or(false, |u| u.is_admin)))
         }
         @for recipe in filtered_recipes {
             (format_recipe(recipe, user.as_ref(), &user_group_ids))
@@ -230,11 +230,11 @@ pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
                 @let is_admin = user.as_ref().map_or(false, |u| u.is_admin);
                 thead { tr {
                     @if is_admin { th { "ID" } }
-                    th { "Name" } th { "Comment" } th {} th {} th {}
+                    th { "Name" } th { "Comment" } th {} @if is_admin {th {}} th {}
                 } }
                     tbody id="search-results"  {
                         @if user.is_some() {
-                            (recipe_add_row())
+                            (recipe_add_row(is_admin))
                         }
                         @for recipe in recipes.iter() {
                             (format_recipe(recipe, user.as_ref(), &user_group_ids))
@@ -251,12 +251,14 @@ pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
 /// First-row inline add. On success, `add_recipe` returns the recipe-edit
 /// view (retargeted to #content) so the user lands in the editor — no need
 /// to refocus the name input here.
-fn recipe_add_row() -> Markup {
+fn recipe_add_row(is_admin: bool) -> Markup {
     html! {
         tr id="recipe--1" {
             input type="hidden" name="id" value="-1";
             input type="hidden" name="group_id" value="-1";
-            td class="text-center opacity-70 no-label" { "+" }
+            @if is_admin {
+                td class="text-center opacity-70 no-label" { "+" }
+            }
             td data-label="Name" { input class="grow text" type="text" name="name" placeholder="Recipe name" required="required"; }
             td data-label="Comment" { input class="grow text" type="text" name="comment" placeholder="Comment"; }
             td class="no-label" {
@@ -347,8 +349,8 @@ fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[i32]) -
                     button class="btn btn-primary" type="button" hx-push-url="true" hx-target="#content"  hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" }
                 }
             }
-            td class="no-label" {
-                @if is_admin {
+            @if is_admin {
+                td class="no-label" {
                     button class="btn btn-cancel"  type="button" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.id)) { "Delete" }
                 }
             }
