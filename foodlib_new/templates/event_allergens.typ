@@ -44,10 +44,10 @@
 // Decorative flourish built from typst primitives (no glyph dependency).
 // A short horizontal line + small diamond + line, evoking an art-deco rule.
 #let flourish() = {
-  box(baseline: 0.3em, stack(dir: ltr, spacing: 4pt,
-    line(length: 2.5em, stroke: 0.6pt),
-    rotate(45deg, square(size: 0.4em, fill: black)),
-    line(length: 2.5em, stroke: 0.6pt),
+  box(baseline: -0.2em, stack(dir: ltr, spacing: 4pt,
+    line(length: 2.5em, stroke: 0.6pt, start: (0%,0.36%)),
+    rotate(45deg, square(size: 0.5em, fill: black)),
+    line(length: 2.5em, stroke: 0.6pt, start: (0%,0.36%)),
   ))
 }
 

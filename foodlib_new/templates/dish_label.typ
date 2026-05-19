@@ -36,7 +36,7 @@
 
 // Decorative flourish built from typst primitives — no glyph dependency.
 #let flourish() = {
-  box(baseline: 0.3em, stack(dir: ltr, spacing: 3pt,
+  box(baseline: -0.2em, stack(dir: ltr, spacing: 3pt,
     line(length: 1.5em, stroke: 0.5pt),
     rotate(45deg, square(size: 0.35em, fill: black)),
     line(length: 1.5em, stroke: 0.5pt),
@@ -53,12 +53,12 @@
   if parts.len() == 0 { [] } else { stack(dir: ltr, spacing: 4pt, ..parts) }
 }
 
-#let label_content(meal) = {
+#let label_content(meal, draw_flourish) = {
   set text(font: ("Linux Libertine", "New Computer Modern", "Source Sans Pro"), lang: "de")
   align(center)[
-    #flourish() #h(0.4em)
+    #if draw_flourish { flourish() } #h(0.4em)
     #text(font: ("Linux Libertine"), size: 1.4em, weight: "bold", style: "italic", meal.name)
-    #h(0.4em) #flourish()
+    #h(0.4em) #if draw_flourish { flourish() }
   ]
   v(0.2em)
   align(center, text(size: 0.85em, style: "italic")[#meal.place · #meal.time · #meal.servings Portionen])
@@ -76,7 +76,7 @@
 
 #let flat_layout(meals) = {
   set page(paper: "a4", margin: 1cm)
-  let cells = meals.map(meal => rect(stroke: 0.5pt + gray, inset: 8pt, radius: 4pt, width: 100%, height: 100%, label_content(meal)))
+  let cells = meals.map(meal => rect(stroke: 0.5pt + gray, inset: 8pt, radius: 4pt, width: 100%, height: 100%, label_content(meal, false)))
   // 2 columns × 3 rows = 6 labels per A4 page; typst grid automatically pages.
   grid(
     columns: (1fr, 1fr),
@@ -97,10 +97,10 @@
       rows: (1fr, 1fr),
       // Top half: rotated 180°
       rotate(180deg, reflow: true)[
-        #align(horizon, rect(stroke: none, inset: 6pt, width: 100%, label_content(meal)))
+        #align(horizon, rect(stroke: none, inset: 6pt, width: 100%, label_content(meal, true)))
       ],
       // Bottom half: upright
-      align(horizon, rect(stroke: none, inset: 6pt, width: 100%, label_content(meal))),
+      align(horizon, rect(stroke: none, inset: 6pt, width: 100%, label_content(meal, true))),
     )
     // Fold guide
     place(top + center, dy: 50%, line(length: 100%, stroke: 0.25pt + gray.lighten(30%)))
