@@ -40,6 +40,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         .route("/allergen_overview/{event_id}", get(export_event_allergens))
         .route("/{event_id}", get(event_form))
         .route("/{event_id}/meal-prices", get(render_meal_prices))
+        .route("/{event_id}/uncovered-ingredients", get(render_ingredients_without_tours))
         .route(
             "/ingredients-per-serving/{meal_id}",
             get(ingredients_per_serving),
@@ -379,7 +380,7 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
                 }
             }
         }
-        (render_ingredients_without_tours(&foodlib, event_id).await?)
+        div hx-get=(format!("/events/edit/{}/uncovered-ingredients", event_id)) hx-trigger="load" hx-swap="outerHTML" {}
         div class="flex flex-col items-center gap-2 mb-3 mt-3 p-3 rounded-lg border border-gray-700" {
             p class="text-lg font-semibold" { "Allergen exports" }
             div class="flex flex-row flex-wrap gap-2 justify-center" {
@@ -447,9 +448,12 @@ async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<i32>) -> MRespo
 use bigdecimal::BigDecimal;
 use std::collections::HashMap;
 
-// Add this function after the existing render_shopping_tours function
-pub async fn render_ingredients_without_tours(foodlib: &FoodLib, event_id: i32) -> MResponse {
-    // Get all ingredients without a tour
+async fn render_ingredients_without_tours(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
     let mut uncovered_ingredients = foodlib
         .events()
         .get_ingredients_without_tour(event_id)

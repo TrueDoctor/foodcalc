@@ -122,9 +122,10 @@ impl MealOps {
 
     /// Compute total prices for every meal in an event in a single query.
     ///
-    /// Much cheaper than calling [`Self::get_meal_price`] N times: the
-    /// `event_ingredients` recursive view is evaluated once for the event and
-    /// the result is aggregated per meal, instead of redone for each meal_id.
+    /// Reads from `event_ingredients_before_prep_time_resolve` rather than
+    /// `event_ingredients`. The two views produce identical per-meal price sums
+    /// (the prep-time-resolve join only shifts `buy_by`, not the cost) but the
+    /// former avoids a ~2-3x recursive-view join cost on events with food preps.
     pub async fn get_event_meal_prices(
         &self,
         event_id: i32,
@@ -133,7 +134,7 @@ impl MealOps {
             r#"
             SELECT em.meal_id as "meal_id!", COALESCE(sum(ei.price), 0) as "price!"
             FROM event_meals em
-            LEFT JOIN event_ingredients ei ON ei.meal_id = em.meal_id
+            LEFT JOIN event_ingredients_before_prep_time_resolve ei ON ei.meal_id = em.meal_id
             WHERE em.event_id = $1
             GROUP BY em.meal_id
             "#,
