@@ -19,7 +19,7 @@ impl MealOps {
 
     /// Get all meals for a given event.
     ///
-    /// `weight` is derived from `recipe_stats` (cheap). `price` is returned as 0 —
+    /// `weight` is derived from `recipe_stats` (cheap). Price is not included —
     /// it requires the deep `event_ingredients` aggregate and should be fetched
     /// separately per meal via [`Self::get_meal_price`] (e.g. lazy-loaded over HTMX).
     pub async fn get_event_meals(&self, event_id: i32) -> Result<Vec<Meal>> {
@@ -37,7 +37,6 @@ impl MealOps {
                 event_meals.end_time,
                 COALESCE(round(recipe_stats.weight * event_meals.energy_per_serving * event_meals.servings / NULLIF(recipe_stats.energy, 0), 2), 0) as "weight!",
                 event_meals.energy_per_serving as "energy!",
-                0::numeric as "price!",
                 event_meals.servings,
                 event_meals.comment
             FROM event_meals
@@ -61,7 +60,7 @@ impl MealOps {
     /// energy multiplier), avoiding the per-event-ingredient aggregate which goes
     /// through the deep `event_ingredients` recursive view.
     ///
-    /// `price` is returned as 0 — it is event-source-specific and requires the
+    /// Price is not included — it is event-source-specific and requires the
     /// expensive aggregate. Callers that need the price should fetch it separately
     /// via [`Self::get_meal_price`] (e.g. lazy-loaded over HTMX).
     pub async fn get_meal(&self, meal_id: i32) -> Result<Meal> {
@@ -79,7 +78,6 @@ impl MealOps {
                 event_meals.end_time,
                 COALESCE(round(recipe_stats.weight * event_meals.energy_per_serving * event_meals.servings / NULLIF(recipe_stats.energy, 0), 2), 0) as "weight!",
                 event_meals.energy_per_serving as "energy!",
-                0::numeric as "price!",
                 event_meals.comment,
                 event_meals.servings
             FROM event_meals
@@ -160,16 +158,14 @@ impl MealOps {
                 places.name as "place!",
                 event_meals.start_time,
                 event_meals.end_time,
-                round(sum(event_ingredients.weight), 2) as "weight!",
-                event_meals.energy_per_serving as energy,
-                sum(event_ingredients.price) as "price!",
+                COALESCE(round(recipe_stats.weight * event_meals.energy_per_serving * event_meals.servings / NULLIF(recipe_stats.energy, 0), 2), 0) as "weight!",
+                event_meals.energy_per_serving as "energy!",
                 event_meals.comment,
                 event_meals.servings
             FROM event_meals
-            LEFT JOIN event_ingredients ON event_meals.meal_id = event_ingredients.meal_id
             LEFT JOIN recipes ON event_meals.recipe_id = recipes.recipe_id
             LEFT JOIN places ON event_meals.place_id = places.place_id
-            GROUP BY event_meals.meal_id, recipes.name, places.name, event_meals.servings
+            LEFT JOIN recipe_stats ON event_meals.recipe_id = recipe_stats.recipe_id
             ORDER BY event_meals.start_time
             "#
         )

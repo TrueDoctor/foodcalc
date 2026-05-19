@@ -161,7 +161,6 @@ async fn test_update_event_meals(pool: PgPool) {
         end_time,
         weight: Default::default(),
         energy: BigDecimal::from(3400),
-        price: Default::default(),
         servings: 4,
         comment: Some("Updated meal".to_string()),
     }];
@@ -174,9 +173,10 @@ async fn test_update_event_meals(pool: PgPool) {
     let updated_meal = &updated_meals[0];
     assert_eq!(updated_meal.recipe_id, 2);
     assert_eq!(updated_meal.place_id, 1);
-    assert_eq!(updated_meal.weight, BigDecimal::new(83.into(), 2));
+    assert_eq!(updated_meal.weight, BigDecimal::new(102.into(), 2));
     assert_eq!(updated_meal.energy, BigDecimal::from(3400));
-    assert_eq!(updated_meal.price.round(3) * 1000, BigDecimal::from(5809));
+    let price = ops.get_meal_price(updated_meal.meal_id).await.unwrap();
+    assert_eq!(price.round(3) * 1000, BigDecimal::from(5809));
     assert_eq!(updated_meal.servings, 4);
     assert_eq!(updated_meal.comment, Some("Updated meal".to_string()));
 }

@@ -237,7 +237,7 @@ async fn meal_form(
                 }
                 tr {
                     td { "Weight" }
-                    td { (meal.weight.round(2).to_string()) "g" }
+                    td { (meal.weight.round(2).to_string()) "kg" }
                 }
                 tr {
                     td {

@@ -14,7 +14,6 @@ pub struct Meal {
     pub end_time: OffsetDateTime,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
-    pub price: BigDecimal,
     pub servings: i32,
     pub comment: Option<String>,
 }
@@ -49,7 +48,6 @@ impl Default for Meal {
             end_time: start_time,
             weight: Default::default(),
             energy: BigDecimal::from(2400),
-            price: BigDecimal::from(0),
             servings: 1,
         }
     }
