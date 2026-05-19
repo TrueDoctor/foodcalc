@@ -368,7 +368,10 @@ fn pretty_property(name: &str) -> String {
 }
 
 async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
-    let rp = foodlib.properties().get_recipe_properties(recipe_id).await?;
+    let rp = foodlib
+        .properties()
+        .get_recipe_properties(recipe_id)
+        .await?;
     let dietary = foodlib_new::ops::allergens::dietary_flags(&rp.properties);
 
     let mut contains_lower: Vec<String> = Vec::new();
@@ -399,7 +402,8 @@ async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResp
             div class="flex flex-wrap gap-2 mb-4" {
                 @if dietary.vegan {
                     span class="px-2 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800 border border-green-300" { "vegan" }
-                } @else if dietary.vegetarian {
+                }
+                @if dietary.vegetarian {
                     span class="px-2 py-1 rounded-full text-sm font-semibold bg-lime-100 text-lime-800 border border-lime-300" { "vegetarisch" }
                 }
                 @if dietary.lactose_free {

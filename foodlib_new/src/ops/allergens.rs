@@ -303,22 +303,31 @@ pub fn dietary_flags(properties: &[Property]) -> DietaryFlags {
 
     let has = |n: &str| names.contains(n);
     // Strict: a property `~spuren-X` blocks the same axis as having `X` itself.
-    let has_any_form = |canonical: &str| {
-        has(canonical) || has(&format!("~spuren-{canonical}"))
-    };
+    let has_any_form = |canonical: &str| has(canonical) || has(&format!("~spuren-{canonical}"));
 
-    let meat_props = [FLEISCH, SCHWEIN, FISCH, "gelatine", "lab", "krebstiere", "weichtiere"];
+    let meat_props = [
+        FLEISCH,
+        SCHWEIN,
+        FISCH,
+        "gelatine",
+        "lab",
+        "krebstiere",
+        "weichtiere",
+    ];
     let dairy_props = [MILCH, MILCHPRODUKT, KAESE, "milcheiweiß"];
     let egg_props = [EIER, EI_PRODUKT];
     let other_animal_props: [&str; 2] = ["tierische produkte", "honig"];
-    let gluten_props = [GLUTEN, WEIZEN, "gerste", "roggen", "hafer", "dinkel", "kamut"];
+    let gluten_props = [
+        GLUTEN, WEIZEN, "gerste", "roggen", "hafer", "dinkel", "kamut",
+    ];
 
     let vegetarian = !meat_props.iter().any(|p| has_any_form(p));
     let vegan = vegetarian
         && !dairy_props.iter().any(|p| has_any_form(p))
         && !egg_props.iter().any(|p| has_any_form(p))
         && !other_animal_props.iter().any(|p| has_any_form(p));
-    let lactose_free = !dairy_props.iter().any(|p| has_any_form(p));
+    let vegetarian = vegetarian && !vegan;
+    let lactose_free = !dairy_props.iter().any(|p| has_any_form(p)) && !vegan;
     let gluten_free = !gluten_props.iter().any(|p| has_any_form(p));
 
     DietaryFlags {
@@ -338,14 +347,20 @@ pub fn dietary_flags(properties: &[Property]) -> DietaryFlags {
 /// noise. After compaction it reads `Milch` only.
 fn allergen_hierarchy() -> &'static [(&'static str, &'static [&'static str])] {
     &[
-        ("milch", &["milcheiweiß", "milcheiweiss", "milchprodukt", "käse"]),
+        (
+            "milch",
+            &["milcheiweiß", "milcheiweiss", "milchprodukt", "käse"],
+        ),
         ("eier", &["ei-produkt"]),
         ("fleisch", &["schwein"]),
         // Gluten subsumes specific cereals. Even if only `weizen` is present and
         // not `gluten`, we still want to show both because the cereal name is
         // additional information. Only collapse when the *parent* gluten tag is
         // present alongside.
-        ("gluten", &["weizen", "roggen", "gerste", "hafer", "dinkel", "kamut"]),
+        (
+            "gluten",
+            &["weizen", "roggen", "gerste", "hafer", "dinkel", "kamut"],
+        ),
     ]
 }
 
@@ -442,18 +457,56 @@ mod tests {
             vec!["gluten"]
         );
         assert_eq!(classify_allergen_label("eigelbpulver"), vec!["eier"]);
-        assert!(classify_allergen_label("eis").is_empty(), "must not match 'eis' for 'eier'");
-        assert!(classify_allergen_label("frische zutaten").is_empty(), "frisch ≠ fisch");
-        assert!(classify_allergen_label("frischhefe").is_empty(), "frischhefe ≠ fisch");
-        assert_eq!(classify_allergen_label("fischfilet"), vec!["fisch"], "fisch stems still match");
-        assert!(classify_allergen_label("brokkoli").is_empty(), "vegetables don't match");
-        assert!(classify_allergen_label("salz").is_empty(), "salt does not match");
-        assert!(classify_allergen_label("kokosmilch").is_empty(), "coconut milk is not dairy");
-        assert!(classify_allergen_label("sojamilch").is_empty(), "soy milk is not dairy");
-        assert!(classify_allergen_label("hafermilch").is_empty(), "oat milk is not dairy");
-        assert!(classify_allergen_label("mandelmilch").is_empty(), "almond milk is not dairy");
-        assert_eq!(classify_allergen_label("vollmilch"), vec!["milch"], "actual milk still matches");
-        assert_eq!(classify_allergen_label("milch und daraus gewonnene erzeugnisse"), vec!["milch"]);
+        assert!(
+            classify_allergen_label("eis").is_empty(),
+            "must not match 'eis' for 'eier'"
+        );
+        assert!(
+            classify_allergen_label("frische zutaten").is_empty(),
+            "frisch ≠ fisch"
+        );
+        assert!(
+            classify_allergen_label("frischhefe").is_empty(),
+            "frischhefe ≠ fisch"
+        );
+        assert_eq!(
+            classify_allergen_label("fischfilet"),
+            vec!["fisch"],
+            "fisch stems still match"
+        );
+        assert!(
+            classify_allergen_label("brokkoli").is_empty(),
+            "vegetables don't match"
+        );
+        assert!(
+            classify_allergen_label("salz").is_empty(),
+            "salt does not match"
+        );
+        assert!(
+            classify_allergen_label("kokosmilch").is_empty(),
+            "coconut milk is not dairy"
+        );
+        assert!(
+            classify_allergen_label("sojamilch").is_empty(),
+            "soy milk is not dairy"
+        );
+        assert!(
+            classify_allergen_label("hafermilch").is_empty(),
+            "oat milk is not dairy"
+        );
+        assert!(
+            classify_allergen_label("mandelmilch").is_empty(),
+            "almond milk is not dairy"
+        );
+        assert_eq!(
+            classify_allergen_label("vollmilch"),
+            vec!["milch"],
+            "actual milk still matches"
+        );
+        assert_eq!(
+            classify_allergen_label("milch und daraus gewonnene erzeugnisse"),
+            vec!["milch"]
+        );
         assert_eq!(
             classify_allergen_label("sesamsamen und daraus gewonnene erzeugnisse"),
             vec!["sesamsamen"]
@@ -470,10 +523,17 @@ mod tests {
 
     #[test]
     fn compact_allergens_drops_subsumed_children() {
-        let names: Vec<String> = ["milch", "milcheiweiß", "milchprodukt", "käse", "senf", "weizen"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let names: Vec<String> = [
+            "milch",
+            "milcheiweiß",
+            "milchprodukt",
+            "käse",
+            "senf",
+            "weizen",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
         let mut compact = compact_allergen_set(&names);
         compact.sort();
         // milch absorbs milcheiweiß, milchprodukt, käse. weizen stays because gluten parent absent.
@@ -489,7 +549,7 @@ mod tests {
     #[test]
     fn dietary_flags_basic() {
         let veg = dietary_flags(&[p("gemüse")]);
-        assert!(veg.vegan && veg.vegetarian && veg.lactose_free && veg.gluten_free);
+        assert!(veg.vegan && veg.gluten_free);
 
         let with_meat = dietary_flags(&[p("fleisch")]);
         assert!(!with_meat.vegetarian);
@@ -510,7 +570,10 @@ mod tests {
         let with_trace = dietary_flags(&[p("~spuren-milch")]);
         assert!(!with_trace.lactose_free);
         assert!(!with_trace.vegan);
-        assert!(with_trace.vegetarian, "traces of milk don't make it non-vegetarian");
+        assert!(
+            with_trace.vegetarian,
+            "traces of milk don't make it non-vegetarian"
+        );
 
         let with_gluten_trace = dietary_flags(&[p("~spuren-gluten")]);
         assert!(!with_gluten_trace.gluten_free);
