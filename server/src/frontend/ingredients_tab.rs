@@ -36,6 +36,7 @@ pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
             "/properties/{ingredient_id}/{property_id}",
             delete(delete_property),
         )
+        .route("/properties/{id}", post(add_property))
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
         .route("/sources/{id}", get(sources_table))
         .route("/properties/{id}", get(properties_dialog))
@@ -469,7 +470,6 @@ async fn properties_dialog(foodlib: FoodLib, user: Option<User>, id: Path<i32>) 
         .map_or(false, |u| can_edit(ingredient.group_id, &user_group_ids, u));
 
     // Group properties by source kind for readability.
-    let mut category: Vec<&foodlib_new::property::Property> = Vec::new();
     let mut contains: Vec<&foodlib_new::property::Property> = Vec::new();
     let mut may_contain: Vec<&foodlib_new::property::Property> = Vec::new();
     for p in &props.properties {
@@ -481,7 +481,6 @@ async fn properties_dialog(foodlib: FoodLib, user: Option<User>, id: Path<i32>) 
             contains.push(p);
         }
     }
-    let _ = &mut category; // suppress unused
 
     fn pretty(name: &str) -> String {
         let stripped = name.strip_prefix("~spuren-").unwrap_or(name);
@@ -492,59 +491,109 @@ async fn properties_dialog(foodlib: FoodLib, user: Option<User>, id: Path<i32>) 
         }
     }
 
+    use foodlib_new::allergen::canonical;
+    let contains_taken: std::collections::HashSet<&str> =
+        contains.iter().map(|p| p.name.as_str()).collect();
+    let may_contain_taken: std::collections::HashSet<String> = may_contain
+        .iter()
+        .map(|p| p.name.trim_start_matches("~spuren-").to_string())
+        .collect();
+    let contains_options: Vec<&'static str> = canonical::ALL
+        .iter()
+        .copied()
+        .filter(|n| !contains_taken.contains(n))
+        .collect();
+    let may_contain_options: Vec<&'static str> = canonical::ALL
+        .iter()
+        .copied()
+        .filter(|n| !may_contain_taken.contains(*n))
+        .collect();
+
+    let add_row = |kind: &'static str, options: &[&'static str]| -> Markup {
+        let path = format!("/ingredients/properties/{}", ingredient.id);
+        html! {
+            div class="flex items-center gap-2 mt-2" {
+                input type="hidden" name="kind" value=(kind);
+                select name="canonical" required="true" class="fc-select flex-1" {
+                    option value="" { "Select allergen…" }
+                    @for c in options {
+                        option value=(c) { (pretty(c)) }
+                    }
+                }
+                button class="btn btn-primary"
+                    hx-post=(path)
+                    hx-include="closest div"
+                    hx-target="#popup"
+                    hx-swap="outerHTML" { "Add" }
+            }
+        }
+    };
+
     Ok(html! {
         dialog open="true" class="dialog z-50" id="popup" {
             div class="flex justify-between items-center w-full mb-3 gap-2" {
                 p class="text-xl font-semibold" { "Allergens: " (ingredient.name) }
                 button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" { "Close" }
             }
-            @if props.properties.is_empty() {
+            @if props.properties.is_empty() && !can_edit {
                 p class="text-center opacity-70 py-4" { "No allergens tagged on this ingredient." }
-            } @else {
-                @if !contains.is_empty() {
-                    div class="mb-4" {
-                        p class="font-semibold mb-2" { "Enthält / Direct properties" }
-                        ul class="list-disc pl-6 flex flex-col gap-1" {
-                            @for p in &contains {
-                                li class="flex items-center justify-between gap-2" {
-                                    span { (pretty(&p.name)) }
-                                    @if can_edit {
-                                        button class="btn btn-cancel"
-                                            hx-delete=(format!("/ingredients/properties/{}/{}", ingredient.id, p.id))
-                                            hx-target="#popup"
-                                            hx-swap="outerHTML"
-                                            hx-confirm=(format!("Remove `{}` from {}?", p.name, ingredient.name))
-                                            { "Remove" }
-                                    }
+            }
+
+            div class="mb-4" {
+                p class="font-semibold mb-2" { "Enthält / Direct properties" }
+                @if contains.is_empty() && !can_edit {
+                    p class="text-sm opacity-60" { "None." }
+                } @else {
+                    ul class="list-disc pl-6 flex flex-col gap-1" {
+                        @for p in &contains {
+                            li class="flex items-center justify-between gap-2" {
+                                span { (pretty(&p.name)) }
+                                @if can_edit {
+                                    button class="btn btn-cancel"
+                                        hx-delete=(format!("/ingredients/properties/{}/{}", ingredient.id, p.id))
+                                        hx-target="#popup"
+                                        hx-swap="outerHTML"
+                                        hx-confirm=(format!("Remove `{}` from {}?", p.name, ingredient.name))
+                                        { "Remove" }
                                 }
                             }
                         }
                     }
                 }
-                @if !may_contain.is_empty() {
-                    div class="mb-4" {
-                        p class="font-semibold mb-2" { "Spuren / May contain" }
-                        ul class="list-disc pl-6 flex flex-col gap-1" {
-                            @for p in &may_contain {
-                                li class="flex items-center justify-between gap-2" {
-                                    span { (pretty(&p.name)) }
-                                    @if can_edit {
-                                        button class="btn btn-cancel"
-                                            hx-delete=(format!("/ingredients/properties/{}/{}", ingredient.id, p.id))
-                                            hx-target="#popup"
-                                            hx-swap="outerHTML"
-                                            hx-confirm=(format!("Remove `{}` from {}?", p.name, ingredient.name))
-                                            { "Remove" }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                @if can_edit && !contains_options.is_empty() {
+                    (add_row("contains", &contains_options))
                 }
             }
+
+            div class="mb-4" {
+                p class="font-semibold mb-2" { "Spuren / May contain" }
+                @if may_contain.is_empty() && !can_edit {
+                    p class="text-sm opacity-60" { "None." }
+                } @else {
+                    ul class="list-disc pl-6 flex flex-col gap-1" {
+                        @for p in &may_contain {
+                            li class="flex items-center justify-between gap-2" {
+                                span { (pretty(&p.name)) }
+                                @if can_edit {
+                                    button class="btn btn-cancel"
+                                        hx-delete=(format!("/ingredients/properties/{}/{}", ingredient.id, p.id))
+                                        hx-target="#popup"
+                                        hx-swap="outerHTML"
+                                        hx-confirm=(format!("Remove `{}` from {}?", p.name, ingredient.name))
+                                        { "Remove" }
+                                }
+                            }
+                        }
+                    }
+                }
+                @if can_edit && !may_contain_options.is_empty() {
+                    (add_row("may_contain", &may_contain_options))
+                }
+            }
+
             p class="text-xs opacity-60 mt-3" {
                 "Tags are populated by the Metro sync from product allergen disclosures. "
-                "Manual removals here are NOT preserved across re-syncs unless you skip the wipe option."
+                "Manual edits here are NOT preserved across re-syncs unless you skip the wipe option."
             }
         }
     })
@@ -572,6 +621,62 @@ async fn delete_property(
     foodlib
         .properties()
         .remove_from_ingredient(ingredient_id, property_id)
+        .await?;
+    properties_dialog(foodlib, Some(user), Path(ingredient_id)).await
+}
+
+#[derive(Deserialize)]
+struct AddPropertyForm {
+    canonical: String,
+    kind: String,
+}
+
+async fn add_property(
+    foodlib: FoodLib,
+    user: User,
+    Path(ingredient_id): Path<i32>,
+    Form(form): Form<AddPropertyForm>,
+) -> MResponse {
+    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
+    let user_group_ids: Vec<i32> = foodlib
+        .users()
+        .get_user_groups(user.id)
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(|g| g.id)
+        .collect();
+    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
+        return Err(foodlib_new::Error::Forbidden(
+            "You don't have permission to edit this ingredient".into(),
+        ));
+    }
+
+    use foodlib_new::allergen::{canonical, ClassifiedProperty, PropertySource};
+    if !canonical::ALL.contains(&form.canonical.as_str()) {
+        return Err(foodlib_new::Error::Validation {
+            message: format!("Unknown allergen: {}", form.canonical),
+        });
+    }
+    let source = match form.kind.as_str() {
+        "contains" => PropertySource::Contains,
+        "may_contain" => PropertySource::MayContain,
+        _ => {
+            return Err(foodlib_new::Error::Validation {
+                message: format!("Invalid kind: {}", form.kind),
+            })
+        }
+    };
+
+    foodlib
+        .allergens()
+        .apply_to_ingredient(
+            ingredient_id,
+            &[ClassifiedProperty {
+                canonical_name: form.canonical,
+                source,
+            }],
+        )
         .await?;
     properties_dialog(foodlib, Some(user), Path(ingredient_id)).await
 }

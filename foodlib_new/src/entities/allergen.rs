@@ -27,6 +27,29 @@ pub mod canonical {
     pub const SENF: &str = "senf";
     pub const LUPINE: &str = "lupine";
     pub const SULFITE: &str = "schwefeldioxid & sulfite";
+
+    /// All canonical names users can attach via the UI, ordered for display.
+    /// Broad dietary classes first, then EU-14 allergens.
+    pub const ALL: &[&str] = &[
+        FLEISCH,
+        SCHWEIN,
+        FISCH,
+        MILCHPRODUKT,
+        KAESE,
+        EI_PRODUKT,
+        GLUTEN,
+        WEIZEN,
+        MILCH,
+        EIER,
+        SOJA,
+        ERDNUESSE,
+        SCHALENFRUECHTE,
+        SESAM,
+        SELLERIE,
+        SENF,
+        LUPINE,
+        SULFITE,
+    ];
 }
 
 /// A property attached to an ingredient with the source kind that produced it.

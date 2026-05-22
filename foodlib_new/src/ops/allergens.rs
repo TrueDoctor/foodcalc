@@ -249,7 +249,11 @@ fn classify_allergen_label(label: &str) -> Vec<&'static str> {
             (r(r"\bei\b"), &[EIER][..]),
 
             (r(r"\bsoja"), &[SOJA][..]),
-            (r(r"\berdnu[sß]"), &[ERDNUESSE][..]),
+            // Peanut stem accepts both the singular vowel "u" (erdnuss/erdnüsse
+            // share the prefix "erdn") and the umlaut form. Old pattern
+            // `\berdnu[sß]` silently failed on the plural form because the umlaut
+            // shifts the 5th character from "u" to "ü".
+            (r(r"\berdn[uü]"), &[ERDNUESSE][..]),
 
             // Tree nuts
             (r(r"\b(schalenfrüchte|haselnuss|haselnüsse|haselnusskerne|cashew|cashewkern|mandel|walnuss|walnüsse|walnusskern|pistazi|paranu[sß]|pekannu[sß]|pekanu[sß]|macadamia|queenslandnu[sß]|nu[sß]kern)"), &[SCHALENFRUECHTE][..]),
@@ -262,6 +266,13 @@ fn classify_allergen_label(label: &str) -> Vec<&'static str> {
             (r(r"\blupine"), &[LUPINE][..]),
             (r(r"\b(schwefeldioxid|sulfit|sulphit)"), &[SULFITE][..]),
             (r(r"\bfisch"), &[FISCH][..]),
+
+            // Broad dietary classes that are NOT in the EU-14 list but show up in
+            // Contains labels for meat products. Manufacturer-declared ingredients
+            // like "Schweinefleisch" or "Schweineschmalz" reliably indicate pork —
+            // category paths often only say `/Wurst & Schinken/` and miss this.
+            // FLEISCH is paired with SCHWEIN because all pork implies meat.
+            (r(r"\bschwein"), &[SCHWEIN, FLEISCH][..]),
         ]
     });
 
@@ -519,6 +530,22 @@ mod tests {
             classify_allergen_label("haselnusskerne"),
             vec!["schalenfrüchte"]
         );
+        // Plural "erdnüsse" must match (regression: previous `\berdnu[sß]` only
+        // matched the singular stem because it required `u`, not `ü`).
+        assert_eq!(
+            classify_allergen_label("erdnüsse und daraus gewonnene erzeugnisse"),
+            vec!["erdnüsse"]
+        );
+        assert_eq!(classify_allergen_label("erdnuss"), vec!["erdnüsse"]);
+        // Manufacturer-declared pork ingredient → schwein + fleisch. Category
+        // paths for Wurst/Schinken often don't reveal the meat type, but the
+        // Contains label does.
+        let mut pork = classify_allergen_label("schweinefleisch");
+        pork.sort();
+        assert_eq!(pork, vec!["fleisch", "schwein"]);
+        let mut pork2 = classify_allergen_label("schweineschmalz");
+        pork2.sort();
+        assert_eq!(pork2, vec!["fleisch", "schwein"]);
     }
 
     #[test]
