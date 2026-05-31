@@ -258,6 +258,30 @@ impl MealOps {
         Ok(())
     }
 
+    /// Duplicate a single meal within its own event.
+    ///
+    /// An event meal has no child tables of its own (ingredients are derived
+    /// from the recipe), so this is a single-row copy. Returns the new meal_id.
+    pub async fn duplicate_meal(&self, meal_id: i32) -> Result<i32> {
+        let row = sqlx::query!(
+            r#"
+                INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
+                SELECT event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment
+                FROM event_meals
+                WHERE meal_id = $1
+                RETURNING meal_id
+            "#,
+            meal_id
+        )
+        .fetch_optional(&*self.pool)
+        .await?;
+
+        row.map(|r| r.meal_id).ok_or(Error::NotFound {
+            entity: "Meal",
+            id: meal_id.to_string(),
+        })
+    }
+
     /// Remove a meal.
     pub async fn remove_meal(&self, meal_id: i32) -> Result<()> {
         let count = sqlx::query!(

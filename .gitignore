@@ -6,3 +6,5 @@ recipes/out/
 server/node_modules
 status-api/feedback.log
 .env
+
+.playwright-mcp/

@@ -393,7 +393,7 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
             p class="text-2xl" { "Meals" }
         }
         table class="w-full text-inherit table-auto object-center mb-2 responsive-card" {
-            thead { tr { th { "Recipe" } th {"Start Time"} th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} }  }
+            thead { tr { th { "Recipe" } th {"Start Time"} th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} th {} }  }
             tbody class="text-center" id="meals-tbody" {
                 (meal_add_row(event_id, &recipes, default_meal_start))
                 @for meal in &meals {
@@ -792,6 +792,7 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
                 hx-target="#content"
                 hx-push-url="true"
                 hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
+            td class="no-label" { button class="btn btn-primary" hx-target="#content" hx-swap="innerHTML" hx-post=(format!("/events/edit/event_edit_meal/duplicate/{}/{}", event_id, event_meal.meal_id)) {"Duplicate"} }
             td class="no-label" { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/edit/delete/{}/{}", event_id, event_meal.meal_id)) {"Delete"} }
         }
     }

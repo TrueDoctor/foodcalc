@@ -18,6 +18,7 @@ pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
         .route("/{event_id}/{meal_id}", post(update_meal))
         .route("/{event_id}/{meal_id}", get(meal_form))
         .route("/{event_id}/{meal_id}", delete(delete_meal))
+        .route("/duplicate/{event_id}/{meal_id}", post(duplicate_meal))
         .route("/{meal_id}/price", get(meal_price_cell))
         .route("/{meal_id}/price_per_serving", get(meal_price_per_serving_cell))
 }
@@ -64,6 +65,17 @@ pub async fn delete_meal(
     ctx.assert_can_edit_event(event_id).await?;
     ctx.assert_can_edit_meal(meal_id).await?;
     foodlib.meals().remove_meal(meal_id).await?;
+    event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
+}
+
+pub async fn duplicate_meal(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path((event_id, meal_id)): Path<(i32, i32)>,
+) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_can_edit_meal(meal_id).await?;
+    foodlib.meals().duplicate_meal(meal_id).await?;
     event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
 }
 
