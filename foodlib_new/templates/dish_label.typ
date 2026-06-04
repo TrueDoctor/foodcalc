@@ -61,7 +61,7 @@
     #h(0.4em) #if draw_flourish { flourish() }
   ]
   v(0.2em)
-  align(center, text(size: 0.85em, style: "italic")[#meal.place · #meal.time · #meal.servings Portionen])
+  align(center, text(size: 0.85em, style: "italic")[#meal.place · #meal.time])
   v(0.4em)
   align(center, dietary_badges(meal.dietary))
   v(0.5em)
