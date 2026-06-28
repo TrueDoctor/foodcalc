@@ -33,10 +33,16 @@
 }
 
 #let significant_digits(x) = {
-  let first =  calc.ceil(calc.log(x))
-  let y = x / calc.pow(10,first)
-  let rounded = calc.round(digits: 4,y)
-  calc.round(digits: 3,rounded * calc.pow(10,first)) 
+  if x == 0 {
+    0
+  } else {
+    let sign = if x < 0 { -1 } else { 1 }
+    let ax = calc.abs(x)
+    let first = calc.ceil(calc.log(ax))
+    let y = ax / calc.pow(10, first)
+    let rounded = calc.round(digits: 4, y)
+    sign * calc.round(digits: 3, rounded * calc.pow(10, first))
+  }
 }
 
 #let format_weight(w) = if w < 1 [
