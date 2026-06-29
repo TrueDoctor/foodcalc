@@ -97,7 +97,29 @@ async fn render_meal_prices(
         *group_price.entry(meal.start_time.unix_timestamp()).or_default() += total;
     }
 
+    // Whole-event total = sum of every meal's total price. Colored against the
+    // event budget: red when over, green when within. A budget of 0 / unset
+    // carries no meaning, so it stays uncolored.
+    let event_total: f64 = price_by_meal.values().sum();
+    let budget = foodlib
+        .events()
+        .get(event_id)
+        .await?
+        .budget
+        .as_ref()
+        .and_then(|b| b.to_f64())
+        .filter(|b| *b > 0.0);
+    let total_color = match budget {
+        Some(b) if event_total > b => "text-red-600 dark:text-red-400",
+        Some(_) => "text-green-600 dark:text-green-400",
+        None => "",
+    };
+
     Ok(html! {
+        // OOB-replace the top-of-form total placeholder (`#event-total-price`).
+        span id="event-total-price" hx-swap-oob="true" class=(format!("font-semibold {}", total_color)) {
+            (format!("Total {:.2}€", event_total))
+        }
         @for meal in &meals {
             @let per_serving = price_by_meal.get(&meal.meal_id).copied().unwrap_or(0.0)
                 / meal.servings as f64;
@@ -373,8 +395,14 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
                 input name="name" class="text " type="text" value=(&event.name);
                 label for="comment" { "Comment:" };
                 input name="comment" class="text " type="text" value=(&event.comment.unwrap_or_default());
-                label for="budget" { "Budget:" };
-                input name="budget" class="text  w-24" type="text" value=(event.budget.and_then(|x|x.to_f64()).unwrap_or(0.));
+                // "Total X€ / [budget]": the total is lazily filled by the
+                // /meal-prices OOB swap (keyed by id) and colored vs the budget
+                // server-side; the budget itself stays editable.
+                div class="flex flex-row items-center gap-1 whitespace-nowrap" {
+                    span class="font-semibold" id="event-total-price" { "Total …" }
+                    span { "/" }
+                    input name="budget" class="text w-24" type="text" value=(event.budget.as_ref().and_then(|x|x.to_f64()).unwrap_or(0.));
+                }
                 (owner_select)
                 button class="btn btn-primary " hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
                 span class="htmx-indicator" { "Saving\u{a0}…" }
