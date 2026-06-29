@@ -27,6 +27,22 @@ tr:nth-child(odd) {
   @apply dark:bg-dark-bg-dark;
 }
 
+/* Opt out of parity-based row striping (e.g. the event meals table, where group
+   header and spacer rows would otherwise land on inconsistent stripe parities).
+   Backgrounds are assigned by row role instead: group header + spacer rows stay
+   transparent to match the page background, while meal rows get a darker surface
+   so each reads as a card. The dark-mode meal shade is gray-900 (the page bg is
+   gray-800), matching the darker of the old alternating row colors. */
+table.no-stripe tr:nth-child(even),
+table.no-stripe tr:nth-child(odd) {
+  @apply bg-slate-200 dark:bg-gray-900;
+}
+
+table.no-stripe tr.meal-group-band:nth-child(even),
+table.no-stripe tr.meal-group-band:nth-child(odd) {
+  @apply bg-transparent;
+}
+
 .text {
   @apply dark:text-white text-black bg-gray-300;
   @apply bg-white border-gray-500;
@@ -167,6 +183,13 @@ details[open] > summary .inv-chevron {
 
   table.responsive-card tr {
     @apply rounded-lg p-2 mb-2 border border-gray-300 dark:border-gray-700;
+  }
+
+  /* On mobile, cards have their own border/background — drop the row striping
+     so every card has a uniform background regardless of stripe parity. */
+  table.responsive-card tr:nth-child(even),
+  table.responsive-card tr:nth-child(odd) {
+    @apply bg-transparent;
   }
 
   table.responsive-card td[data-label]::before {

@@ -89,6 +89,14 @@ async fn render_meal_prices(
         .map(|(id, p)| (id, p.to_f64().unwrap_or_default()))
         .collect();
 
+    // Group total prices, keyed by the group's start_time (matches the
+    // divider-row id emitted by `format_event_meal_groups`).
+    let mut group_price: HashMap<i64, f64> = HashMap::new();
+    for meal in &meals {
+        let total = price_by_meal.get(&meal.meal_id).copied().unwrap_or(0.0);
+        *group_price.entry(meal.start_time.unix_timestamp()).or_default() += total;
+    }
+
     Ok(html! {
         @for meal in &meals {
             @let per_serving = price_by_meal.get(&meal.meal_id).copied().unwrap_or(0.0)
@@ -97,6 +105,11 @@ async fn render_meal_prices(
             // discarded by HTMX once the swap completes.
             td id=(format!("meal-price-{}", meal.meal_id)) hx-swap-oob="true" data-label="Price" {
                 (format!("{:.3}€", per_serving))
+            }
+        }
+        @for (ts, total) in &group_price {
+            td id=(format!("group-price-{}", ts)) hx-swap-oob="true" data-label="Price" {
+                (format!("{:.2}€", total))
             }
         }
     })
@@ -392,13 +405,11 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Meals" }
         }
-        table class="w-full text-inherit table-auto object-center mb-2 responsive-card" {
+        table class="w-full text-inherit table-auto object-center mb-2 responsive-card no-stripe" {
             thead { tr { th { "Recipe" } th {"Start Time"} th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} th {} }  }
             tbody class="text-center" id="meals-tbody" {
                 (meal_add_row(event_id, &recipes, default_meal_start))
-                @for meal in &meals {
-                    (format_event_meal(event_id, meal))
-                }
+                (format_event_meal_groups(event_id, &meals))
                 tr hx-get=(format!("/events/edit/{}/meal-prices", event_id)) hx-trigger="load" hx-swap="delete" {}
             }
         }
@@ -763,6 +774,68 @@ fn meal_add_row(
                     hx-target="#content"
                     hx-push-url="true" { "Add" }
             }
+        }
+    }
+}
+
+/// Render meals grouped by `start_time`. `meals` is start_time-ordered, so
+/// each contiguous run sharing a start time is one group, preceded by a header
+/// row with the group's date/time and subtotal that also draws the divider.
+fn format_event_meal_groups(event_id: i32, meals: &[Meal]) -> Markup {
+    html! {
+        @for group in meals.chunk_by(|a, b| a.start_time == b.start_time) {
+            (meal_group_header_row(group[0].start_time, group))
+            @for meal in group {
+                (format_event_meal(event_id, meal))
+            }
+            // Empty spacer row separates this group from the next header.
+            // Hidden on mobile, where responsive-card already spaces cards.
+            tr class="meal-group-band hidden sm:table-row" aria-hidden="true" { td colspan="11" class="h-4 no-label" {} }
+        }
+    }
+}
+
+/// Header/divider row opening a meal group. Shows the group's time range
+/// (shared start – latest end, spilling into the Start Time column) and absolute
+/// subtotals: energy (kj) summed over `energy_per_serving × servings`, total
+/// weight (g), and a lazily-filled price cell keyed by the group's unix
+/// timestamp. The bottom border draws the divider, so the date/time text sits
+/// above the line and its meals below.
+fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Markup {
+    let time_format = format_description!("[day].[month] [hour]:[minute]");
+    let time_only = format_description!("[hour]:[minute]");
+    let total_energy: f64 = group
+        .iter()
+        .map(|m| m.energy.to_f64().unwrap_or_default() * m.servings as f64)
+        .sum();
+    let total_weight_g: f64 = group
+        .iter()
+        .map(|m| m.weight.to_f64().unwrap_or_default() * 1000.)
+        .sum();
+
+    // Group end = latest end among its meals. Show only the time-of-day when it
+    // lands on the start's calendar day, otherwise the full end date+time.
+    let group_end = group.iter().map(|m| m.end_time).max().unwrap_or(start_time);
+    let start_str = start_time.format(&time_format).unwrap_or_default();
+    let end_str = if group_end.date() == start_time.date() {
+        group_end.format(&time_only).unwrap_or_default()
+    } else {
+        group_end.format(&time_format).unwrap_or_default()
+    };
+
+    html! {
+        tr class="meal-group-band border-b-2 border-gray-400 dark:border-gray-500 font-semibold" {
+            // Spans the Recipe + Start Time columns so the time range has room.
+            td data-label="Time" colspan="2" { (start_str) " – " (end_str) }
+            td class="no-label" {}
+            td data-label="Energy" { (format!("{:.0}kj", total_energy)) }
+            td data-label="Weight" { (format!("{:.0}g", total_weight_g)) }
+            td data-label="Price" id=(format!("group-price-{}", start_time.unix_timestamp())) { "…" }
+            td class="no-label" {}
+            td class="no-label" {}
+            td class="no-label" {}
+            td class="no-label" {}
+            td class="no-label" {}
         }
     }
 }
