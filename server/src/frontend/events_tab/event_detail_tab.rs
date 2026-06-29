@@ -116,10 +116,11 @@ async fn render_meal_prices(
     };
 
     Ok(html! {
-        // OOB-replace the top-of-form total placeholder (`#event-total-price`).
-        span id="event-total-price" hx-swap-oob="true" class=(format!("font-semibold {}", total_color)) {
-            (format!("Total {:.2}€", event_total))
-        }
+        // The response must START with the `<td>` OOB cells: HTMX picks a table
+        // parsing context from the first element, and bare `<td>`s are dropped
+        // by the HTML parser otherwise. The total `<span>` therefore comes LAST
+        // (a span is valid in any context). Reordering this broke the per-meal
+        // price swaps once before — keep the tds first.
         @for meal in &meals {
             @let per_serving = price_by_meal.get(&meal.meal_id).copied().unwrap_or(0.0)
                 / meal.servings as f64;
@@ -133,6 +134,10 @@ async fn render_meal_prices(
             td id=(format!("group-price-{}", ts)) hx-swap-oob="true" data-label="Price" {
                 (format!("{:.2}€", total))
             }
+        }
+        // OOB-replace the top-of-form total placeholder (`#event-total-price`).
+        span id="event-total-price" hx-swap-oob="true" class=(format!("font-semibold {}", total_color)) {
+            (format!("Total {:.2}€", event_total))
         }
     })
 }
