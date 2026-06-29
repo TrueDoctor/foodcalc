@@ -804,13 +804,16 @@ fn format_event_meal_groups(event_id: i32, meals: &[Meal]) -> Markup {
 fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Markup {
     let time_format = format_description!("[day].[month] [hour]:[minute]");
     let time_only = format_description!("[hour]:[minute]");
-    let total_energy: f64 = group
+    // Energy summed in kj (energy_per_serving × servings), shown in MJ.
+    let total_energy_mj: f64 = group
         .iter()
         .map(|m| m.energy.to_f64().unwrap_or_default() * m.servings as f64)
-        .sum();
-    let total_weight_g: f64 = group
+        .sum::<f64>()
+        / 1000.;
+    // `weight` from the query is already total meal weight in kg.
+    let total_weight_kg: f64 = group
         .iter()
-        .map(|m| m.weight.to_f64().unwrap_or_default() * 1000.)
+        .map(|m| m.weight.to_f64().unwrap_or_default())
         .sum();
 
     // Group end = latest end among its meals. Show only the time-of-day when it
@@ -828,8 +831,8 @@ fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Ma
             // Spans the Recipe + Start Time columns so the time range has room.
             td data-label="Time" colspan="2" { (start_str) " – " (end_str) }
             td class="no-label" {}
-            td data-label="Energy" { (format!("{:.0}kj", total_energy)) }
-            td data-label="Weight" { (format!("{:.0}g", total_weight_g)) }
+            td data-label="Energy" { (format!("{:.1}MJ", total_energy_mj)) }
+            td data-label="Weight" { (format!("{:.2}kg", total_weight_kg)) }
             td data-label="Price" id=(format!("group-price-{}", start_time.unix_timestamp())) { "…" }
             td class="no-label" {}
             td class="no-label" {}
