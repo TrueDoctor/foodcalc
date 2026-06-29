@@ -461,6 +461,113 @@ impl EventOps {
         Ok(records)
     }
 
+    /// Metro article numbers for the ingredients on a tour, read from the cache
+    /// populated during metro sync (`metro_categories.article_number`). Returns
+    /// `ingredient_id -> article_number`. Ingredients whose source has no cached
+    /// article number (never synced, or sync found none) are simply absent from
+    /// the map; the caller decides how to render those. This is a pure DB read —
+    /// run a metro sync to refresh the cache.
+    pub async fn resolve_metro_article_numbers(
+        &self,
+        tour_id: i32,
+    ) -> Result<std::collections::HashMap<i32, String>> {
+        use crate::ops::metro_sync::METRO_STORE_ID;
+
+        let rows = sqlx::query!(
+            r#"
+            SELECT DISTINCT s.ingredient_id, mc.article_number AS "article_number!"
+            FROM shopping_list sl
+            JOIN ingredient_sources s ON s.ingredient_id = sl.ingredient_id
+            JOIN metro_categories mc ON mc.ingredient_source_id = s.ingredient_source_id
+            WHERE sl.tour_id = $1
+              AND s.store_id = $2
+              AND mc.article_number IS NOT NULL
+            "#,
+            tour_id,
+            METRO_STORE_ID,
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.ingredient_id, r.article_number))
+            .collect())
+    }
+
+    /// Tour shopping list **with** the per-recipe usage breakdown, from a single
+    /// query over `shopping_tour_ingredients` (recipe grain) aggregated to
+    /// ingredient totals in Rust. Replaces a separate shopping-list + usage
+    /// query pair for the exports — both are aggregations of the same expensive
+    /// base view, so we scan it once.
+    ///
+    /// Price/category are derived exactly as the `shopping_list` view does (the
+    /// `best_event_ingredient_sources` and `metro_categories` joins); price is
+    /// `per-unit × total weight`. Each ingredient's `recipe_usage` is scoped to
+    /// what this tour covers (food-prep splits an ingredient across tours by
+    /// `buy_by` time), ordered by descending amount. Items are returned ordered
+    /// by category then name, matching the shopping-list ordering.
+    pub async fn tour_shopping_list_with_usage(
+        &self,
+        tour_id: i32,
+    ) -> Result<Vec<ShoppingListItemWithUsage>> {
+        // One row per (ingredient, recipe). price_per_unit and category repeat
+        // across an ingredient's recipe rows (they're ingredient-level); weight
+        // is the recipe's share.
+        let rows = sqlx::query!(
+            r#"
+            SELECT sti.ingredient_id AS "ingredient_id!",
+                   sti.ingredient AS "ingredient_name!",
+                   sti.recipe AS "recipe!",
+                   SUM(sti.weight) AS "weight!",
+                   beis.price AS price_per_unit,
+                   mc.category AS "category?"
+            FROM shopping_tour_ingredients sti
+            LEFT JOIN best_event_ingredient_sources beis
+                USING (ingredient_id, event_id)
+            LEFT JOIN metro_categories mc USING (ingredient_source_id)
+            WHERE sti.tour_id = $1
+            GROUP BY sti.ingredient_id, sti.ingredient, sti.recipe, beis.price, mc.category
+            ORDER BY COALESCE(mc.category, ''), sti.ingredient,
+                     SUM(sti.weight) DESC, sti.recipe
+            "#,
+            tour_id,
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        // Aggregate recipe-grain rows into per-ingredient items, preserving the
+        // SQL ordering (category, name) for items and (desc weight) for recipes.
+        let mut items: Vec<ShoppingListItemWithUsage> = Vec::new();
+        for row in rows {
+            match items.last_mut() {
+                Some(item) if item.ingredient_id == row.ingredient_id => {
+                    item.weight += &row.weight;
+                    item.recipe_usage.push((row.recipe, row.weight));
+                }
+                _ => items.push(ShoppingListItemWithUsage {
+                    ingredient_id: row.ingredient_id,
+                    ingredient_name: row.ingredient_name,
+                    weight: row.weight.clone(),
+                    // Price is per-unit × total weight; multiply once weight is
+                    // fully summed below. Stash per-unit here, finalize after.
+                    price: row.price_per_unit.clone(),
+                    category: row.category,
+                    recipe_usage: vec![(row.recipe, row.weight)],
+                }),
+            }
+        }
+        // Finalize price: per-unit × summed weight (matches the shopping_list
+        // view's `SUM(weight) * price`). A negative sentinel (-1) means "no
+        // source priced", which we surface as None.
+        for item in &mut items {
+            item.price = item.price.as_ref().and_then(|per_unit| {
+                (per_unit >= &BigDecimal::from(0)).then(|| per_unit * &item.weight)
+            });
+        }
+        Ok(items)
+    }
+
     /// Gets the shopping list for a specific tour
     pub async fn get_shopping_list(&self, tour_id: i32) -> Result<Vec<ShoppingListItem>> {
         let records = sqlx::query_as!(

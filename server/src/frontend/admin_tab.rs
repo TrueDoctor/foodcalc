@@ -308,7 +308,8 @@ async fn metro_sync_view(ctx: AuthCtx) -> MResponse {
                             hx-disabled-elt="this" {
                             "Run Metro sync"
                         }
-                        span id="metro-sync-spinner" class="htmx-indicator opacity-70" {
+                        span id="metro-sync-spinner" class="htmx-indicator flex items-center gap-2 opacity-70" {
+                            span class="spinner" {}
                             "Syncing… this may take a minute"
                         }
                     }

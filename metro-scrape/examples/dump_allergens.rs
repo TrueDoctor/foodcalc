@@ -30,8 +30,11 @@ async fn main() -> eyre::Result<()> {
         .collect();
 
     eprintln!("Fetching {} articles...", urls.len());
-    let articles = fetch_articles_from_urls(urls).await?;
+    let (articles, failures) = fetch_articles_from_urls(urls).await;
     eprintln!("Got {} articles back.", articles.len());
+    for f in &failures {
+        eprintln!("fetch failure: {f}");
+    }
 
     // (meta_info_variant_name, label) -> count
     let mut histogram: BTreeMap<(String, String), usize> = BTreeMap::new();

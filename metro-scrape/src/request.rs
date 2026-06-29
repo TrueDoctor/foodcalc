@@ -46,45 +46,73 @@ async fn fetch_articles(articles: &[ArticleIdentifier]) -> Result<Vec<Article>, 
     Ok(result.result.values().cloned().collect())
 }
 
+/// Fetch all chunks, isolating failures: a chunk whose HTTP request or parsing
+/// fails is recorded in the returned failure list and skipped, while the other
+/// chunks are still fetched. Returns `(successfully fetched articles, failure
+/// messages)`.
 async fn fetch_articles_batched(
     articles: &[ArticleIdentifier],
-) -> Result<Vec<Article>, eyre::Error> {
+) -> (Vec<Article>, Vec<String>) {
     let mut result = Vec::new();
+    let mut failures = Vec::new();
     for chunk in articles.chunks(40) {
-        let articles = fetch_articles(chunk).await?;
-        result.extend(articles);
+        match fetch_articles(chunk).await {
+            Ok(articles) => result.extend(articles),
+            // The API takes the whole chunk in one request, so on failure we
+            // can't tell which id was at fault — report the batch's betty ids.
+            Err(e) => failures.push(format!(
+                "failed to fetch batch [{}]: {e}",
+                chunk
+                    .iter()
+                    .map(|a| a.betty_id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+        }
     }
-    Ok(result)
+    (result, failures)
 }
+
+/// Resolve Metro articles for `(id, url)` pairs. Malformed URLs and failed
+/// fetch batches are reported in the returned failure list rather than aborting
+/// the whole call; every URL that can be fetched still is. Returns `(resolved
+/// (id, article) pairs, failure messages)`.
 pub async fn fetch_articles_from_urls<S: AsRef<str> + Hash>(
     urls: impl IntoIterator<Item = (i32, S)>,
-) -> Result<Vec<(i32, Article)>, eyre::Error> {
-    let article_identifiers = urls
-        .into_iter()
-        .filter(|(_, url)| !url.as_ref().is_empty())
-        .map(|(id, url)| {
-            let ident = extract_betty_identifier_from_url(url.as_ref())
-                .unwrap_or_else(|| panic!("invalid url {}", url.as_ref()));
-            (ident.betty_id.clone(), (ident, id))
-        })
-        .collect::<HashMap<_, _>>();
+) -> (Vec<(i32, Article)>, Vec<String>) {
+    let mut failures = Vec::new();
+    let mut article_identifiers = HashMap::new();
+    for (id, url) in urls {
+        let url = url.as_ref();
+        if url.is_empty() {
+            continue;
+        }
+        match extract_betty_identifier_from_url(url) {
+            Some(ident) => {
+                article_identifiers.insert(ident.betty_id.clone(), (ident, id));
+            }
+            None => failures.push(format!("invalid metro url for ingredient #{id}: {url}")),
+        }
+    }
 
     let identifiers = article_identifiers
         .values()
         .map(|x| x.0.clone())
         .collect::<Vec<_>>();
 
-    let articles = fetch_articles_batched(&identifiers).await?;
+    let (articles, fetch_failures) = fetch_articles_batched(&identifiers).await;
+    failures.extend(fetch_failures);
 
     let mut result = articles
         .iter()
-        .map(|article| {
+        .filter_map(|article| {
             let betty_id = &article.betty_article_id.betty_article_id;
-            let ingredient_id = article_identifiers.get(betty_id).unwrap();
-            (ingredient_id.1, article.clone())
+            article_identifiers
+                .get(betty_id)
+                .map(|ingredient_id| (ingredient_id.1, article.clone()))
         })
         .collect::<Vec<_>>();
     // sort articles by identifier
     result.sort_by_key(|article| article.0);
-    Ok(result)
+    (result, failures)
 }

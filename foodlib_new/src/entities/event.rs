@@ -85,6 +85,21 @@ pub struct ShoppingListItem {
     pub category: Option<String>,
 }
 
+/// A tour shopping-list item plus the per-recipe usage breakdown that makes it
+/// up. Built from a single `shopping_tour_ingredients` query (recipe grain),
+/// aggregated to ingredient totals so the shopping exports don't need a second
+/// pass for the comment column. `recipe_usage` is `(recipe, kg)` ordered by
+/// descending amount; `weight`/`price` are the tour totals for the ingredient.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ShoppingListItemWithUsage {
+    pub ingredient_id: i32,
+    pub ingredient_name: String,
+    pub weight: BigDecimal,
+    pub price: Option<BigDecimal>,
+    pub category: Option<String>,
+    pub recipe_usage: Vec<(String, BigDecimal)>,
+}
+
 /// Custom type for ingredients without a shopping tour
 #[derive(Debug, Clone)]
 pub struct IngredientWithoutTour {

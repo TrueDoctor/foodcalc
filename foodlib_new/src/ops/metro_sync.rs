@@ -7,17 +7,38 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use bigdecimal::{BigDecimal, FromPrimitive};
+use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive};
 use sqlx::PgPool;
 
 use crate::error::{Error, Result};
 use crate::ops::allergens::AllergenOps;
 
-use metro_scrape::article::Article;
+use metro_scrape::article::{Article, Bundle};
 use metro_scrape::request::fetch_articles_from_urls;
 
 /// Metro is `store_id = 0` per legacy `foodlib::ingredients::METRO`.
 pub const METRO_STORE_ID: i32 = 0;
+
+/// Package weight of a bundle in kilograms.
+///
+/// Prefers the declared net piece weight (`content_data.net_piece_weight`) when
+/// present and its unit is recognised, falling back to `gross_weight` (already
+/// in kg) otherwise. An unrecognised net unit is treated as "no usable net" and
+/// also falls back to gross, so an unexpected uom can never store a value off by
+/// a factor of 1000.
+fn bundle_weight_kg(bundle: &Bundle) -> Option<BigDecimal> {
+    let net_kg = bundle.content_data.net_piece_weight.as_ref().and_then(|net| {
+        let value = BigDecimal::from_i64(net.value)?;
+        // Metro reports the unit as a full uppercase word (e.g. "GRAM"). Accept
+        // the abbreviated forms too, defensively.
+        match net.uom.to_ascii_uppercase().as_str() {
+            "GRAM" | "G" | "GRM" => Some(value / 1000),
+            "KILOGRAM" | "KG" | "KGM" => Some(value),
+            _ => None,
+        }
+    });
+    net_kg.or_else(|| BigDecimal::from_str(&bundle.gross_weight).ok())
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct SyncReport {
@@ -90,9 +111,10 @@ impl MetroSyncOps {
             .iter()
             .map(|s| (s.ingredient_id, s.url.clone()))
             .collect();
-        let articles = fetch_articles_from_urls(url_pairs)
-            .await
-            .map_err(|e| Error::Misc(format!("Metro fetch failed: {e}")))?;
+        // Per-URL/batch fetch failures are reported but do not abort the sync —
+        // every article that can be fetched is still applied.
+        let (articles, fetch_failures) = fetch_articles_from_urls(url_pairs).await;
+        report.failures.extend(fetch_failures);
         report.articles_fetched = articles.len();
 
         for (ingredient_id, article) in articles {
@@ -222,21 +244,33 @@ impl MetroSyncOps {
         let bundle = variant
             .bundles
             .values()
-            .min_by_key(|b| (f64::from_str(&b.gross_weight).unwrap_or_default() * 1000.) as u64)
+            .min_by_key(|b| {
+                // Key in integer grams so floats don't need Ord. Bundles with no
+                // usable weight sort last (u64::MAX) so a weighted bundle wins.
+                bundle_weight_kg(b)
+                    .and_then(|kg| (kg * BigDecimal::from(1000)).to_u64())
+                    .unwrap_or(u64::MAX)
+            })
             .ok_or_else(|| Error::Misc(format!("no bundle for ingredient #{}", source.ingredient_id)))?;
 
         let category = bundle
             .categories
             .iter()
             .fold(String::new(), |acc, n| format!("{acc}/{}", n.name));
+        // Metro's customer-facing article number for this bundle, cached so the
+        // Metro CSV export can read it from the DB instead of re-querying the API.
+        let article_number = article.article_number();
         sqlx::query!(
             r#"
-            INSERT INTO metro_categories (ingredient_source_id, category)
-            VALUES ($1, $2)
-            ON CONFLICT (ingredient_source_id) DO UPDATE SET category = EXCLUDED.category
+            INSERT INTO metro_categories (ingredient_source_id, category, article_number)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (ingredient_source_id) DO UPDATE SET
+                category = EXCLUDED.category,
+                article_number = EXCLUDED.article_number
             "#,
             source.ingredient_source_id,
             category,
+            article_number,
         )
         .execute(&*self.pool)
         .await?;
@@ -256,8 +290,9 @@ impl MetroSyncOps {
             return Ok(false);
         };
 
-        let weight = BigDecimal::from_str(&bundle.gross_weight)
-            .map_err(|e| Error::Misc(format!("invalid gross_weight `{}`: {e}", bundle.gross_weight)))?;
+        let weight = bundle_weight_kg(bundle).ok_or_else(|| {
+            Error::Misc(format!("invalid gross_weight `{}`", bundle.gross_weight))
+        })?;
         let price_bd = BigDecimal::from_f64(price)
             .ok_or_else(|| Error::Misc(format!("price {price} not representable as BigDecimal")))?;
 

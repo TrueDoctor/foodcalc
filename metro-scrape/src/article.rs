@@ -31,6 +31,21 @@ pub struct Article {
     pub article_id: ArticleId,
 }
 
+impl Article {
+    /// Metro's customer-facing article number (the "customer display id", e.g.
+    /// `"805914"`), used in Metro's own order CSV. NOTE: this is distinct from
+    /// `article_id.article_number` (which holds the BTY string) and from the
+    /// internal `ref_bundle_ids.article_number`. Returns the first one found
+    /// across the article's variants/bundles.
+    pub fn article_number(&self) -> Option<&str> {
+        self.variants
+            .values()
+            .flat_map(|v| v.bundles.values())
+            .map(|b| b.customer_display_id.as_str())
+            .find(|id| !id.is_empty())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArticleId {

@@ -207,3 +207,22 @@ details[open] > summary .inv-chevron {
   }
 }
 
+/* Small inline loading spinner. Pair with htmx-indicator so it only shows
+   while a request is in flight. */
+.spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 9999px;
+  animation: spinner-rotate 0.6s linear infinite;
+  vertical-align: -2px;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

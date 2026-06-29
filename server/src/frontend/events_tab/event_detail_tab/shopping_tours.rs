@@ -379,13 +379,18 @@ fn get_inventory_amount(
     item: &ShoppingListItem,
     inventory: &[InventoryItemWithName],
 ) -> BigDecimal {
-    let inv_amount = inventory
-        .iter()
-        .filter(|i| i.ingredient_id == item.ingredient_id)
-        .map(|i| i.amount.clone())
-        .sum::<BigDecimal>();
+    get_inventory_amount_by_id(item.ingredient_id, inventory)
+}
 
-    inv_amount
+fn get_inventory_amount_by_id(
+    ingredient_id: i32,
+    inventory: &[InventoryItemWithName],
+) -> BigDecimal {
+    inventory
+        .iter()
+        .filter(|i| i.ingredient_id == ingredient_id)
+        .map(|i| i.amount.clone())
+        .sum::<BigDecimal>()
 }
 
 fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> String {
@@ -406,7 +411,8 @@ async fn export_plain(
     Path(tour_id): Path<i32>,
 ) -> IResponse {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    let shopping_list = state.events().get_shopping_list(tour_id).await?;
+    // Single query: tour shopping list + per-recipe usage breakdown.
+    let shopping_list = state.events().tour_shopping_list_with_usage(tour_id).await?;
     let tour = state.events().get_shopping_tour(tour_id).await?;
 
     let event_inventories = state.events().get_inventories(tour.event_id).await?;
@@ -424,12 +430,13 @@ async fn export_plain(
             output.push_str(&format!("=== {} ===\n", category));
             current_category = category;
         }
-        let inv_amount = get_inventory_amount(&item, &inventory_items);
+        let inv_amount = get_inventory_amount_by_id(item.ingredient_id, &inventory_items);
         let status = if inv_amount > item.weight { "x" } else { " " };
         let to_buy = (item.weight.clone() - inv_amount).max(BigDecimal::zero());
 
         let new_price = item
             .price
+            .as_ref()
             .map(|p| (p / item.weight.clone()) * to_buy.clone());
 
         output.push_str(&format!(
@@ -444,6 +451,11 @@ async fn export_plain(
             },
             item.weight
         ));
+        // Usage breakdown without the ingredient-name prefix the Metro export uses.
+        let usage = format_recipe_usage(&item.recipe_usage);
+        if !usage.is_empty() {
+            output.push_str(&format!("  [{}]", usage));
+        }
         output.push('\n');
     }
     Ok(IntoResponse::into_response((
@@ -461,46 +473,90 @@ async fn export_plain(
     )))
 }
 
+/// Format a per-recipe usage breakdown as "3.00kg Recipe 2.00kg Other".
+/// `usages` is the `[(recipe, kg)]` list from `tour_shopping_list_with_usage`.
+/// Returns an empty string when there are no usages.
+fn format_recipe_usage(usages: &[(String, BigDecimal)]) -> String {
+    usages
+        .iter()
+        .map(|(recipe, kg)| format!("{:.2}kg {}", kg.to_f64().unwrap_or_default(), recipe))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 async fn export_metro(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(tour_id): Path<i32>,
 ) -> IResponse {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    let shopping_list = state.events().get_shopping_list(tour_id).await?;
+    // Single query: tour shopping list + per-recipe usage breakdown.
+    let shopping_list = state.events().tour_shopping_list_with_usage(tour_id).await?;
     let sources = state.ingredients().list_sources(None).await?;
 
     let tour = state.events().get_shopping_tour(tour_id).await?;
     let event_inventories = state.events().get_inventories(tour.event_id).await?;
     let inventory_items = inventory_items(Some(tour_id), &event_inventories, &state).await;
 
-    let mut output = String::new();
-    output.push_str("Name,Amount,URL\n");
+    // ingredient_id -> Metro article number (e.g. "208486"), resolved from the
+    // sync cache. Ingredients that can't be resolved are absent here and get
+    // their name in column 1 + sorted to the bottom of the CSV.
+    let article_numbers = state.events().resolve_metro_article_numbers(tour_id).await?;
+
+    // CSV rows: (article_number_or_name, amount, comment, resolved?). Resolved
+    // rows are emitted first; unresolved (no Metro article number) sink below.
+    let mut rows: Vec<(String, f64, String, bool)> = Vec::new();
 
     for item in shopping_list {
-        let inv_amount = get_inventory_amount(&item, &inventory_items);
+        let inv_amount = get_inventory_amount_by_id(item.ingredient_id, &inventory_items);
         if inv_amount > item.weight {
             continue;
         }
-        let weight = item.weight - inv_amount;
+        let weight = &item.weight - inv_amount;
 
         // Find source with matching ingredient_id
-        if let Some(source) = sources
-            .iter()
-            .find(|s| s.ingredient_id == item.ingredient_id)
-        {
-            // Round up to next package size
-            let packages =
-                (weight.to_f64().unwrap() / source.package_size.to_f64().unwrap()).ceil();
-            let amount = packages * source.package_size.to_f64().unwrap();
+        let Some(source) = sources.iter().find(|s| s.ingredient_id == item.ingredient_id) else {
+            continue;
+        };
 
-            output.push_str(&format!(
-                "{},{:.2},{}\n",
-                item.ingredient_name,
-                amount,
-                source.url.as_deref().unwrap_or("")
-            ));
+        // Round up to whole packages; column 2 is the package count Metro orders.
+        let package_size = source.package_size.to_f64().unwrap();
+        let packages = (weight.to_f64().unwrap() / package_size).ceil();
+        let total_kg = packages * package_size;
+
+        // Comment: "<name>(<count> * <size>kg = <total>kg): <usage breakdown>".
+        // The prefix explains how the package count maps to kg; the usage list
+        // is the per-recipe breakdown for this tour.
+        let mut comment = format!(
+            "{}({} * {:.2}kg = {:.2}kg)",
+            item.ingredient_name, packages as i64, package_size, total_kg
+        );
+        let usage = format_recipe_usage(&item.recipe_usage);
+        if !usage.is_empty() {
+            comment.push_str(&format!(": {usage}"));
         }
+
+        match article_numbers.get(&item.ingredient_id) {
+            Some(article) => rows.push((article.clone(), packages, comment, true)),
+            // Unresolved: fall back to the ingredient name and sink to the bottom.
+            None => rows.push((item.ingredient_name.clone(), packages, comment, false)),
+        }
+    }
+
+    // Resolved rows first (stable within each group preserves the shopping-list
+    // category/name ordering).
+    rows.sort_by_key(|(_, _, _, resolved)| !*resolved);
+
+    let mut output = String::new();
+    for (col1, packages, comment, _) in rows {
+        // Quote the comment (may contain commas); CSV-escape embedded quotes.
+        let comment_field = if comment.is_empty() {
+            String::new()
+        } else {
+            format!("\"{}\"", comment.replace('"', "\"\""))
+        };
+        // Column 2 is a whole package count.
+        output.push_str(&format!("{},{},{}\n", col1, packages as i64, comment_field));
     }
 
     Ok(IntoResponse::into_response((

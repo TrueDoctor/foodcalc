@@ -483,13 +483,17 @@ impl FoodBase {
             .collect();
 
         // fetch article descriptions from the metro api
-        let articles = metro_scrape::request::fetch_articles_from_urls(urls.iter().flat_map(|s| {
-            s.url
-                .is_some()
-                .then(|| (s.ingredient_id, s.url.clone().unwrap()))
-        }))
-        .await?;
+        let (articles, failures) =
+            metro_scrape::request::fetch_articles_from_urls(urls.iter().flat_map(|s| {
+                s.url
+                    .is_some()
+                    .then(|| (s.ingredient_id, s.url.clone().unwrap()))
+            }))
+            .await;
         print!("Fetched {} articles from metro api", articles.len());
+        for f in &failures {
+            eprintln!("metro fetch failure: {f}");
+        }
 
         async fn update_ingredient_price(
             foodbase: &FoodBase,
