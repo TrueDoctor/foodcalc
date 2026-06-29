@@ -137,13 +137,11 @@ async fn shopping_tour_form(
         default_tour = state.events().get_shopping_tour(tour_id).await?;
     }
 
-    // If tour_id is provided, get existing tour data
+    // If tour_id is provided, get existing tour data. `default_tour` was already
+    // loaded by `get_shopping_tour(tour_id)` above, so reuse it directly.
     let (tour, event_inventories, shopping_list) = if tour_id > 0 {
-        let tours = state.events().get_shopping_tours(tour_id).await?;
-        let tour = tours.first().cloned().unwrap_or(default_tour);
-
         (
-            tour,
+            default_tour,
             state.events().get_inventories(event_id).await?,
             state.events().get_shopping_list(tour_id).await?,
         )
