@@ -102,6 +102,41 @@ async fn test_prep_tasks_affect_shopping_lists(pool: PgPool) {
     assert!(sauce_ingredients.is_empty());
 }
 
+/// Regression test: a prepped recipe's OWN direct ingredients (not nested in a
+/// subrecipe) must honour the food-prep `prep_date` when assigned to a shopping
+/// tour. Previously these ingredients had an empty `subrecipe_hierarchy`, so the
+/// prep_date never propagated and they were scheduled by meal serving time —
+/// landing them on a later tour than the prep warranted.
+///
+/// Festival Coleslaw (recipe 103) is served 2024-07-04 but prepped 2024-07-02.
+/// Its flour is sourced from Local Grocery (store 1), which has two tours:
+/// tour 101 @ 07-01 and tour 103 @ 07-03. Honouring the prep_date (07-02) buys
+/// the flour on tour 101; ignoring it (meal date 07-04) slips it to tour 103.
+#[sqlx::test(fixtures("minimal", "complex_events"))]
+async fn test_prep_applies_to_root_recipe_direct_ingredients(pool: PgPool) {
+    let ops = EventOps::new(Arc::new(pool));
+
+    const FLOUR: i32 = 5;
+
+    // Tour 101 (07-01, prep-window tour) must contain the coleslaw flour.
+    let early = ops.get_shopping_list(101).await.unwrap();
+    let flour_early = early.iter().find(|i| i.ingredient_id == FLOUR);
+    assert!(
+        flour_early.is_some(),
+        "coleslaw flour should buy on tour 101 (prep_date 07-02), \
+         got tours: {:?}",
+        early.iter().map(|i| (i.ingredient_id, i.tour_id)).collect::<Vec<_>>()
+    );
+
+    // Tour 103 (07-03, the later store-1 tour aligned with the meal date) must
+    // NOT contain it — that would be the buggy, serving-time-based assignment.
+    let late = ops.get_shopping_list(103).await.unwrap();
+    assert!(
+        late.iter().all(|i| i.ingredient_id != FLOUR),
+        "coleslaw flour must not slip to tour 103 (meal date 07-04)"
+    );
+}
+
 #[sqlx::test(fixtures("minimal", "complex_events"))]
 async fn test_upcoming_and_past_events(pool: PgPool) {
     let ops = EventOps::new(Arc::new(pool));

@@ -67,3 +67,32 @@ INSERT INTO event_inventories (event_id, inventory_id) VALUES
 -- Inventory contents
 INSERT INTO inventory_ingredients (inventory_id, ingredient_id, amount) VALUES
     (100, 2, 5.0);  -- 5kg tomatoes in Festival Storage
+
+-- Regression scenario: a prepped recipe whose ingredients belong DIRECTLY to
+-- the meal's root recipe (no subrecipe). Such ingredients previously got an
+-- empty subrecipe_hierarchy, so the food-prep prep_date never applied and they
+-- were scheduled by meal serving time instead. See migration
+-- 20260629083425_fix_root_recipe_subrecipe_hierarchy.sql.
+INSERT INTO recipes (recipe_id, name, comment, group_id) VALUES
+    (103, 'Festival Coleslaw', 'Prepped ahead, flour as direct ingredient', 1);
+
+-- Direct ingredient of recipe 103 (flour, sourced from store 1 / Local Grocery)
+INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id) VALUES
+    (103, 5, 4.0, 0);  -- 4kg flour, belongs directly to recipe 103
+
+-- Coleslaw is served on July 4, after both Local Grocery tours below.
+INSERT INTO event_meals (event_id, recipe_id, place_id, energy_per_serving, servings, start_time, end_time) VALUES
+    (100, 103, 1, 1500, 50, '2024-07-04 18:00:00+00', '2024-07-04 20:00:00+00');
+
+-- Prepped on July 2 (after tour 101, before tour 103), with a window covering
+-- the meal.
+INSERT INTO food_prep (prep_id, event_id, recipe_id, prep_date, use_from, use_until) VALUES
+    (103, 100, 103, '2024-07-02 14:00:00+00', '2024-07-02 14:00:00+00', '2024-07-04 20:00:00+00');
+
+-- A second Local Grocery (store 1) tour, so store 1 now has two tours:
+--   tour 101 @ 2024-07-01  and  tour 103 @ 2024-07-03.
+-- With the prep_date (07-02) the flour buys on tour 101; without it the flour's
+-- buy_by would be the meal date (07-04) and it would slip to tour 103. This
+-- straddling boundary is what makes the regression observable.
+INSERT INTO shopping_tours (tour_id, event_id, tour_date, store_id) VALUES
+    (103, 100, '2024-07-03 08:00:00+00', 1);
