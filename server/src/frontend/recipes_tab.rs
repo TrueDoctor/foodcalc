@@ -69,10 +69,12 @@ pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
                  div class="flex flex-col items-center justify-center gap-2" {
                      h1 class="text-lg mb-2" { "Export recipe" }
                      // Input mask for energy and number of servings as a form which downloads the recipe as a PDF on Submit
-                        form class="flex flex-col items-center justify-center gap-x-8" action=(format!("/recipes/export_pdf/{}", recipe_id)) {
-                            div class="flex flex-row items-center justify-center gap-4" {
-                                input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy kJ/serving" required="required";
-                                input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="number_of_servings" placeholder="Number of servings" required="required";
+                        form class="flex flex-col items-stretch justify-center gap-4 w-full" action=(format!("/recipes/export_pdf/{}", recipe_id)) {
+                            div class="flex flex-col gap-2 w-full" {
+                                input class="text w-full" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy kJ/serving" required="required";
+                                input class="text w-full" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="number_of_servings" placeholder="Number of servings" required="required";
+                            }
+                            div class="flex flex-row flex-wrap items-center justify-center gap-4" {
                                 button class="btn btn-primary" type="submit" hx-post=(format!("/recipes/shopping-list/{}", recipe_id)) hx-target="#shopping-list" { "Shopping list" }
                                 button class="btn btn-primary" type="submit" { "Export" }
                                 button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
