@@ -358,8 +358,14 @@ impl MealOps {
                 servings as "servings!",
                 meal_id as "meal_id!",
                 subrecipe_hierarchy
-            FROM event_ingredients
-            WHERE meal_id = $1
+            -- Non-recursive base view: identical per-meal weights/energy/prices
+            -- (incl. event source overrides) but skips the expensive prep-time
+            -- resolution. Critically, also filter by event_id so the planner
+            -- prunes to a single event's rows up front — without it the view is
+            -- computed across all events then filtered (~4.5s vs ~60ms).
+            FROM event_ingredients_before_prep_time_resolve
+            WHERE event_id = (SELECT event_id FROM event_meals WHERE meal_id = $1)
+              AND meal_id = $1
             ORDER BY weight DESC
             "#,
             meal_id

@@ -619,7 +619,7 @@ pub async fn render_shopping_tours(
                 tr {
                     th { "Date" }
                     th { "Store" }
-                    th {} th {}
+                    th {}
                 }
             }
             tbody {
@@ -629,17 +629,17 @@ pub async fn render_shopping_tours(
                         td data-label="Date" { (tour.tour_date.format(&time::format_description::parse("[day].[month] [hour]:[minute]").unwrap()).unwrap()) }
                         td data-label="Store" { (tour.store_name.clone().unwrap_or_default()) }
                         td class="no-label" {
-                            button class="btn btn-primary"
-                                hx-get=(format!("/events/edit/shopping_tours/edit/{}/{}", event_id, tour.id))
-                                hx-swap="innerHtml show:window:top"
-                                hx-push-url="true"
-                                hx-target="#content" { "Edit" }
-                        }
-                        td class="no-label" {
-                            button class="btn btn-cancel"
-                                hx-delete=(format!("/events/edit/shopping_tours/{}", tour.id))
-                                hx-swap="delete"
-                                hx-target="closest tr" { "Delete" }
+                            div class="flex flex-row flex-nowrap gap-2 justify-end items-center" {
+                                button class="icon-btn" title="Edit" aria-label="Edit"
+                                    hx-get=(format!("/events/edit/shopping_tours/edit/{}/{}", event_id, tour.id))
+                                    hx-swap="innerHtml show:window:top"
+                                    hx-push-url="true"
+                                    hx-target="#content" { (icons::edit()) }
+                                button class="icon-btn" title="Delete" aria-label="Delete"
+                                    hx-delete=(format!("/events/edit/shopping_tours/{}", tour.id))
+                                    hx-swap="delete"
+                                    hx-target="closest tr" { (icons::delete()) }
+                            }
                         }
                     }
                 }
@@ -671,12 +671,13 @@ fn tour_add_row(
                     }
                 }
             }
-            td class="no-label" {}
             td class="no-label" {
-                button class="btn btn-primary" type="button"
-                    hx-post=(url)
-                    hx-include="closest tr"
-                    hx-target="#content" { "Add" }
+                div class="flex flex-row justify-end" {
+                    button class="btn btn-primary" type="button"
+                        hx-post=(url)
+                        hx-include="closest tr"
+                        hx-target="#content" { "Add" }
+                }
             }
         }
     }
