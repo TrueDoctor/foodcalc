@@ -748,7 +748,7 @@ struct SourceData {
 async fn update_override(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((event_id, _ingredient_id)): Path<(i32, i32)>,
+    Path((event_id, ingredient_id)): Path<(i32, i32)>,
     Form(source): Form<SourceData>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
@@ -766,7 +766,14 @@ async fn update_override(
         .set_source_override(event_id, source.id)
         .await?;
 
-    event_form(foodlib, ctx, Path(event_id)).await
+    // Adding a brand-new override (id -1 from the Add row) must re-render the
+    // form so the new row appears. Editing an existing override only changes
+    // prices, so refresh just the price cells via the OOB swaps.
+    if ingredient_id == -1 {
+        event_form(foodlib, ctx, Path(event_id)).await
+    } else {
+        render_meal_prices(foodlib, ctx, Path(event_id)).await
+    }
 }
 
 fn format_event_source_override(
@@ -789,27 +796,47 @@ fn format_event_source_override(
         },
     };
 
-    let button = match source_override.ingredient_id {
-        -1 => html! {
-            button class="btn btn-primary" hx-target="#content" hx-post=(format!("/events/edit/{}/overrides/{}", source_override.event_id, source_override.ingredient_id)) hx-include="closest tr" { "Add" }
-        },
-        _ => html! {
-            button class="btn btn-primary" hx-target="#content" hx-post=(format!("/events/edit/{}/overrides/{}", source_override.event_id, source_override.ingredient_id)) hx-include="closest tr" { "Save" }
-        },
-    };
-
+    let is_new = source_override.ingredient_id == -1;
+    let post_url = format!(
+        "/events/edit/{}/overrides/{}",
+        source_override.event_id, source_override.ingredient_id
+    );
+    // New (empty) rows keep an explicit Add button — auto-saving a blank row
+    // would create junk overrides. Existing rows auto-save on change (posting
+    // the whole row) instead, matching the inventory/edit patterns elsewhere.
+    // Setting an override only affects prices, so the handler returns just the
+    // OOB price swaps rather than re-rendering the whole event form.
     html! {
         tr {
-            td data-label="Ingredient" { input name="ingredient" class="text" type="text" list="ingredients" value=(source_override.ingredient_name) placeholder="Ingredient Name" required="true"; }
+            td data-label="Ingredient" {
+                @if is_new {
+                    input name="ingredient" class="text" type="text" list="ingredients"
+                        value=(source_override.ingredient_name) placeholder="Ingredient Name" required="true";
+                } @else {
+                    input name="ingredient" class="text" type="text" list="ingredients"
+                        value=(source_override.ingredient_name) placeholder="Ingredient Name" required="true"
+                        hx-post=(post_url) hx-include="closest tr" hx-swap="none"
+                        hx-trigger="change, keyup[keyCode==13] changed";
+                }
+            }
             td data-label="Store" {
-                select name="store_id" id="stores" required="true" class="text" {
-                    @for store in stores {
-                        (option(store, source_override.store_id))
+                @if is_new {
+                    select name="store_id" id="stores" required="true" class="text" {
+                        @for store in stores { (option(store, source_override.store_id)) }
+                    }
+                } @else {
+                    select name="store_id" id="stores" required="true" class="text"
+                        hx-post=(post_url) hx-include="closest tr" hx-swap="none" hx-trigger="change" {
+                        @for store in stores { (option(store, source_override.store_id)) }
                     }
                 }
             }
-            td class="no-label" { (button) }
-            td class="no-label" { @if source_override.ingredient_id != -1 {
+            td class="no-label" {
+                @if is_new {
+                    button class="btn btn-primary" hx-target="#content" hx-post=(post_url) hx-include="closest tr" { "Add" }
+                }
+            }
+            td class="no-label" { @if !is_new {
                 div class="flex flex-row justify-end" {
                     button class="icon-btn" title="Delete" aria-label="Delete" hx-get=(format!("/events/edit/{}/overrides/{}/delete_dialog", source_override.event_id, source_override.source_id)) hx-target="this" hx-swap="outerHTML" { (icons::delete()) }
                 } }}
