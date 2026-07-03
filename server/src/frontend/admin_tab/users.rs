@@ -58,6 +58,7 @@ fn user_list(users: &[User]) -> Markup {
     html! {
         table class="w-full text-inherit table-auto object-center responsive-card mb-4" {
             thead { tr {
+                th class="w-1/12" { "ID" }
                 th { "Username" }
                 th { "Email" }
                 th class="w-20" { "Admin" }
@@ -67,6 +68,7 @@ fn user_list(users: &[User]) -> Markup {
                 (create_user_row())
                 @for u in users {
                     tr id=(format!("user-{}", u.id)) {
+                        td class="text-center opacity-70" data-label="ID" { (u.id) }
                         td data-label="Username" { (u.username) }
                         td data-label="Email" { (u.email) }
                         td data-label="Admin" class="text-center" { @if u.is_admin { "✓" } @else { "" } }
@@ -87,7 +89,7 @@ fn user_list(users: &[User]) -> Markup {
 fn create_user_row() -> Markup {
     html! {
         tr id="user--1" {
-            td colspan="4" {
+            td colspan="5" {
                 div class="flex flex-row flex-wrap gap-2 items-center" {
                     input class="text grow" type="text" name="username" placeholder="Username" required="required";
                     input class="text grow" type="email" name="email" placeholder="Email" required="required";

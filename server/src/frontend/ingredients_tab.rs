@@ -18,7 +18,7 @@ use num::{FromPrimitive, ToPrimitive};
 use serde::Deserialize;
 
 use super::{IResponse, MResponse};
-use crate::frontend::{move_group, LOGIN_URL};
+use crate::frontend::{icons, move_group, LOGIN_URL};
 use crate::MyAppState;
 
 pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
@@ -281,9 +281,6 @@ fn render_ingredients_page(
                     th class="w-1/8" { "Energy (kJ/g)" }
                     th class="w-1/8" { "Comment" }
                     th {}
-                    @if is_admin {
-                        th {}
-                    }
                     th class="w-1/6" {}
                 } }
                 tbody id="search-results" {
@@ -314,8 +311,9 @@ fn ingredient_add_row(user: Option<&User>, _user_group_ids: &[i32]) -> Markup {
             td data-label="Name" { input class="text" type="text" name="name" placeholder="Name" required="required"; }
             td data-label="Energy (kJ/g)" { input class="text" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="kJ/g" required="required"; }
             td data-label="Comment" { input class="text" type="text" name="comment" placeholder="Comment"; }
+            td class="no-label" {}
             td class="no-label" {
-                button class="btn btn-primary"
+                button class="btn btn-primary w-full"
                     hx-post="/ingredients"
                     hx-include="closest tr"
                     hx-target="#ingredient--1"
@@ -323,8 +321,6 @@ fn ingredient_add_row(user: Option<&User>, _user_group_ids: &[i32]) -> Markup {
                     hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#ingredient--1 input[name=name]');if(i)i.focus();}"
                     { "Add" }
             }
-            td class="no-label" {}
-            td class="no-label" {}
         }
     }
 }
@@ -738,7 +734,7 @@ fn format_ingredient_source(
             td data-label="URL" { input class="text" name="url" value=(source.url.clone().unwrap_or_default()) disabled[!can_edit]; }
             @if can_edit {
                 td class="no-label" { button class="btn btn-primary" hx-post=(format!("/ingredients/sources/{}/{}", ingredient_id, source.id)) hx-include="closest tr" hx-target="#popup" hx-swap="outerHTML" { "Update" } }
-                td class="no-label" { button class="btn btn-cancel" hx-get=(format!("/ingredients/sources/delete/{}/{}", ingredient_id, source.id)) hx-target="#popup" hx-swap="outerHTML" { "Delete" } }
+                td class="no-label" { button class="icon-btn" title="Delete" aria-label="Delete" hx-get=(format!("/ingredients/sources/delete/{}/{}", ingredient_id, source.id)) hx-target="#popup" hx-swap="outerHTML" { (icons::delete()) } }
             } @else {
                 td class="no-label" {}
                 td class="no-label" {}
@@ -799,20 +795,20 @@ fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, use
                data-label=(if comment.is_empty() { "" } else { "Comment" }) {
                 (comment)
             }
-            td class="no-label" {
-                @if can_edit_this {
-                    button class="btn btn-primary"
-                    hx-get="/ingredients/edit"
-                    hx-target=(format!("#ingredient-{}", ingredient.id))
-                    hx-vals=(serde_json::to_string(ingredient).unwrap()) { "Edit" }
-                }
-            }
-            @if is_admin {
-                td class="no-label" {
-                    button class="btn btn-cancel"
-                    hx-get=(format!("/ingredients/delete/{}", ingredient.id))
-                    hx-target="#content"
-                    hx-swap="afterbegin" { "Delete" }
+            td class="no-label whitespace-nowrap" {
+                div class="flex flex-row flex-nowrap gap-2 justify-end items-center" {
+                    @if can_edit_this {
+                        button class="icon-btn" title="Edit" aria-label="Edit"
+                        hx-get="/ingredients/edit"
+                        hx-target=(format!("#ingredient-{}", ingredient.id))
+                        hx-vals=(serde_json::to_string(ingredient).unwrap()) { (icons::edit()) }
+                    }
+                    @if is_admin {
+                        button class="icon-btn" title="Delete" aria-label="Delete"
+                        hx-get=(format!("/ingredients/delete/{}", ingredient.id))
+                        hx-target="#content"
+                        hx-swap="afterbegin" { (icons::delete()) }
+                    }
                 }
             }
             td class="no-label" {

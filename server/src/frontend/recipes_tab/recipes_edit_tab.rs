@@ -14,7 +14,7 @@ use serde::Deserialize;
 use sqlx::postgres::types::PgInterval;
 
 use crate::{
-    frontend::{move_group, MResponse},
+    frontend::{icons, move_group, MResponse},
     MyAppState,
 };
 
@@ -576,7 +576,7 @@ impl IngredientTableFormattable for RecipeIngredient {
                 td data-label="Amount" { input class=(format!("text {}",form_id)) name="ingredient_amount" value=(self.amount) required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-target=(format!("#ingredient-{}", ingredient_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML"; }
                 td data-label="Unit" { select class=(format!("unit {} fc-select",form_id)) name="ingredient_unit_id" selected=(unit.name) hx-target=(format!("#ingredient-{}", ingredient_id)) hx-swap="outerHTML" required="required" hx-put="/recipes/edit/change-ingredient" hx-indicator=".htmx-indicator" hx-include=(format!(".{}", form_id)) { @for unit in unit_types {
                     @if unit.id == self.unit_id { option value=(unit.id) selected { (unit.name) } } @else { option value=(unit.id) { (unit.name) } } } } }
-                td class="no-label" { button class="btn btn-cancel" hx-target="#contents" hx-delete=(format!("/recipes/edit/delete-ingredient/{recipe_id}/{ingredient_id}"))  { "Delete" } }
+                td class="no-label" { button class="icon-btn" title="Delete" aria-label="Delete" hx-target="#contents" hx-delete=(format!("/recipes/edit/delete-ingredient/{recipe_id}/{ingredient_id}"))  { (icons::delete()) } }
             }
         }
     }
@@ -605,7 +605,7 @@ impl SubRecipeTableFormattable for RecipeMetaIngredient {
                 }
                 td data-label="Amount (kg)" { input class=(format!("text {}",form_id)) name="subrecipe_amount" value=(amount) required="required" hx-put="/recipes/edit/change-subrecipe" hx-target=(format!("#subrecipe-{}", subrecipe_id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-indicator=".htmx-indicator" hx-swap="outerHTML"; }
                 td data-label="Unit" { "kg" }
-                td class="no-label" { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-subrecipe/{}/{}", recipe_id, subrecipe_id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
+                td class="no-label" { button class="icon-btn" title="Delete" aria-label="Delete" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-subrecipe/{}/{}", recipe_id, subrecipe_id)) hx-include=(format!(".{}", form_id)) { (icons::delete()) } }
             }
         }
     }
@@ -628,7 +628,7 @@ impl StepTableFormattable for RecipeStep {
                 td data-label="Description" { input class=(format!("text {}",form_id)) name="step_description" value=(self.description) hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
                 td data-label="Duration (min)" { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
                 td data-label="Per kg (min)" { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td class="no-label" { button class="btn btn-cancel" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-step/{}/{}", recipe_id, self.id)) hx-include=(format!(".{}", form_id)) { "Delete" } }
+                td class="no-label" { button class="icon-btn" title="Delete" aria-label="Delete" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-step/{}/{}", recipe_id, self.id)) hx-include=(format!(".{}", form_id)) { (icons::delete()) } }
             }
         }
     }

@@ -14,7 +14,7 @@ use maud::{html, Markup};
 use serde::Deserialize;
 
 use super::MResponse;
-use crate::frontend::move_group;
+use crate::frontend::{icons, move_group};
 use crate::MyAppState;
 
 pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
@@ -239,17 +239,18 @@ fn render_row_markup(inv: &Inventory, open: bool, filter: &str) -> Markup {
                         class="h-3 w-3 text-current transition-transform duration-200 inv-chevron" {
                         path fill="currentColor" d="M137.4 374.6c12.5 12.5 32.8 12.5 45.3 0l128-128c9.2-9.2 11.9-22.9 6.9-34.9s-16.6-19.8-29.6-19.8L32 192c-12.9 0-24.6 7.8-29.6 19.8s-2.2 25.7 6.9 34.9l128 128z" {}
                     }
+                    span class="text-sm opacity-70 tabular-nums" { "#" (inv.id) }
                     span class="font-medium" { (inv.name) }
                 }
                 div class="flex flex-row gap-2" onclick="event.stopPropagation()" {
-                    button type="button" class="btn btn-primary"
+                    button type="button" class="icon-btn" title="Edit" aria-label="Edit"
                         hx-get=(format!("/inventories/{}/edit", inv.id))
                         hx-target=(format!("#{}", row_id))
-                        hx-swap="outerHTML" { "Edit" }
-                    button type="button" class="btn btn-cancel"
+                        hx-swap="outerHTML" { (icons::edit()) }
+                    button type="button" class="icon-btn" title="Delete" aria-label="Delete"
                         hx-delete=(format!("/inventories/{}", inv.id))
                         hx-target="#inventories"
-                        hx-confirm="Delete this inventory?" { "Delete" }
+                        hx-confirm="Delete this inventory?" { (icons::delete()) }
                 }
             }
             div id=(contents_id) class="mt-2 px-2 pb-2"
@@ -381,10 +382,10 @@ fn item_row(inventory_id: i32, item: &InventoryItemWithName) -> Markup {
                     hx-swap="outerHTML";
             }
             td class="no-label" {
-                button type="button" class="btn btn-cancel"
+                button type="button" class="icon-btn" title="Remove" aria-label="Remove"
                     hx-delete=(format!("/inventories/{}/items/{}", inventory_id, item.ingredient_id))
                     hx-target=(format!("#inv-{}-contents", inventory_id))
-                    hx-swap="innerHTML" { "X" }
+                    hx-swap="innerHTML" { (icons::delete()) }
             }
         }
     }

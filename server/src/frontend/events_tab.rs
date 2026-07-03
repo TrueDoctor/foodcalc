@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 mod event_detail_tab;
 
+use crate::frontend::icons;
 use crate::MyAppState;
 
 use super::MResponse;
@@ -58,19 +59,24 @@ pub async fn add(
 /// comment); budget sits in the column normally used for Edit, with the Add
 /// button in the next cell. Submitting refreshes the whole `#content`, so a
 /// fresh empty add-row reappears for rapid entry.
-fn event_add_row() -> Markup {
+fn event_add_row(is_admin: bool) -> Markup {
     html! {
         tr id="event--1" {
+            @if is_admin {
+                td class="text-center opacity-70 no-label" { "+" }
+            }
             td data-label="Name" { input class="text w-full" type="text" name="name" placeholder="Event name" required="required"; }
             td data-label="Comment" { input class="text w-full" type="text" name="comment" placeholder="Comment"; }
-            td data-label="Budget" { input class="text w-full" type="number" step="0.01" min="0" name="budget" placeholder="Budget"; }
-            td class="no-label" colspan="2" {
-                button class="btn btn-primary"
-                    hx-post="/events/add"
-                    hx-include="closest tr"
-                    hx-target="#content"
-                    hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#event--1 input[name=name]');if(i)i.focus();}"
-                    { "Add" }
+            td class="no-label" {
+                div class="flex flex-row items-center gap-2" {
+                    input class="text w-full" type="number" step="0.01" min="0" name="budget" placeholder="Budget";
+                    button class="btn btn-primary"
+                        hx-post="/events/add"
+                        hx-include="closest tr"
+                        hx-target="#content"
+                        hx-on::after-request="if(event.detail.successful){const i=document.querySelector('#event--1 input[name=name]');if(i)i.focus();}"
+                        { "Add" }
+                }
             }
         }
     }
@@ -145,11 +151,11 @@ pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
             }
         }
         table class="w-full text-inherit table-auto object-center responsive-card" {
-            thead { tr { th { "Name" } th { "Comment" } th {} th {} th {}} }
+            thead { tr { @if user.is_admin { th class="w-1/12" { "ID" } } th { "Name" } th { "Comment" } th {}} }
             tbody id="search-results" {
-                (event_add_row())
+                (event_add_row(user.is_admin))
                 @for event in visible_events.iter() {
-                    (format_event(event))
+                    (format_event(event, user.is_admin))
                 }
             }
         }
@@ -185,25 +191,32 @@ pub async fn search(foodlib: FoodLib, user: User, query: Form<SearchParameters>)
     });
 
     html! {
-        (event_add_row())
+        (event_add_row(user.is_admin))
         @for event in filtered_events {
-            (format_event(event))
+            (format_event(event, user.is_admin))
         }
     }
 }
 
-fn format_event(event: &foodlib_new::event::Event) -> Markup {
+fn format_event(event: &foodlib_new::event::Event, is_admin: bool) -> Markup {
     html! {
         tr id=(format!("event-{}", event.id)) {
             @let indicator_id = format!("indicator-{}", event.id);
+            @if is_admin {
+                td class="text-center opacity-70" data-label="ID" { (event.id) }
+            }
             td data-label="Name" { (event.name) }
             td data-label="Comment" { (event.comment.clone().unwrap_or_default()) }
-            td class="no-label" { button class="btn btn-primary" hx-target="#content" hx-push-url="true" hx-get=(format!("/events/edit/{}", event.id)) {"Edit"} }
-            td class="no-label" { button class="btn btn-primary" hx-target="#content" hx-indicator=("#".to_owned() + &indicator_id) hx-post=(format!("/events/duplicate/{}", event.id)) hx-swap="innerHTML show:window:top" {
-            span id=(indicator_id) class="inverse-htmx-indicator" { "Duplicate" }
-            span id=(indicator_id) class="my-htmx-indicator" { "Duplicating..." }
-            } }
-            td class="no-label" { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/delete/{}", event.id) ) {"Delete"} }
+            td class="no-label whitespace-nowrap" {
+                div class="flex flex-row flex-nowrap gap-2 justify-end items-center" {
+                    button class="icon-btn" title="Edit" aria-label="Edit" hx-target="#content" hx-push-url="true" hx-get=(format!("/events/edit/{}", event.id)) { (icons::edit()) }
+                    button class="icon-btn" title="Duplicate" aria-label="Duplicate" hx-target="#content" hx-indicator=("#".to_owned() + &indicator_id) hx-post=(format!("/events/duplicate/{}", event.id)) hx-swap="innerHTML show:window:top" {
+                        span id=(indicator_id) class="inverse-htmx-indicator" { (icons::duplicate()) }
+                        span id=(indicator_id) class="my-htmx-indicator" { "…" }
+                    }
+                    button class="icon-btn" title="Delete" aria-label="Delete" hx-target="#content" hx-get=(format!("/events/delete/{}", event.id) ) { (icons::delete()) }
+                }
+            }
         }
     }
 }

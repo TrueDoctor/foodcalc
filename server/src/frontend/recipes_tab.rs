@@ -11,7 +11,7 @@ use maud::{html, Markup};
 use serde::Deserialize;
 
 use super::MResponse;
-use crate::frontend::LOGIN_URL;
+use crate::frontend::{icons, LOGIN_URL};
 use crate::MyAppState;
 
 mod recipes_edit_tab;
@@ -231,8 +231,8 @@ pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
             table class="w-full text-inherit table-auto object-center responsive-card" {
                 @let is_admin = user.as_ref().map_or(false, |u| u.is_admin);
                 thead { tr {
-                    @if is_admin { th { "ID" } }
-                    th { "Name" } th { "Comment" } th {} @if is_admin {th {}} th {}
+                    @if is_admin { th class="w-1/12" { "ID" } }
+                    th { "Name" } th { "Comment" } th {} th {}
                 } }
                     tbody id="search-results"  {
                         @if user.is_some() {
@@ -269,7 +269,7 @@ fn recipe_add_row(is_admin: bool) -> Markup {
                     hx-include="closest tr"
                     hx-target="#content" { "Add" }
             }
-            td class="no-label" {} td class="no-label" {} td class="no-label" {}
+            td class="no-label" {}
         }
     }
 }
@@ -327,7 +327,7 @@ fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[i32]) -
     html! {
         tr id=(format!("recipe-{}", recipe.id)) {
             @if is_admin {
-                td data-label="ID" { (recipe.id) }
+                td class="text-center opacity-70" data-label="ID" { (recipe.id) }
             }
             td data-label="Name" {
                 span class="inline-flex items-center gap-1" {
@@ -346,17 +346,17 @@ fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[i32]) -
                class=(if comment.is_empty() { "no-label" } else { "" }) {
                 (comment)
             }
-            td class="no-label" {
-                @if can_edit_this {
-                    button class="btn btn-primary" type="button" hx-push-url="true" hx-target="#content"  hx-get=(format!("/recipes/edit/{}", recipe.id)) { "Edit" }
+            td class="no-label whitespace-nowrap" {
+                div class="flex flex-row flex-nowrap gap-2 justify-end items-center" {
+                    @if can_edit_this {
+                        button class="icon-btn" type="button" title="Edit" aria-label="Edit" hx-push-url="true" hx-target="#content"  hx-get=(format!("/recipes/edit/{}", recipe.id)) { (icons::edit()) }
+                    }
+                    @if is_admin {
+                        button class="icon-btn" type="button" title="Delete" aria-label="Delete" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.id)) { (icons::delete()) }
+                    }
+                    button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.id)) hx-swap="afterend" { "Export" }
                 }
             }
-            @if is_admin {
-                td class="no-label" {
-                    button class="btn btn-cancel"  type="button" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.id)) { "Delete" }
-                }
-            }
-            td class="no-label" { button class="btn btn-primary" type="button" hx-get=(format!("/recipes/export/{}", recipe.id)) hx-swap="afterend" { "Export" } }
             td class="no-label" { div id="dialog"; }
         }
     }
