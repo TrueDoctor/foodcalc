@@ -245,11 +245,18 @@ impl MetroSyncOps {
             .bundles
             .values()
             .min_by_key(|b| {
-                // Key in integer grams so floats don't need Ord. Bundles with no
-                // usable weight sort last (u64::MAX) so a weighted bundle wins.
-                bundle_weight_kg(b)
+                // Primary key: unit-aware package weight in grams (reuses
+                // `bundle_weight_kg`). No usable weight sorts last (u64::MAX).
+                let net = bundle_weight_kg(b)
                     .and_then(|kg| (kg * BigDecimal::from(1000)).to_u64())
-                    .unwrap_or(u64::MAX)
+                    .unwrap_or(u64::MAX);
+                // Tie-break on gross weight (unitless kg): a multi-piece case and
+                // a single piece share the same net *piece* weight (e.g. 9 × 275 g
+                // vs 1 × 275 g), so without this the pick — and thus the price —
+                // is arbitrary. Smaller gross is the single unit, whose price
+                // matches its weight.
+                let gross = (f64::from_str(&b.gross_weight).unwrap_or(f64::MAX) * 1000.) as u64;
+                (net, gross)
             })
             .ok_or_else(|| Error::Misc(format!("no bundle for ingredient #{}", source.ingredient_id)))?;
 
@@ -257,9 +264,13 @@ impl MetroSyncOps {
             .categories
             .iter()
             .fold(String::new(), |acc, n| format!("{acc}/{}", n.name));
-        // Metro's customer-facing article number for this bundle, cached so the
-        // Metro CSV export can read it from the DB instead of re-querying the API.
-        let article_number = article.article_number();
+        // Article number, price and weight must all come from the SAME (selected)
+        // bundle — multi-bundle articles (e.g. a single piece vs a 9-piece case)
+        // have different prices/ids for the same net piece weight, so mixing
+        // bundles yields a price/weight mismatch. Read the id off `bundle`, not
+        // `article` (which would pick an arbitrary bundle's id).
+        let article_number = (!bundle.customer_display_id.is_empty())
+            .then_some(bundle.customer_display_id.as_str());
         sqlx::query!(
             r#"
             INSERT INTO metro_categories (ingredient_source_id, category, article_number)
