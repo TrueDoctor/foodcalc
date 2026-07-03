@@ -111,6 +111,14 @@ dialog[open].dialog::backdrop {
 	@apply bg-gray-700 text-white;
 }
 
+/* Bare clickable icon — no background/border, follows text color, subtle
+   hover. Used for compact action toolbars (e.g. meal rows). */
+.icon-btn {
+	@apply inline-flex items-center justify-center p-1 rounded cursor-pointer;
+	@apply text-inherit opacity-70 transition;
+	@apply hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10;
+}
+
 .btn-cancel:hover {
 	@apply bg-btn-cancel-hover;
 }

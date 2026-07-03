@@ -57,9 +57,19 @@
   #{calc.floor(d/60)} h #{calc.round(calc.rem(d,60))} min
 ]
 
-#let list_ingredients(ingredients) =  ingredients.map(((ingredient, amount)) => 
+#let list_ingredients(ingredients) =  ingredients.map(((ingredient, amount)) =>
 rect(stroke: none, width: 100%)[
     #format_weight(amount) #ingredient
+  ]
+)
+
+// Meta-ingredients (subrecipes) carry a third element: whether they come from
+// food prep. Those are marked so the cook uses the prepped batch instead of
+// making them fresh.
+#let list_meta(items) = items.map(((ingredient, amount, from_prep)) =>
+rect(stroke: none, width: 100%)[
+    #format_weight(amount) #ingredient
+    #if from_prep [ #box(stroke: 0.5pt + orange, inset: (x: 3pt, y: 1pt), radius: 2pt, fill: orange.lighten(85%))[#text(size: 0.75em)[aus Food Prep]] ]
   ]
 )
 
@@ -104,12 +114,42 @@ rect(stroke: none, width: 100%)[
   ]
 }
 
-#let recipe(name, date, ingredients, steps, allergens) = {
+// A prepped-ahead recipe: banner naming the meals it feeds and each meal's
+// share of the batch, so the kitchen knows how to portion the prep.
+#let prep_banner(prep_for) = {
+  block(stroke: 0.5pt + orange, inset: 6pt, radius: 4pt, width: 100%, fill: orange.lighten(85%))[
+    *Vorbereitung (Food Prep)*
+    #if prep_for.len() > 0 [
+      \
+      #text(size: 0.9em)[für: #prep_for.map(((name, pct)) => name + " (" + str(calc.round(pct)) + "%)").join(", ")]
+    ]
+  ]
+}
+
+// Boiling-water helper, rendered inline right below the recipe that uses it.
+// `kg` is the scaled amount of water for this usage site. The boil time is
+// computed here rather than read from a stored recipe step: heating water is
+// physical, and the constants are calibrated for a 3.5 kW induction stove —
+// ~4.2 min pot/heat-up offset + ~1.4 min per kg (matching the historical
+// "4:12 fix + 1:24/kg" step of recipe 282). Kept as one small block so it can
+// appear below every usage without forcing its own page.
+#let water_boil_minutes(kg) = 4.2 + 1.4 * kg
+// `extras` is a list of (name, kg) for non-water ingredients (e.g. salt in
+// Salzwasser) so they are not lost when the recipe is folded inline.
+#let water_note(name, kg, extras) = {
+  v(0.4em)
+  block(stroke: 0.5pt + blue, inset: 6pt, radius: 4pt, width: 100%, fill: blue.lighten(92%), breakable: false)[
+    *#name:* #format_weight(kg) Wasser#for (ename, ekg) in extras [ + #format_weight(ekg) #ename] #h(1fr) #sym.arrow.r aufkochen \~#format_duration(water_boil_minutes(kg)) #text(size: 0.85em, fill: gray)[(3.5 kW)]
+  ]
+}
+
+#let recipe(name, date, ingredients, steps, allergens, prep_for: none, water: ()) = {
   [
     #show: project.with(
       title: name,
       date: date,
     )
+    #if prep_for != none [ #prep_banner(prep_for) #v(0.5em) ]
     #allergen_block(allergens)
     #v(0.5em)
     #rect()[
@@ -122,12 +162,16 @@ rect(stroke: none, width: 100%)[
         #line(length: 100%)
         #grid(
           columns: (1fr,1fr),
-        ..list_ingredients(ingredients.subrecipes)
+        ..list_meta(ingredients.subrecipes)
       )]
     ]
     #for step in steps [
       +  *#step.title* #h(1fr) #format_duration(step.duration.fix) fix + #format_duration(step.duration.var) \
         #step.desc
+    ]
+    // Boiling-water helpers inline on this recipe's page.
+    #for (wname, wkg, wextras) in water [
+      #water_note(wname, wkg, wextras)
     ]
   ]
 }

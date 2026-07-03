@@ -2,7 +2,7 @@ use crate::entities::allergen::DietaryFlags;
 use crate::entities::property::Property;
 use crate::entities::recipe::{RecipeStep, SubRecipe};
 use crate::error::{Error, Result};
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, ToPrimitive};
 use sqlx::PgPool;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -16,6 +16,17 @@ pub struct RecipeInfo {
     pub properties: Vec<Property>,
     /// Derived dietary flags computed from `properties` via `allergens::dietary_flags`.
     pub dietary: DietaryFlags,
+    /// True when this sheet represents a food-prep task (cooked ahead of time)
+    /// rather than a meal served at the event.
+    pub is_prep: bool,
+    /// For prep sheets: the meals this prep feeds, as (recipe name, weight share
+    /// percentage). Empty for meals and for preps whose downstream meals can't be
+    /// resolved.
+    pub prep_for: Vec<(String, f64)>,
+    /// Subrecipe ids that are prepped ahead for this event. Their own recipe
+    /// section is omitted (assumed already made) and their meta-ingredient row is
+    /// marked "aus Food Prep". Empty when there is no event/prep context.
+    pub prepped_subrecipe_ids: Vec<i32>,
 }
 
 /// Lighter-weight summary for dish labels and event overviews — just identity + allergens.
@@ -38,6 +49,34 @@ pub struct EventAllergenInfo {
     pub meals: Vec<MealAllergenInfo>,
 }
 
+/// Prep availability windows for one event, fetched once and queried in memory.
+struct PrepWindows {
+    /// (prepped recipe id, use_from, use_until).
+    windows: Vec<(i32, time::OffsetDateTime, time::OffsetDateTime)>,
+}
+
+impl PrepWindows {
+    /// Recipe ids whose prep window covers `consumer_time`, excluding
+    /// `exclude` (a prep never treats itself as already made).
+    fn ids_available_at(
+        &self,
+        consumer_time: time::OffsetDateTime,
+        exclude: Option<i32>,
+    ) -> Vec<i32> {
+        let mut ids: Vec<i32> = self
+            .windows
+            .iter()
+            .filter(|(id, from, until)| {
+                *from <= consumer_time && *until >= consumer_time && Some(*id) != exclude
+            })
+            .map(|(id, _, _)| *id)
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
+}
+
 pub struct ExportOps {
     pool: Arc<PgPool>,
 }
@@ -55,7 +94,7 @@ impl ExportOps {
         // heavy aggregate computes but reading only `event_meals` + `recipe_stats`.
         let row = sqlx::query!(
             r#"
-            SELECT recipe_id, start_time, servings, energy_per_serving
+            SELECT event_id, recipe_id, start_time, servings, energy_per_serving
             FROM event_meals
             WHERE meal_id = $1
             "#,
@@ -71,7 +110,16 @@ impl ExportOps {
         let weight = self.calc_energy_to_weight(row.recipe_id, total_energy).await?;
         let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
         let date = row.start_time.format(&format).unwrap();
-        self.fetch_recipe_info(row.recipe_id, weight, date).await
+        // A meal assumes any prepped subrecipe that is available at its serving
+        // time is already made, so those sub-sections are omitted from the print.
+        let prepped = self
+            .event_prep_windows(row.event_id)
+            .await
+            .map(|w| w.ids_available_at(row.start_time, None))
+            .unwrap_or_default();
+        let mut info = self.fetch_recipe_info(row.recipe_id, weight, date).await?;
+        info.prepped_subrecipe_ids = prepped;
+        Ok(info)
     }
 
     pub async fn fetch_food_prep_recipe(&self, prep_id: i32) -> Result<RecipeInfo> {
@@ -98,7 +146,83 @@ impl ExportOps {
         let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
         let date = prep.prep_date.format(&format).unwrap();
 
-        self.fetch_recipe_info(prep.recipe_id, weight, date).await
+        // A prep sheet assumes any *other* prep available at its own prep time is
+        // already made — but never itself (that is what this sheet prints), and
+        // never a prep made later than this one.
+        let prepped = self
+            .event_prep_windows(prep.event_id)
+            .await
+            .map(|w| w.ids_available_at(prep.prep_date, Some(prep.recipe_id)))
+            .unwrap_or_default();
+
+        let mut info = self.fetch_recipe_info(prep.recipe_id, weight, date).await?;
+        info.is_prep = true;
+        info.prep_for = self.fetch_prep_allocation(prep_id).await.unwrap_or_default();
+        info.prepped_subrecipe_ids = prepped;
+        Ok(info)
+    }
+
+    /// Build every recipe sheet for an event — one per meal plus one per food-prep
+    /// task — sorted chronologically (preps by prep_date, meals by start_time) so a
+    /// single combined PDF reads in kitchen-workflow order.
+    pub async fn fetch_event_combined(&self, event_id: i32) -> Result<Vec<RecipeInfo>> {
+        let format =
+            format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
+
+        // (sort_key, RecipeInfo). sort_key is the OffsetDateTime driving the order.
+        let mut items: Vec<(time::OffsetDateTime, RecipeInfo)> = Vec::new();
+
+        // Fetch prep windows once and resolve attribution in memory for every
+        // meal and prep, rather than a query per item.
+        let windows = self.event_prep_windows(event_id).await?;
+
+        let meals = crate::ops::meals::MealOps::new(self.pool.clone())
+            .get_event_meals(event_id)
+            .await?;
+        for meal in meals {
+            // `meal.weight` is already the scaled total recipe weight (same
+            // derivation as calc_energy_to_weight), so reuse it directly.
+            let date = meal.start_time.format(&format).unwrap_or_default();
+            match self.fetch_recipe_info(meal.recipe_id, meal.weight.clone(), date).await {
+                Ok(mut info) => {
+                    info.prepped_subrecipe_ids =
+                        windows.ids_available_at(meal.start_time, None);
+                    items.push((meal.start_time, info));
+                }
+                // Skip meals whose recipe can't render (e.g. no subrecipes) rather
+                // than failing the whole export.
+                Err(_) => continue,
+            }
+        }
+
+        let preps = crate::ops::events::EventOps::new(self.pool.clone())
+            .get_food_prep_tasks(event_id)
+            .await?;
+        // Batch the two expensive recursive-view lookups across all preps once,
+        // instead of one query per prep.
+        let prep_weights = self.event_prep_weights(event_id).await.unwrap_or_default();
+        let prep_allocations = self.event_prep_allocations(event_id).await.unwrap_or_default();
+        for prep in preps {
+            let weight = prep_weights
+                .get(&prep.id)
+                .cloned()
+                .unwrap_or_else(|| BigDecimal::from(0));
+            let date = prep.prep_date.format(&format).unwrap();
+            match self.fetch_recipe_info(prep.recipe_id, weight, date).await {
+                Ok(mut info) => {
+                    info.is_prep = true;
+                    info.prep_for = prep_allocations.get(&prep.id).cloned().unwrap_or_default();
+                    // Other preps available at this prep's own time, never itself.
+                    info.prepped_subrecipe_ids =
+                        windows.ids_available_at(prep.prep_date, Some(prep.recipe_id));
+                    items.push((prep.prep_date, info));
+                }
+                Err(_) => continue,
+            }
+        }
+
+        items.sort_by_key(|(when, _)| *when);
+        Ok(items.into_iter().map(|(_, info)| info).collect())
     }
 
     pub async fn fetch_subrecipes(
@@ -113,7 +237,7 @@ impl ExportOps {
                 recipe as "recipe!",
                 recipe_id as "recipe_id!",
                 ingredient as "ingredient!",
-                round(weight * $1, 10) as "weight!",
+                round(COALESCE(weight, 0) * $1, 10) as "weight!",
                 subrecipe as "subrecipe!",
                 is_subrecipe as "is_subrecipe!",
                 subrecipe_id as "subrecipe_id!",
@@ -224,7 +348,145 @@ impl ExportOps {
             subrecipes: recipes,
             properties,
             dietary,
+            is_prep: false,
+            prep_for: Vec::new(),
+            prepped_subrecipe_ids: Vec::new(),
         })
+    }
+
+    /// All prep availability windows for an event, fetched once so per-consumer
+    /// attribution can be resolved in memory (see [`PrepWindows::ids_available_at`])
+    /// instead of a query per meal/prep. Uses the same `[use_from, use_until]`
+    /// window the shopping-tour views use (`resolved_prep_starts`:
+    /// `use_from = COALESCE(use_from, prep_date)`).
+    async fn event_prep_windows(&self, event_id: i32) -> Result<PrepWindows> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT recipe_id,
+                   COALESCE(use_from, prep_date) as "use_from!",
+                   use_until
+            FROM food_prep
+            WHERE event_id = $1
+            "#,
+            event_id,
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(PrepWindows {
+            windows: rows
+                .into_iter()
+                .map(|r| (r.recipe_id, r.use_from, r.use_until))
+                .collect(),
+        })
+    }
+
+    /// Total prepped weight per prep for an event, in one query. Avoids the
+    /// per-prep `prep_ingredients_with_duplicates` scan (each ~0.6s) in the
+    /// combined export. Keyed by prep_id.
+    async fn event_prep_weights(
+        &self,
+        event_id: i32,
+    ) -> Result<std::collections::HashMap<i32, BigDecimal>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT d.prep_id as "prep_id!", COALESCE(SUM(d.weight), 0) as "weight!"
+            FROM prep_ingredients_with_duplicates d
+            JOIN food_prep fp ON fp.prep_id = d.prep_id
+            WHERE fp.event_id = $1
+            GROUP BY d.prep_id
+            "#,
+            event_id,
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|r| (r.prep_id, r.weight)).collect())
+    }
+
+    /// Per-prep downstream meal allocation for an event, in one query over the
+    /// recursive prep-attribution view (the export's most expensive query, ~0.85s
+    /// each per prep). Returns prep_id -> [(meal recipe name, weight %)].
+    async fn event_prep_allocations(
+        &self,
+        event_id: i32,
+    ) -> Result<std::collections::HashMap<i32, Vec<(String, f64)>>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT pi.prep_id as "prep_id!", r.name as "recipe!",
+                   sum(eibptr.weight) as "weight!"
+            FROM prep_ingredients pi
+            JOIN event_ingredients_before_prep_time_resolve eibptr
+              ON eibptr.event_id = pi.event_id
+             AND eibptr.ingredient_id = pi.ingredient_id
+             AND eibptr.subrecipe_hierarchy = pi.subrecipe_hierarchy
+             AND eibptr.meal_id = pi.meal_id
+            JOIN event_meals em ON em.meal_id = pi.meal_id
+            JOIN recipes r ON r.recipe_id = em.recipe_id
+            WHERE pi.event_id = $1
+            GROUP BY pi.prep_id, r.name
+            "#,
+            event_id,
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        // Group by prep, then normalise each prep's rows to percentages.
+        let mut raw: std::collections::HashMap<i32, Vec<(String, f64)>> =
+            std::collections::HashMap::new();
+        for row in rows {
+            raw.entry(row.prep_id)
+                .or_default()
+                .push((row.recipe, row.weight.to_f64().unwrap_or(0.0)));
+        }
+        let mut out = std::collections::HashMap::new();
+        for (prep_id, entries) in raw {
+            let total: f64 = entries.iter().map(|(_, w)| w).sum();
+            if total <= 0.0 {
+                continue;
+            }
+            let mut alloc: Vec<(String, f64)> = entries
+                .into_iter()
+                .map(|(name, w)| (name, w / total * 100.0))
+                .collect();
+            alloc.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            out.insert(prep_id, alloc);
+        }
+        Ok(out)
+    }
+
+    /// For a prep task, resolve which event meals consume it and each meal's
+    /// share of the prepped weight (as a percentage). Aggregated by downstream
+    /// recipe name so multiple servings of the same dish collapse into one entry.
+    async fn fetch_prep_allocation(&self, prep_id: i32) -> Result<Vec<(String, f64)>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT r.name as "recipe!", sum(eibptr.weight) as "weight!"
+            FROM prep_ingredients pi
+            JOIN event_ingredients_before_prep_time_resolve eibptr
+              ON eibptr.event_id = pi.event_id
+             AND eibptr.ingredient_id = pi.ingredient_id
+             AND eibptr.subrecipe_hierarchy = pi.subrecipe_hierarchy
+             AND eibptr.meal_id = pi.meal_id
+            JOIN event_meals em ON em.meal_id = pi.meal_id
+            JOIN recipes r ON r.recipe_id = em.recipe_id
+            WHERE pi.prep_id = $1
+            GROUP BY r.name
+            "#,
+            prep_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let total: f64 = rows.iter().map(|r| r.weight.to_f64().unwrap_or(0.0)).sum();
+        if total <= 0.0 {
+            return Ok(Vec::new());
+        }
+        let mut alloc: Vec<(String, f64)> = rows
+            .into_iter()
+            .map(|r| (r.recipe, r.weight.to_f64().unwrap_or(0.0) / total * 100.0))
+            .collect();
+        // Largest share first so the most relevant meal reads first.
+        alloc.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(alloc)
     }
 
     /// Fetch the allergen/dietary summary for every meal of an event, used to

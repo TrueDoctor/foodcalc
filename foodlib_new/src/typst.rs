@@ -180,19 +180,120 @@ fn format_time(t: time::OffsetDateTime) -> String {
 }
 
 
+/// Subrecipe ids that should render inline on the previous page instead of
+/// forcing their own page. These are the "boiling water" helper recipes whose
+/// step timing (calibrated for a 3.5 kW induction stove) still matters but
+/// which are too small to warrant a dedicated sheet.
+/// NOTE: production recipe ids — Kochendes Wasser (282), Kochendes Salzwasser (408).
+const WATER_RECIPE_IDS: [i32; 2] = [282, 408];
+
 async fn format_recipe_info_typst(info: RecipeInfo) -> eyre::Result<String> {
-    let mut preamble = TEMPLATE_FILE.to_string();
+    let mut out = TEMPLATE_FILE.to_string();
+    format_recipe_info_body(&mut out, info)?;
+    Ok(out)
+}
+
+/// Render every recipe sheet for an event into one document, compiled once.
+pub async fn export_combined(items: Vec<RecipeInfo>) -> eyre::Result<Vec<u8>> {
+    let mut out = TEMPLATE_FILE.to_string();
+    for info in items {
+        format_recipe_info_body(&mut out, info)?;
+    }
+    create_pdf(out)
+}
+
+/// Append one recipe's typst body (all its subrecipe pages, with water helpers
+/// folded inline) onto `text`. Shared by single-recipe and combined exports.
+fn format_recipe_info_body(text: &mut String, info: RecipeInfo) -> eyre::Result<()> {
     let allergen_block = format_allergen_block(&info.properties, info.dietary);
-    for recipe in info.subrecipes {
+    let prep_for = if info.is_prep {
+        Some(info.prep_for.as_slice())
+    } else {
+        None
+    };
+    // For each water subrecipe, the extra (non-water) ingredients it carries —
+    // e.g. "Kochendes Salzwasser" (408) has salt — expressed as a fraction of
+    // that subrecipe's total weight, so the inline note can scale them to the
+    // usage-site water amount. Keyed by water recipe id.
+    let water_extras = water_extra_ingredients(&info.subrecipes);
+    // The prep banner only rides on the first (root) recipe of the sheet.
+    let mut first = true;
+    for recipe in &info.subrecipes {
+        let subrecipe_id = recipe.0.first().map(|sr| sr.subrecipe_id);
+        // Water helper recipes are not given their own page; they are rendered
+        // inline below each recipe that uses them (see below).
+        if subrecipe_id.is_some_and(|id| WATER_RECIPE_IDS.contains(&id)) {
+            continue;
+        }
+        // Subrecipes that are prepped ahead for the event are assumed already
+        // made: skip their section entirely (the meta-ingredient still lists
+        // them, marked "aus Food Prep").
+        if subrecipe_id.is_some_and(|id| info.prepped_subrecipe_ids.contains(&id)) {
+            continue;
+        }
         format_subrecipe(
-            &mut preamble,
+            text,
             &recipe.0,
             &recipe.1,
             &info.date,
             &allergen_block,
+            if first { prep_for } else { None },
+            &info.prepped_subrecipe_ids,
+            &water_extras,
         )?;
+        first = false;
     }
-    Ok(preamble)
+    Ok(())
+}
+
+/// Non-water extra ingredients per water subrecipe, as fractions of the
+/// subrecipe's total weight. For "Kochendes Salzwasser" this yields the salt
+/// fraction so the inline note can show salt scaled to the usage amount.
+/// Keyed by water recipe id (e.g. 408). Water itself ("Wasser") is excluded.
+fn water_extra_ingredients(
+    subrecipes: &[(Vec<SubRecipe>, Vec<RecipeStep>)],
+) -> std::collections::HashMap<i32, Vec<(String, f64)>> {
+    let mut map = std::collections::HashMap::new();
+    for (rows, _) in subrecipes {
+        let Some(id) = rows.first().map(|sr| sr.subrecipe_id) else { continue };
+        if !WATER_RECIPE_IDS.contains(&id) {
+            continue;
+        }
+        let total: f64 = rows
+            .iter()
+            .filter(|sr| !sr.is_subrecipe)
+            .map(|sr| sr.weight.to_f64().unwrap_or(0.0))
+            .sum();
+        if total <= 0.0 {
+            continue;
+        }
+        let extras: Vec<(String, f64)> = rows
+            .iter()
+            .filter(|sr| !sr.is_subrecipe)
+            .filter(|sr| !sr.ingredient.eq_ignore_ascii_case("Wasser"))
+            .map(|sr| {
+                (
+                    escape_underscore(&sr.ingredient),
+                    sr.weight.to_f64().unwrap_or(0.0) / total,
+                )
+            })
+            .collect();
+        if !extras.is_empty() {
+            map.insert(id, extras);
+        }
+    }
+    map
+}
+
+/// The child recipe id a meta-ingredient row refers to, parsed from the last
+/// segment of its `subrecipe_hierarchy` (e.g. "58.282" -> 282).
+fn meta_child_id(sr: &SubRecipe) -> Option<i32> {
+    sr.subrecipe_hierarchy
+        .as_deref()?
+        .rsplit('.')
+        .next()?
+        .parse()
+        .ok()
 }
 
 /// Produce a typst literal for the dictionary the template's `#recipe` function expects
@@ -217,6 +318,9 @@ fn format_subrecipe(
     steps: &[RecipeStep],
     date: &str,
     allergen_block: &str,
+    prep_for: Option<&[(String, f64)]>,
+    prepped_ids: &[i32],
+    water_extras: &std::collections::HashMap<i32, Vec<(String, f64)>>,
 ) -> eyre::Result<()> {
     let title = escape_underscore(
         &subrecipes
@@ -234,12 +338,17 @@ fn format_subrecipe(
     use std::fmt::Write;
     writeln!(text, "#recipe(\"{title}\",\"{date}\",")?;
     writeln!(text, "(\"subrecipes\":( ")?;
-    for ingredient in meta_ingredients {
+    for ingredient in &meta_ingredients {
+        // A meta-ingredient sourced from food prep is flagged so the template can
+        // mark it and the cook knows not to make it fresh.
+        let from_prep = meta_child_id(ingredient)
+            .is_some_and(|id| prepped_ids.contains(&id));
         writeln!(
             text,
-            r#"("{}",{}),"#,
+            r#"("{}",{},{}),"#,
             escape_underscore(&ingredient.ingredient),
-            ingredient.weight
+            ingredient.weight,
+            from_prep
         )?;
     }
     writeln!(text, "), \"ingredients\": (")?;
@@ -262,7 +371,50 @@ fn format_subrecipe(
             to_minutes(&step.duration_per_kg) * total_weight.to_f64().unwrap_or_default()
         )?;
     }
-    writeln!(text, "),{allergen_block})")?;
+    write!(text, "),{allergen_block}")?;
+    if let Some(prep_for) = prep_for {
+        write!(text, ", prep_for: (")?;
+        for (name, pct) in prep_for {
+            write!(
+                text,
+                r#"("{}",{:.1}),"#,
+                escape_typst_string(name),
+                pct
+            )?;
+        }
+        write!(text, ")")?;
+    }
+    // Boiling-water helpers for each water subrecipe this recipe uses, rendered
+    // *inside* #recipe so they stay on the same page (not floated onto the next).
+    // The meta-ingredient weight is the scaled water amount for this usage site.
+    write!(text, ", water: (")?;
+    for meta in &meta_ingredients {
+        let Some(water_id) = meta_child_id(meta).filter(|id| WATER_RECIPE_IDS.contains(id))
+        else {
+            continue;
+        };
+        let water_kg = meta.weight.to_f64().unwrap_or_default();
+        // Extra ingredients (e.g. salt in Salzwasser), scaled to this usage.
+        write!(
+            text,
+            r#"("{}",{},("#,
+            escape_typst_string(&escape_underscore(&meta.ingredient)),
+            meta.weight
+        )?;
+        if let Some(extras) = water_extras.get(&water_id) {
+            for (name, frac) in extras {
+                write!(
+                    text,
+                    r#"("{}",{:.6}),"#,
+                    escape_typst_string(name),
+                    frac * water_kg
+                )?;
+            }
+        }
+        write!(text, ")),")?;
+    }
+    write!(text, ")")?;
+    writeln!(text, ")")?;
     Ok(())
 }
 

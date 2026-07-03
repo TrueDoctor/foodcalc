@@ -10,7 +10,7 @@ use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
 use crate::{
-    frontend::{events_tab::event_detail_tab, html_error, MResponse},
+    frontend::{events_tab::event_detail_tab, html_error, icons, MResponse},
     FoodLib, MyAppState,
 };
 
@@ -310,23 +310,17 @@ fn format_food_prep(event_id: i32, prep: &FoodPrep, recipe: &Recipe) -> Markup {
             td data-label="Use From" { (use_from) }
             td data-label="Use Until" { (use_until) }
             td class="no-label" {
-                form class="m-0" action=(format!("/events/edit/export_food_prep_pdf/{}", prep.id)) {
-                    button class="btn btn-primary" { "Print" }
-                }
-            }
-            td class="no-label" {
-                button class="btn btn-primary"
-                    hx-target="#content"
-                    hx-push-url="true"
-                    hx-get=(format!("/events/edit/food_prep/edit/{}/{}", event_id, prep.id)) {
-                    "Edit"
-                }
-            }
-            td class="no-label" {
-                button class="btn btn-cancel"
-                    hx-target="#content"
-                    hx-get=(format!("/events/edit/food_prep/delete_dialog/{}/{}", event_id, prep.id)) {
-                    "Delete"
+                div class="flex flex-row flex-nowrap gap-2 justify-end items-center" {
+                    form class="m-0" action=(format!("/events/edit/export_food_prep_pdf/{}", prep.id)) {
+                        button class="icon-btn" type="submit" title="Print" aria-label="Print" { (icons::print()) }
+                    }
+                    button class="icon-btn" title="Edit" aria-label="Edit"
+                        hx-target="#content"
+                        hx-push-url="true"
+                        hx-get=(format!("/events/edit/food_prep/edit/{}/{}", event_id, prep.id)) { (icons::edit()) }
+                    button class="icon-btn" title="Delete" aria-label="Delete"
+                        hx-target="#content"
+                        hx-get=(format!("/events/edit/food_prep/delete_dialog/{}/{}", event_id, prep.id)) { (icons::delete()) }
                 }
             }
         }
@@ -363,7 +357,7 @@ pub async fn render_food_prep(
                     th { "Prep Date" }
                     th { "Use From" }
                     th { "Use Until" }
-                    th {} th {} th {}
+                    th {}
                 }
             }
             tbody {
@@ -407,12 +401,13 @@ fn food_prep_add_row(
             td data-label="Prep Date" { input class="text w-full" type="datetime-local" name="prep_date" value=(prep_value) required="required"; }
             td data-label="Use From" { input class="text w-full" type="datetime-local" name="use_from"; }
             td data-label="Use Until" { input class="text w-full" type="datetime-local" name="use_until" value=(until_value) required="required"; }
-            td class="no-label" {} td class="no-label" {}
             td class="no-label" {
-                button class="btn btn-primary" type="button"
-                    hx-post=(url)
-                    hx-include="closest tr"
-                    hx-target="#content" { "Add" }
+                div class="flex flex-row justify-end" {
+                    button class="btn btn-primary" type="button"
+                        hx-post=(url)
+                        hx-include="closest tr"
+                        hx-target="#content" { "Add" }
+                }
             }
         }
     }

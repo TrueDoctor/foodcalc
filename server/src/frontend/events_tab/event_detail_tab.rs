@@ -20,7 +20,7 @@ mod food_prep;
 mod shopping_tours;
 
 use crate::{
-    frontend::{move_group, MResponse},
+    frontend::{icons, move_group, MResponse},
     MyAppState,
 };
 
@@ -34,6 +34,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
             get(delete_override_dialog),
         )
         .route("/export_pdf/{meal_id}", get(export_recipe_pdf))
+        .route("/export_all/{event_id}", get(export_all_pdf))
         .route("/export_food_prep_pdf/{prep_id}", get(export_food_prep_pdf))
         .route("/dish_labels/{event_id}", get(export_dish_labels_flat))
         .route("/dish_labels_tent/{event_id}", get(export_dish_labels_tent))
@@ -344,6 +345,45 @@ pub async fn export_event_allergens(
     ))
 }
 
+/// Combined PDF for an entire event: every meal recipe plus every food-prep
+/// sheet, ordered chronologically, in a single download.
+pub async fn export_all_pdf(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
+    ctx.assert_can_edit_event(event_id).await?;
+    let event = state.events().get(event_id).await?;
+    let filename = format!("{}_alle_rezepte", sanitize_filename(&event.name));
+
+    let recipes = state.export().fetch_event_combined(event_id).await?;
+
+    #[cfg(feature = "typst")]
+    let result = foodlib_new::typst::export_combined(recipes).await;
+    #[cfg(not(feature = "typst"))]
+    let result = {
+        let _ = recipes;
+        Err(foodlib_new::Error::Misc(
+            "Server compiled without typst support".into(),
+        ))
+    };
+    let pdf = result.map_err(|e| foodlib_new::Error::Misc(e.to_string()))?;
+
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}.pdf\""),
+            ),
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/pdf".to_string(),
+            ),
+        ],
+        pdf,
+    ))
+}
+
 fn sanitize_filename(s: &str) -> String {
     s.chars()
         .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
@@ -428,8 +468,9 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
         }
         div hx-get=(format!("/events/edit/{}/uncovered-ingredients", event_id)) hx-trigger="load" hx-swap="outerHTML" {}
         div class="flex flex-col items-center gap-2 mb-3 mt-3 p-3 rounded-lg border border-gray-700" {
-            p class="text-lg font-semibold" { "Allergen exports" }
+            p class="text-lg font-semibold" { "Exports" }
             div class="flex flex-row flex-wrap gap-2 justify-center" {
+                a class="btn btn-primary" target="_blank" href=(format!("/events/edit/export_all/{}", event_id)) { "Alle Rezepte + Prep (PDF)" }
                 a class="btn btn-primary" target="_blank" href=(format!("/events/edit/allergen_overview/{}", event_id)) { "Event overview (PDF)" }
                 a class="btn btn-primary" target="_blank" href=(format!("/events/edit/dish_labels/{}", event_id)) { "Dish labels — flat (6 / page)" }
                 a class="btn btn-primary" target="_blank" href=(format!("/events/edit/dish_labels_tent/{}", event_id)) { "Dish labels — tent (fold)" }
@@ -439,7 +480,7 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
             p class="text-2xl" { "Meals" }
         }
         table class="w-full text-inherit table-auto object-center mb-2 responsive-card no-stripe" {
-            thead { tr { th { "Recipe" } th {"Start Time"} th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} th {} th {} th {} th {} }  }
+            thead { tr { th { "Recipe" } th {"Start Time"} th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} }  }
             tbody class="text-center" id="meals-tbody" {
                 (meal_add_row(event_id, &recipes, default_meal_start))
                 (format_event_meal_groups(event_id, &meals))
@@ -769,7 +810,9 @@ fn format_event_source_override(
             }
             td class="no-label" { (button) }
             td class="no-label" { @if source_override.ingredient_id != -1 {
-                button class="btn btn-cancel" hx-get=(format!("/events/edit/{}/overrides/{}/delete_dialog", source_override.event_id, source_override.source_id)) hx-target="this" hx-swap="outerHTML" { "Delete" } }}
+                div class="flex flex-row justify-end" {
+                    button class="icon-btn" title="Delete" aria-label="Delete" hx-get=(format!("/events/edit/{}/overrides/{}/delete_dialog", source_override.event_id, source_override.source_id)) hx-target="this" hx-swap="outerHTML" { (icons::delete()) }
+                } }}
         }
     }
 }
@@ -799,13 +842,15 @@ fn meal_add_row(
             }
             td data-label="Start Time" { input class="text w-full" type="datetime-local" name="start_time" value=(start_value); }
             td data-label="Servings" { input class="text w-full" type="number" name="servings" min="1" placeholder="Servings"; }
-            td class="no-label" {} td class="no-label" {} td class="no-label" {} td class="no-label" {} td class="no-label" {} td class="no-label" {}
+            td class="no-label" {} td class="no-label" {} td class="no-label" {}
             td class="no-label" {
-                button class="btn btn-primary" type="button"
-                    hx-get=(url)
-                    hx-include="closest tr"
-                    hx-target="#content"
-                    hx-push-url="true" { "Add" }
+                div class="flex flex-row justify-end" {
+                    button class="btn btn-primary" type="button"
+                        hx-get=(url)
+                        hx-include="closest tr"
+                        hx-target="#content"
+                        hx-push-url="true" { "Add" }
+                }
             }
         }
     }
@@ -823,7 +868,7 @@ fn format_event_meal_groups(event_id: i32, meals: &[Meal]) -> Markup {
             }
             // Empty spacer row separates this group from the next header.
             // Hidden on mobile, where responsive-card already spaces cards.
-            tr class="meal-group-band hidden sm:table-row" aria-hidden="true" { td colspan="11" class="h-4 no-label" {} }
+            tr class="meal-group-band hidden sm:table-row" aria-hidden="true" { td colspan="7" class="h-4 no-label" {} }
         }
     }
 }
@@ -868,10 +913,6 @@ fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Ma
             td data-label="Weight" { (format!("{:.2}kg", total_weight_kg)) }
             td data-label="Price" id=(format!("group-price-{}", start_time.unix_timestamp())) { "…" }
             td class="no-label" {}
-            td class="no-label" {}
-            td class="no-label" {}
-            td class="no-label" {}
-            td class="no-label" {}
         }
     }
 }
@@ -884,10 +925,12 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
     html! {
         tr class="meal-row" {
             td data-label="Recipe" {
-                (event_meal.name)
-                @if !comment.is_empty() {
-                    br;
-                    span class="text-sm opacity-60 italic" { (comment) }
+                div class="sm:max-w-[14rem] break-words whitespace-normal sm:mx-auto" {
+                    (event_meal.name)
+                    @if !comment.is_empty() {
+                        br;
+                        span class="text-sm opacity-60 italic" { (comment) }
+                    }
                 }
             }
             td data-label="Start Time" { (event_meal.start_time.format(&time_format).unwrap()) }
@@ -895,14 +938,25 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
             (format("Energy", event_meal.energy.to_f64().unwrap_or_default(), "kj"))
             (format("Weight", event_meal.weight.to_f64().unwrap_or_default() / event_meal.servings as f64 * 1000., "g"))
             td data-label="Price" id=(format!("meal-price-{}", event_meal.meal_id)) { "…" }
-            td class="no-label" { button class="btn btn-primary" hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) {"Ing./serving"} }
-            td class="no-label" { form class="m-0" action=(format!("/events/edit/export_pdf/{}", event_meal.meal_id)) { button class="btn btn-primary" {"Print"} } }
-            td class="no-label" { button class="btn btn-primary"
-                hx-target="#content"
-                hx-push-url="true"
-                hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) {"Edit"} }
-            td class="no-label" { button class="btn btn-primary" hx-target="#content" hx-swap="innerHTML" hx-post=(format!("/events/edit/event_edit_meal/duplicate/{}/{}", event_id, event_meal.meal_id)) {"Duplicate"} }
-            td class="no-label" { button class="btn btn-cancel" hx-target="#content" hx-get=(format!("/events/edit/delete/{}/{}", event_id, event_meal.meal_id)) {"Delete"} }
+            td class="no-label" {
+                div class="flex flex-row flex-nowrap gap-2 justify-end items-center" {
+                    button class="icon-btn" title="Ingredients per serving" aria-label="Ingredients per serving"
+                        hx-swap="afterend" hx-get=(format!("/events/edit/ingredients-per-serving/{}", event_meal.meal_id)) { (icons::list()) }
+                    form class="m-0" action=(format!("/events/edit/export_pdf/{}", event_meal.meal_id)) {
+                        button class="icon-btn" type="submit" title="Print" aria-label="Print" { (icons::print()) }
+                    }
+                    button class="icon-btn" title="Edit" aria-label="Edit"
+                        hx-target="#content"
+                        hx-push-url="true"
+                        hx-get=(format!("/events/edit/event_edit_meal/{}/{}", event_id, event_meal.meal_id)) { (icons::edit()) }
+                    button class="icon-btn" title="Duplicate" aria-label="Duplicate"
+                        hx-target="#content" hx-swap="innerHTML"
+                        hx-post=(format!("/events/edit/event_edit_meal/duplicate/{}/{}", event_id, event_meal.meal_id)) { (icons::duplicate()) }
+                    button class="icon-btn" title="Delete" aria-label="Delete"
+                        hx-target="#content"
+                        hx-get=(format!("/events/edit/delete/{}/{}", event_id, event_meal.meal_id)) { (icons::delete()) }
+                }
+            }
         }
     }
 }
