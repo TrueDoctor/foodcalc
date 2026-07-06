@@ -480,7 +480,7 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
             p class="text-2xl" { "Meals" }
         }
         table class="w-full text-inherit table-auto object-center mb-2 responsive-card no-stripe" {
-            thead { tr { th { "Recipe" } th {"Start Time"} th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} }  }
+            thead { tr { th { "Recipe" } th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} }  }
             tbody class="text-center" id="meals-tbody" {
                 (meal_add_row(event_id, &recipes, default_meal_start))
                 (format_event_meal_groups(event_id, &meals))
@@ -868,8 +868,8 @@ fn meal_add_row(
                     }
                 }
             }
-            td data-label="Start Time" { input class="text w-full" type="datetime-local" name="start_time" value=(start_value); }
             td data-label="Servings" { input class="text w-full" type="number" name="servings" min="1" placeholder="Servings"; }
+            input type="hidden" name="start_time" value=(start_value);
             td class="no-label" {} td class="no-label" {} td class="no-label" {}
             td class="no-label" {
                 div class="flex flex-row justify-end" {
@@ -896,17 +896,31 @@ fn format_event_meal_groups(event_id: i32, meals: &[Meal]) -> Markup {
             }
             // Empty spacer row separates this group from the next header.
             // Hidden on mobile, where responsive-card already spaces cards.
-            tr class="meal-group-band hidden sm:table-row" aria-hidden="true" { td colspan="7" class="h-4 no-label" {} }
+            tr class="meal-group-band hidden sm:table-row" aria-hidden="true" { td colspan="6" class="h-4 no-label" {} }
         }
     }
 }
 
-/// Header/divider row opening a meal group. Shows the group's time range
-/// (shared start – latest end, spilling into the Start Time column) and absolute
-/// subtotals: energy (kj) summed over `energy_per_serving × servings`, total
-/// weight (g), and a lazily-filled price cell keyed by the group's unix
-/// timestamp. The bottom border draws the divider, so the date/time text sits
-/// above the line and its meals below.
+/// German weekday name for a group header (e.g. "Montag").
+fn german_weekday(weekday: time::Weekday) -> &'static str {
+    use time::Weekday::*;
+    match weekday {
+        Monday => "Montag",
+        Tuesday => "Dienstag",
+        Wednesday => "Mittwoch",
+        Thursday => "Donnerstag",
+        Friday => "Freitag",
+        Saturday => "Samstag",
+        Sunday => "Sonntag",
+    }
+}
+
+/// Header/divider row opening a meal group. Shows the group's weekday, time
+/// range (shared start – latest end) and location, plus absolute subtotals:
+/// energy (kj) summed over `energy_per_serving × servings`, total weight (g),
+/// and a lazily-filled price cell keyed by the group's unix timestamp. The
+/// bottom border draws the divider, so the header text sits above the line and
+/// its meals below.
 fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Markup {
     let time_format = format_description!("[day].[month] [hour]:[minute]");
     let time_only = format_description!("[hour]:[minute]");
@@ -932,10 +946,21 @@ fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Ma
         group_end.format(&time_format).unwrap_or_default()
     };
 
+    let weekday = german_weekday(start_time.weekday());
+
+    let mut places: Vec<&str> = Vec::new();
+    for m in group {
+        let name = m.place.trim();
+        if !name.is_empty() && !places.contains(&name) {
+            places.push(name);
+        }
+    }
+    let place_str = places.join(", ");
+
     html! {
         tr class="meal-group-band border-b-2 border-gray-400 dark:border-gray-500 font-semibold" {
-            // Spans the Recipe + Start Time columns so the time range has room.
-            td data-label="Time" colspan="2" { (start_str) " – " (end_str) }
+            td data-label="Time" { (weekday) ", " (start_str) " – " (end_str)
+                @if !place_str.is_empty() { " · " (place_str) } }
             td class="no-label" {}
             td data-label="Energy" { (format!("{:.1}MJ", total_energy_mj)) }
             td data-label="Weight" { (format!("{:.2}kg", total_weight_kg)) }
@@ -947,7 +972,6 @@ fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Ma
 
 fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
     let format = |label: &'static str, x, unit| html! { td data-label=(label) { (&format!("{:.3}{}", x, unit)) } };
-    let time_format = format_description!("[day].[month] [hour]:[minute]");
     let comment = event_meal.comment.as_deref().unwrap_or("").trim().to_string();
 
     html! {
@@ -961,7 +985,6 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
                     }
                 }
             }
-            td data-label="Start Time" { (event_meal.start_time.format(&time_format).unwrap()) }
             td data-label="Servings" { (event_meal.servings) }
             (format("Energy", event_meal.energy.to_f64().unwrap_or_default(), "kj"))
             (format("Weight", event_meal.weight.to_f64().unwrap_or_default() / event_meal.servings as f64 * 1000., "g"))
