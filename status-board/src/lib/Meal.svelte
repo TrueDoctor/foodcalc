@@ -135,12 +135,20 @@
       <h3 class="text-lg font-semibold text-unifest-green-dark">
         {meal.recipe} {#if isAdmin}<span class="text-sm text-gray-500">({meal.meal_id})</span>{/if}
       </h3>
-      <button 
-        on:click={() => window.open(`http://catering.campus-kit.de/recipes/export_pdf/${meal.recipe_id}?energy=3000&number_of_servings=1`, '_blank')}
-        class="bg-unifest-green text-white text-xs px-2 py-1 rounded hover:bg-unifest-green-dark"
+      <!--
+        Real anchor instead of a scripted window.open: Android Chrome blocks
+        script-triggered popups (and http:// links opened from an https:// page
+        as mixed content), which made this button do nothing on phones.
+        Protocol-relative URL inherits the page scheme so it stays https on prod.
+      -->
+      <a
+        href={`//catering.campus-kit.de/recipes/export_pdf/${meal.recipe_id}?energy=3000&number_of_servings=1`}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-block bg-unifest-green text-white text-xs px-2 py-1 rounded hover:bg-unifest-green-dark"
       >
         Ingredients
-      </button>
+      </a>
       <p class="text-sm text-gray-600 mb-2">Location: {meal.place}</p>
     </div>
     

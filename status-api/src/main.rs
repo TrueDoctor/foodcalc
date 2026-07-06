@@ -335,8 +335,14 @@ async fn main() {
     let food_lib = FoodLib::new(pg_pool);
 
     println!("Setting up Logging");
+    // DEBUG logs every request via TraceLayer, which is heavy noise on a
+    // dashboard that's polled by many tabs every 10s. Default to INFO and let
+    // RUST_LOG override when debugging.
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
         .init();
 
     let cors = CorsLayer::new()

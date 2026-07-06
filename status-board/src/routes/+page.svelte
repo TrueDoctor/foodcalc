@@ -34,40 +34,47 @@
     async function loadEvents() {
         try {
             events = await fetchEvents();
-            
+
             // In admin mode, all events are considered active
             if (isAdmin) {
                 activeEvents = [...events]; // Create a copy of all events
                 return;
             }
-            
-            // Fetch meals for each event to determine which ones have active meals
-            for (const event of events) {
-                try {
-                    const eventMeals = await fetchMeals(event.id);
-                    
-                    // Check if any meals in this event are active (not in the past)
-                    const hasActiveMeals = eventMeals.some(day => 
-                        day.some(meal => isMealActive(meal))
-                    );
-                    
-                    if (hasActiveMeals) {
-                        activeEvents.push(event);
-                    }
-                } catch (err) {
-                    console.error(`Could not fetch meals for event ${event.id}:`, err);
-                }
-            }
+
+            // Fan out all per-event meal fetches concurrently instead of
+            // awaiting them one at a time. Promise.allSettled means one failing
+            // event doesn't abort the whole dropdown, and the requests overlap
+            // on the wire rather than running N sequential round-trips.
+            const results = await Promise.allSettled(
+                events.map(event => fetchMeals(event.id))
+            );
+
+            // Keep events that have at least one meal still active (end time in
+            // the future). A rejected fetch means we couldn't tell, so we keep
+            // the event rather than letting a transient API blip hide it.
+            activeEvents = events.filter((event, i) => {
+                const r = results[i];
+                if (r.status === 'rejected') return true;
+                return r.value.some(day => day.some(meal => isMealActive(meal)));
+            });
         } catch (err) {
             console.error('Error fetching events:', err);
         }
     }
     
+    // Guard against overlapping refresh cycles: on a slow network the 10s
+    // interval could otherwise fire a new fetchData() before the previous one
+    // finished, stacking in-flight requests and letting a stale response
+    // clobber fresher state.
+    let fetchInFlight = false;
+
     async function fetchData() {
+        if (fetchInFlight) return;
+        fetchInFlight = true;
         isLoading = true;
         error = null;
         isPastEvent = false;
-        
+
         try {
             // Fetch meals
             const mealsData = await fetchMeals(eventId);
@@ -112,8 +119,13 @@
                 }
             }
 
-            // Fetch unread feedback count
-            await checkUnreadFeedback();
+            // Unread feedback is only surfaced in admin mode, so don't make
+            // every public viewer pay for this request on every refresh. It
+            // also doesn't need to block rendering of the meals, so fire it
+            // without awaiting.
+            if (isAdmin) {
+                checkUnreadFeedback();
+            }
         } catch (err) {
             // Parse error message to be more user-friendly
             if (err.message.includes('404') || err.message.includes('No meals found')) {
@@ -126,6 +138,7 @@
             }
             days = [];
         } finally {
+            fetchInFlight = false;
             isLoading = false;
         }
     }
@@ -139,6 +152,9 @@
             goto(`/`);
             eventId = null;
         }
+        // A user-initiated switch must take effect now, even if a background
+        // poll is mid-flight — otherwise the guard would defer it up to 10s.
+        fetchInFlight = false;
         fetchData();
     }
     
