@@ -1,7 +1,7 @@
 use crate::entities::allergen::DietaryFlags;
 use crate::entities::property::Property;
 use crate::entities::recipe::{RecipeStep, SubRecipe};
-use crate::ops::export::{EventAllergenInfo, RecipeInfo};
+use crate::ops::export::{EventAllergenInfo, RecipeInfo, SubrecipeSection};
 use bigdecimal::{BigDecimal, ToPrimitive};
 use sqlx::postgres::types::PgInterval;
 use typst::foundations::Bytes;
@@ -205,7 +205,6 @@ pub async fn export_combined(items: Vec<RecipeInfo>) -> eyre::Result<Vec<u8>> {
 /// Append one recipe's typst body (all its subrecipe pages, with water helpers
 /// folded inline) onto `text`. Shared by single-recipe and combined exports.
 fn format_recipe_info_body(text: &mut String, info: RecipeInfo) -> eyre::Result<()> {
-    let allergen_block = format_allergen_block(&info.properties, info.dietary);
     let prep_for = if info.is_prep {
         Some(info.prep_for.as_slice())
     } else {
@@ -219,7 +218,7 @@ fn format_recipe_info_body(text: &mut String, info: RecipeInfo) -> eyre::Result<
     // The prep banner only rides on the first (root) recipe of the sheet.
     let mut first = true;
     for recipe in &info.subrecipes {
-        let subrecipe_id = recipe.0.first().map(|sr| sr.subrecipe_id);
+        let subrecipe_id = recipe.ingredients.first().map(|sr| sr.subrecipe_id);
         // Water helper recipes are not given their own page; they are rendered
         // inline below each recipe that uses them (see below).
         if subrecipe_id.is_some_and(|id| WATER_RECIPE_IDS.contains(&id)) {
@@ -231,12 +230,16 @@ fn format_recipe_info_body(text: &mut String, info: RecipeInfo) -> eyre::Result<
         if subrecipe_id.is_some_and(|id| info.prepped_subrecipe_ids.contains(&id)) {
             continue;
         }
+        // Each page's dietary tag reflects *this* subrecipe's own ingredient tree,
+        // so a vegan sub reads vegan even when a non-vegan sibling shares the sheet.
+        let allergen_block = format_allergen_block(&recipe.properties, recipe.dietary);
         format_subrecipe(
             text,
-            &recipe.0,
-            &recipe.1,
+            &recipe.ingredients,
+            &recipe.steps,
             &info.date,
             &allergen_block,
+            &recipe.root_recipe,
             if first { prep_for } else { None },
             // The eingewogen badge only rides on the first (root) recipe sheet.
             first && info.weighed_in,
@@ -253,10 +256,11 @@ fn format_recipe_info_body(text: &mut String, info: RecipeInfo) -> eyre::Result<
 /// fraction so the inline note can show salt scaled to the usage amount.
 /// Keyed by water recipe id (e.g. 408). Water itself ("Wasser") is excluded.
 fn water_extra_ingredients(
-    subrecipes: &[(Vec<SubRecipe>, Vec<RecipeStep>)],
+    subrecipes: &[SubrecipeSection],
 ) -> std::collections::HashMap<i32, Vec<(String, f64)>> {
     let mut map = std::collections::HashMap::new();
-    for (rows, _) in subrecipes {
+    for section in subrecipes {
+        let rows = &section.ingredients;
         let Some(id) = rows.first().map(|sr| sr.subrecipe_id) else { continue };
         if !WATER_RECIPE_IDS.contains(&id) {
             continue;
@@ -314,12 +318,14 @@ fn format_allergen_block(properties: &[Property], dietary: DietaryFlags) -> Stri
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn format_subrecipe(
     text: &mut String,
     subrecipes: &[SubRecipe],
     steps: &[RecipeStep],
     date: &str,
     allergen_block: &str,
+    root_recipe: &str,
     prep_for: Option<&[(String, f64)]>,
     weighed_in: bool,
     prepped_ids: &[i32],
@@ -390,6 +396,11 @@ fn format_subrecipe(
     if weighed_in {
         write!(text, ", weighed_in: true")?;
     }
+    write!(
+        text,
+        r#", root: "{}""#,
+        escape_typst_string(&escape_underscore(root_recipe))
+    )?;
     // Boiling-water helpers for each water subrecipe this recipe uses, rendered
     // *inside* #recipe so they stay on the same page (not floated onto the next).
     // The meta-ingredient weight is the scaled water amount for this usage site.

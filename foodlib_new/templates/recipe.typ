@@ -149,12 +149,18 @@ rect(stroke: none, width: 100%)[
   box(stroke: 0.5pt + green, inset: (x: 6pt, y: 3pt), radius: 3pt, fill: green.lighten(80%))[*Eingewogen* #text(size: 0.85em)[(Mengen grammgenau)]]
 }
 
-#let recipe(name, date, ingredients, steps, allergens, prep_for: none, weighed_in: false, water: ()) = {
+#let recipe(name, date, ingredients, steps, allergens, prep_for: none, weighed_in: false, water: (), root: none) = {
   [
     #show: project.with(
       title: name,
       date: date,
     )
+    // When this page is a subrecipe of a larger dish, name that dish so the cook
+    // knows what the component belongs to.
+    #if root != none and root != name [
+      #align(center)[#text(size: 0.9em, style: "italic")[Teil von: #root]]
+      #v(0.5em)
+    ]
     #if prep_for != none [ #prep_banner(prep_for) #v(0.5em) ]
     #if weighed_in [ #weighed_in_badge() #v(0.5em) ]
     #allergen_block(allergens)

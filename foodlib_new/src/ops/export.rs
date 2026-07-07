@@ -11,7 +11,7 @@ use time::format_description;
 pub struct RecipeInfo {
     pub name: String,
     pub date: String,
-    pub subrecipes: Vec<(Vec<SubRecipe>, Vec<RecipeStep>)>,
+    pub subrecipes: Vec<SubrecipeSection>,
     /// Aggregated allergen properties from all ingredients (including subrecipes).
     pub properties: Vec<Property>,
     /// Derived dietary flags computed from `properties` via `allergens::dietary_flags`.
@@ -30,6 +30,24 @@ pub struct RecipeInfo {
     /// True when the recipe's ingredient amounts have been weighed and verified
     /// accurate to the gram ("eingewogen"); rendered as a badge on the sheet.
     pub weighed_in: bool,
+}
+
+/// One rendered section of a recipe sheet: a single (sub)recipe's ingredients and
+/// steps, plus its *own* allergen properties/flags — computed over that subrecipe's
+/// full ingredient tree, independent of the sheet's root recipe. This lets each page
+/// carry an accurate dietary tag (e.g. a vegan couscous salad stays vegan even when
+/// printed alongside a non-vegan mint dip on the same combined sheet).
+pub struct SubrecipeSection {
+    /// Ingredient rows (both leaf ingredients and meta-ingredient subrecipe refs).
+    pub ingredients: Vec<SubRecipe>,
+    pub steps: Vec<RecipeStep>,
+    /// This subrecipe's own aggregated allergen properties (full sub-tree).
+    pub properties: Vec<Property>,
+    /// Dietary flags derived from `properties`.
+    pub dietary: DietaryFlags,
+    /// Name of the sheet's root recipe, so a subrecipe page can show what dish it
+    /// belongs to (e.g. "Couscoussalat" carries root "Couscossalat + Minzdip").
+    pub root_recipe: String,
 }
 
 /// Lighter-weight summary for dish labels and event overviews — just identity + allergens.
@@ -321,7 +339,14 @@ impl ExportOps {
         let mut seen: HashSet<i32> = HashSet::new();
         keys.retain(|&x| seen.insert(x));
 
+        let name = subrecipes
+            .first()
+            .ok_or_else(|| Error::Misc("No subrecipe provided".into()))?
+            .subrecipe
+            .clone();
+
         let recipe_ops = crate::ops::recipes::RecipeOps::new(self.pool.clone());
+        let property_ops = crate::ops::properties::PropertyOps::new(self.pool.clone());
         let mut recipes = Vec::with_capacity(keys.len());
         for id in keys {
             let ingredients = subrecipes
@@ -330,16 +355,24 @@ impl ExportOps {
                 .cloned()
                 .collect::<Vec<SubRecipe>>();
             let steps = recipe_ops.get_steps(id).await.unwrap_or_default();
-            recipes.push((ingredients, steps));
+            // Each subrecipe's tag is derived from its *own* ingredient tree, not the
+            // sheet's root, so a vegan sub stays vegan next to a non-vegan sibling.
+            let sub_properties = property_ops
+                .get_recipe_properties(id)
+                .await
+                .map(|rp| rp.properties)
+                .unwrap_or_default();
+            let sub_dietary = crate::ops::allergens::dietary_flags(&sub_properties);
+            recipes.push(SubrecipeSection {
+                ingredients,
+                steps,
+                properties: sub_properties,
+                dietary: sub_dietary,
+                root_recipe: name.clone(),
+            });
         }
 
-        let name = subrecipes
-            .first()
-            .ok_or_else(|| Error::Misc("No subrecipe provided".into()))?
-            .subrecipe
-            .clone();
-
-        let properties = crate::ops::properties::PropertyOps::new(self.pool.clone())
+        let properties = property_ops
             .get_recipe_properties(recipe_id)
             .await?
             .properties;
