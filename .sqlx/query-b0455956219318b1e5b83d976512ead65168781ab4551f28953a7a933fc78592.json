@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                e.event_id as id,\n                e.event_name as name,\n                e.comment,\n                e.group_id,\n                e.budget\n            FROM events e\n            LEFT JOIN event_meals em ON e.event_id = em.event_id\n            LEFT JOIN food_prep fp ON e.event_id = fp.event_id\n            WHERE em.start_time >= $1 OR fp.prep_date >= $1\n            GROUP BY (e.event_id, e.event_name, e.group_id, e.budget)\n            ORDER BY MIN(em.start_time)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "group_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "budget",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "b0455956219318b1e5b83d976512ead65168781ab4551f28953a7a933fc78592"
+}

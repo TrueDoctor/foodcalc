@@ -13,6 +13,7 @@ async fn create_test_recipe(ops: &RecipeOps) -> Recipe {
         name: "Test Recipe".to_string(),
         comment: Some("Test Comment".to_string()),
         group_id: 1,
+        weighed_in: false,
     })
     .await
     .expect("Failed to create test recipe")
@@ -124,6 +125,7 @@ async fn test_meta_recipes(pool: PgPool) {
             name: "Child Recipe".to_string(),
             comment: None,
             group_id: 1,
+            weighed_in: false,
         })
         .await
         .expect("Failed to create child recipe");

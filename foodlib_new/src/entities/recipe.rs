@@ -8,6 +8,10 @@ pub struct Recipe {
     pub name: String,
     pub comment: Option<String>,
     pub group_id: i32,
+    /// True when every ingredient amount has been weighed and verified accurate
+    /// to the gram ("eingewogen"). Shown as a warning in the edit tab while
+    /// false and as a badge on the printed recipe sheet once true.
+    pub weighed_in: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

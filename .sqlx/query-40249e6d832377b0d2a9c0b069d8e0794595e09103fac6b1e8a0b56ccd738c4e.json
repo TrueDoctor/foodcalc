@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE food_prep SET prep_date = prep_date + $2, use_from = use_from + $2, use_until = use_until + $2 WHERE event_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Interval"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "40249e6d832377b0d2a9c0b069d8e0794595e09103fac6b1e8a0b56ccd738c4e"
+}

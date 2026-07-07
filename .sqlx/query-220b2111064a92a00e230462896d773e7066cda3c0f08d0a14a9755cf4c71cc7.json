@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE shopping_tours SET tour_date = tour_date + $2 WHERE event_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Interval"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "220b2111064a92a00e230462896d773e7066cda3c0f08d0a14a9755cf4c71cc7"
+}

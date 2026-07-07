@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT DISTINCT\n                e.event_id as id,\n                e.event_name as name,\n                e.comment,\n                e.group_id,\n                e.budget\n            FROM events e\n            LEFT JOIN event_meals em ON e.event_id = em.event_id\n            LEFT JOIN food_prep fp ON e.event_id = fp.event_id\n            GROUP BY e.event_id, e.event_name, e.comment, e.group_id, e.budget\n            HAVING MAX(GREATEST(em.end_time, fp.use_until)) < $1\n            ORDER BY e.event_name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "group_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "budget",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "ee6ee345caea8a81cc1c0f9f5a595609b628e9832851b7cea81d1b35227b0d91"
+}

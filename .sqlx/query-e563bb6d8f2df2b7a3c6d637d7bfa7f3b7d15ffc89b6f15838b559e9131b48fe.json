@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT DISTINCT s.ingredient_id, mc.article_number AS \"article_number!\"\n            FROM shopping_list sl\n            JOIN ingredient_sources s ON s.ingredient_id = sl.ingredient_id\n            JOIN metro_categories mc ON mc.ingredient_source_id = s.ingredient_source_id\n            WHERE sl.tour_id = $1\n              AND s.store_id = $2\n              AND mc.article_number IS NOT NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "article_number!",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "e563bb6d8f2df2b7a3c6d637d7bfa7f3b7d15ffc89b6f15838b559e9131b48fe"
+}

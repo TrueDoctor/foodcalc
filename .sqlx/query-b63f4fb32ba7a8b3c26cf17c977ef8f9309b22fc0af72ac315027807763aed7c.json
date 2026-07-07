@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT fp.property_id as \"id\", fp.name\n            FROM ingredient_properties ip\n            JOIN food_properties fp ON fp.property_id = ip.property_id\n            WHERE ip.ingredient_id = $1\n            ORDER BY fp.name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b63f4fb32ba7a8b3c26cf17c977ef8f9309b22fc0af72ac315027807763aed7c"
+}

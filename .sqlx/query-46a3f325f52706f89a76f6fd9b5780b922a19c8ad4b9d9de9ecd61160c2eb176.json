@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                em.meal_id as \"meal_id!\",\n                em.recipe_id,\n                r.name as recipe_name,\n                p.name as place,\n                em.servings,\n                em.start_time as \"start_time: time::OffsetDateTime\"\n            FROM event_meals em\n            JOIN recipes r ON r.recipe_id = em.recipe_id\n            JOIN places p ON p.place_id = em.place_id\n            WHERE em.event_id = $1\n            ORDER BY em.start_time, r.name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "meal_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "recipe_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "recipe_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "place",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "servings",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "start_time: time::OffsetDateTime",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "46a3f325f52706f89a76f6fd9b5780b922a19c8ad4b9d9de9ecd61160c2eb176"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT DISTINCT fp.property_id as \"id\", fp.name\n            FROM resolved_recipes r\n            JOIN ingredient_properties ip ON ip.ingredient_id = r.ingredient_id\n            JOIN food_properties fp ON fp.property_id = ip.property_id\n            WHERE r.recipe_id = $1\n            ORDER BY fp.name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "d0426e60f5302d02d58ab8dc08ee2fbfd721828f8ed088906d804ded7ea5cd78"
+}

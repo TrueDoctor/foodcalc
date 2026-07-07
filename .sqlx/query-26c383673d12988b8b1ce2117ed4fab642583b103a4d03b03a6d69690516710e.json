@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE shopping_tours\n            SET tour_date = $2, store_id = $3\n            WHERE tour_id = $1\n            RETURNING tour_id as id, event_id, tour_date, store_id, $4 as store_name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "tour_date",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "store_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "store_name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Timestamptz",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "26c383673d12988b8b1ce2117ed4fab642583b103a4d03b03a6d69690516710e"
+}

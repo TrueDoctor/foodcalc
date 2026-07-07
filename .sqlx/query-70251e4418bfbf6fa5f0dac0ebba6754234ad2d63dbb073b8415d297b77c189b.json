@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM event_inventories \n            WHERE event_id = $1 AND inventory_id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "70251e4418bfbf6fa5f0dac0ebba6754234ad2d63dbb073b8415d297b77c189b"
+}

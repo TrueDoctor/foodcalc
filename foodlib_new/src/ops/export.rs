@@ -27,6 +27,9 @@ pub struct RecipeInfo {
     /// section is omitted (assumed already made) and their meta-ingredient row is
     /// marked "aus Food Prep". Empty when there is no event/prep context.
     pub prepped_subrecipe_ids: Vec<i32>,
+    /// True when the recipe's ingredient amounts have been weighed and verified
+    /// accurate to the gram ("eingewogen"); rendered as a badge on the sheet.
+    pub weighed_in: bool,
 }
 
 /// Lighter-weight summary for dish labels and event overviews — just identity + allergens.
@@ -342,6 +345,8 @@ impl ExportOps {
             .properties;
         let dietary = crate::ops::allergens::dietary_flags(&properties);
 
+        let weighed_in = recipe_ops.get(recipe_id).await?.weighed_in;
+
         Ok(RecipeInfo {
             name,
             date,
@@ -351,6 +356,7 @@ impl ExportOps {
             is_prep: false,
             prep_for: Vec::new(),
             prepped_subrecipe_ids: Vec::new(),
+            weighed_in,
         })
     }
 

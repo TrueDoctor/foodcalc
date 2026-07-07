@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT e.group_id\n            FROM event_meals m\n            JOIN events e ON e.event_id = m.event_id\n            WHERE m.meal_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d34f48ae0206b33971a4e2a6a8cf278b866fc8d11d993ed1306e3574835906f6"
+}

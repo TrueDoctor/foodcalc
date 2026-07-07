@@ -291,6 +291,7 @@ async fn add_recipe(
         name: recipe_data.name,
         comment: recipe_data.comment,
         group_id: group.id,
+        weighed_in: false,
     };
 
     let created_recipe = foodlib.recipes().create(recipe).await?;

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                parent_id,\n                child_id,\n                name,\n                weight\n            FROM meta_recipes JOIN recipes ON(child_id = recipe_id)\n            WHERE parent_id = $1\n            ORDER BY child_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "parent_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "child_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "weight",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6ec273d6945f9f65cd5943d23f866f9a2edd633f5c5bb947d6585066699ad83e"
+}

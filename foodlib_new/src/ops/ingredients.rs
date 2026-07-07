@@ -82,11 +82,12 @@ impl IngredientOps {
         let row = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT 
-                recipe_id as "id", 
-                name, 
+            SELECT
+                recipe_id as "id",
+                name,
                 group_id,
-                comment 
+                comment,
+                weighed_in
             FROM recipes JOIN recipe_ingredients USING(recipe_id)
             WHERE ingredient_id = $1
             "#,

@@ -16,6 +16,9 @@ pub struct Meal {
     pub energy: BigDecimal,
     pub servings: i32,
     pub comment: Option<String>,
+    /// Whether the meal's recipe has been marked "weighed in" (amounts verified
+    /// accurate to the gram). Surfaced as a warning icon in the event detail tab.
+    pub weighed_in: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +52,7 @@ impl Default for Meal {
             weight: Default::default(),
             energy: BigDecimal::from(2400),
             servings: 1,
+            weighed_in: false,
         }
     }
 }

@@ -978,7 +978,15 @@ fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
         tr class="meal-row" {
             td data-label="Recipe" {
                 div class="sm:max-w-[14rem] break-words whitespace-normal sm:mx-auto" {
-                    (event_meal.name)
+                    @if !event_meal.weighed_in {
+                        span class="inline-flex align-middle mr-1"
+                            title="Recipe is not weighed in yet — amounts may not be accurate to the gram" {
+                            (icons::warning("h-4 w-4 !text-yellow-500"))
+                        }
+                    }
+                    a class="cursor-pointer hover:underline"
+                        hx-target="#content" hx-push-url="true"
+                        hx-get=(format!("/recipes/edit/{}", event_meal.recipe_id)) { (event_meal.name) }
                     @if !comment.is_empty() {
                         br;
                         span class="text-sm opacity-60 italic" { (comment) }

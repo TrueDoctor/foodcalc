@@ -238,6 +238,8 @@ fn format_recipe_info_body(text: &mut String, info: RecipeInfo) -> eyre::Result<
             &info.date,
             &allergen_block,
             if first { prep_for } else { None },
+            // The eingewogen badge only rides on the first (root) recipe sheet.
+            first && info.weighed_in,
             &info.prepped_subrecipe_ids,
             &water_extras,
         )?;
@@ -319,6 +321,7 @@ fn format_subrecipe(
     date: &str,
     allergen_block: &str,
     prep_for: Option<&[(String, f64)]>,
+    weighed_in: bool,
     prepped_ids: &[i32],
     water_extras: &std::collections::HashMap<i32, Vec<(String, f64)>>,
 ) -> eyre::Result<()> {
@@ -383,6 +386,9 @@ fn format_subrecipe(
             )?;
         }
         write!(text, ")")?;
+    }
+    if weighed_in {
+        write!(text, ", weighed_in: true")?;
     }
     // Boiling-water helpers for each water subrecipe this recipe uses, rendered
     // *inside* #recipe so they stay on the same page (not floated onto the next).

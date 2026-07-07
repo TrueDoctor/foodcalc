@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT sti.ingredient_id AS \"ingredient_id!\",\n                   sti.ingredient AS \"ingredient_name!\",\n                   sti.recipe AS \"recipe!\",\n                   SUM(sti.weight) AS \"weight!\",\n                   beis.price AS price_per_unit,\n                   mc.category AS \"category?\"\n            FROM shopping_tour_ingredients sti\n            LEFT JOIN best_event_ingredient_sources beis\n                USING (ingredient_id, event_id)\n            LEFT JOIN metro_categories mc USING (ingredient_source_id)\n            WHERE sti.tour_id = $1\n            GROUP BY sti.ingredient_id, sti.ingredient, sti.recipe, beis.price, mc.category\n            ORDER BY COALESCE(mc.category, ''), sti.ingredient,\n                     SUM(sti.weight) DESC, sti.recipe\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient_name!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "recipe!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "weight!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "price_per_unit",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "category?",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      null,
+      true,
+      false
+    ]
+  },
+  "hash": "ad77008a68c05c3cd9575787f6f62357a9c9936ee7bb0190d12eba1f7ddc4de6"
+}

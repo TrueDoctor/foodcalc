@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT e.group_id\n            FROM food_prep fp\n            JOIN events e ON e.event_id = fp.event_id\n            WHERE fp.prep_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3675501027d9d8c2906d179ed4630fdd4cac9d4ecbda7e1263ba67e8d0f3042c"
+}

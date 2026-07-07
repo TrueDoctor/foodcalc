@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO ingredient_properties (ingredient_id, property_id)\n                       VALUES ($1, $2) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9f9880b4dc9ce9a578f16ec3c83f4362ea68f4ee505aaed92821b9c31f7e716"
+}

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            ingredient_id as \"ingredient_id!\",\n            ingredient as \"ingredient_name!\",\n            sum(weight) as \"weight\",\n            coalesce(sn.name, 'No Store') as \"store_name!\"\n        FROM shopping_tour_ingredients_without_tour\n        LEFT JOIN stores sn USING (store_id)\n        WHERE event_id = $1\n        GROUP BY event_id, ingredient_id, ingredient, store_id, sn.name\n        ORDER BY ingredient\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ingredient_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "ingredient_name!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "weight",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "store_name!",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "7400c5b09e1bf37b2352354d3a3c277f39c3742796804d932e37628cdaca7548"
+}

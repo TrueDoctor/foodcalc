@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                event_id as id,\n                event_name as name,\n                events.comment,\n                group_id,\n                budget\n            FROM events LEFT JOIN event_meals USING (event_id)\n            GROUP BY event_id, event_name, events.comment, group_id, budget\n            ORDER BY MIN(start_time) DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "group_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "budget",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "da28b54fd8963e3a258308e4450aebb3b3454a8c51caffb61e3bc851c27d3bac"
+}

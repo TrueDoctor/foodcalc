@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT tour_id as id, event_id, tour_date, store_id, name as store_name\n            FROM shopping_tours JOIN stores USING(store_id)\n            WHERE tour_id = $1\n            ORDER BY tour_date\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "tour_date",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "store_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "store_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fefa8184952a2b7f263e0b37e524819f63e12d3627b6d02cf79ea6b4e0a6c898"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.name as \"recipe!\", sum(eibptr.weight) as \"weight!\"\n            FROM prep_ingredients pi\n            JOIN event_ingredients_before_prep_time_resolve eibptr\n              ON eibptr.event_id = pi.event_id\n             AND eibptr.ingredient_id = pi.ingredient_id\n             AND eibptr.subrecipe_hierarchy = pi.subrecipe_hierarchy\n             AND eibptr.meal_id = pi.meal_id\n            JOIN event_meals em ON em.meal_id = pi.meal_id\n            JOIN recipes r ON r.recipe_id = em.recipe_id\n            WHERE pi.prep_id = $1\n            GROUP BY r.name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recipe!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "weight!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "d134b40a5d7809f0a43c0d453ba7caf16c13e0e44460da2c8594f84c9f4a37bf"
+}

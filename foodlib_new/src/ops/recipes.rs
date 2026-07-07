@@ -34,7 +34,7 @@ impl RecipeOps {
             r#"
             INSERT INTO recipes (name, comment, group_id)
             VALUES ($1, $2, $3)
-            RETURNING recipe_id as id, name, comment, group_id
+            RETURNING recipe_id as id, name, comment, group_id, weighed_in
             "#,
             recipe.name,
             recipe.comment,
@@ -50,8 +50,8 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id 
-            FROM recipes 
+            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            FROM recipes
             WHERE recipe_id = $1
             "#,
             id
@@ -70,8 +70,8 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id 
-            FROM recipes 
+            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            FROM recipes
             WHERE name = $1
             "#,
             name
@@ -90,14 +90,15 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            UPDATE recipes 
-            SET name = $1, comment = $2
+            UPDATE recipes
+            SET name = $1, comment = $2, weighed_in = $4
             WHERE recipe_id = $3
-            RETURNING recipe_id as id, name, comment, group_id
+            RETURNING recipe_id as id, name, comment, group_id, weighed_in
             "#,
             recipe.name,
             recipe.comment,
-            recipe.id
+            recipe.id,
+            recipe.weighed_in
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -162,7 +163,7 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id
+            SELECT recipe_id as id, name, comment, group_id, weighed_in
             FROM recipes
             WHERE group_id IN (
                 SELECT group_id FROM user_groups WHERE user_id = $1
@@ -182,7 +183,7 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id
+            SELECT recipe_id as id, name, comment, group_id, weighed_in
             FROM recipes
             ORDER BY recipe_id
             "#
@@ -544,21 +545,22 @@ impl RecipeOps {
             Recipe,
             r#"
             WITH matching_recipes AS (
-                SELECT r.recipe_id, r.name, r.comment, r.group_id,
+                SELECT r.recipe_id, r.name, r.comment, r.group_id, r.weighed_in,
                        COUNT(DISTINCT ri.ingredient_id) as matching_ingredients,
-                       (SELECT COUNT(DISTINCT ingredient_id) 
-                        FROM recipe_ingredients 
+                       (SELECT COUNT(DISTINCT ingredient_id)
+                        FROM recipe_ingredients
                         WHERE recipe_id = r.recipe_id) as total_ingredients
                 FROM recipes r
                 JOIN recipe_ingredients ri ON r.recipe_id = ri.recipe_id
                 WHERE ri.ingredient_id = ANY($1)
-                GROUP BY r.recipe_id, r.name, r.comment
+                GROUP BY r.recipe_id, r.name, r.comment, r.weighed_in
             )
             SELECT
                 recipe_id as id,
                 name,
                 comment,
-                group_id
+                group_id,
+                weighed_in
             FROM matching_recipes
             ORDER BY 
                 matching_ingredients::float / total_ingredients DESC,

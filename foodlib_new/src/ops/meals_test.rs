@@ -163,6 +163,7 @@ async fn test_update_event_meals(pool: PgPool) {
         energy: BigDecimal::from(3400),
         servings: 4,
         comment: Some("Updated meal".to_string()),
+        weighed_in: false,
     }];
 
     ops.update_event_meals(1, meals.into_iter()).await.unwrap();

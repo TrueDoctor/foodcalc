@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT e.group_id\n            FROM shopping_tours t\n            JOIN events e ON e.event_id = t.event_id\n            WHERE t.tour_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d42d2856adf276b36f1153d29593001a48b385a3e7769e4a833e9fd8263af90d"
+}

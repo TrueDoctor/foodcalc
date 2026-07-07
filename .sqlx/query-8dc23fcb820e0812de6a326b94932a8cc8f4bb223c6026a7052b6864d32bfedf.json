@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT em.meal_id as \"meal_id!\", COALESCE(sum(ei.price), 0) as \"price!\"\n            FROM event_meals em\n            LEFT JOIN event_ingredients_before_prep_time_resolve ei ON ei.meal_id = em.meal_id\n            WHERE em.event_id = $1\n            GROUP BY em.meal_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "meal_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "price!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "8dc23fcb820e0812de6a326b94932a8cc8f4bb223c6026a7052b6864d32bfedf"
+}

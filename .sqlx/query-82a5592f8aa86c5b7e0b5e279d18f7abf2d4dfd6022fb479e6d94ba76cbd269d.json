@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                    (SELECT COUNT(*) FROM recipes WHERE group_id = $1)\n                  + (SELECT COUNT(*) FROM ingredients WHERE group_id = $1)\n                  + (SELECT COUNT(*) FROM inventories WHERE group_id = $1)\n                  + (SELECT COUNT(*) FROM events WHERE group_id = $1)\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "?column?",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "82a5592f8aa86c5b7e0b5e279d18f7abf2d4dfd6022fb479e6d94ba76cbd269d"
+}

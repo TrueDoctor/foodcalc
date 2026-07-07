@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                event_id as \"event_id!\",\n                recipe_id as \"recipe_id!\",\n                ingredient_id as \"ingredient_id!\",\n                ingredient as \"ingredient!\",\n                coalesce(weight,0) as \"weight!\",\n                coalesce(energy, 0) as \"energy!\",\n                coalesce(price, 0) as \"price!\",\n                servings as \"servings!\",\n                meal_id as \"meal_id!\",\n                subrecipe_hierarchy\n            -- Non-recursive base view: identical per-meal weights/energy/prices\n            -- (incl. event source overrides) but skips the expensive prep-time\n            -- resolution. Critically, also filter by event_id so the planner\n            -- prunes to a single event's rows up front — without it the view is\n            -- computed across all events then filtered (~4.5s vs ~60ms).\n            FROM event_ingredients_before_prep_time_resolve\n            WHERE event_id = (SELECT event_id FROM event_meals WHERE meal_id = $1)\n              AND meal_id = $1\n            ORDER BY weight DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "recipe_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "ingredient_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "ingredient!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "weight!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "energy!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "price!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "servings!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "meal_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "subrecipe_hierarchy",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      null,
+      null,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "b666abf1f562b1bf28f60a169fe8dfcce6cad214e741cf2f09be1321bd73a98d"
+}

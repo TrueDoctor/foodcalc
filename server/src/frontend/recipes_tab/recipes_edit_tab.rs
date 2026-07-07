@@ -49,6 +49,9 @@ pub struct UpdateNameHeader {
     pub name: String,
     pub comment: String,
     pub group_id: i32,
+    // Unchecked HTML checkboxes submit nothing, so default to false when absent.
+    #[serde(default)]
+    pub weighed_in: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -141,6 +144,7 @@ pub async fn handle_name_change(
             name: data.name,
             comment: Some(data.comment),
             group_id: -1, // Placeholder; ops-level update ignores group_id
+            weighed_in: data.weighed_in,
         })
         .await?;
     if current.group_id != data.group_id {
@@ -413,9 +417,21 @@ pub async fn recipe_edit_view(
                 form hx-put="/recipes/edit/change-name" hx-indicator=".htmx-indicator" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);
                     input class="text" type="text" name="name" value=(recipe.name) required="required";
-                    textarea class="text" name="comment" { (recipe.comment.unwrap_or_default()) }
+                    textarea class="text" name="comment" { (recipe.comment.clone().unwrap_or_default()) }
                     div class="flex flex-row items-center gap-2" { (owner_select) }
+                    label class="flex flex-row items-center gap-2 cursor-pointer" {
+                        input type="checkbox" name="weighed_in" value="true" checked[recipe.weighed_in];
+                        span { "Weighed in (all amounts measured accurate to the gram)" }
+                    }
                     button type="submit" class="btn btn-primary"  { "Change Name and Comment" }}
+            }
+
+            @if !recipe.weighed_in {
+                div class="w-full sm:w-3/4 bg-yellow-100 dark:bg-yellow-900 p-4 mb-4 rounded-lg" {
+                    span class="font-bold text-yellow-700 dark:text-yellow-300" { "⚠️ Warning: " }
+                    "This recipe is not weighed in yet — the amounts may not be accurate to the gram. "
+                    "Check \u{201C}Weighed in\u{201D} above once the ingredients have been measured."
+                }
             }
 
             div class="w-full sm:w-3/4 bg-blue-100 dark:bg-blue-900 p-4 mb-4 rounded-lg" {

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO metro_categories (ingredient_source_id, category, article_number)\n            VALUES ($1, $2, $3)\n            ON CONFLICT (ingredient_source_id) DO UPDATE SET\n                category = EXCLUDED.category,\n                article_number = EXCLUDED.article_number\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "19389465ddd593bf4b9a369b0f315e23abe03f8a377d00e4df588a4c8fd5bf31"
+}

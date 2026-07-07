@@ -143,13 +143,20 @@ rect(stroke: none, width: 100%)[
   ]
 }
 
-#let recipe(name, date, ingredients, steps, allergens, prep_for: none, water: ()) = {
+// Badge confirming every ingredient amount was weighed and verified accurate
+// to the gram ("eingewogen"). Only shown once the recipe is explicitly marked.
+#let weighed_in_badge() = {
+  box(stroke: 0.5pt + green, inset: (x: 6pt, y: 3pt), radius: 3pt, fill: green.lighten(80%))[*Eingewogen* #text(size: 0.85em)[(Mengen grammgenau)]]
+}
+
+#let recipe(name, date, ingredients, steps, allergens, prep_for: none, weighed_in: false, water: ()) = {
   [
     #show: project.with(
       title: name,
       date: date,
     )
     #if prep_for != none [ #prep_banner(prep_for) #v(0.5em) ]
+    #if weighed_in [ #weighed_in_badge() #v(0.5em) ]
     #allergen_block(allergens)
     #v(0.5em)
     #rect()[

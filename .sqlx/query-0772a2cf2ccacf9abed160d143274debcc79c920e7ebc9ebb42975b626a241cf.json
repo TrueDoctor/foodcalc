@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT weight, energy FROM recipe_stats WHERE recipe_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "weight",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 1,
+        "name": "energy",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "0772a2cf2ccacf9abed160d143274debcc79c920e7ebc9ebb42975b626a241cf"
+}

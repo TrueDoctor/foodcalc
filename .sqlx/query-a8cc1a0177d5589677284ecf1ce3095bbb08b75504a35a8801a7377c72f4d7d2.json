@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE event_meals SET start_time = start_time + $2, end_time = end_time + $2 WHERE event_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Interval"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a8cc1a0177d5589677284ecf1ce3095bbb08b75504a35a8801a7377c72f4d7d2"
+}
