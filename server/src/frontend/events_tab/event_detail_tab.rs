@@ -18,6 +18,7 @@ use time::macros::format_description;
 mod event_edit_meal_tab;
 mod food_prep;
 mod shopping_tours;
+mod timeline;
 
 use crate::{
     frontend::{icons, move_group, MResponse},
@@ -53,6 +54,7 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         )
         .nest("/shopping_tours", shopping_tours::shopping_tour_router())
         .nest("/food_prep", food_prep::food_prep_router())
+        .nest("/timeline", timeline::timeline_router())
         .route("/shift/{event_id}", post(handle_shift_times))
 }
 
@@ -452,17 +454,22 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
                 button class="btn btn-primary " hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
                 span class="htmx-indicator" { "Saving\u{a0}…" }
             }
-            @if let Some(first_meal_start) = first_meal_start {
-                @let shift_value = first_meal_start
-                    .format(format_description!("[year]-[month]-[day]T[hour]:[minute]"))
-                    .unwrap_or_default();
-                form class="flex flex-row items-center justify-center flex-wrap gap-2"
-                    hx-post=(format!("/events/edit/shift/{}", event_id))
-                    hx-target="#content" {
-                    label class="whitespace-nowrap" for="new_first_meal_start" { "Shift first meal to:" }
-                    input class="text " type="datetime-local" name="new_first_meal_start"
-                        value=(shift_value) required="required";
-                    button class="btn btn-primary " type="submit" { "Shift all times" }
+            // Event-level actions: navigate to the timeline, and (when meals
+            // exist) shift every dated row by anchoring the first meal.
+            div class="flex flex-row items-center justify-center flex-wrap gap-2" {
+                a class="btn btn-primary " hx-target="#content" hx-push-url="true" hx-get=(format!("/events/edit/timeline/{}", event_id)) { "Show timeline" }
+                @if let Some(first_meal_start) = first_meal_start {
+                    @let shift_value = first_meal_start
+                        .format(format_description!("[year]-[month]-[day]T[hour]:[minute]"))
+                        .unwrap_or_default();
+                    form class="flex flex-row items-center flex-wrap gap-2"
+                        hx-post=(format!("/events/edit/shift/{}", event_id))
+                        hx-target="#content" {
+                        label class="whitespace-nowrap" for="new_first_meal_start" { "Shift first meal to:" }
+                        input class="text " type="datetime-local" name="new_first_meal_start"
+                            value=(shift_value) required="required";
+                        button class="btn btn-primary " type="submit" { "Shift all times" }
+                    }
                 }
             }
         }

@@ -209,6 +209,7 @@ fn format_event(event: &foodlib_new::event::Event, is_admin: bool) -> Markup {
             td data-label="Comment" { (event.comment.clone().unwrap_or_default()) }
             td class="no-label whitespace-nowrap" {
                 div class="flex flex-row flex-nowrap gap-2 justify-end items-center" {
+                    button class="icon-btn" title="Timeline" aria-label="Timeline" hx-target="#content" hx-push-url="true" hx-get=(format!("/events/edit/timeline/{}", event.id)) { (icons::timeline()) }
                     button class="icon-btn" title="Edit" aria-label="Edit" hx-target="#content" hx-push-url="true" hx-get=(format!("/events/edit/{}", event.id)) { (icons::edit()) }
                     button class="icon-btn" title="Duplicate" aria-label="Duplicate" hx-target="#content" hx-indicator=("#".to_owned() + &indicator_id) hx-post=(format!("/events/duplicate/{}", event.id)) hx-swap="innerHTML show:window:top" {
                         span id=(indicator_id) class="inverse-htmx-indicator" { (icons::duplicate()) }

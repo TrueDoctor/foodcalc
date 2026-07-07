@@ -58,6 +58,14 @@ pub fn delete() -> Markup {
     )
 }
 
+// Horizontal bars offset like a Gantt chart (timeline).
+const TIMELINE: &str = "M0 96C0 78.3 14.3 64 32 64l192 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM64 256c0-17.7 14.3-32 32-32l256 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L96 288c-17.7 0-32-14.3-32-32zM192 416c0-17.7 14.3-32 32-32l224 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-224 0c-17.7 0-32-14.3-32-32z";
+
+/// Offset horizontal bars (Gantt-style timeline).
+pub fn timeline() -> Markup {
+    icon("0 0 512 512", TIMELINE, "")
+}
+
 // Triangle with exclamation mark (warning).
 const WARNING: &str = "M256 32c14.2 0 27.3 7.5 34.5 19.8l216 368c7.3 12.4 7.3 27.7 .2 40.1S486.3 480 472 480L40 480c-14.3 0-27.6-7.7-34.7-20.1s-7-27.8 .2-40.1l216-368C228.7 39.5 241.8 32 256 32zm0 128c-13.3 0-24 10.7-24 24l0 112c0 13.3 10.7 24 24 24s24-10.7 24-24l0-112c0-13.3-10.7-24-24-24zm32 224a32 32 0 1 0 -64 0 32 32 0 1 0 64 0z";
 
