@@ -23,15 +23,21 @@
 
 use std::collections::HashMap;
 
-use axum::{extract::Path, routing::get};
+use axum::{
+    extract::{Form, Path},
+    routing::{get, post},
+};
 use foodlib_new::auth_context::AuthCtx;
 use maud::{html, Markup};
-use time::{macros::format_description, Date, Duration, OffsetDateTime};
+use serde::Deserialize;
+use time::{macros::format_description, Date, Duration, OffsetDateTime, PrimitiveDateTime, Time};
 
 use crate::{frontend::MResponse, FoodLib, MyAppState};
 
 pub(crate) fn timeline_router() -> axum::Router<MyAppState> {
-    axum::Router::new().route("/{event_id}", get(timeline_view))
+    axum::Router::new()
+        .route("/{event_id}", get(timeline_view))
+        .route("/{event_id}/move", post(handle_move))
 }
 
 /// Width of one grid slot, in minutes. Bars snap to this granularity.
@@ -115,6 +121,10 @@ impl ItemKind {
 #[derive(Debug, Clone)]
 pub struct TimelineItem {
     pub kind: ItemKind,
+    /// DB primary key of the underlying row (meal_id / tour_id / prep_id). Used
+    /// by the drag/resize JS and the update endpoints to identify the row.
+    /// `None` for helper shifts, which come from Engelsystem and are read-only.
+    pub id: Option<i32>,
     pub label: String,
     /// Secondary line shown under the label (place, servings, …).
     pub detail: Option<String>,
@@ -124,6 +134,25 @@ pub struct TimelineItem {
     /// switch between the green "full" and red "understaffed" palettes. When
     /// `None`, the color comes from `kind.bar_classes()`.
     pub class_override: Option<&'static str>,
+}
+
+impl ItemKind {
+    /// The URL path segment identifying this kind in drag-update requests.
+    /// Helpers are read-only and have no segment.
+    fn drag_key(self) -> Option<&'static str> {
+        match self {
+            ItemKind::Meal => Some("meal"),
+            ItemKind::ShoppingTour => Some("tour"),
+            ItemKind::FoodPrep => Some("prep"),
+            ItemKind::Helper => None,
+        }
+    }
+
+    /// Whether a bar of this kind can have its end time changed by resizing.
+    /// Tours are instants (no meaningful duration); helpers are read-only.
+    fn resizable(self) -> bool {
+        matches!(self, ItemKind::Meal | ItemKind::FoodPrep)
+    }
 }
 
 /// Build the normalized item list for an event from the three DB sources.
@@ -148,6 +177,7 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
     for m in meals {
         items.push(TimelineItem {
             kind: ItemKind::Meal,
+            id: Some(m.meal_id),
             label: m.name,
             detail: Some(format!("{} · {} Port.", m.place, m.servings)),
             start: m.start_time,
@@ -156,16 +186,17 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
         });
     }
 
-    // A shopping tour is an instant in the DB; give it a nominal block so it
-    // renders as a visible bar rather than a zero-width sliver.
+    // A shopping tour is an instant in the DB; give it a nominal 2-hour block
+    // so it renders as a realistically-sized bar rather than a sliver.
     for t in tours {
         let start = t.tour_date;
         items.push(TimelineItem {
             kind: ItemKind::ShoppingTour,
+            id: Some(t.id),
             label: t.store_name.unwrap_or_else(|| "Einkauf".to_string()),
             detail: None,
             start,
-            end: start + Duration::minutes(SLOT_MINUTES),
+            end: start + Duration::hours(2),
             class_override: None,
         });
     }
@@ -181,6 +212,7 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
             .unwrap_or_else(|| format!("Rezept #{}", p.recipe_id));
         items.push(TimelineItem {
             kind: ItemKind::FoodPrep,
+            id: Some(p.id),
             label,
             detail: None,
             start: p.prep_date,
@@ -207,6 +239,7 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
             };
             items.push(TimelineItem {
                 kind: ItemKind::Helper,
+                id: None,
                 label,
                 detail: Some(format!("Helfer {}/{}", shift.filled, shift.needed)),
                 start: shift.start,
@@ -417,7 +450,11 @@ fn render_gridlines(bounds: WindowBounds) -> Markup {
 
 /// Render one bar as an absolutely-positioned block within its lane track,
 /// using percentage left/width from fractional hours (exact sub-hour position).
-fn render_bar(item: &TimelineItem, bounds: WindowBounds) -> Markup {
+///
+/// `event_id` and `day` (the bar's logical date) are emitted as `data-*` so the
+/// drag/resize JS can reconstruct the wall-clock timestamp and POST an update.
+/// Meal/tour/prep bars are made draggable; helper bars stay static.
+fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: i32, day: Date) -> Markup {
     let left = pct(hour_pos(item.start), bounds);
     let right = pct(end_hour_pos(item), bounds);
     let width = (right - left).max(1.5);
@@ -425,17 +462,44 @@ fn render_bar(item: &TimelineItem, bounds: WindowBounds) -> Markup {
     let start_label = item.start.time().format(&time_fmt).unwrap_or_default();
     let end_label = item.end.time().format(&time_fmt).unwrap_or_default();
     let colors = item.class_override.unwrap_or_else(|| item.kind.bar_classes());
+
+    // A bar is interactive when it has both a DB id and a drag key (i.e. not a
+    // read-only helper). The JS attaches handlers by the `data-drag` marker.
+    let drag_key = item.id.and_then(|id| item.kind.drag_key().map(|k| (id, k)));
+    let day_iso = day
+        .format(format_description!("[year]-[month]-[day]"))
+        .unwrap_or_default();
+    let base_class = format!(
+        "absolute top-0.5 bottom-0.5 rounded border px-2 py-0.5 text-xs \
+         overflow-hidden whitespace-nowrap flex items-center {} {}",
+        colors,
+        if drag_key.is_some() { "cursor-grab select-none tl-bar" } else { "" },
+    );
+
     html! {
-        div class=(format!(
-                "absolute top-0.5 bottom-0.5 rounded border px-2 py-0.5 text-xs \
-                 overflow-hidden whitespace-nowrap flex items-center {}",
-                colors
-            ))
+        div class=(base_class)
             style=(format!("left: {:.3}%; width: {:.3}%", left, width))
-            title=(format!("{} ({}–{})", item.label, start_label, end_label)) {
-            span class="font-semibold" { (item.label) }
+            title=(format!("{}{} ({}–{})",
+                item.label,
+                item.detail.as_deref().map(|d| format!(" — {d}")).unwrap_or_default(),
+                start_label, end_label))
+            data-drag=[drag_key.map(|(_, k)| k)]
+            data-id=[drag_key.map(|(id, _)| id)]
+            data-event=(event_id)
+            data-day=(day_iso)
+            data-resizable=(drag_key.is_some() && item.kind.resizable())
+            // Double-click target: meal bars open their edit form. Only meals
+            // have an edit page in scope here.
+            data-edit=[(item.kind == ItemKind::Meal)
+                .then(|| item.id.map(|id| format!("/events/edit/event_edit_meal/{event_id}/{id}")))
+                .flatten()] {
+            span class="font-semibold pointer-events-none" { (item.label) }
             @if let Some(detail) = &item.detail {
-                span class="opacity-80 ml-1" { "— " (detail) }
+                span class="opacity-80 ml-1 pointer-events-none" { "— " (detail) }
+            }
+            // Right-edge resize handle for meals/prep. `tl-resize` is the JS hook.
+            @if drag_key.is_some() && item.kind.resizable() {
+                div class="tl-resize absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize" {}
             }
         }
     }
@@ -443,12 +507,12 @@ fn render_bar(item: &TimelineItem, bounds: WindowBounds) -> Markup {
 
 /// Render one lane (grid row): a relative track holding the gridlines plus the
 /// absolutely-positioned bars assigned to this lane.
-fn render_lane(lane: &[TimelineItem], bounds: WindowBounds) -> Markup {
+fn render_lane(lane: &[TimelineItem], bounds: WindowBounds, event_id: i32, day: Date) -> Markup {
     html! {
         div class="relative h-7 w-full" {
             (render_gridlines(bounds))
             @for item in lane {
-                (render_bar(item, bounds))
+                (render_bar(item, bounds, event_id, day))
             }
         }
     }
@@ -467,7 +531,20 @@ pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<
     let date_fmt = format_description!("[day].[month].[year]");
 
     Ok(html! {
-        section class="w-full flex flex-col gap-4 p-4" {
+        // `data-timeline` marks the region the drag/resize JS operates on.
+        // The JS converts a bar's pixel offset within a lane to minutes:
+        //   data-cols       = number of hour columns in the shared window
+        //   data-start-hour = the window's left edge, in LOGICAL hours since
+        //                     DAY_START_HOUR (so a bar's window-relative minutes
+        //                     + start-hour*60 == minutes-since-DAY_START_HOUR,
+        //                     which is what the /move endpoint expects)
+        //   data-snap       = snap granularity in minutes
+        section class="w-full flex flex-col gap-4 p-4" id="timeline-root"
+            data-timeline="1"
+            data-event=(event_id)
+            data-cols=(bounds.cols())
+            data-start-hour=(bounds.first_hour)
+            data-snap="30" {
             div class="flex flex-row items-center justify-between flex-wrap gap-3" {
                 h1 class="text-2xl font-semibold" { (event.name) " — Timeline" }
                 a class="btn btn-primary" hx-target="#content" hx-push-url="true"
@@ -514,7 +591,7 @@ pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<
                         (render_hour_axis(bounds))
                         @for band in &day.bands {
                             @for lane in &band.lanes {
-                                (render_lane(lane, bounds))
+                                (render_lane(lane, bounds, event_id, day.date))
                             }
                         }
                     }
@@ -522,4 +599,143 @@ pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<
             }
         }
     })
+}
+
+// ── Drag / resize updates ────────────────────────────────────────────────────
+
+/// Payload for a drag/resize update. Positions are in the timeline's own
+/// coordinate system: `day` is the logical date the bar sits on (ISO
+/// `YYYY-MM-DD`), and `start_min`/`end_min` are minutes since `DAY_START_HOUR`
+/// (i.e. 0 == 04:00) on that logical day, snapped to 30-minute steps by the JS.
+/// `kind` is one of `meal` | `tour` | `prep`. `end_min` is absent for a plain
+/// move of a tour (an instant with no duration).
+#[derive(Deserialize)]
+struct MoveForm {
+    kind: String,
+    id: i32,
+    day: String,
+    start_min: i64,
+    end_min: Option<i64>,
+}
+
+/// Reconstruct a stored `OffsetDateTime` from a logical `day` + minutes-since-
+/// `DAY_START_HOUR`. Minutes ≥ (24h − DAY_START_HOUR) roll onto the next
+/// calendar day (the early-morning tail of the logical day). The result is
+/// built as UTC to match foodcalc's wall-clock-as-UTC storage convention.
+fn to_stored(day: Date, minutes_since_day_start: i64) -> Option<OffsetDateTime> {
+    let real = minutes_since_day_start + DAY_START_HOUR * 60;
+    let (date, minute_of_day) = if real >= 24 * 60 {
+        (day.next_day()?, real - 24 * 60)
+    } else {
+        (day, real)
+    };
+    let time = Time::from_hms(
+        (minute_of_day / 60).clamp(0, 23) as u8,
+        (minute_of_day % 60) as u8,
+        0,
+    )
+    .ok()?;
+    Some(PrimitiveDateTime::new(date, time).assume_utc())
+}
+
+/// Apply a drag/resize update to a meal, tour or prep, then re-render the whole
+/// timeline. Read-modify-write: the current row is fetched and only its time
+/// fields are patched, so no other data is trusted from the client.
+async fn handle_move(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+    Form(form): Form<MoveForm>,
+) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+
+    log::info!(
+        "timeline move: kind={} id={} day={} start_min={} end_min={:?}",
+        form.kind, form.id, form.day, form.start_min, form.end_min
+    );
+
+    let day = Date::parse(&form.day, format_description!("[year]-[month]-[day]"))
+        .map_err(|e| foodlib_new::Error::Misc(format!("bad day: {e}")))?;
+    let new_start = to_stored(day, form.start_min)
+        .ok_or_else(|| foodlib_new::Error::Misc("invalid start time".into()))?;
+
+    match form.kind.as_str() {
+        "meal" => {
+            let m = foodlib.meals().get_meal(form.id).await?;
+            // Preserve the meal's duration on a plain move; honor end_min on a
+            // resize. Guard against a non-positive span by falling back to the
+            // original duration.
+            let new_end = match form.end_min {
+                Some(end_min) => to_stored(day, end_min)
+                    .filter(|e| *e > new_start)
+                    .unwrap_or(new_start + (m.end_time - m.start_time)),
+                None => new_start + (m.end_time - m.start_time),
+            };
+            foodlib
+                .meals()
+                .update_meal(
+                    m.meal_id,
+                    m.recipe_id,
+                    m.place_id,
+                    new_start,
+                    new_end,
+                    m.energy,
+                    m.servings,
+                    m.comment,
+                )
+                .await?;
+        }
+        "tour" => {
+            let mut tour = foodlib.events().get_shopping_tour(form.id).await?;
+            tour.tour_date = new_start;
+            foodlib.events().update_shopping_tour(tour).await?;
+        }
+        "prep" => {
+            let mut prep = foodlib.events().get_food_prep(form.id).await?;
+            // Keep the use window's length relative to the (possibly changed)
+            // prep time so a moved prep still "uses until" the same offset.
+            let delta = new_start - prep.prep_date;
+            prep.prep_date = new_start;
+            prep.use_until += delta;
+            if let Some(from) = prep.use_from {
+                prep.use_from = Some(from + delta);
+            }
+            foodlib.events().update_food_prep(prep).await?;
+        }
+        other => {
+            return Err(foodlib_new::Error::Misc(format!("unknown kind: {other}")));
+        }
+    }
+
+    timeline_view(foodlib, ctx, Path(event_id)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use time::macros::date;
+
+    #[test]
+    fn to_stored_maps_day_start_to_04() {
+        // 0 minutes since day start == 04:00 on the same date.
+        let dt = to_stored(date!(2026 - 07 - 06), 0).unwrap();
+        assert_eq!(dt.date(), date!(2026 - 07 - 06));
+        assert_eq!(dt.hour(), 4);
+        assert_eq!(dt.minute(), 0);
+    }
+
+    #[test]
+    fn to_stored_midday() {
+        // 09:00 == 5h after 04:00 == 300 minutes.
+        let dt = to_stored(date!(2026 - 07 - 06), 300).unwrap();
+        assert_eq!(dt.hour(), 9);
+    }
+
+    #[test]
+    fn to_stored_rolls_past_midnight() {
+        // 21h after 04:00 == 01:00 the NEXT calendar day.
+        let dt = to_stored(date!(2026 - 07 - 06), 21 * 60).unwrap();
+        assert_eq!(dt.date(), date!(2026 - 07 - 07));
+        assert_eq!(dt.hour(), 1);
+    }
 }

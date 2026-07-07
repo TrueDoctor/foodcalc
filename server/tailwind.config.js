@@ -1,4 +1,4 @@
-export const content = ["./src/frontend/**/*.rs", "./src/htmx_middleware.rs", "./../foodlib_new/src/error.rs"]
+export const content = ["./src/frontend/**/*.rs", "./src/htmx_middleware.rs", "./../foodlib_new/src/error.rs", "./assets/*.js"]
 
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);

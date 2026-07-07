@@ -35,6 +35,7 @@ pub fn frontend_router() -> Router {
         .route("/static/{*-style.css}", get(static_style))
         .route("/static/htmxv2.0.4.js", get(static_htmx))
         .route("/static/sortable.js", get(static_sortable))
+        .route("/static/timeline.js", get(static_timeline))
 }
 
 thread_local! {
@@ -42,7 +43,14 @@ thread_local! {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         hasher.write(include_str!("index.css").as_bytes());
         hasher.finish()
-    }
+    };
+    /// Content hash of the timeline JS, used in its URL for cache-busting: the
+    /// browser refetches whenever the file content changes (mirrors CSS_HASH).
+    pub (crate) static TIMELINE_JS_HASH: u64 = {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        hasher.write(include_str!("../assets/timeline.js").as_bytes());
+        hasher.finish()
+    };
 }
 
 async fn static_style() -> impl IntoResponse {
@@ -63,6 +71,14 @@ async fn static_htmx() -> impl IntoResponse {
 
 async fn static_sortable() -> impl IntoResponse {
     let js = include_str!("../assets/Sortable-1.15.6.min.js");
+    Response::builder()
+        .header("Content-Type", "text/javascript")
+        .body(js.to_owned())
+        .unwrap()
+}
+
+async fn static_timeline() -> impl IntoResponse {
+    let js = include_str!("../assets/timeline.js");
     Response::builder()
         .header("Content-Type", "text/javascript")
         .body(js.to_owned())

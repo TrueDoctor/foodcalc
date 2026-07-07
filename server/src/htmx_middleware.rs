@@ -7,7 +7,7 @@ use foodlib_new::user::User;
 use maud::{html, DOCTYPE};
 
 use crate::frontend::home;
-use crate::frontend::CSS_HASH;
+use crate::frontend::{CSS_HASH, TIMELINE_JS_HASH};
 
 pub async fn htmx_middleware(
     mut auth: AuthSession,
@@ -100,6 +100,7 @@ pub async fn htmx_middleware(
                     link rel="stylesheet" href=(format!("/static/{}-style.css", CSS_HASH.with(|x| *x)));
                     script src="/static/htmxv2.0.4.js" {}
                     script src="/static/sortable.js" {}
+                    script src=(format!("/static/timeline.js?v={}", TIMELINE_JS_HASH.with(|x| *x))) defer {}
                     meta name="htmx-config" content=r#"{
                     "scrollBehavior":"smooth",
                     "responseHandling": [
