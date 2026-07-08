@@ -209,7 +209,7 @@ impl PropertyOps {
             id: recipe_id.to_string(),
         })?;
 
-        let properties = sqlx::query_as!(
+        let mut properties = sqlx::query_as!(
             Property,
             r#"
             SELECT DISTINCT fp.property_id as "id", fp.name
@@ -223,6 +223,36 @@ impl PropertyOps {
         )
         .fetch_all(&*self.pool)
         .await?;
+
+        // Derive non-EU-14 avoidance tags (`~hinweis-…`) from each ingredient's
+        // NAME, so a recipe using an ingredient literally called "Zwiebeln" is
+        // flagged even if it carries no Metro-classified properties. Union onto
+        // the stored set (dedup by name). Synthetic → id 0; consumers key on name.
+        let ingredient_names: Vec<String> = sqlx::query_scalar!(
+            r#"
+            SELECT DISTINCT i.name
+            FROM resolved_recipes r
+            JOIN ingredients i ON i.ingredient_id = r.ingredient_id
+            WHERE r.recipe_id = $1
+            "#,
+            recipe_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let existing: std::collections::HashSet<String> =
+            properties.iter().map(|p| p.name.to_lowercase()).collect();
+        let mut derived: Vec<String> = ingredient_names
+            .iter()
+            .flat_map(|n| crate::ops::allergens::AllergenOps::avoidances_from_name(n))
+            .filter(|name| !existing.contains(&name.to_lowercase()))
+            .collect();
+        derived.sort();
+        derived.dedup();
+        for name in derived {
+            properties.push(Property { id: 0, name });
+        }
+        properties.sort_by(|a, b| a.name.cmp(&b.name));
 
         Ok(RecipeProperties {
             recipe_id,

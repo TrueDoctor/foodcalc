@@ -28,8 +28,27 @@ pub mod canonical {
     pub const LUPINE: &str = "lupine";
     pub const SULFITE: &str = "schwefeldioxid & sulfite";
 
+    // Common non-EU-14 avoidances. NOT legally-required allergens — these are
+    // frequently-requested dietary avoidances (onions, mushrooms, ...) that guests
+    // list on their needs form. Classified from the free-text ingredient list and
+    // stored under the `~hinweis-` prefix so they stay OUT of the regulatory
+    // "Enthält" disclosure and render in a separate "Hinweise" section.
+    pub const ZWIEBEL: &str = "zwiebel";
+    pub const KNOBLAUCH: &str = "knoblauch";
+    pub const PILZ: &str = "pilz";
+    pub const APFEL: &str = "apfel";
+    pub const KAROTTE: &str = "karotte";
+    pub const KICHERERBSE: &str = "kichererbse";
+    pub const ZITRUS: &str = "zitrus";
+    pub const GUAR: &str = "guar";
+
+    /// Curated common avoidances (non-EU-14). Extend this list as guest needs
+    /// dictate; each entry needs a matching rule in `classify_avoidance_label`.
+    pub const AVOIDANCES: &[&str] =
+        &[ZWIEBEL, KNOBLAUCH, PILZ, APFEL, KAROTTE, KICHERERBSE, ZITRUS, GUAR];
+
     /// All canonical names users can attach via the UI, ordered for display.
-    /// Broad dietary classes first, then EU-14 allergens.
+    /// Broad dietary classes first, then EU-14 allergens, then common avoidances.
     pub const ALL: &[&str] = &[
         FLEISCH,
         SCHWEIN,
@@ -49,6 +68,14 @@ pub mod canonical {
         SENF,
         LUPINE,
         SULFITE,
+        ZWIEBEL,
+        KNOBLAUCH,
+        PILZ,
+        APFEL,
+        KAROTTE,
+        KICHERERBSE,
+        ZITRUS,
+        GUAR,
     ];
 }
 
@@ -67,15 +94,21 @@ pub enum PropertySource {
     Contains,
     /// From a `MayContain` feature — stored under the `~spuren-` prefix convention.
     MayContain,
+    /// A common non-EU-14 avoidance (onion, mushroom, ...) mined from the free-text
+    /// ingredient list. Stored under `~hinweis-` so it stays out of the regulatory
+    /// allergen disclosure and renders in a separate informational section.
+    Avoidance,
 }
 
 impl PropertySource {
     /// The stored property name applies this source's prefix convention.
-    /// `Contains`/`Category` use the canonical name directly; `MayContain` prepends `~spuren-`.
+    /// `Contains`/`Category` use the canonical name directly; `MayContain`
+    /// prepends `~spuren-`; `Avoidance` prepends `~hinweis-`.
     pub fn stored_name(&self, canonical: &str) -> String {
         match self {
             Self::Category | Self::Contains => canonical.to_string(),
             Self::MayContain => format!("~spuren-{canonical}"),
+            Self::Avoidance => format!("~hinweis-{canonical}"),
         }
     }
 }

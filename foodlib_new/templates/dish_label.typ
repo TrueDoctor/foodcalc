@@ -27,6 +27,15 @@
   "krebstiere": "Krebstiere",
   "weichtiere": "Weichtiere",
   "gelatine": "Gelatine",
+  // Non-EU-14 avoidances (rendered in the separate "Hinweise" line).
+  "zwiebel": "Zwiebeln",
+  "knoblauch": "Knoblauch",
+  "pilz": "Pilze",
+  "apfel": "Apfel",
+  "karotte": "Karotte",
+  "kichererbse": "Kichererbsen",
+  "zitrus": "Zitrusfrüchte",
+  "guar": "Guarkernmehl",
 )
 
 #let pretty(name) = {
@@ -81,6 +90,10 @@
   ]
   if meal.may_contain.len() > 0 [
     #text(size: 0.85em, style: "italic")[Kann Spuren von #meal.may_contain.map(pretty).join(", ") enthalten.]
+    #linebreak()
+  ]
+  if meal.at("hinweise", default: ()).len() > 0 [
+    #text(size: 0.8em)[*Hinweise:* #meal.hinweise.map(pretty).join(", ")]
   ]
 }
 

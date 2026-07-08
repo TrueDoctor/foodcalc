@@ -381,10 +381,13 @@ async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResp
 
     let mut contains_lower: Vec<String> = Vec::new();
     let mut may_lower: Vec<String> = Vec::new();
+    let mut hinweis_lower: Vec<String> = Vec::new();
     for p in &rp.properties {
         let lower = p.name.to_lowercase();
         if let Some(rest) = lower.strip_prefix("~spuren-") {
             may_lower.push(rest.to_string());
+        } else if let Some(rest) = lower.strip_prefix("~hinweis-") {
+            hinweis_lower.push(rest.to_string());
         } else {
             contains_lower.push(lower);
         }
@@ -393,8 +396,11 @@ async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResp
     contains_lower.dedup();
     may_lower.sort();
     may_lower.dedup();
+    hinweis_lower.sort();
+    hinweis_lower.dedup();
     let contains = foodlib_new::ops::allergens::compact_allergen_set(&contains_lower);
     let may_contain = foodlib_new::ops::allergens::compact_allergen_set(&may_lower);
+    let hinweise = hinweis_lower;
 
     Ok(html! {
         dialog open="true" class="dialog z-50" id="popup" {
@@ -445,6 +451,18 @@ async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResp
                         p class="text-sm italic opacity-80" {
                             (may_contain.iter().map(|s| pretty_property(s)).collect::<Vec<_>>().join(", "))
                         }
+                    }
+                }
+            }
+
+            // Non-EU-14 informational avoidances (onions, mushrooms, ...). Kept
+            // separate from the regulatory disclosure above; matches common guest
+            // dietary requests that aren't legally-declarable allergens.
+            @if !hinweise.is_empty() {
+                div class="mb-4 pt-3 border-t border-gray-300 dark:border-gray-600" {
+                    p class="font-semibold mb-2" { "Hinweise (keine EU-Allergene)" }
+                    p class="text-sm opacity-80" {
+                        (hinweise.iter().map(|s| pretty_property(s)).collect::<Vec<_>>().join(", "))
                     }
                 }
             }

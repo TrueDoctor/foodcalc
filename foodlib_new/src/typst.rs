@@ -78,18 +78,19 @@ fn format_dish_labels_typst(info: &EventAllergenInfo, layout: DishLabelLayout) -
     )
     .unwrap();
     for meal in &info.meals {
-        let (contains, may) = split_properties(&meal.properties);
+        let (contains, may, hinweise) = split_properties(&meal.properties);
         writeln!(
             out,
             "(name: \"{name}\", place: \"{place}\", servings: {servings}, \
              time: \"{time}\", contains: ({contains}), may_contain: ({may}), \
-             dietary: {dietary}),",
+             hinweise: ({hinweise}), dietary: {dietary}),",
             name = escape_typst_string(&meal.recipe_name),
             place = escape_typst_string(&meal.place),
             servings = meal.servings,
             time = format_time(meal.start_time),
             contains = format_array(&contains),
             may = format_array(&may),
+            hinweise = format_array(&hinweise),
             dietary = format_dietary(meal.dietary),
         )
         .unwrap();
@@ -108,18 +109,19 @@ fn format_event_allergens_typst(info: &EventAllergenInfo) -> String {
     )
     .unwrap();
     for meal in &info.meals {
-        let (contains, may) = split_properties(&meal.properties);
+        let (contains, may, hinweise) = split_properties(&meal.properties);
         writeln!(
             out,
             "(name: \"{name}\", place: \"{place}\", servings: {servings}, \
              time: \"{time}\", contains: ({contains}), may_contain: ({may}), \
-             dietary: {dietary}),",
+             hinweise: ({hinweise}), dietary: {dietary}),",
             name = escape_typst_string(&meal.recipe_name),
             place = escape_typst_string(&meal.place),
             servings = meal.servings,
             time = format_time(meal.start_time),
             contains = format_array(&contains),
             may = format_array(&may),
+            hinweise = format_array(&hinweise),
             dietary = format_dietary(meal.dietary),
         )
         .unwrap();
@@ -128,28 +130,34 @@ fn format_event_allergens_typst(info: &EventAllergenInfo) -> String {
     out
 }
 
-fn split_properties(properties: &[Property]) -> (Vec<String>, Vec<String>) {
+/// Split a recipe's aggregated properties into the three display buckets:
+/// `(contains, may_contain, hinweise)`. The first two are EU-14 regulatory
+/// disclosure (`~spuren-` → may_contain); `~hinweis-` are non-EU-14 avoidances
+/// kept separate. All lowercased, escaped, and (for EU-14) hierarchy-compacted.
+fn split_properties(properties: &[Property]) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut contains: Vec<String> = Vec::new();
     let mut may: Vec<String> = Vec::new();
+    let mut hinweise: Vec<String> = Vec::new();
     for p in properties {
         let lower = p.name.to_lowercase();
         if let Some(rest) = lower.strip_prefix("~spuren-") {
             may.push(rest.to_string());
+        } else if let Some(rest) = lower.strip_prefix("~hinweis-") {
+            hinweise.push(rest.to_string());
         } else {
             contains.push(lower);
         }
     }
-    contains.sort();
-    contains.dedup();
-    may.sort();
-    may.dedup();
+    for v in [&mut contains, &mut may, &mut hinweise] {
+        v.sort();
+        v.dedup();
+    }
     contains = crate::ops::allergens::compact_allergen_set(&contains);
     may = crate::ops::allergens::compact_allergen_set(&may);
     // Escape only after collapsing — the canonical names don't contain quotes,
     // but be safe in case future canonicals do.
-    let contains = contains.into_iter().map(|s| escape_typst_string(&s)).collect();
-    let may = may.into_iter().map(|s| escape_typst_string(&s)).collect();
-    (contains, may)
+    let esc = |v: Vec<String>| v.into_iter().map(|s| escape_typst_string(&s)).collect();
+    (esc(contains), esc(may), esc(hinweise))
 }
 
 fn format_array(items: &[String]) -> String {
@@ -315,13 +323,15 @@ fn format_dietary(d: DietaryFlags) -> String {
 }
 
 /// Produce a typst literal for the dictionary the template's `#recipe` function expects
-/// under the `allergens` key: contains array, may_contain array, dietary record.
+/// under the `allergens` key: contains array, may_contain array, hinweise array
+/// (non-EU-14 avoidances), dietary record.
 fn format_allergen_block(properties: &[Property], dietary: DietaryFlags) -> String {
-    let (contains, may_contain) = split_properties(properties);
+    let (contains, may_contain, hinweise) = split_properties(properties);
     format!(
-        "(contains: ({c}), may_contain: ({m}), dietary: {d})",
+        "(contains: ({c}), may_contain: ({m}), hinweise: ({h}), dietary: {d})",
         c = format_array(&contains),
         m = format_array(&may_contain),
+        h = format_array(&hinweise),
         d = format_dietary(dietary),
     )
 }
@@ -453,4 +463,84 @@ fn escape_typst_string(s: &str) -> String {
 
 fn to_minutes(duration: &PgInterval) -> f64 {
     duration.microseconds as f64 / 1_000_000. / 60.
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entities::allergen::DietaryFlags;
+
+    /// The dietary dict with every trace flag set — exercises the asterisk path.
+    fn trace_flags() -> DietaryFlags {
+        DietaryFlags {
+            vegan: true,
+            vegetarian: false,
+            lactose_free: true,
+            gluten_free: true,
+            vegan_trace: true,
+            vegetarian_trace: false,
+            lactose_free_trace: true,
+            gluten_free_trace: true,
+        }
+    }
+
+    #[test]
+    fn format_dietary_emits_trace_fields() {
+        let s = format_dietary(trace_flags());
+        for field in [
+            "vegan_trace: true",
+            "gluten_free_trace: true",
+            "lactose_free_trace: true",
+            "vegetarian_trace: false",
+        ] {
+            assert!(s.contains(field), "missing {field} in: {s}");
+        }
+    }
+
+    /// Compile each template's `dietary_badges` with trace flags set, so a typst
+    /// syntax error in the asterisk/footnote changes fails the build. Gated on the
+    /// `typst` feature (the compiler deps are only present then).
+    #[cfg(feature = "typst")]
+    #[test]
+    fn templates_compile_with_trace_badges() {
+        let dietary = format_dietary(trace_flags());
+        // Each template defines `dietary_badges`; invoke it with our synthetic dict.
+        for (name, template) in [
+            ("recipe.typ", TEMPLATE_FILE),
+            ("dish_label.typ", DISH_LABEL_TEMPLATE),
+            ("event_allergens.typ", EVENT_ALLERGENS_TEMPLATE),
+        ] {
+            let src = format!("{template}\n#dietary_badges({dietary})\n");
+            create_pdf(src)
+                .unwrap_or_else(|e| panic!("template {name} failed to compile: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn split_properties_routes_hinweis_prefix() {
+        use crate::entities::property::Property;
+        let p = |n: &str| Property { id: 0, name: n.to_string() };
+        let (contains, may, hinweise) = split_properties(&[
+            p("gluten"),
+            p("~spuren-soja"),
+            p("~hinweis-zwiebel"),
+            p("~hinweis-pilz"),
+        ]);
+        assert_eq!(contains, vec!["gluten"]);
+        assert_eq!(may, vec!["soja"]);
+        assert_eq!(hinweise, vec!["pilz", "zwiebel"]);
+    }
+
+    /// The recipe template's `allergen_block` must render a dict carrying a
+    /// `hinweise` array — validates the new section's typst syntax + label map.
+    #[cfg(feature = "typst")]
+    #[test]
+    fn recipe_template_renders_hinweise() {
+        let dietary = format_dietary(DietaryFlags::default());
+        let block = format!(
+            "(contains: (\"gluten\",), may_contain: (), hinweise: (\"zwiebel\",\"pilz\",), dietary: {dietary})"
+        );
+        let src = format!("{TEMPLATE_FILE}\n#allergen_block({block})\n");
+        create_pdf(src).unwrap_or_else(|e| panic!("allergen_block failed to compile: {e:?}"));
+    }
 }

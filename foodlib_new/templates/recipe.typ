@@ -81,6 +81,10 @@ rect(stroke: none, width: 100%)[
   "schwein": "Schwein", "fleisch": "Fleisch", "milchprodukt": "Milchprodukt",
   "käse": "Käse", "ei-produkt": "Ei-Produkt", "krebstiere": "Krebstiere",
   "weichtiere": "Weichtiere", "gelatine": "Gelatine",
+  // Non-EU-14 avoidances (rendered in the separate "Hinweise" section).
+  "zwiebel": "Zwiebeln", "knoblauch": "Knoblauch", "pilz": "Pilze",
+  "apfel": "Apfel", "karotte": "Karotte", "kichererbse": "Kichererbsen",
+  "zitrus": "Zitrusfrüchte", "guar": "Guarkernmehl",
 )
 
 #let pretty_allergen(name) = {
@@ -120,6 +124,10 @@ rect(stroke: none, width: 100%)[
     #if allergens.may_contain.len() > 0 [
       \
       #text(size: 0.85em, style: "italic")[Kann Spuren von #allergens.may_contain.map(pretty_allergen).join(", ") enthalten.]
+    ]
+    #if allergens.at("hinweise", default: ()).len() > 0 [
+      \
+      #text(size: 0.85em)[*Hinweise (keine EU-Allergene):* #allergens.hinweise.map(pretty_allergen).join(", ")]
     ]
   ]
 }

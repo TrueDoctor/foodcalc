@@ -70,14 +70,34 @@ impl AllergenOps {
                 let mut flat = Vec::new();
                 flatten_features(&bundle.details.features, &mut flat);
                 for f in flat {
-                    let label = f.label.to_lowercase();
-                    let source = match f.meta_info {
-                        FeatureMetaInfo::Contains => PropertySource::Contains,
-                        FeatureMetaInfo::MayContain => PropertySource::MayContain,
-                        _ => continue,
-                    };
-                    for name in classify_allergen_label(&label) {
-                        out.insert((name.to_string(), source));
+                    match f.meta_info {
+                        // Structured allergen features: the allergen is named in the
+                        // *label* (e.g. "Weizen und daraus gewonnene Erzeugnisse").
+                        FeatureMetaInfo::Contains | FeatureMetaInfo::MayContain => {
+                            let source = if matches!(f.meta_info, FeatureMetaInfo::MayContain) {
+                                PropertySource::MayContain
+                            } else {
+                                PropertySource::Contains
+                            };
+                            for name in classify_allergen_label(&f.label.to_lowercase()) {
+                                out.insert((name.to_string(), source));
+                            }
+                        }
+                        // Free-text ingredient list ("Zutat" / "Zutaten: WEIZEN, ...").
+                        // Metro sometimes drops the structured features and leaves the
+                        // allergens only here, so mine the *value* for allergen stems.
+                        // These are declared ingredients → treated as `Contains`.
+                        // The same text also feeds the non-EU-14 avoidance vocabulary.
+                        _ if is_ingredient_list_feature(&f.label) => {
+                            let value = f.value.to_lowercase();
+                            for name in classify_allergen_label(&value) {
+                                out.insert((name.to_string(), PropertySource::Contains));
+                            }
+                            for name in classify_avoidance_label(&value) {
+                                out.insert((name.to_string(), PropertySource::Avoidance));
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -116,6 +136,17 @@ impl AllergenOps {
                 })
             })
         })
+    }
+
+    /// Non-EU-14 avoidance tags (stored form, e.g. `~hinweis-zwiebel`) implied by
+    /// an ingredient's *name* alone — so a recipe using an ingredient literally
+    /// named "Zwiebeln" is flagged even without any Metro classification. Derived,
+    /// never stored; callers union these onto a recipe's aggregated properties.
+    pub fn avoidances_from_name(name: &str) -> Vec<String> {
+        classify_avoidance_label(&name.to_lowercase())
+            .into_iter()
+            .map(|c| PropertySource::Avoidance.stored_name(c))
+            .collect()
     }
 
     /// Apply classified properties to an ingredient. Idempotent: creates missing
@@ -194,6 +225,15 @@ fn flatten_features<'a>(features: &'a [Feature], out: &mut Vec<&'a Feature>) {
 /// Matched loosely (lowercased substring on the distinctive stems) so wording
 /// variants still register as "no allergen" rather than triggering a false
 /// classification-miss warning.
+/// Whether a feature is Metro's free-text ingredient list ("Zutat" / "Zutaten"),
+/// whose `value` holds the declared ingredients (e.g. "Zutaten: WEIZEN, Salz").
+/// Metro sometimes ships allergens *only* here, with no structured Contains
+/// feature, so we mine this text as a fallback allergen source.
+fn is_ingredient_list_feature(label: &str) -> bool {
+    let l = label.to_lowercase();
+    l == "zutat" || l == "zutaten" || l.starts_with("zutat")
+}
+
 fn is_negative_allergen_declaration(label: &str) -> bool {
     let l = label.to_lowercase();
     // "keine … kennzeichnungspflichtigen/deklarationspflichtigen … (allergene|zusatzstoffe)"
@@ -281,8 +321,11 @@ fn classify_allergen_label(label: &str) -> Vec<&'static str> {
             // Weizen (wheat) — both contain gluten but they're separate EU-14
             // sub-entries. So weizen and dinkel emit *different* specific tags.
             (r(r"\b(weizen|hartweizen)"), &[WEIZEN, GLUTEN][..]),
-            (r(r"\bdinkel"), &[GLUTEN][..]),
-            (r(r"\b(gerste|roggen|hafer|kamut)\b"), &[GLUTEN][..]),
+            // Dinkel (spelt) and Grünkern (dehulled unripe spelt) both → gluten.
+            (r(r"\b(dinkel|grünkern|gruenkern)"), &[GLUTEN][..]),
+            // Left-anchored only (no trailing \b) so German compounds match:
+            // "roggenmehl", "gerstenmalz", "haferflocken", "kamutmehl".
+            (r(r"\b(gerste|roggen|hafer|kamut)"), &[GLUTEN][..]),
             (r(r"\bgluten"), &[GLUTEN][..]),
 
             // Dairy stems. Note: this only matches the genuine dairy items.
@@ -346,6 +389,67 @@ fn classify_allergen_label(label: &str) -> Vec<&'static str> {
                     out.push(c);
                 }
             }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Map free text (already lowercased) to common **non-EU-14 avoidance** tags —
+/// frequently-requested dietary avoidances (onion, mushroom, apple, ...) that are
+/// not legally-required allergens. Fed the ingredient-list text and each recipe
+/// ingredient's own name, so both a Metro product listing "Zwiebeln" and a recipe
+/// that uses an ingredient literally named "Zwiebeln" get tagged.
+///
+/// Uses the same `\b`-anchored regex discipline as [`classify_allergen_label`]:
+/// left-anchor to catch German compounds ("zwiebelpulver", "champignonscheiben"),
+/// but guard short/ambiguous stems with a trailing `\b` to avoid false positives.
+fn classify_avoidance_label(text: &str) -> Vec<&'static str> {
+    use canonical::*;
+    use regex::Regex;
+    use std::sync::OnceLock;
+
+    static RULES: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
+    let rules = RULES.get_or_init(|| {
+        let r = |p: &str| Regex::new(p).expect("avoidance regex compiles");
+        vec![
+            // Onion family. `zwiebel` catches Zwiebeln/Zwiebelpulver/Röstzwiebeln
+            // (left-anchor allows the "röst-" prefix? no — `\b` needs a boundary;
+            // "röstzwiebel" has no boundary before "zwiebel", so also match the
+            // bare stem). Frühlingszwiebel/Lauchzwiebel included via the stem.
+            (r(r"zwiebel"), ZWIEBEL),
+            (r(r"\bknoblauch"), KNOBLAUCH),
+            // Mushrooms: generic + the common named varieties.
+            (r(r"\b(pilz|champignon|steinpilz|pfifferling|austernpilz|shiitake)"), PILZ),
+            // Apple. "Apfelsine" (= orange) is sanitized to a citrus marker before
+            // matching (see below), so `apfel` here is safe. Matches Apfelsaft/
+            // Apfelmus/Äpfel; umlaut plural needs its own alternative.
+            (r(r"\b(apfel|äpfel)"), APFEL),
+            (r(r"\b(karotte|möhre|mohrrübe)"), KAROTTE),
+            (r(r"\bkichererbse"), KICHERERBSE),
+            // Citrus: orange, Zitrone, Limette, Mandarine, Grapefruit, Clementine,
+            // the generic "Zitrus…" stem, plus the sanitized "apfelsine" marker.
+            (r(r"\b(orange|zitrone|zitrus|limette|mandarine|grapefruit|clementine|<<zitrus>>)"), ZITRUS),
+            // Guar gum (E412) — a thickener some people are allergic to. Catches
+            // Guarkernmehl / Guarmehl / Guarkernmehl and the bare "guar" stem.
+            (r(r"\bguar"), GUAR),
+        ]
+    });
+
+    // "Apfelsine" is an orange, not an apple — but it starts with "apfel". The
+    // regex crate has no negative lookahead, so neutralize it to a citrus marker
+    // before the apple rule runs (mirrors the plant-milk trick in the allergen
+    // classifier).
+    static APFELSINE: OnceLock<Regex> = OnceLock::new();
+    let apfelsine = APFELSINE.get_or_init(|| Regex::new(r"apfelsine").expect("apfelsine regex"));
+    let text: std::borrow::Cow<'_, str> = apfelsine.replace_all(text, "<<zitrus>>");
+    let text = text.as_ref();
+
+    let mut out: Vec<&'static str> = Vec::new();
+    for (re, canonical) in rules {
+        if re.is_match(text) && !out.contains(canonical) {
+            out.push(*canonical);
         }
     }
     out.sort();
@@ -706,6 +810,106 @@ mod tests {
         let with_real_gluten = dietary_flags(&[p("weizen"), p("gluten")]);
         assert!(!with_real_gluten.gluten_free);
         assert!(!with_real_gluten.gluten_free_trace);
+    }
+
+    #[test]
+    fn ingredient_list_feature_detection() {
+        assert!(is_ingredient_list_feature("Zutat"));
+        assert!(is_ingredient_list_feature("Zutaten"));
+        assert!(is_ingredient_list_feature("zutatenverzeichnis"));
+        assert!(!is_ingredient_list_feature("Kontaktadresse"));
+        assert!(!is_ingredient_list_feature("Verpackungsbeschreibung"));
+    }
+
+    #[test]
+    fn compound_cereal_names_are_gluten() {
+        // German compounds: the cereal stem is the START of the word, so a
+        // trailing \b would wrongly miss "roggenmehl"/"gerstenmalz"/"haferflocken".
+        assert_eq!(classify_allergen_label("roggenmehl"), vec!["gluten"]);
+        assert_eq!(classify_allergen_label("gerstenmalz"), vec!["gluten"]);
+        assert_eq!(classify_allergen_label("haferflocken"), vec!["gluten"]);
+        assert_eq!(classify_allergen_label("grünkern"), vec!["gluten"], "grünkern is dehulled spelt → gluten");
+    }
+
+    #[test]
+    fn avoidance_classification() {
+        assert_eq!(classify_avoidance_label("zwiebeln"), vec!["zwiebel"]);
+        assert_eq!(classify_avoidance_label("röstzwiebeln"), vec!["zwiebel"]);
+        assert_eq!(classify_avoidance_label("champignons, geschnitten"), vec!["pilz"]);
+        assert_eq!(classify_avoidance_label("knoblauchgranulat"), vec!["knoblauch"]);
+        assert_eq!(classify_avoidance_label("kichererbsenmehl"), vec!["kichererbse"]);
+        // Citrus, including the tricky "Apfelsine" (orange, not apple).
+        assert_eq!(classify_avoidance_label("orangensaft"), vec!["zitrus"]);
+        assert_eq!(
+            classify_avoidance_label("apfelsine"),
+            vec!["zitrus"],
+            "Apfelsine is an orange — must NOT be tagged as apple"
+        );
+        // Real apple still classifies as apple, not citrus.
+        assert_eq!(classify_avoidance_label("apfelmus"), vec!["apfel"]);
+        // No spurious tags on unrelated text.
+        assert!(classify_avoidance_label("wasser, salz, hefe").is_empty());
+    }
+
+    #[test]
+    fn avoidance_from_ingredient_name() {
+        // The name-based path used for recipe ingredients (stored form).
+        assert_eq!(
+            AllergenOps::avoidances_from_name("Zwiebeln"),
+            vec!["~hinweis-zwiebel"]
+        );
+        assert_eq!(
+            AllergenOps::avoidances_from_name("Frische Champignons"),
+            vec!["~hinweis-pilz"]
+        );
+        assert!(AllergenOps::avoidances_from_name("Mehl 405").is_empty());
+    }
+
+    #[test]
+    fn guarkernmehl_is_avoidance_not_gluten() {
+        // Guar gum flour (E412): NOT a gluten cereal (guards against naive
+        // "kern"/"mehl" substring matching), but IS an avoidance — some people
+        // are allergic to guar gum.
+        assert!(
+            classify_allergen_label("guarkernmehl").is_empty(),
+            "guar gum is gluten-free"
+        );
+        assert_eq!(classify_avoidance_label("guarkernmehl"), vec!["guar"]);
+        assert_eq!(classify_avoidance_label("guarmehl"), vec!["guar"]);
+    }
+
+    #[test]
+    fn ingredient_list_text_yields_allergens() {
+        // Metro's free-text ingredient list — the fallback source when the
+        // structured allergen features are missing (as happened to Mehl 405).
+        assert_eq!(
+            classify_allergen_label("zutaten: weizen"),
+            vec!["gluten", "weizen"]
+        );
+        assert_eq!(
+            classify_allergen_label("zutaten: weizenmehl, wasser, salz, hefe"),
+            vec!["gluten", "weizen"]
+        );
+    }
+
+    #[test]
+    fn mehl_405_is_not_gluten_free() {
+        // Exact stored property set for ingredient #1 (Mehl 405): real gluten +
+        // weizen, plus non-animal traces. Must read as: not gluten-free, vegan.
+        let props = [
+            p("gluten"),
+            p("weizen"),
+            p("~spuren-lupine"),
+            p("~spuren-sesamsamen"),
+            p("~spuren-soja"),
+        ];
+        let d = dietary_flags(&props);
+        assert!(!d.gluten_free, "wheat flour must NOT be gluten-free");
+        assert!(!d.gluten_free_trace, "real gluten → no asterisk, no label");
+        assert!(d.vegan && !d.vegan_trace, "flour is vegan; its traces are non-animal");
+        // The 'contains' list still surfaces gluten (weizen collapses under it).
+        let contains = compact_allergen_set(&["gluten".to_string(), "weizen".to_string()]);
+        assert!(contains.contains(&"gluten".to_string()));
     }
 
     #[test]
