@@ -86,25 +86,50 @@
   )
 }
 
+// Folded-tent geometry. Each card is a fixed-size block split top/bottom along
+// a horizontal fold line: the top half is rotated 180° so that folding along
+// the centerline produces a free-standing tent whose two faces both read
+// upright. Dimensions are absolute (mm) so cells never collapse — `1fr`/`100%`
+// sizing degenerates when the parent has no fixed height, which is what made
+// earlier attempts overlap.
+#let card_w = 92mm      // folded card width
+#let half_h = 52mm      // height of one face; card block is 2 × this tall
+
+#let tent_face(meal) = align(horizon + center,
+  block(width: card_w, height: half_h, inset: 4pt, label_content(meal, true)))
+
+#let tent_card(meal) = {
+  set text(size: 8pt)
+  block(width: card_w, height: 2 * half_h, {
+    // Top face: rotated 180° so it reads upright on the back once folded.
+    rotate(180deg, reflow: true, tent_face(meal))
+    // Bottom face: upright (front).
+    tent_face(meal)
+    // Dashed fold guide on the centerline, placed within this card block.
+    place(top + center, dy: half_h,
+      line(length: card_w, stroke: (paint: gray.lighten(20%), thickness: 0.4pt, dash: "dashed")))
+  })
+}
+
 #let tent_layout(meals) = {
-  set page(paper: "a5", flipped: true, margin: 1cm)
-  for meal in meals {
-    pagebreak(weak: true)
-    // The page is A5 landscape (≈ 21cm × 14.8cm). We split it in half: bottom half
-    // shows the label upright; top half shows the same label rotated 180° so when
-    // folded along the horizontal centerline, both sides display correctly.
-    grid(
-      rows: (1fr, 1fr),
-      // Top half: rotated 180°
-      rotate(180deg, reflow: true)[
-        #align(horizon, rect(stroke: none, inset: 6pt, width: 100%, label_content(meal, true)))
-      ],
-      // Bottom half: upright
-      align(horizon, rect(stroke: none, inset: 6pt, width: 100%, label_content(meal, true))),
-    )
-    // Fold guide
-    place(top + center, dy: 50%, line(length: 100%, stroke: 0.25pt + gray.lighten(30%)))
-  }
+  // Standard A4 portrait so any office printer handles it natively. Four tent
+  // cards per sheet in a 2×2 grid; cut apart on both axes, then fold each along
+  // its dashed centerline. The grid has fixed row heights, so >4 meals auto-page.
+  set page(paper: "a4", margin: 8mm)
+  let cells = meals.map(meal => box(
+    // Solid border doubles as the cut line for this card.
+    stroke: (paint: gray.lighten(30%), thickness: 0.4pt),
+    inset: 2mm,
+    tent_card(meal),
+  ))
+  grid(
+    columns: (auto, auto),
+    rows: (auto, auto),
+    align: center + horizon,
+    column-gutter: 6mm,
+    row-gutter: 6mm,
+    ..cells,
+  )
 }
 
 #let dish_labels(event_name, layout, meals) = {

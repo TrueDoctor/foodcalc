@@ -37,7 +37,6 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         .route("/export_pdf/{meal_id}", get(export_recipe_pdf))
         .route("/export_all/{event_id}", get(export_all_pdf))
         .route("/export_food_prep_pdf/{prep_id}", get(export_food_prep_pdf))
-        .route("/dish_labels/{event_id}", get(export_dish_labels_flat))
         .route("/dish_labels_tent/{event_id}", get(export_dish_labels_tent))
         .route("/allergen_overview/{event_id}", get(export_event_allergens))
         .route("/{event_id}", get(event_form))
@@ -258,42 +257,28 @@ pub async fn export_food_prep_pdf(
     Ok((headers, recipe))
 }
 
-pub async fn export_dish_labels_flat(
-    State(state): State<MyAppState>,
-    ctx: AuthCtx,
-    Path(event_id): Path<i32>,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    ctx.assert_can_edit_event(event_id).await?;
-    dish_labels_response(&state, event_id, "flat").await
-}
-
 pub async fn export_dish_labels_tent(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(event_id): Path<i32>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
     ctx.assert_can_edit_event(event_id).await?;
-    dish_labels_response(&state, event_id, "tent").await
+    dish_labels_response(&state, event_id).await
 }
 
 async fn dish_labels_response(
     state: &MyAppState,
     event_id: i32,
-    layout_key: &'static str,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
     let info = state.export().fetch_event_allergens(event_id).await?;
-    let filename = format!("{}_dish_labels_{}", sanitize_filename(&info.event_name), layout_key);
+    let filename = format!("{}_dish_labels_tent", sanitize_filename(&info.event_name));
 
     #[cfg(feature = "typst")]
-    let result = {
-        let layout = match layout_key {
-            "tent" => foodlib_new::typst::DishLabelLayout::Tent,
-            _ => foodlib_new::typst::DishLabelLayout::Flat,
-        };
-        foodlib_new::typst::export_dish_labels(info, layout).await
-    };
-    #[cfg(not(feature = "typst"))]
-    let _ = layout_key;
+    let result = foodlib_new::typst::export_dish_labels(
+        info,
+        foodlib_new::typst::DishLabelLayout::Tent,
+    )
+    .await;
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),
@@ -479,7 +464,6 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
             div class="flex flex-row flex-wrap gap-2 justify-center" {
                 a class="btn btn-primary" target="_blank" href=(format!("/events/edit/export_all/{}", event_id)) { "Alle Rezepte + Prep (PDF)" }
                 a class="btn btn-primary" target="_blank" href=(format!("/events/edit/allergen_overview/{}", event_id)) { "Event overview (PDF)" }
-                a class="btn btn-primary" target="_blank" href=(format!("/events/edit/dish_labels/{}", event_id)) { "Dish labels — flat (6 / page)" }
                 a class="btn btn-primary" target="_blank" href=(format!("/events/edit/dish_labels_tent/{}", event_id)) { "Dish labels — tent (fold)" }
             }
         }
