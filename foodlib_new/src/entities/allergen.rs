@@ -83,10 +83,23 @@ impl PropertySource {
 /// The derived dietary predicates computed over an aggregated property set.
 ///
 /// Never stored — recomputed at render time from the union of stored properties.
+///
+/// Each label is tri-state via the paired `*_trace` field:
+///   * flag `false`              → label does not apply
+///   * flag `true`, trace `false`→ label applies cleanly (e.g. "Vegan")
+///   * flag `true`, trace `true` → label applies only because a `~spuren-`
+///     (may-contain) warning on that axis was ignored → render with an asterisk
+///     (e.g. "Vegan*"), explained by a footnote.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize, Default)]
 pub struct DietaryFlags {
     pub vegan: bool,
     pub vegetarian: bool,
     pub lactose_free: bool,
     pub gluten_free: bool,
+    /// Whether the corresponding flag holds only because may-contain traces on
+    /// that axis were ignored (→ show the label with an asterisk).
+    pub vegan_trace: bool,
+    pub vegetarian_trace: bool,
+    pub lactose_free_trace: bool,
+    pub gluten_free_trace: bool,
 }

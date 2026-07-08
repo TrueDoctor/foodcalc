@@ -83,17 +83,14 @@ fn format_dish_labels_typst(info: &EventAllergenInfo, layout: DishLabelLayout) -
             out,
             "(name: \"{name}\", place: \"{place}\", servings: {servings}, \
              time: \"{time}\", contains: ({contains}), may_contain: ({may}), \
-             dietary: (vegan: {v}, vegetarian: {vt}, lactose_free: {lf}, gluten_free: {gf})),",
+             dietary: {dietary}),",
             name = escape_typst_string(&meal.recipe_name),
             place = escape_typst_string(&meal.place),
             servings = meal.servings,
             time = format_time(meal.start_time),
             contains = format_array(&contains),
             may = format_array(&may),
-            v = meal.dietary.vegan,
-            vt = meal.dietary.vegetarian,
-            lf = meal.dietary.lactose_free,
-            gf = meal.dietary.gluten_free,
+            dietary = format_dietary(meal.dietary),
         )
         .unwrap();
     }
@@ -116,17 +113,14 @@ fn format_event_allergens_typst(info: &EventAllergenInfo) -> String {
             out,
             "(name: \"{name}\", place: \"{place}\", servings: {servings}, \
              time: \"{time}\", contains: ({contains}), may_contain: ({may}), \
-             dietary: (vegan: {v}, vegetarian: {vt}, lactose_free: {lf}, gluten_free: {gf})),",
+             dietary: {dietary}),",
             name = escape_typst_string(&meal.recipe_name),
             place = escape_typst_string(&meal.place),
             servings = meal.servings,
             time = format_time(meal.start_time),
             contains = format_array(&contains),
             may = format_array(&may),
-            v = meal.dietary.vegan,
-            vt = meal.dietary.vegetarian,
-            lf = meal.dietary.lactose_free,
-            gf = meal.dietary.gluten_free,
+            dietary = format_dietary(meal.dietary),
         )
         .unwrap();
     }
@@ -302,19 +296,33 @@ fn meta_child_id(sr: &SubRecipe) -> Option<i32> {
         .ok()
 }
 
+/// Typst literal for a `dietary` record. Each label carries its base boolean plus
+/// a `*_trace` boolean: `true` means the label holds only because may-contain
+/// traces were ignored, so the template renders it with an asterisk + footnote.
+fn format_dietary(d: DietaryFlags) -> String {
+    format!(
+        "(vegan: {v}, vegetarian: {vt}, lactose_free: {lf}, gluten_free: {gf}, \
+         vegan_trace: {vtr}, vegetarian_trace: {vttr}, lactose_free_trace: {lftr}, gluten_free_trace: {gftr})",
+        v = d.vegan,
+        vt = d.vegetarian,
+        lf = d.lactose_free,
+        gf = d.gluten_free,
+        vtr = d.vegan_trace,
+        vttr = d.vegetarian_trace,
+        lftr = d.lactose_free_trace,
+        gftr = d.gluten_free_trace,
+    )
+}
+
 /// Produce a typst literal for the dictionary the template's `#recipe` function expects
 /// under the `allergens` key: contains array, may_contain array, dietary record.
 fn format_allergen_block(properties: &[Property], dietary: DietaryFlags) -> String {
     let (contains, may_contain) = split_properties(properties);
     format!(
-        "(contains: ({c}), may_contain: ({m}), \
-         dietary: (vegan: {v}, vegetarian: {vt}, lactose_free: {lf}, gluten_free: {gf}))",
+        "(contains: ({c}), may_contain: ({m}), dietary: {d})",
         c = format_array(&contains),
         m = format_array(&may_contain),
-        v = dietary.vegan,
-        vt = dietary.vegetarian,
-        lf = dietary.lactose_free,
-        gf = dietary.gluten_free,
+        d = format_dietary(dietary),
     )
 }
 

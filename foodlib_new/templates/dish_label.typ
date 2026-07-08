@@ -43,14 +43,24 @@
   ))
 }
 
+// A label carrying a may-contain trace on its axis gets a trailing asterisk;
+// the footnote below explains it. `star(cond)` yields "*" or "".
 #let dietary_badges(d) = {
   set text(size: 0.85em)
+  let star(cond) = if cond [\*] else []
   let parts = ()
-  if d.vegan { parts.push(box(stroke: 0.5pt + green, inset: 3pt, radius: 3pt, fill: green.lighten(80%))[*vegan*]) }
-  else if d.vegetarian { parts.push(box(stroke: 0.5pt + olive, inset: 3pt, radius: 3pt, fill: olive.lighten(80%))[*vegetarisch*]) }
-  if d.lactose_free { parts.push(box(stroke: 0.5pt + blue, inset: 3pt, radius: 3pt, fill: blue.lighten(80%))[*laktosefrei*]) }
-  if d.gluten_free { parts.push(box(stroke: 0.5pt + purple, inset: 3pt, radius: 3pt, fill: purple.lighten(80%))[*glutenfrei*]) }
-  if parts.len() == 0 { [] } else { stack(dir: ltr, spacing: 4pt, ..parts) }
+  if d.vegan { parts.push(box(stroke: 0.5pt + green, inset: 3pt, radius: 3pt, fill: green.lighten(80%))[*vegan#star(d.vegan_trace)*]) }
+  else if d.vegetarian { parts.push(box(stroke: 0.5pt + olive, inset: 3pt, radius: 3pt, fill: olive.lighten(80%))[*vegetarisch#star(d.vegetarian_trace)*]) }
+  if d.lactose_free { parts.push(box(stroke: 0.5pt + blue, inset: 3pt, radius: 3pt, fill: blue.lighten(80%))[*laktosefrei#star(d.lactose_free_trace)*]) }
+  if d.gluten_free { parts.push(box(stroke: 0.5pt + purple, inset: 3pt, radius: 3pt, fill: purple.lighten(80%))[*glutenfrei#star(d.gluten_free_trace)*]) }
+  let has_trace = d.vegan_trace or d.vegetarian_trace or d.lactose_free_trace or d.gluten_free_trace
+  if parts.len() == 0 { [] } else {
+    stack(dir: ltr, spacing: 4pt, ..parts)
+    if has_trace [
+      #v(0.2em)
+      #text(size: 0.6em, style: "italic")[\* ohne Berücksichtigung von Spuren]
+    ]
+  }
 }
 
 #let label_content(meal, draw_flourish) = {

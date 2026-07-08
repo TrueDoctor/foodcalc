@@ -44,6 +44,17 @@ impl Article {
             .map(|b| b.customer_display_id.as_str())
             .find(|id| !id.is_empty())
     }
+
+    /// The product's webshop display name (e.g. "aro Raffinade Zucker - 1 kg"),
+    /// read from the first bundle header that has one. Used for human-readable
+    /// sync reports. Returns `None` if no bundle carries a name.
+    pub fn name(&self) -> Option<&str> {
+        self.variants
+            .values()
+            .flat_map(|v| v.bundles.values())
+            .map(|b| b.details.header.misc_name_webshop.as_str())
+            .find(|n| !n.is_empty())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

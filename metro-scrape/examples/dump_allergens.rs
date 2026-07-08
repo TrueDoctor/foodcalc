@@ -30,10 +30,14 @@ async fn main() -> eyre::Result<()> {
         .collect();
 
     eprintln!("Fetching {} articles...", urls.len());
-    let (articles, failures) = fetch_articles_from_urls(urls).await;
+    let fetched = fetch_articles_from_urls(urls).await;
+    let articles = fetched.articles;
     eprintln!("Got {} articles back.", articles.len());
-    for f in &failures {
+    for f in &fetched.failures {
         eprintln!("fetch failure: {f}");
+    }
+    for m in &fetched.missing {
+        eprintln!("missing article {} ({})", m.betty_id, m.reasons.join(", "));
     }
 
     // (meta_info_variant_name, label) -> count

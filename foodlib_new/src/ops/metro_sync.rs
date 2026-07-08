@@ -48,6 +48,9 @@ pub struct SyncReport {
     pub allergens_applied: usize,
     pub allergens_wiped: usize,
     pub failures: Vec<String>,
+    /// Non-fatal anomalies worth a human's attention, e.g. an article that
+    /// declares allergen data but yielded no classified properties.
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -68,6 +71,7 @@ pub struct MetroSyncOps {
 struct MetroSource {
     ingredient_source_id: i32,
     ingredient_id: i32,
+    ingredient_name: String,
     url: String,
 }
 
@@ -107,17 +111,48 @@ impl MetroSyncOps {
             report.allergens_wiped = self.wipe_metro_ingredient_properties(&sources).await?;
         }
 
+        // Ingredient names for human-readable report messages (ids alone aren't
+        // recognizable in the UI). One name per ingredient id.
+        let ingredient_names: std::collections::HashMap<i32, String> = sources
+            .iter()
+            .map(|s| (s.ingredient_id, s.ingredient_name.clone()))
+            .collect();
+        // Label an ingredient by name (falling back to id if somehow unknown).
+        let label = |id: i32| match ingredient_names.get(&id) {
+            Some(name) => format!("{name} (#{id})"),
+            None => format!("#{id}"),
+        };
+
         let url_pairs: Vec<(i32, String)> = sources
             .iter()
             .map(|s| (s.ingredient_id, s.url.clone()))
             .collect();
         // Per-URL/batch fetch failures are reported but do not abort the sync —
         // every article that can be fetched is still applied.
-        let (articles, fetch_failures) = fetch_articles_from_urls(url_pairs).await;
-        report.failures.extend(fetch_failures);
-        report.articles_fetched = articles.len();
+        let fetched = fetch_articles_from_urls(url_pairs).await;
+        report.failures.extend(fetched.failures);
+        report.articles_fetched = fetched.articles.len();
 
-        for (ingredient_id, article) in articles {
+        // Ids Metro could not resolve (delisted / NOT_FOUND) — surface as failures
+        // so a stale source URL is visible rather than silently leaving the
+        // ingredient with no data.
+        for m in &fetched.missing {
+            let who = match m.ingredient_id {
+                Some(id) => label(id),
+                None => format!("Metro article {}", m.betty_id),
+            };
+            let reason = if m.reasons.is_empty() {
+                "not available".to_string()
+            } else {
+                m.reasons.join(", ")
+            };
+            report.failures.push(format!(
+                "{who}: Metro article {} not available ({reason})",
+                m.betty_id
+            ));
+        }
+
+        for (ingredient_id, article) in fetched.articles {
             // One ingredient_id can have multiple sources (rare); apply to whichever source
             // matches this article.
             let matching: Vec<&MetroSource> = sources
@@ -127,16 +162,28 @@ impl MetroSyncOps {
             if matching.is_empty() {
                 report
                     .failures
-                    .push(format!("no source row for ingredient #{ingredient_id}"));
+                    .push(format!("no source row for ingredient {}", label(ingredient_id)));
                 continue;
             }
 
             // Allergens are keyed by ingredient, not source — apply once per ingredient.
             match self.apply_allergens(ingredient_id, &article).await {
-                Ok(n) => report.allergens_applied += n,
+                Ok(n) => {
+                    report.allergens_applied += n;
+                    // The article declared allergen data but we extracted nothing —
+                    // likely an unrecognized label. Flag it rather than silently
+                    // leaving the ingredient with no properties (which would, e.g.,
+                    // make a wheat product read as gluten-free).
+                    if n == 0 && AllergenOps::article_has_allergen_features(&article) {
+                        report.warnings.push(format!(
+                            "{}: article declares allergen data but no properties were classified",
+                            label(ingredient_id)
+                        ));
+                    }
+                }
                 Err(e) => report
                     .failures
-                    .push(format!("ingredient #{ingredient_id} allergens: {e}")),
+                    .push(format!("{} allergens: {e}", label(ingredient_id))),
             }
 
             for source in matching {
@@ -144,8 +191,9 @@ impl MetroSyncOps {
                     Ok(true) => report.prices_updated += 1,
                     Ok(false) => {} // no price available (unauth?), category still set
                     Err(e) => report.failures.push(format!(
-                        "ingredient #{} source #{}: {e}",
-                        source.ingredient_id, source.ingredient_source_id
+                        "{} source #{}: {e}",
+                        label(source.ingredient_id),
+                        source.ingredient_source_id
                     )),
                 }
             }
@@ -179,9 +227,10 @@ impl MetroSyncOps {
         let rows: Vec<MetroSource> = match ingredient_id {
             Some(id) => sqlx::query!(
                 r#"
-                SELECT ingredient_source_id, ingredient_id, url
-                FROM ingredient_sources
-                WHERE store_id = $1 AND url IS NOT NULL AND url <> '' AND ingredient_id = $2
+                SELECT s.ingredient_source_id, s.ingredient_id, i.name AS ingredient_name, s.url
+                FROM ingredient_sources s
+                JOIN ingredients i ON i.ingredient_id = s.ingredient_id
+                WHERE s.store_id = $1 AND s.url IS NOT NULL AND s.url <> '' AND s.ingredient_id = $2
                 "#,
                 METRO_STORE_ID,
                 id,
@@ -192,14 +241,16 @@ impl MetroSyncOps {
             .map(|r| MetroSource {
                 ingredient_source_id: r.ingredient_source_id,
                 ingredient_id: r.ingredient_id,
+                ingredient_name: r.ingredient_name,
                 url: r.url.unwrap_or_default(),
             })
             .collect(),
             None => sqlx::query!(
                 r#"
-                SELECT ingredient_source_id, ingredient_id, url
-                FROM ingredient_sources
-                WHERE store_id = $1 AND url IS NOT NULL AND url <> ''
+                SELECT s.ingredient_source_id, s.ingredient_id, i.name AS ingredient_name, s.url
+                FROM ingredient_sources s
+                JOIN ingredients i ON i.ingredient_id = s.ingredient_id
+                WHERE s.store_id = $1 AND s.url IS NOT NULL AND s.url <> ''
                 "#,
                 METRO_STORE_ID,
             )
@@ -209,6 +260,7 @@ impl MetroSyncOps {
             .map(|r| MetroSource {
                 ingredient_source_id: r.ingredient_source_id,
                 ingredient_id: r.ingredient_id,
+                ingredient_name: r.ingredient_name,
                 url: r.url.unwrap_or_default(),
             })
             .collect(),

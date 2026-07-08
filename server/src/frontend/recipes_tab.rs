@@ -403,22 +403,30 @@ async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResp
                 button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" { "Close" }
             }
 
-            // Dietary flag badges. Same visual idiom as the PDF.
+            // Dietary flag badges. Same visual idiom as the PDF. A label that
+            // holds only because may-contain traces were ignored gets a trailing
+            // asterisk, explained by the footnote below.
             div class="flex flex-wrap gap-2 mb-4" {
                 @if dietary.vegan {
-                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800 border border-green-300" { "vegan" }
+                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800 border border-green-300" { "vegan" (if dietary.vegan_trace { "*" } else { "" }) }
                 }
                 @if dietary.vegetarian {
-                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-lime-100 text-lime-800 border border-lime-300" { "vegetarisch" }
+                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-lime-100 text-lime-800 border border-lime-300" { "vegetarisch" (if dietary.vegetarian_trace { "*" } else { "" }) }
                 }
                 @if dietary.lactose_free {
-                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800 border border-blue-300" { "laktosefrei" }
+                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800 border border-blue-300" { "laktosefrei" (if dietary.lactose_free_trace { "*" } else { "" }) }
                 }
                 @if dietary.gluten_free {
-                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800 border border-purple-300" { "glutenfrei" }
+                    span class="px-2 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800 border border-purple-300" { "glutenfrei" (if dietary.gluten_free_trace { "*" } else { "" }) }
                 }
-                @if !dietary.vegetarian && !dietary.lactose_free && !dietary.gluten_free {
+                @if !dietary.vegetarian && !dietary.lactose_free && !dietary.gluten_free && !dietary.vegan {
                     span class="text-sm opacity-70" { "No dietary flags apply." }
+                }
+            }
+            @if dietary.vegan_trace || dietary.vegetarian_trace || dietary.lactose_free_trace || dietary.gluten_free_trace {
+                p class="text-xs italic opacity-70 mb-3" {
+                    "* vegan / vegetarisch / laktosefrei / glutenfrei ohne Berücksichtigung von Spuren "
+                    "(„kann Spuren enthalten“-Hinweise werden für diese Kennzeichnung ignoriert)."
                 }
             }
 

@@ -9,8 +9,9 @@
 //!  - EU-14 allergens from `MayContain` features, prefixed `~spuren-`
 //!
 //! Dietary flags (`vegan`, `vegetarian`, `lactose_free`, `gluten_free`) are NOT stored;
-//! they are derived at render time by `dietary_flags()`. Catering-grade strictness: any
-//! `~spuren-X` warning disqualifies the corresponding flag.
+//! they are derived at render time by `dietary_flags()`. Trace (`~spuren-X`) warnings
+//! disqualify allergen-*safety* flags (`gluten_free`) but not dietary-*preference*
+//! flags (`vegan`, `vegetarian`, `lactose_free`) — see `dietary_flags()`.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -90,6 +91,33 @@ impl AllergenOps {
             .collect()
     }
 
+    /// Whether the article names an actual allergen we *should* have classified.
+    ///
+    /// A `Contains`/`MayContain` feature alone isn't enough: Metro files additives,
+    /// E-numbers, and — crucially — *negative* declarations under the same
+    /// `Contains` meta_info. A product whose only allergen-section entry is
+    /// "Keine kennzeichnungspflichtigen Allergene …" is genuinely allergen-free,
+    /// not a classification miss. So we ignore those boilerplate negative
+    /// declarations here.
+    ///
+    /// Used to distinguish a genuinely allergen-free product from a classification
+    /// miss (a real allergen label present that `classify_article` failed to map —
+    /// worth flagging so, e.g., a wheat product doesn't silently read gluten-free).
+    pub fn article_has_allergen_features(article: &Article) -> bool {
+        article.variants.values().any(|variant| {
+            variant.bundles.values().any(|bundle| {
+                let mut flat = Vec::new();
+                flatten_features(&bundle.details.features, &mut flat);
+                flat.iter().any(|f| {
+                    matches!(
+                        f.meta_info,
+                        FeatureMetaInfo::Contains | FeatureMetaInfo::MayContain
+                    ) && !is_negative_allergen_declaration(&f.label)
+                })
+            })
+        })
+    }
+
     /// Apply classified properties to an ingredient. Idempotent: creates missing
     /// `food_properties` rows (case-insensitive lookup), inserts join rows with
     /// `ON CONFLICT DO NOTHING`.
@@ -151,6 +179,27 @@ fn flatten_features<'a>(features: &'a [Feature], out: &mut Vec<&'a Feature>) {
         out.push(f);
         flatten_features(&f.leafs, out);
     }
+}
+
+/// Whether an allergen-section feature label is a *negative* declaration — Metro
+/// boilerplate stating the product contains no labelable allergens/additives —
+/// rather than the name of an actual allergen.
+///
+/// Examples (target-market regulatory phrasing):
+///   * "Keine kennzeichnungspflichtigen Allergene entsprechend der
+///     zielmarktspezifischen Vorschriften enthalten"
+///   * "Keine deklarationspflichtigen Zusatzstoffe vorhanden, abhängig vom
+///     Zielmarkt. …"
+///
+/// Matched loosely (lowercased substring on the distinctive stems) so wording
+/// variants still register as "no allergen" rather than triggering a false
+/// classification-miss warning.
+fn is_negative_allergen_declaration(label: &str) -> bool {
+    let l = label.to_lowercase();
+    // "keine … kennzeichnungspflichtigen/deklarationspflichtigen … (allergene|zusatzstoffe)"
+    l.starts_with("keine")
+        && (l.contains("kennzeichnungspflichtig") || l.contains("deklarationspflichtig"))
+        && (l.contains("allergene") || l.contains("zusatzstoffe"))
 }
 
 /// Lowercased list of path components for a Metro category: each level's `display_name`
@@ -306,15 +355,20 @@ fn classify_allergen_label(label: &str) -> Vec<&'static str> {
 
 /// Derive dietary flags from a recipe's aggregated property set.
 ///
-/// Strict mode (catering): `~spuren-X` (may-contain) properties disqualify the matching flag.
-/// A "may contain milk" warning means the recipe is NOT lactose-free and NOT vegan.
+/// `~spuren-X` (may-contain) traces never *remove* a label: a shared production
+/// line isn't an ingredient. Instead, each label is tri-state (see [`DietaryFlags`]):
+/// a label that holds only because a trace on its axis was ignored is flagged via
+/// the paired `*_trace` field, so the UI can render it with an asterisk (e.g.
+/// "Glutenfrei*") and a footnote. A real (non-trace) property still removes the label.
 pub fn dietary_flags(properties: &[Property]) -> DietaryFlags {
     use canonical::*;
     let names: HashSet<String> = properties.iter().map(|p| p.name.to_lowercase()).collect();
 
     let has = |n: &str| names.contains(n);
-    // Strict: a property `~spuren-X` blocks the same axis as having `X` itself.
-    let has_any_form = |canonical: &str| has(canonical) || has(&format!("~spuren-{canonical}"));
+    // An actual (declared) property on this axis — removes the label outright.
+    let has_real = |canonical: &str| has(canonical);
+    // A may-contain trace on this axis — kept but flagged with an asterisk.
+    let has_trace = |canonical: &str| has(&format!("~spuren-{canonical}"));
 
     let meat_props = [
         FLEISCH,
@@ -332,20 +386,45 @@ pub fn dietary_flags(properties: &[Property]) -> DietaryFlags {
         GLUTEN, WEIZEN, "gerste", "roggen", "hafer", "dinkel", "kamut",
     ];
 
-    let vegetarian = !meat_props.iter().any(|p| has_any_form(p));
-    let vegan = vegetarian
-        && !dairy_props.iter().any(|p| has_any_form(p))
-        && !egg_props.iter().any(|p| has_any_form(p))
-        && !other_animal_props.iter().any(|p| has_any_form(p));
-    let vegetarian = vegetarian && !vegan;
-    let lactose_free = !dairy_props.iter().any(|p| has_any_form(p)) && !vegan;
-    let gluten_free = !gluten_props.iter().any(|p| has_any_form(p));
+    // For a group of axis-properties: does a real one exist, and (independently)
+    // does any trace exist? A label applies iff no real property; the trace flag
+    // is only meaningful when the label applies.
+    let scan = |props: &[&str]| {
+        let real = props.iter().any(|p| has_real(p));
+        let trace = props.iter().any(|p| has_trace(p));
+        (real, trace)
+    };
+
+    let (meat_real, meat_trace) = scan(&meat_props);
+    let (dairy_real, dairy_trace) = scan(&dairy_props);
+    let (egg_real, egg_trace) = scan(&egg_props);
+    let (other_real, other_trace) = scan(&other_animal_props);
+    let (gluten_real, gluten_trace_raw) = scan(&gluten_props);
+
+    // Vegetarian: no meat. Vegan additionally: no dairy/egg/other-animal.
+    let vegetarian_ok = !meat_real;
+    let vegan = vegetarian_ok && !dairy_real && !egg_real && !other_real;
+    // A vegan product isn't separately badged vegetarian.
+    let vegetarian = vegetarian_ok && !vegan;
+    let lactose_free = !dairy_real && !vegan;
+    let gluten_free = !gluten_real;
+
+    // Trace asterisks: only when the label applies and a trace exists on any of
+    // that label's contributing axes.
+    let vegetarian_trace = vegetarian && meat_trace;
+    let vegan_trace = vegan && (meat_trace || dairy_trace || egg_trace || other_trace);
+    let lactose_free_trace = lactose_free && dairy_trace;
+    let gluten_free_trace = gluten_free && gluten_trace_raw;
 
     DietaryFlags {
         vegan,
         vegetarian,
         lactose_free,
         gluten_free,
+        vegan_trace,
+        vegetarian_trace,
+        lactose_free_trace,
+        gluten_free_trace,
     }
 }
 
@@ -592,17 +671,67 @@ mod tests {
     }
 
     #[test]
-    fn dietary_flags_traces_block_strictly() {
-        // Catering rule: "may contain milk" → not lactose-free, not vegan
+    fn dietary_flags_traces_keep_label_but_flag_asterisk() {
+        // "may contain milk" keeps the label but marks it as trace-only (asterisk).
         let with_trace = dietary_flags(&[p("~spuren-milch")]);
-        assert!(!with_trace.lactose_free);
-        assert!(!with_trace.vegan);
+        assert!(with_trace.vegan, "milk trace keeps vegan");
+        assert!(with_trace.vegan_trace, "vegan holds only via ignored trace");
         assert!(
-            with_trace.vegetarian,
-            "traces of milk don't make it non-vegetarian"
+            !with_trace.vegetarian,
+            "vegan products aren't also labeled vegetarian"
         );
 
+        // A milk trace on an otherwise non-vegan product keeps lactose-free, flagged.
+        let trace_on_nonvegan = dietary_flags(&[p("fleisch"), p("~spuren-milch")]);
+        assert!(!trace_on_nonvegan.vegan);
+        assert!(trace_on_nonvegan.lactose_free, "milk trace keeps lactose-free");
+        assert!(
+            trace_on_nonvegan.lactose_free_trace,
+            "lactose-free holds only via ignored trace"
+        );
+    }
+
+    #[test]
+    fn dietary_flags_gluten_trace_is_asterisked_not_blocked() {
+        // Gluten-free now uses the asterisk model: a trace keeps the label but
+        // flags it. Only a REAL gluten property removes it.
         let with_gluten_trace = dietary_flags(&[p("~spuren-gluten")]);
-        assert!(!with_gluten_trace.gluten_free);
+        assert!(with_gluten_trace.gluten_free, "gluten trace keeps gluten-free");
+        assert!(
+            with_gluten_trace.gluten_free_trace,
+            "gluten-free holds only via ignored trace → asterisk"
+        );
+
+        // A real gluten property removes gluten-free entirely (no asterisk).
+        let with_real_gluten = dietary_flags(&[p("weizen"), p("gluten")]);
+        assert!(!with_real_gluten.gluten_free);
+        assert!(!with_real_gluten.gluten_free_trace);
+    }
+
+    #[test]
+    fn dietary_flags_no_trace_no_asterisk() {
+        // A clean vegan/gluten-free product carries no asterisk flags.
+        let clean = dietary_flags(&[p("gemüse")]);
+        assert!(clean.vegan && clean.gluten_free);
+        assert!(!clean.vegan_trace && !clean.gluten_free_trace);
+    }
+
+    #[test]
+    fn negative_allergen_declarations_are_not_real_allergens() {
+        // Boilerplate "no labelable allergens/additives" must NOT count as data —
+        // otherwise allergen-free products would false-positive the sync warning.
+        assert!(is_negative_allergen_declaration(
+            "Keine kennzeichnungspflichtigen Allergene entsprechend der zielmarktspezifischen Vorschriften enthalten"
+        ));
+        assert!(is_negative_allergen_declaration(
+            "Keine deklarationspflichtigen Zusatzstoffe vorhanden, abhängig vom Zielmarkt."
+        ));
+        // Actual allergen labels are not negative declarations.
+        assert!(!is_negative_allergen_declaration(
+            "Milch und daraus gewonnene Erzeugnisse"
+        ));
+        assert!(!is_negative_allergen_declaration(
+            "Weizen und daraus gewonnene Erzeugnisse"
+        ));
     }
 }

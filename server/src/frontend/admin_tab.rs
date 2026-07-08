@@ -351,9 +351,21 @@ async fn metro_sync_run(
                 }
                 li { "Allergen properties applied: " (report.allergens_applied) }
             }
+            @if !report.warnings.is_empty() {
+                details class="mt-2" {
+                    summary class="cursor-pointer text-amber-600 dark:text-amber-400" {
+                        (report.warnings.len()) " warning(s) (click to expand)"
+                    }
+                    ul class="list-disc pl-6 mt-2 text-sm opacity-80" {
+                        @for w in &report.warnings {
+                            li { (w) }
+                        }
+                    }
+                }
+            }
             @if !report.failures.is_empty() {
                 details class="mt-2" {
-                    summary class="cursor-pointer text-yellow-600 dark:text-yellow-400" {
+                    summary class="cursor-pointer text-red-600 dark:text-red-400" {
                         (report.failures.len()) " failure(s) (click to expand)"
                     }
                     ul class="list-disc pl-6 mt-2 text-sm opacity-80" {
