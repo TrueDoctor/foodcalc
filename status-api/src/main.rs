@@ -213,16 +213,16 @@ async fn refresh_cache(state: &AppState) {
     println!("Cache refreshed at {}", OffsetDateTime::now_utc());
 }
 
-// Get the next upcoming event
+// Get the event to show by default: the ongoing event, else the next upcoming one
 async fn get_upcoming_event(food_lib: &FoodLib) -> Option<i32> {
     match food_lib
         .events()
-        .get_upcoming_events(OffsetDateTime::now_utc())
+        .get_current_or_upcoming_event(OffsetDateTime::now_utc())
         .await
     {
-        Ok(events) => events.first().map(|e| e.id),
+        Ok(event) => event.map(|e| e.id),
         Err(e) => {
-            eprintln!("Error fetching upcoming events: {}", e);
+            eprintln!("Error fetching current/upcoming event: {}", e);
             None
         }
     }

@@ -138,21 +138,40 @@ async fn test_prep_applies_to_root_recipe_direct_ingredients(pool: PgPool) {
 }
 
 #[sqlx::test(fixtures("minimal", "complex_events"))]
-async fn test_upcoming_and_past_events(pool: PgPool) {
+async fn test_current_or_upcoming_event(pool: PgPool) {
     let ops = EventOps::new(Arc::new(pool));
 
-    // Check around July 1, 2024
-    let date = datetime!(2024-07-01 00:00:00 UTC);
+    // 2024-07-01: festival (100) window is 06-30..07-04 → ongoing; prep (101)
+    // starts 07-07 → upcoming. Ongoing wins.
+    let during_festival = datetime!(2024-07-01 00:00:00 UTC);
+    let event = ops
+        .get_current_or_upcoming_event(during_festival)
+        .await
+        .unwrap();
+    assert_eq!(event.map(|e| e.id), Some(100));
 
-    let upcoming = ops.get_upcoming_events(date).await.unwrap();
-    assert!(upcoming.iter().any(|e| e.id == 100)); // Festival ongoing
-    assert!(upcoming.iter().any(|e| e.id == 101)); // Week 28 prep upcoming
+    // 2024-07-05: festival finished (ended 07-04), prep (101) not yet started
+    // (07-07) → soonest upcoming wins over the far-off December events.
+    let between_events = datetime!(2024-07-05 00:00:00 UTC);
+    let event = ops
+        .get_current_or_upcoming_event(between_events)
+        .await
+        .unwrap();
+    assert_eq!(event.map(|e| e.id), Some(101));
 
-    // Check after all events
-    let date = datetime!(2024-07-09 00:00:00 UTC);
-    let past = ops.get_past_events(date).await.unwrap();
-    assert!(past.iter().any(|e| e.id == 100)); // Festival finished
-    assert!(past.iter().any(|e| e.id == 101)); // Week 28 prep finished
+    // After every scheduled event has finished → nothing to show. (The minimal
+    // fixture's December events are also in the past by this date.)
+    let after_all = datetime!(2025-01-01 00:00:00 UTC);
+    let event = ops
+        .get_current_or_upcoming_event(after_all)
+        .await
+        .unwrap();
+    assert_eq!(event, None);
+
+    // Past-events query still reports the festival and prep once they're over.
+    let past = ops.get_past_events(datetime!(2024-07-09 00:00:00 UTC)).await.unwrap();
+    assert!(past.iter().any(|e| e.id == 100));
+    assert!(past.iter().any(|e| e.id == 101));
 }
 
 #[sqlx::test(fixtures("minimal", "complex_events"))]

@@ -986,9 +986,14 @@ impl EventOps {
         Ok(record.total)
     }
 
-    /// Gets upcoming events (those with meals or prep tasks after the given date)
-    pub async fn get_upcoming_events(&self, after: OffsetDateTime) -> Result<Vec<Event>> {
-        let records = sqlx::query_as!(
+    /// Picks the event to show by default at the given time: an ongoing event
+    /// (window contains `at`) ending soonest, else the soonest upcoming event.
+    /// Fully-past events are never returned; `None` means nothing is scheduled.
+    pub async fn get_current_or_upcoming_event(
+        &self,
+        at: OffsetDateTime,
+    ) -> Result<Option<Event>> {
+        let record = sqlx::query_as!(
             Event,
             r#"
             SELECT
@@ -1000,16 +1005,23 @@ impl EventOps {
             FROM events e
             LEFT JOIN event_meals em ON e.event_id = em.event_id
             LEFT JOIN food_prep fp ON e.event_id = fp.event_id
-            WHERE em.start_time >= $1 OR fp.prep_date >= $1
-            GROUP BY (e.event_id, e.event_name, e.group_id, e.budget)
-            ORDER BY MIN(em.start_time)
+            GROUP BY (e.event_id, e.event_name, e.comment, e.group_id, e.budget)
+            HAVING MAX(GREATEST(em.end_time, fp.use_until)) >= $1
+            ORDER BY
+                (MIN(LEAST(em.start_time, fp.prep_date)) > $1),
+                CASE
+                    WHEN MIN(LEAST(em.start_time, fp.prep_date)) <= $1
+                        THEN MAX(GREATEST(em.end_time, fp.use_until))
+                    ELSE MIN(LEAST(em.start_time, fp.prep_date))
+                END
+            LIMIT 1
             "#,
-            after
+            at
         )
-        .fetch_all(&*self.pool)
+        .fetch_optional(&*self.pool)
         .await?;
 
-        Ok(records)
+        Ok(record)
     }
 
     /// Gets past events (those with no future meals or prep tasks after the given date)
