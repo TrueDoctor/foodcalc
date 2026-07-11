@@ -24,17 +24,36 @@
     return name.charAt(0).toUpperCase() + name.slice(1);
   }
 
-  // Split `meal.allergens` (an array of canonical names) into Contains and
-  // MayContain lists. `~spuren-X` is the may-contain convention.
+  // Split `meal.allergens` (an array of canonical names) into three lists.
+  // `~spuren-X` = EU-14 may-contain trace; `~hinweis-X` = non-EU-14 avoidance
+  // note (e.g. onion). Everything else = EU-14 allergens that are definitely
+  // present. Hinweise render as the plain "Enthält:" line; EU-14 allergens get
+  // their own boxed "Allergene" section — the two must not be conflated.
   $: contains = (meal.allergens ?? [])
-    .filter(n => !n.startsWith('~spuren-'))
+    .filter(n => !n.startsWith('~spuren-') && !n.startsWith('~hinweis-'))
     .map(pretty)
     .sort();
+  // Drop any may-contain that's already a definite allergen: "kann Spuren von
+  // Gluten enthalten" is redundant (and contradictory) when Gluten is in `contains`.
   $: mayContain = (meal.allergens ?? [])
     .filter(n => n.startsWith('~spuren-'))
     .map(n => pretty(n.slice('~spuren-'.length)))
+    .filter(n => !contains.includes(n))
     .sort();
-  $: dietary = meal.dietary ?? { vegan: false, vegetarian: false, lactose_free: false, gluten_free: false };
+  $: hinweise = (meal.allergens ?? [])
+    .filter(n => n.startsWith('~hinweis-'))
+    .map(n => pretty(n.slice('~hinweis-'.length)))
+    .sort();
+  $: dietary = meal.dietary ?? {
+    vegan: false, vegetarian: false, lactose_free: false, gluten_free: false,
+    vegan_trace: false, vegetarian_trace: false, lactose_free_trace: false, gluten_free_trace: false,
+  };
+  // Any dietary label that holds only because may-contain traces were ignored
+  // gets a trailing asterisk, explained by a footnote (mirrors the recipe view).
+  $: hasTraceAsterisk = dietary.vegan_trace || dietary.vegetarian_trace
+    || dietary.lactose_free_trace || dietary.gluten_free_trace;
+  // Whether there's any Enthält / Allergene / Spuren detail worth a collapsible.
+  $: hasAllergenDetail = contains.length > 0 || mayContain.length > 0 || hinweise.length > 0;
 
   // Fix admin mode to be case insensitive
   const adminPassword = $page.url.searchParams.get('admin');
@@ -159,30 +178,74 @@
     </div>
   </div>
   
-  {#if dietary.vegan || dietary.vegetarian || dietary.lactose_free || dietary.gluten_free || contains.length > 0 || mayContain.length > 0}
+  {#if dietary.vegan || dietary.vegetarian || dietary.lactose_free || dietary.gluten_free || contains.length > 0 || mayContain.length > 0 || hinweise.length > 0}
     <div class="mt-2 mb-1 text-sm">
       <div class="flex flex-wrap gap-1 mb-1">
         {#if dietary.vegan}
-          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-300">vegan</span>
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-300">vegan{dietary.vegan_trace ? '*' : ''}</span>
         {:else if dietary.vegetarian}
-          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-lime-100 text-lime-800 border border-lime-300">vegetarisch</span>
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-lime-100 text-lime-800 border border-lime-300">vegetarisch{dietary.vegetarian_trace ? '*' : ''}</span>
         {/if}
         {#if dietary.lactose_free}
-          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">laktosefrei</span>
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">laktosefrei{dietary.lactose_free_trace ? '*' : ''}</span>
         {/if}
         {#if dietary.gluten_free}
-          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-300">glutenfrei</span>
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-300">glutenfrei{dietary.gluten_free_trace ? '*' : ''}</span>
         {/if}
       </div>
-      {#if contains.length > 0}
-        <p class="text-gray-700">
-          <span class="font-semibold">Enthält:</span> {contains.join(', ')}
-        </p>
-      {/if}
-      {#if mayContain.length > 0}
-        <p class="text-xs italic text-gray-500">
-          Kann Spuren von {mayContain.join(', ')} enthalten.
-        </p>
+
+      <!--
+        Enthält / Allergene / Spuren live behind a click-to-expand to keep the
+        card quiet by default. Native <details> gives us open/close state, keyboard
+        support and ARIA for free; `list-none` + the marker rule strip the default
+        disclosure triangle so we can draw our own caret.
+      -->
+      {#if hasAllergenDetail}
+        <details class="allergen-details mt-1">
+          <summary class="flex items-center gap-1 cursor-pointer select-none text-gray-600 hover:text-gray-800">
+            <svg class="caret h-3 w-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <span class="font-semibold">Inhaltsstoffe & Allergene</span>
+            {#if contains.length > 0}
+              <span class="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                {contains.length} Allergen{contains.length === 1 ? '' : 'e'}
+              </span>
+            {/if}
+          </summary>
+
+          <div class="mt-1.5">
+            <!-- Non-EU-14 avoidance notes (onion, guar gum, …) — plain "Enthält" list. -->
+            {#if hinweise.length > 0}
+              <p class="text-gray-700">
+                <span class="font-semibold">Enthält:</span> {hinweise.join(', ')}
+              </p>
+            {/if}
+
+            <!-- EU-14 regulatory allergens — boxed to stand apart from the plain list. -->
+            {#if contains.length > 0}
+              <div class="mt-1 px-2 py-1.5 rounded border border-amber-200 bg-amber-50">
+                <span class="font-semibold text-amber-800">Allergene:</span>
+                <span class="text-amber-900">{contains.join(', ')}</span>
+                {#if mayContain.length > 0}
+                  <p class="text-xs italic text-amber-700/80 mt-0.5">
+                    kann Spuren von {mayContain.join(', ')} enthalten
+                  </p>
+                {/if}
+              </div>
+            {:else if mayContain.length > 0}
+              <p class="text-xs italic text-gray-500 mt-1">
+                kann Spuren von {mayContain.join(', ')} enthalten
+              </p>
+            {/if}
+
+            {#if hasTraceAsterisk}
+              <p class="text-xs italic text-gray-500 mt-1">
+                * ohne Berücksichtigung von Spuren
+              </p>
+            {/if}
+          </div>
+        </details>
       {/if}
     </div>
   {/if}
@@ -315,3 +378,17 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* Strip the native disclosure triangle so our own caret is the only marker. */
+  .allergen-details summary {
+    list-style: none;
+  }
+  .allergen-details summary::-webkit-details-marker {
+    display: none;
+  }
+  /* Point the caret down when the section is open. */
+  .allergen-details[open] summary .caret {
+    transform: rotate(90deg);
+  }
+</style>

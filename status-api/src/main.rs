@@ -36,7 +36,8 @@ struct MealStatus {
     meal_id: i32,
     event_id: i32, // Added event_id for cache invalidation
     /// Canonical property names (e.g. "milch", "gluten"). `~spuren-X` prefixed entries
-    /// indicate "may contain X" warnings.
+    /// indicate "may contain X" warnings; `~hinweis-X` entries are non-EU-14
+    /// avoidance notes (e.g. onion) shown as separate "Hinweise".
     #[serde(default)]
     allergens: Vec<String>,
     /// Derived dietary flags computed from `allergens`.
@@ -50,6 +51,17 @@ struct DietaryStatus {
     vegetarian: bool,
     lactose_free: bool,
     gluten_free: bool,
+    /// A `*_trace` flag is true when the paired flag holds only because a
+    /// `~spuren-` may-contain warning on that axis was ignored → the UI renders
+    /// the label with an asterisk (e.g. "vegan*").
+    #[serde(default)]
+    vegan_trace: bool,
+    #[serde(default)]
+    vegetarian_trace: bool,
+    #[serde(default)]
+    lactose_free_trace: bool,
+    #[serde(default)]
+    gluten_free_trace: bool,
 }
 
 impl From<foodlib_new::allergen::DietaryFlags> for DietaryStatus {
@@ -59,6 +71,10 @@ impl From<foodlib_new::allergen::DietaryFlags> for DietaryStatus {
             vegetarian: d.vegetarian,
             lactose_free: d.lactose_free,
             gluten_free: d.gluten_free,
+            vegan_trace: d.vegan_trace,
+            vegetarian_trace: d.vegetarian_trace,
+            lactose_free_trace: d.lactose_free_trace,
+            gluten_free_trace: d.gluten_free_trace,
         }
     }
 }
@@ -248,24 +264,31 @@ async fn fetch_allergens_for_meals(
             .await
             .map(|rp| rp.properties)
             .unwrap_or_default();
-        // Split into contains/may, compact each separately (drop subsumed children),
-        // then merge back with `~spuren-` prefix preserved on may-contains.
+        // Split into contains/may/hinweise, compact contains & may separately (drop
+        // subsumed children), then merge back with prefixes preserved. `~spuren-` are
+        // EU-14 may-contain warnings; `~hinweis-` are non-EU-14 avoidances (e.g. onion)
+        // that must stay OUT of the regulatory "Enthält" list.
         let mut contains: Vec<String> = Vec::new();
         let mut may: Vec<String> = Vec::new();
+        let mut hinweise: Vec<String> = Vec::new();
         for p in &props {
             let lower = p.name.to_lowercase();
             if let Some(rest) = lower.strip_prefix("~spuren-") {
                 may.push(rest.to_string());
+            } else if let Some(rest) = lower.strip_prefix("~hinweis-") {
+                hinweise.push(rest.to_string());
             } else {
                 contains.push(lower);
             }
         }
         contains.sort(); contains.dedup();
         may.sort(); may.dedup();
+        hinweise.sort(); hinweise.dedup();
         let contains = foodlib_new::ops::allergens::compact_allergen_set(&contains);
         let may = foodlib_new::ops::allergens::compact_allergen_set(&may);
         let mut names: Vec<String> = contains;
         names.extend(may.into_iter().map(|s| format!("~spuren-{s}")));
+        names.extend(hinweise.into_iter().map(|s| format!("~hinweis-{s}")));
         let dietary = foodlib_new::ops::allergens::dietary_flags(&props).into();
         out.insert(recipe_id, (names, dietary));
     }
