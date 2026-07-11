@@ -340,23 +340,80 @@ struct Band {
 }
 
 impl Band {
-    /// Greedy interval packing: sort by start, then place each item in the first
-    /// lane whose last item ends at or before this item starts; otherwise open a
-    /// new lane. Classic activity-selection lane assignment.
+    /// Pack items into as few lanes as possible, then order the lanes so the
+    /// longest bars sit on top. Two separate concerns, handled in two passes:
+    ///
+    /// 1. **Minimize height (lane count).** Items are visited in start-time order
+    ///    and each goes into the first lane whose last bar has already ended;
+    ///    otherwise a new lane opens. Start-time ordering is the classic optimal
+    ///    greedy for interval partitioning — it always yields the minimum number
+    ///    of lanes, so several non-overlapping meals share one row instead of
+    ///    each waterfalling onto its own. (Duration-first ordering does NOT
+    ///    guarantee that: a long early bar can block a lane a short later bar
+    ///    could have shared, wasting vertical space.)
+    ///
+    /// 2. **Long lines on top.** The packed lanes are then reordered top-to-
+    ///    bottom by [`lane_rank`], floating the lane with the longest bar up.
+    ///
+    /// The `(start, label, id)` sort key makes both passes deterministic for
+    /// identical input.
     fn pack(mut items: Vec<TimelineItem>) -> Self {
-        items.sort_by_key(|i| i.start);
+        items.sort_by(|a, b| lane_sort_key(a).cmp(&lane_sort_key(b)));
         let mut lanes: Vec<Vec<TimelineItem>> = Vec::new();
+        // `lane_ends[i]` is the end-time of the last (latest) bar in `lanes[i]`.
+        // Because we visit in start order, that's always the lane's current tail.
+        let mut lane_ends: Vec<OffsetDateTime> = Vec::new();
         for item in items {
-            let slot = lanes
-                .iter_mut()
-                .find(|lane| lane.last().is_none_or(|prev| prev.end <= item.start));
+            let slot = lane_ends.iter().position(|&end| end <= item.start);
             match slot {
-                Some(lane) => lane.push(item),
-                None => lanes.push(vec![item]),
+                Some(i) => {
+                    lane_ends[i] = item.end;
+                    lanes[i].push(item);
+                }
+                None => {
+                    lane_ends.push(item.end);
+                    lanes.push(vec![item]);
+                }
             }
         }
+        // Float the visually-heaviest lanes to the top. `sort_by` is stable, so
+        // lanes of equal rank keep their (start-ordered) packing order.
+        lanes.sort_by(|a, b| lane_rank(a).cmp(&lane_rank(b)));
         Band { lanes }
     }
+}
+
+/// Ranking of a whole lane for its final top-to-bottom position within a band
+/// (lower rank = higher on screen). This is the "long lines above short lines"
+/// rule applied at the lane level, without affecting how densely each lane was
+/// packed.
+///
+/// A lane is ranked by its single longest bar (longest first), which floats the
+/// lane holding the biggest anchor bar to the top. Ties fall through to the
+/// lane's earliest start and then its first label, so equal-weight lanes always
+/// order the same way (deterministic layout).
+fn lane_rank(lane: &[TimelineItem]) -> (std::cmp::Reverse<Duration>, OffsetDateTime, String) {
+    let longest = lane
+        .iter()
+        .map(|i| i.end - i.start)
+        .max()
+        .unwrap_or(Duration::ZERO);
+    // Bars are in start order within a lane, so the first is the earliest.
+    let earliest_start = lane
+        .first()
+        .map(|i| i.start)
+        .unwrap_or(OffsetDateTime::UNIX_EPOCH);
+    let first_label = lane.first().map(|i| i.label.clone()).unwrap_or_default();
+    (std::cmp::Reverse(longest), earliest_start, first_label)
+}
+
+/// Sort key that drives lane packing: **start time first**, then by name, then
+/// id — a total order so the packing (and thus the whole layout) is
+/// deterministic for identical input. Start-first ordering is what guarantees
+/// the minimum lane count; the "longest on top" concern is handled afterwards
+/// by [`lane_rank`], not here.
+fn lane_sort_key(item: &TimelineItem) -> (OffsetDateTime, String, i32) {
+    (item.start, item.label.clone(), item.id.unwrap_or(i32::MAX))
 }
 
 /// One calendar day's worth of items, grouped into per-kind packed bands.
@@ -419,6 +476,50 @@ fn pct(hour: f64, bounds: WindowBounds) -> f64 {
     pos / bounds.cols() as f64 * 100.0
 }
 
+/// The current wall-clock instant, in foodcalc's storage convention (local
+/// wall-clock components carried as UTC — see the module header). We read this
+/// value's `.date()`/`.time()` directly, exactly like stored meals, so the
+/// cursor lines up with the bars without any offset conversion. Falls back to
+/// UTC if the local offset can't be determined (headless server, etc.).
+fn now_wall_clock() -> OffsetDateTime {
+    OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc())
+}
+
+/// Render the live "now" cursor: a thin vertical playhead across a day-row,
+/// like the current-time line in a video editor. Positioned by the same
+/// logical-hour → percent mapping as the bars.
+///
+/// Returns nothing when "now" falls outside the visible hour window (e.g. it's
+/// 03:00 but the window starts at 08:00) — a cursor pinned to the edge would
+/// just be misleading. The element carries the window geometry as `data-*` so
+/// `timeline.js` can recompute its position every few seconds and animate it,
+/// and `data-tl-cursor` marks it for that script.
+fn render_now_cursor(bounds: WindowBounds, now: OffsetDateTime) -> Markup {
+    let hour = hour_pos(now);
+    // Only draw when "now" is actually within the shown columns.
+    if (hour as i64) < bounds.first_hour || (hour as i64) >= bounds.last_hour {
+        return html! {};
+    }
+    let left = pct(hour, bounds);
+    let time_fmt = format_description!("[hour]:[minute]");
+    let label = now.time().format(&time_fmt).unwrap_or_default();
+    html! {
+        div class="tl-cursor absolute top-0 bottom-0 w-px bg-red-500 dark:bg-red-400 \
+                   pointer-events-none z-20"
+            style=(format!("left: {:.3}%", left))
+            data-tl-cursor="1" {
+            // A small time chip and a knob at the top, like a playhead handle.
+            div class="absolute -top-0.5 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full \
+                       bg-red-500 dark:bg-red-400" {}
+            div class="absolute -top-5 left-1/2 -translate-x-1/2 px-1 rounded text-[10px] \
+                       leading-4 font-semibold whitespace-nowrap bg-red-500 text-white \
+                       dark:bg-red-400 dark:text-red-950 tl-cursor-label" {
+                (label)
+            }
+        }
+    }
+}
+
 /// Render the hour-label axis: one label per hour column, left-aligned over its
 /// gridline. Uses the same flex track so labels line up with the bars below.
 fn render_hour_axis(bounds: WindowBounds) -> Markup {
@@ -469,8 +570,12 @@ fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: i32, day: Dat
     let day_iso = day
         .format(format_description!("[year]-[month]-[day]"))
         .unwrap_or_default();
+    let resizable = drag_key.is_some() && item.kind.resizable();
+    // `group` lets the edge handles reveal themselves on bar hover (Tailwind
+    // `group-hover`). `overflow-hidden` keeps the label clipped but we inset the
+    // handles so they aren't cut off by the rounded corners.
     let base_class = format!(
-        "absolute top-0.5 bottom-0.5 rounded border px-2 py-0.5 text-xs \
+        "group absolute top-0.5 bottom-0.5 rounded border px-2 py-0.5 text-xs \
          overflow-hidden whitespace-nowrap flex items-center {} {}",
         colors,
         if drag_key.is_some() { "cursor-grab select-none tl-bar" } else { "" },
@@ -487,7 +592,7 @@ fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: i32, day: Dat
             data-id=[drag_key.map(|(id, _)| id)]
             data-event=(event_id)
             data-day=(day_iso)
-            data-resizable=(drag_key.is_some() && item.kind.resizable())
+            data-resizable=(resizable)
             // Double-click target: meal bars open their edit form. Only meals
             // have an edit page in scope here.
             data-edit=[(item.kind == ItemKind::Meal)
@@ -497,9 +602,38 @@ fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: i32, day: Dat
             @if let Some(detail) = &item.detail {
                 span class="opacity-80 ml-1 pointer-events-none" { "— " (detail) }
             }
-            // Right-edge resize handle for meals/prep. `tl-resize` is the JS hook.
-            @if drag_key.is_some() && item.kind.resizable() {
-                div class="tl-resize absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize" {}
+            // Resize handles on BOTH edges for meals/prep. `tl-resize` is the JS
+            // hook; `data-edge` tells it which end moves. The grip is faint until
+            // you hover the bar, then brightens — a clear "drag me" affordance.
+            @if resizable {
+                (resize_handle("left"))
+                (resize_handle("right"))
+            }
+        }
+    }
+}
+
+/// One edge resize handle: a full-height hit target pinned to the given edge
+/// (`"left"` or `"right"`), showing a two-bar grip glyph. The cursor is
+/// *directional* — `w-resize` (←) on the left edge, `e-resize` (→) on the right —
+/// so hovering an edge signals which way it will extend. The grip fades in on
+/// bar hover via `group-hover`. `tl-resize` + `data-edge` are the JS hooks.
+fn resize_handle(edge: &str) -> Markup {
+    let (side, cursor) = if edge == "left" {
+        ("left-0", "cursor-w-resize")
+    } else {
+        ("right-0", "cursor-e-resize")
+    };
+    html! {
+        div class=(format!(
+                "tl-resize absolute {} top-0 bottom-0 w-2.5 {} \
+                 flex items-center justify-center", side, cursor))
+            data-edge=(edge) {
+            // Two short vertical bars = the standard resize grip. Faint by
+            // default, full-opacity while hovering the bar.
+            div class="flex gap-px opacity-40 group-hover:opacity-90 pointer-events-none" {
+                span class="block w-px h-3 bg-current" {}
+                span class="block w-px h-3 bg-current" {}
             }
         }
     }
@@ -527,6 +661,14 @@ pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<
     let bounds = WindowBounds::from_items(&items);
     let days = group_by_day(&items);
 
+    // "Now" in wall-clock terms, and the logical day it belongs to. Both drive
+    // the current-day highlight, the focus-on-load scroll, and the live cursor.
+    let now = now_wall_clock();
+    let today = logical_date(now);
+    let today_iso = today
+        .format(format_description!("[year]-[month]-[day]"))
+        .unwrap_or_default();
+
     let weekday_fmt = format_description!("[weekday repr:long]");
     let date_fmt = format_description!("[day].[month].[year]");
 
@@ -539,12 +681,26 @@ pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<
         //                     + start-hour*60 == minutes-since-DAY_START_HOUR,
         //                     which is what the /move endpoint expects)
         //   data-snap       = snap granularity in minutes
+        //   data-today      = today's logical date (ISO) — the row to focus on
+        //                     load and to hang the live cursor on
+        //
+        // Background refresh: the section re-fetches itself every 10 minutes and
+        // swaps in the fresh render (so a long-open timeline stays current with
+        // other editors and the cursor's day). `hx-trigger` includes `htmx:abort`
+        // suppression via the JS, which cancels the poll while a drag is active
+        // so a refresh never yanks the DOM mid-gesture (see timeline.js).
         section class="w-full flex flex-col gap-4 p-4" id="timeline-root"
             data-timeline="1"
             data-event=(event_id)
             data-cols=(bounds.cols())
             data-start-hour=(bounds.first_hour)
-            data-snap="30" {
+            data-snap="30"
+            data-today=(today_iso)
+            hx-get=(format!("/events/edit/timeline/{event_id}"))
+            hx-trigger="every 600s"
+            hx-target="#timeline-root"
+            hx-swap="outerHTML"
+            hx-sync="this:replace" {
             div class="flex flex-row items-center justify-between flex-wrap gap-3" {
                 h1 class="text-2xl font-semibold" { (event.name) " — Timeline" }
                 a class="btn btn-primary" hx-target="#content" hx-push-url="true"
@@ -577,22 +733,45 @@ pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<
             }
 
             @for day in &days {
-                div class="rounded-lg border border-gray-700 p-3 overflow-x-auto" {
-                    div class="font-semibold" {
+                @let day_iso = day.date
+                    .format(format_description!("[year]-[month]-[day]"))
+                    .unwrap_or_default();
+                @let is_today = day.date == today;
+                // `data-tl-day` is the drop-target + focus hook: the JS hit-tests
+                // it to route a cross-day drop and scrolls today's row into view.
+                // Today's row gets a subtle ring so it's easy to spot on load.
+                div class=(format!(
+                        "rounded-lg border p-3 overflow-x-auto {}",
+                        if is_today {
+                            "border-red-400/70 dark:border-red-400/60 ring-1 ring-red-400/40"
+                        } else {
+                            "border-gray-700"
+                        }))
+                    data-tl-day=(day_iso) {
+                    div class="font-semibold flex items-center gap-2" {
                         (day.date.format(weekday_fmt).unwrap_or_default())
                         ", "
                         (day.date.format(date_fmt).unwrap_or_default())
+                        @if is_today {
+                            span class="text-xs font-normal px-1.5 rounded bg-red-500 text-white \
+                                       dark:bg-red-400 dark:text-red-950" { "Heute" }
+                        }
                     }
                     // Single inner track sized to the full window width so the
                     // outer `overflow-x-auto` has something wider than itself to
                     // scroll on narrow screens. `min-width` keeps it filling the
                     // container on desktop, `width: max-content` lets it grow.
-                    div class="flex flex-col gap-1" style=(format!("min-width: {}rem", track_min_width_rem(bounds))) {
+                    // `relative` makes it the positioning context for the cursor.
+                    div class="relative flex flex-col gap-1" style=(format!("min-width: {}rem", track_min_width_rem(bounds))) {
                         (render_hour_axis(bounds))
                         @for band in &day.bands {
                             @for lane in &band.lanes {
                                 (render_lane(lane, bounds, event_id, day.date))
                             }
+                        }
+                        // Live "now" playhead, only on today's row (per design).
+                        @if is_today {
+                            (render_now_cursor(bounds, now))
                         }
                     }
                 }
@@ -737,5 +916,104 @@ mod tests {
         let dt = to_stored(date!(2026 - 07 - 06), 21 * 60).unwrap();
         assert_eq!(dt.date(), date!(2026 - 07 - 07));
         assert_eq!(dt.hour(), 1);
+    }
+
+    /// Build a meal item spanning [start_h, end_h) o'clock on a fixed test day.
+    fn meal(label: &str, start_h: u8, end_h: u8) -> TimelineItem {
+        let day = date!(2026 - 07 - 06);
+        let at = |h: u8| {
+            PrimitiveDateTime::new(day, Time::from_hms(h, 0, 0).unwrap()).assume_utc()
+        };
+        TimelineItem {
+            kind: ItemKind::Meal,
+            id: Some(1),
+            label: label.to_string(),
+            detail: None,
+            start: at(start_h),
+            end: at(end_h),
+            class_override: None,
+        }
+    }
+
+    #[test]
+    fn pack_no_overlap_within_lane() {
+        // Two overlapping meals must land in different lanes; a third that fits
+        // the gap after the first reuses a lane rather than opening a new one.
+        let band = Band::pack(vec![
+            meal("A", 8, 12),  // long
+            meal("B", 9, 10),  // overlaps A
+            meal("C", 13, 14), // after everything
+        ]);
+        // A and B overlap -> 2 lanes; C fits after A in A's lane.
+        assert_eq!(band.lanes.len(), 2);
+        for lane in &band.lanes {
+            for pair in lane.windows(2) {
+                assert!(
+                    pair[0].end <= pair[1].start,
+                    "lane items must not overlap and must be in start order",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pack_uses_minimum_lanes() {
+        // Compactness: several short, non-overlapping meals must all share ONE
+        // lane rather than waterfalling. The max simultaneous overlap here is 1,
+        // so the minimum (and required) lane count is 1.
+        let band = Band::pack(vec![
+            meal("a", 8, 9),
+            meal("b", 10, 11),
+            meal("c", 12, 13),
+            meal("d", 14, 15),
+        ]);
+        assert_eq!(band.lanes.len(), 1, "non-overlapping meals should share a lane");
+        assert_eq!(band.lanes[0].len(), 4);
+    }
+
+    #[test]
+    fn pack_long_bar_does_not_waste_a_lane() {
+        // Regression for the "reduce vertical height" fix: a long bar must not
+        // block a lane that shorter, non-overlapping bars could share. Max
+        // simultaneous overlap is 2 (Long always overlaps exactly one short at a
+        // time), so the optimal layout is 2 lanes — one for Long, one holding all
+        // three shorts. Duration-first packing would have wasted a 3rd lane here.
+        let band = Band::pack(vec![
+            meal("Long", 8, 16),
+            meal("s1", 8, 9),
+            meal("s2", 10, 11),
+            meal("s3", 12, 13),
+        ]);
+        assert_eq!(band.lanes.len(), 2, "long bar must not waste a lane");
+        // And the Long lane is on top (longest-on-top ordering).
+        assert!(band.lanes[0].iter().any(|i| i.label == "Long"));
+        // The three shorts all share the other lane.
+        assert_eq!(band.lanes[1].len(), 3);
+    }
+
+    #[test]
+    fn pack_longest_lane_on_top() {
+        // The lane holding the longest bar ranks first (top of the band).
+        let band = Band::pack(vec![
+            meal("short", 8, 9),
+            meal("long", 8, 16), // longest -> its lane should be lane 0
+        ]);
+        assert_eq!(band.lanes.len(), 2);
+        let top_has_long = band.lanes[0].iter().any(|i| i.label == "long");
+        assert!(top_has_long, "the lane with the longest bar should be on top");
+    }
+
+    #[test]
+    fn pack_is_deterministic_by_name() {
+        // Two same-duration, same-start meals differing only by name must always
+        // pack in the same (name-sorted) order regardless of input order.
+        let forward = Band::pack(vec![meal("alpha", 8, 9), meal("bravo", 8, 9)]);
+        let reversed = Band::pack(vec![meal("bravo", 8, 9), meal("alpha", 8, 9)]);
+        let names = |b: &Band| -> Vec<String> {
+            b.lanes.iter().flatten().map(|i| i.label.clone()).collect()
+        };
+        assert_eq!(names(&forward), names(&reversed));
+        // And "alpha" comes before "bravo" (name tiebreak, lane 0 first).
+        assert_eq!(names(&forward), vec!["alpha".to_string(), "bravo".to_string()]);
     }
 }
