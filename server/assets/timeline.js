@@ -134,6 +134,48 @@
     return step / drag.mpp;
   }
 
+  // Highlight the day-row the pointer is currently over during a cross-day move,
+  // so the drop target is obvious. Clears the highlight from all other rows.
+  function highlightDropDay(root, isoDay) {
+    root.querySelectorAll("[data-tl-day]").forEach(function (row) {
+      row.classList.toggle("tl-drop-target", row.dataset.tlDay === isoDay);
+    });
+  }
+
+  function clearDropHighlight(root) {
+    root.querySelectorAll(".tl-drop-target").forEach(function (row) {
+      row.classList.remove("tl-drop-target");
+    });
+  }
+
+  // Lift the bar out of its lane into `position: fixed` so it can float across
+  // day-rows during a move. Captured once, on the first movement of a move drag.
+  // We stash the original inline styles to restore them if the drop fails.
+  function liftBar(drag, e) {
+    const barRect = drag.bar.getBoundingClientRect();
+    drag.floating = true;
+    // Pointer offset within the bar, so the bar tracks the cursor 1:1.
+    drag.grabOffsetX = e.clientX - barRect.left;
+    drag.grabOffsetY = e.clientY - barRect.top;
+    drag.savedStyle = drag.bar.getAttribute("style") || "";
+    drag.bar.style.position = "fixed";
+    drag.bar.style.margin = "0";
+    drag.bar.style.width = barRect.width + "px";
+    drag.bar.style.height = barRect.height + "px";
+    drag.bar.style.left = barRect.left + "px";
+    drag.bar.style.top = barRect.top + "px";
+    drag.bar.style.pointerEvents = "none"; // don't shadow dayAtPoint hit-testing
+    drag.bar.classList.add("shadow-lg");
+  }
+
+  // Restore a lifted bar's original inline styles (used when a move is abandoned
+  // or the POST fails; a successful drop re-renders the whole timeline anyway).
+  function dropBar(drag) {
+    if (!drag.floating) return;
+    drag.bar.setAttribute("style", drag.savedStyle);
+    drag.bar.classList.remove("shadow-lg");
+  }
+
   function onPointerMove(e) {
     if (!drag || e.pointerId !== drag.pointerId) return;
     const dx = e.clientX - drag.startX;
@@ -158,25 +200,50 @@
       newWidth = Math.max(pps, Math.min(newWidth, drag.laneWidthPx - drag.origLeftPx));
       drag.bar.style.width = (newWidth / drag.laneWidthPx) * 100 + "%";
     } else {
-      // Slide left/right, snapping to whole slots, clamped within the lane.
-      let newLeft = drag.origLeftPx + dx;
-      newLeft = Math.round(newLeft / pps) * pps;
-      newLeft = Math.max(0, Math.min(newLeft, drag.laneWidthPx - drag.origWidthPx));
-      drag.bar.style.left = (newLeft / drag.laneWidthPx) * 100 + "%";
+      // MOVE: float the bar with `position: fixed` so it can cross day-rows.
+      // Lift it out of its lane on the first real movement.
+      if (!drag.floating) liftBar(drag, e);
+
+      // Which day-row is under the pointer right now (fall back to the origin
+      // day when the pointer strays off all rows). Highlight it.
+      const overDay = dayAtPoint(drag.root, e.clientX, e.clientY) || drag.bar.dataset.day;
+      highlightDropDay(drag.root, overDay);
+
+      // Vertical: follow the pointer directly (the bar rides with the cursor).
+      const topPx = e.clientY - drag.grabOffsetY;
+
+      // Horizontal: snap the bar's left edge to the target day's slot grid so the
+      // preview lines up with the columns it will land on. Measure against that
+      // day's own track; clamp so the bar stays within the track width.
+      const destTrack = trackOfDay(drag.root, overDay);
+      const trackRect = (destTrack || drag.lane).getBoundingClientRect();
+      let relLeft = e.clientX - drag.grabOffsetX - trackRect.left;
+      relLeft = Math.round(relLeft / pps) * pps;
+      relLeft = Math.max(0, Math.min(relLeft, trackRect.width - drag.origWidthPx));
+
+      drag.bar.style.left = trackRect.left + relLeft + "px";
+      drag.bar.style.top = topPx + "px";
     }
   }
 
   function onPointerUp(e) {
     if (!drag || e.pointerId !== drag.pointerId) return;
+    const gesture = drag;
     const { bar, root, lane, resizing, edge, moved, origStartMin, origEndMin } = drag;
     bar.releasePointerCapture(e.pointerId);
     bar.classList.remove("cursor-grabbing", "opacity-80", "z-10");
     drag = null;
+    clearDropHighlight(root);
 
     // A click without movement is not a drag — let dblclick / navigation win.
-    if (!moved) return;
+    if (!moved) {
+      dropBar(gesture);
+      return;
+    }
 
     const laneRect = lane.getBoundingClientRect();
+    // Measure BEFORE restoring the bar's styles: while floating it's fixed-
+    // positioned, but its viewport rect is still what the drop math wants.
     const barRect = bar.getBoundingClientRect();
     const mpp = minutesPerPixel(root, lane);
 
@@ -219,12 +286,12 @@
       body.set("start_min", String(startMin));
     }
 
-    postUpdate(root, body);
+    postUpdate(root, body, gesture);
   }
 
   // POST the change and swap the fresh timeline into #content via htmx, so the
   // server's authoritative (snapped) layout replaces our optimistic drag.
-  function postUpdate(root, body) {
+  function postUpdate(root, body, gesture) {
     const eventId = root.dataset.event;
     const url = "/events/edit/timeline/" + eventId + "/move";
     fetch(url, {
@@ -241,14 +308,20 @@
         return resp.text().then(function (html) {
           const content = document.getElementById("content");
           if (resp.ok && content && window.htmx) {
+            // The swap replaces the whole timeline (incl. the floating bar), so
+            // no manual style restore is needed on success.
             window.htmx.swap(content, html, { swapStyle: "innerHTML" });
           } else if (resp.ok && content) {
             content.innerHTML = html;
+          } else {
+            // Non-OK: put the lifted bar back where it started.
+            if (gesture) dropBar(gesture);
           }
         });
       })
       .catch(function () {
-        // On failure, reload the timeline to discard the optimistic move.
+        // On failure, restore the optimistic bar, then reload the timeline.
+        if (gesture) dropBar(gesture);
         if (window.htmx) {
           window.htmx.ajax("GET", "/events/edit/timeline/" + eventId, "#content");
         }
@@ -269,10 +342,21 @@
     }
   }
 
+  // Cancelled gesture (e.g. system interruption): abandon without POSTing —
+  // restore a lifted bar and clear any highlight.
+  function onPointerCancel(e) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const gesture = drag;
+    drag.bar.classList.remove("cursor-grabbing", "opacity-80", "z-10");
+    clearDropHighlight(drag.root);
+    drag = null;
+    dropBar(gesture);
+  }
+
   document.addEventListener("pointerdown", onPointerDown);
   document.addEventListener("pointermove", onPointerMove);
   document.addEventListener("pointerup", onPointerUp);
-  document.addEventListener("pointercancel", onPointerUp);
+  document.addEventListener("pointercancel", onPointerCancel);
   document.addEventListener("dblclick", onDblClick);
 
   // ── Live "now" cursor ──────────────────────────────────────────────────────

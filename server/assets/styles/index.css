@@ -169,6 +169,12 @@ details[open] > summary .inv-chevron {
   opacity: 0.85;
 }
 
+/* Highlight of the day-row the pointer is over during a cross-day meal drag,
+   so the drop target is obvious while the floating bar rides the cursor. */
+.tl-drop-target {
+  @apply ring-2 ring-inset ring-orange-400/70 bg-orange-50/40 dark:bg-orange-500/10;
+}
+
 /* Navbar: on sm+ always show nav-links regardless of <details> open state.
    We override the browser's native details-collapse by making the details
    element a plain block and forcing its child content visible. */
