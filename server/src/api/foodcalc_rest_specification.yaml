@@ -1,0 +1,608 @@
+openapi: 3.0.3
+info:
+  title: Foodcalc REST API
+  description: >
+    API-Spezifikation für die Foodcalc-Applikation. Zuständig für Event-Planung, 
+    Rezeptverwaltung, Logistik und PDF-Generierung für Groß-Caterings.
+  version: 1.1.0
+servers:
+  - url: http://localhost:8080/api
+    description: Lokaler Entwicklungsserver
+
+tags:
+  - name: Auth
+    description: Authentifizierung und Session-Management
+  - name: Groups
+    description: Benutzergruppen (Owner-Management)
+  - name: Ingredients
+    description: Basis-Zutatenverwaltung
+  - name: Inventories
+    description: Lager und Bestandsverwaltung
+  - name: Events
+    description: Verwaltung von Veranstaltungen und Budgets
+  - name: Event Meals
+    description: Mahlzeitenplanung für spezifische Events
+  - name: Event Logistics
+    description: Einkaufsfahrten, Zutaten-Overrides und Lieferungen
+  - name: Recipes
+    description: Globaler Katalog für Gerichte und Komponenten
+  - name: Exports
+    description: Generierung von PDFs und Labels
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    EventIdParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MealIdParam:
+      in: path
+      name: meal_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RecipeIdParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    LoginCredentials:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+          
+    AuthToken:
+      type: object
+      properties:
+        token:
+          type: string
+        expires_in:
+          type: integer
+          
+    Group:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          
+    Ingredient:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        energy_kj_per_g:
+          type: number
+        comment:
+          type: string
+          nullable: true
+          
+    Inventory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        location:
+          type: string
+          
+    EventSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        date_range:
+          type: string
+        budget:
+          type: number
+        owner:
+          type: string
+          
+    EventCreate:
+      type: object
+      required: [name, budget, owner_group_id]
+      properties:
+        name:
+          type: string
+        date_range:
+          type: string
+        budget:
+          type: number
+        owner_group_id:
+          type: string
+          format: uuid
+          
+    EventDetail:
+      allOf:
+        - $ref: '#/components/schemas/EventSummary'
+        - type: object
+          properties:
+            total_expected_cost:
+              type: number
+            planned_meals_count:
+              type: integer
+              
+    PlannedMeal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        recipe_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        portions:
+          type: integer
+        energy_per_portion_kj:
+          type: number
+        price_per_portion:
+          type: number
+        total_price:
+          type: number
+        is_custom_copy:
+          type: boolean
+          
+    MealAdd:
+      type: object
+      required: [recipe_id, portions, target_energy_kj]
+      properties:
+        recipe_id:
+          type: string
+          format: uuid
+        portions:
+          type: integer
+        target_energy_kj:
+          type: number
+        is_custom_copy:
+          type: boolean
+          default: false
+          
+    MealUpdate:
+      type: object
+      properties:
+        portions:
+          type: integer
+        target_energy_kj:
+          type: number
+        start_time:
+          type: string
+          format: date-time
+
+    EventLogistics:
+      type: object
+      properties:
+        shopping_tours:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              date_time:
+                type: string
+                format: date-time
+              store_name:
+                type: string
+        overrides:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              ingredient_name:
+                type: string
+              new_store_name:
+                type: string
+        inventory_arrivals:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              item_name:
+                type: string
+              source_name:
+                type: string
+              eta:
+                type: string
+                format: date-time
+              status:
+                type: string
+                enum: [Pending, Planned, Arrived]
+
+    RecipeSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [meal, component]
+        owner:
+          type: string
+        energy_kj_g:
+          type: number
+
+    RecipeCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [meal, component]
+        owner_group_id:
+          type: string
+          format: uuid
+
+    RecipeCloneRequest:
+      type: object
+      properties:
+        new_name:
+          type: string
+          description: Optionaler neuer Name für das geklonte Rezept
+        target_event_id:
+          type: string
+          format: uuid
+          description: Falls gesetzt, wird das Rezept als Event-spezifische Kopie (Custom) geklont.
+
+    RecipeTree:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        amount:
+          type: number
+        unit:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeTree'
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login für Benutzer
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginCredentials'
+      responses:
+        '200':
+          description: Erfolgreich eingeloggt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthToken'
+
+  /groups:
+    get:
+      tags: [Groups]
+      summary: Liste alle Gruppen auf
+      responses:
+        '200':
+          description: Liste der Gruppen
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+
+  /ingredients:
+    get:
+      tags: [Ingredients]
+      summary: Liste aller Basis-Zutaten
+      responses:
+        '200':
+          description: Zutatenliste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ingredient'
+
+  /inventories:
+    get:
+      tags: [Inventories]
+      summary: Übersicht aller Lagerorte
+      responses:
+        '200':
+          description: Lagerliste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Inventory'
+
+  /events:
+    get:
+      tags: [Events]
+      summary: Liste alle Events auf
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Suchbegriff für Event-Namen
+      responses:
+        '200':
+          description: Erfolgreiche Abfrage
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventSummary'
+    post:
+      tags: [Events]
+      summary: Erstelle ein neues Event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventCreate'
+      responses:
+        '201':
+          description: Event erfolgreich erstellt
+
+  /events/{id}:
+    get:
+      tags: [Events]
+      summary: Lade Event-Rahmendaten und aggregierte Statistiken
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+      responses:
+        '200':
+          description: Event Details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDetail'
+    put:
+      tags: [Events]
+      summary: Aktualisiere Event-Rahmendaten
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventCreate'
+      responses:
+        '200':
+          description: Erfolgreich aktualisiert
+    delete:
+      tags: [Events]
+      summary: Lösche ein Event
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+      responses:
+        '204':
+          description: Erfolgreich gelöscht
+
+  /events/{id}/clone:
+    post:
+      tags: [Events]
+      summary: Klone ein bestehendes Event
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+      responses:
+        '201':
+          description: Event erfolgreich geklont
+
+  /events/{id}/meals:
+    get:
+      tags: [Event Meals]
+      summary: Lade alle geplanten Mahlzeiten eines Events
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+      responses:
+        '200':
+          description: Liste der Mahlzeiten
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlannedMeal'
+    post:
+      tags: [Event Meals]
+      summary: Füge eine Mahlzeit zum Event hinzu
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MealAdd'
+      responses:
+        '201':
+          description: Mahlzeit hinzugefügt
+
+  /events/{id}/meals/{meal_id}:
+    put:
+      tags: [Event Meals]
+      summary: Aktualisiere Portionen oder Zeit einer geplanten Mahlzeit
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+        - $ref: '#/components/parameters/MealIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MealUpdate'
+      responses:
+        '200':
+          description: Erfolgreich aktualisiert
+    delete:
+      tags: [Event Meals]
+      summary: Entferne die Mahlzeit aus dem Event
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+        - $ref: '#/components/parameters/MealIdParam'
+      responses:
+        '204':
+          description: Erfolgreich gelöscht
+
+  /events/{id}/logistics:
+    get:
+      tags: [Event Logistics]
+      summary: Lade Logistik-Daten (Shopping Tours, Overrides, Arrivals)
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+      responses:
+        '200':
+          description: Logistik-Übersicht
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventLogistics'
+
+  /recipes:
+    get:
+      tags: [Recipes]
+      summary: Liste Rezepte und Komponenten auf
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [meal, component]
+        - in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Liste der Rezepte
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecipeSummary'
+    post:
+      tags: [Recipes]
+      summary: Lege ein neues Rezept an
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecipeCreate'
+      responses:
+        '201':
+          description: Erfolgreich erstellt
+
+  /recipes/{id}:
+    get:
+      tags: [Recipes]
+      summary: Lade den kompletten Rezeptbaum
+      parameters:
+        - $ref: '#/components/parameters/RecipeIdParam'
+      responses:
+        '200':
+          description: Kompletter Rezeptbaum inkl. Sub-Komponenten
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeTree'
+
+  /recipes/{id}/clone:
+    post:
+      tags: [Recipes]
+      summary: Klone ein bestehendes Rezept komplett (Deep Copy)
+      description: Führt eine Transaktion im Backend durch, um einen neuen, unabhängigen Rezeptbaum zu erstellen.
+      parameters:
+        - $ref: '#/components/parameters/RecipeIdParam'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecipeCloneRequest'
+      responses:
+        '201':
+          description: Rezept erfolgreich geklont. Gibt die neue Rezept-ID zurück.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  new_recipe_id:
+                    type: string
+                    format: uuid
+
+  /events/{id}/exports/overview:
+    get:
+      tags: [Exports]
+      summary: Generiere das Event Overview PDF
+      parameters:
+        - $ref: '#/components/parameters/EventIdParam'
+      responses:
+        '200':
+          description: PDF Datei
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary

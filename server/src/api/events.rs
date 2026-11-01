@@ -28,9 +28,9 @@ pub struct EventUpdateInput {
 
 pub fn events_router() -> Router<MyAppState> {
     Router::new()
-        .route("", get(list_events).post(create_event))
-        .route("/:id", get(get_event).put(update_event).delete(delete_event))
-        .route("/:id/clone", post(clone_event))
+    .route("/", get(list_events).post(create_event))
+    .route("/{id}", get(get_event).put(update_event).delete(delete_event))
+    .route("/{id}/clone", post(clone_event))
 }
 
 async fn list_events(State(state): State<MyAppState>) -> impl IntoResponse {

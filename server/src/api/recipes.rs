@@ -19,8 +19,8 @@ pub struct RecipeCreateInput {
 
 pub fn recipes_router() -> Router<MyAppState> {
     Router::new()
-        .route("", get(list_recipes).post(create_recipe))
-        .route("/:id", get(get_recipe))
+    .route("/", get(list_recipes).post(create_recipe))
+    .route("/{id}", get(get_recipe))
 }
 
 async fn list_recipes(State(state): State<MyAppState>) -> impl IntoResponse {

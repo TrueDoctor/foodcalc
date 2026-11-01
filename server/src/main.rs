@@ -120,7 +120,12 @@ async fn main() {
         .await
         .unwrap();
 
-    deletion_task.await.unwrap().unwrap();
+    match deletion_task.await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => panic!("session cleanup task failed: {err}"),
+        Err(err) if err.is_cancelled() => {}
+        Err(err) => panic!("session cleanup task join failed: {err}"),
+    }
 }
 
 async fn shutdown_signal(deletion_task_abort_handle: tokio::task::AbortHandle) {
