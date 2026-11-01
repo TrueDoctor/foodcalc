@@ -297,6 +297,17 @@ impl UserOps {
         Ok(rows)
     }
 
+    /// Lists every group (for owner pickers in the UI).
+    pub async fn list_groups(&self) -> Result<Vec<Group>> {
+        let groups = sqlx::query_as!(
+            Group,
+            r#"SELECT id, name, is_personal FROM groups ORDER BY name"#
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(groups)
+    }
+
     pub async fn get_personal_group(&self, user_id: i64) -> Result<Group> {
         sqlx::query_as!(
             Group,

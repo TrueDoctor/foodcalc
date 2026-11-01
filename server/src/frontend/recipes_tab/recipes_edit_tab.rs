@@ -145,6 +145,7 @@ pub async fn handle_name_change(
             comment: Some(data.comment),
             group_id: -1, // Placeholder; ops-level update ignores group_id
             weighed_in: data.weighed_in,
+            kind: current.kind,
         })
         .await?;
     if current.group_id != data.group_id {

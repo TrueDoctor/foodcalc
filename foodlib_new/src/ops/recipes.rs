@@ -1,4 +1,6 @@
-use crate::entities::recipe::{Recipe, RecipeIngredient, RecipeStep};
+use crate::entities::recipe::{
+    Recipe, RecipeIngredient, RecipeKind, RecipeListItem, RecipeStep,
+};
 use crate::error::{Error, Result};
 use crate::recipe::{RecipeMetaIngredient, RecipeStats, ResolvedRecipe};
 use sqlx::PgPool;
@@ -32,13 +34,15 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            INSERT INTO recipes (name, comment, group_id)
-            VALUES ($1, $2, $3)
-            RETURNING recipe_id as id, name, comment, group_id, weighed_in
+            INSERT INTO recipes (name, comment, group_id, kind)
+            VALUES ($1, $2, $3, $4::text::recipe_kind)
+            RETURNING recipe_id as id, name, comment, group_id, weighed_in,
+                     kind as "kind: RecipeKind"
             "#,
             recipe.name,
             recipe.comment,
             recipe.group_id,
+            recipe.kind.as_str(),
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -50,7 +54,8 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+                   kind as "kind: RecipeKind"
             FROM recipes
             WHERE recipe_id = $1
             "#,
@@ -70,7 +75,8 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+                   kind as "kind: RecipeKind"
             FROM recipes
             WHERE name = $1
             "#,
@@ -91,14 +97,16 @@ impl RecipeOps {
             Recipe,
             r#"
             UPDATE recipes
-            SET name = $1, comment = $2, weighed_in = $4
+            SET name = $1, comment = $2, weighed_in = $4, kind = $5::text::recipe_kind
             WHERE recipe_id = $3
-            RETURNING recipe_id as id, name, comment, group_id, weighed_in
+            RETURNING recipe_id as id, name, comment, group_id, weighed_in,
+                     kind as "kind: RecipeKind"
             "#,
             recipe.name,
             recipe.comment,
             recipe.id,
-            recipe.weighed_in
+            recipe.weighed_in,
+            recipe.kind.as_str()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -163,7 +171,8 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+                   kind as "kind: RecipeKind"
             FROM recipes
             WHERE group_id IN (
                 SELECT group_id FROM user_groups WHERE user_id = $1
@@ -183,7 +192,8 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+                   kind as "kind: RecipeKind"
             FROM recipes
             ORDER BY recipe_id
             "#
@@ -545,7 +555,7 @@ impl RecipeOps {
             Recipe,
             r#"
             WITH matching_recipes AS (
-                SELECT r.recipe_id, r.name, r.comment, r.group_id, r.weighed_in,
+                SELECT r.recipe_id, r.name, r.comment, r.group_id, r.weighed_in, r.kind,
                        COUNT(DISTINCT ri.ingredient_id) as matching_ingredients,
                        (SELECT COUNT(DISTINCT ingredient_id)
                         FROM recipe_ingredients
@@ -560,7 +570,8 @@ impl RecipeOps {
                 name,
                 comment,
                 group_id,
-                weighed_in
+                weighed_in,
+                kind as "kind: RecipeKind"
             FROM matching_recipes
             ORDER BY 
                 matching_ingredients::float / total_ingredients DESC,
@@ -664,5 +675,109 @@ impl RecipeOps {
 
         tx.commit().await?;
         Ok(())
+    }
+
+    /// Lists all recipes together with their aggregated stats from the
+    /// `recipe_stats` view (weight kg / energy kJ). Empty recipes get 0/0,
+    /// which lets callers compute the energy density (kJ/g) safely.
+    pub async fn list_with_stats(&self) -> Result<Vec<RecipeListItem>> {
+        let records = sqlx::query_as!(
+            RecipeListItem,
+            r#"
+            SELECT
+                r.recipe_id as id,
+                r.name,
+                r.comment,
+                r.group_id,
+                r.kind as "kind: RecipeKind",
+                r.weighed_in,
+                COALESCE(s.weight, 0) as "weight!",
+                COALESCE(s.energy, 0) as "energy!"
+            FROM recipes r
+            LEFT JOIN recipe_stats s ON s.recipe_id = r.recipe_id
+            ORDER BY r.name
+            "#
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// Deep-copies a recipe (ingredients, steps, sub-recipes) into a new,
+    /// independent recipe owned by `group_id`. Returns the new recipe id.
+    pub async fn duplicate(
+        &self,
+        recipe_id: i32,
+        new_name: Option<String>,
+        new_group_id: i32,
+    ) -> Result<i32> {
+        let mut tx = self.pool.begin().await?;
+
+        let source = sqlx::query!(
+            r#"SELECT name, comment, kind as "kind: RecipeKind", weighed_in FROM recipes WHERE recipe_id = $1"#,
+            recipe_id
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "Recipe",
+            id: recipe_id.to_string(),
+        })?;
+
+        let name = new_name.unwrap_or_else(|| format!("{} (Kopie)", source.name));
+
+        let new_id: i32 = sqlx::query_scalar!(
+            r#"
+            INSERT INTO recipes (name, comment, group_id, weighed_in, kind)
+            VALUES ($1, $2, $3, $4, $5::text::recipe_kind)
+            RETURNING recipe_id
+            "#,
+            name,
+            source.comment,
+            new_group_id,
+            source.weighed_in,
+            source.kind.as_str()
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id)
+            SELECT $1, ingredient_id, amount, unit_id
+            FROM recipe_ingredients WHERE recipe_id = $2
+            "#,
+            new_id,
+            recipe_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO steps (recipe_id, step_order, step_name, step_description, fixed_duration, duration_per_kg)
+            SELECT $1, step_order, step_name, step_description, fixed_duration, duration_per_kg
+            FROM steps WHERE recipe_id = $2
+            "#,
+            new_id,
+            recipe_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO meta_recipes (parent_id, child_id, weight)
+            SELECT $1, child_id, weight FROM meta_recipes WHERE parent_id = $2
+            "#,
+            new_id,
+            recipe_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(new_id)
     }
 }

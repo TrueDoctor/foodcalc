@@ -2,6 +2,28 @@ use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 
+/// Kind of the recipe: "meal" (Gericht) or "component" (Komponente).
+/// Purely organizational — meals and components can reference each
+/// other freely as sub-recipes.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[serde(rename_all = "lowercase")]
+#[sqlx(type_name = "recipe_kind", rename_all = "lowercase")]
+pub enum RecipeKind {
+    Meal,
+    Component,
+}
+
+impl RecipeKind {
+    /// The database / JSON representation ("meal" | "component").
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Meal => "meal",
+            Self::Component => "component",
+        }
+    }
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recipe {
     pub id: i32,
@@ -12,6 +34,7 @@ pub struct Recipe {
     /// to the gram ("eingewogen"). Shown as a warning in the edit tab while
     /// false and as a badge on the printed recipe sheet once true.
     pub weighed_in: bool,
+    pub kind: RecipeKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,4 +94,20 @@ pub struct ResolvedRecipe {
     pub subrecipe_id: Option<i32>,
     pub subrecipe_name: Option<String>,
     pub hierarchy_path: Option<String>,
+}
+
+/// A recipe together with its aggregated stats from the `recipe_stats`
+/// view. Used by list endpoints that show the energy density (kJ/g).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeListItem {
+    pub id: i32,
+    pub name: String,
+    pub comment: Option<String>,
+    pub group_id: i32,
+    pub kind: RecipeKind,
+    pub weighed_in: bool,
+    /// Total resolved ingredient weight in kg (0 for empty recipes).
+    pub weight: BigDecimal,
+    /// Total resolved energy in kJ.
+    pub energy: BigDecimal,
 }

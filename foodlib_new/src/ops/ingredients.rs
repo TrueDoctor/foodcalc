@@ -1,6 +1,11 @@
 // foodlib_new/src/ops/ingredients.rs
 
-use crate::{entities::ingredient::*, error::Result, recipe::Recipe, Error};
+use crate::{
+    entities::ingredient::*,
+    error::Result,
+    recipe::{Recipe, RecipeKind},
+    Error,
+};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -87,7 +92,8 @@ impl IngredientOps {
                 name,
                 group_id,
                 comment,
-                weighed_in
+                weighed_in,
+                kind as "kind: RecipeKind"
             FROM recipes JOIN recipe_ingredients USING(recipe_id)
             WHERE ingredient_id = $1
             "#,

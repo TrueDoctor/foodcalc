@@ -7,6 +7,8 @@ use axum::{
     Json, Router,
 };
 use foodlib_new::auth::AuthSession;
+use foodlib_new::error::Result;
+use serde::Serialize;
 use serde_json::json;
 
 use crate::MyAppState;
@@ -15,6 +17,7 @@ pub mod auth;
 pub mod events;
 pub mod ingredients;
 pub mod inventories;
+pub mod master;
 pub mod recipes;
 
 pub fn api_router() -> Router<MyAppState> {
@@ -28,6 +31,11 @@ pub fn api_router() -> Router<MyAppState> {
     let protected = Router::new()
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
+        // Master data for owner/store/unit/property pickers in the UI.
+        .route("/groups", get(master::groups))
+        .route("/stores", get(master::stores))
+        .route("/units", get(master::units))
+        .route("/properties", get(master::properties))
         .nest("/events", events::events_router())
         .nest("/recipes", recipes::recipes_router())
         .nest("/ingredients", ingredients::ingredients_router())
@@ -85,5 +93,31 @@ pub fn map_api_error(err: foodlib_new::Error) -> (StatusCode, Json<serde_json::V
             "error": err.to_string(),
         })),
     )
+}
+
+/// Serializes `value` with the given status code.
+pub fn json_response<T: Serialize>(status: StatusCode, value: T) -> Response {
+    (status, Json(value)).into_response()
+}
+
+/// Maps a foodlib result to a `200 OK` (or mapped error) response.
+pub fn respond<T: Serialize>(result: Result<T>) -> Response {
+    match result {
+        Ok(value) => json_response(StatusCode::OK, value),
+        Err(err) => map_api_error(err).into_response(),
+    }
+}
+
+/// Maps a foodlib result to a `201 Created` (or mapped error) response.
+pub fn respond_created<T: Serialize>(result: Result<T>) -> Response {
+    match result {
+        Ok(value) => json_response(StatusCode::CREATED, value),
+        Err(err) => map_api_error(err).into_response(),
+    }
+}
+
+/// Plain JSON error response for input validation failures.
+pub fn bad_request(message: String) -> Response {
+    (StatusCode::BAD_REQUEST, Json(json!({ "error": message }))).into_response()
 }
 

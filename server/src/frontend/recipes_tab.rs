@@ -5,7 +5,7 @@ use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::error::Error;
-use foodlib_new::recipe::Recipe;
+use foodlib_new::recipe::{Recipe, RecipeKind};
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
@@ -292,6 +292,7 @@ async fn add_recipe(
         comment: recipe_data.comment,
         group_id: group.id,
         weighed_in: false,
+        kind: RecipeKind::Meal,
     };
 
     let created_recipe = foodlib.recipes().create(recipe).await?;
