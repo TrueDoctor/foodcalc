@@ -55,6 +55,50 @@ impl MealOps {
         Ok(meals)
     }
 
+    /// Get all meals for a given event enriched with planner aggregates:
+    /// scaled total weight, recipe energy density (kJ/g) and ingredient cost.
+    ///
+    /// The weight is derived from `recipe_stats` like [`Self::get_event_meals`]
+    /// (cheap); the price comes from `event_ingredients_before_prep_time_resolve`
+    /// as a correlated subquery — identical to [`Self::get_event_meal_prices`],
+    /// just fused into one round trip for the SPA detail view.
+    pub async fn get_event_meals_planner(&self, event_id: i32) -> Result<Vec<PlannerMeal>> {
+        let meals = sqlx::query_as!(
+            PlannerMeal,
+            r#"
+            SELECT
+                em.meal_id,
+                em.event_id,
+                em.recipe_id,
+                r.name as "name!",
+                COALESCE(r.weighed_in, false) as "weighed_in!",
+                em.place_id,
+                COALESCE(p.name, '') as "place!",
+                em.start_time,
+                em.end_time,
+                em.comment,
+                em.servings,
+                em.energy_per_serving as "energy_per_serving!",
+                COALESCE(round(rs.weight * em.energy_per_serving * em.servings / NULLIF(rs.energy, 0), 2), 0) as "weight!",
+                CASE WHEN rs.weight > 0 THEN (rs.energy / NULLIF(rs.weight * 1000, 0))::float8 END as "energy_kj_per_g?",
+                (SELECT COALESCE(SUM(ei.price), 0)
+                    FROM event_ingredients_before_prep_time_resolve ei
+                    WHERE ei.meal_id = em.meal_id) as "price!"
+            FROM event_meals em
+            LEFT JOIN recipes r ON em.recipe_id = r.recipe_id
+            LEFT JOIN places p ON em.place_id = p.place_id
+            LEFT JOIN recipe_stats rs ON em.recipe_id = rs.recipe_id
+            WHERE em.event_id = $1
+            ORDER BY em.start_time
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(meals)
+    }
+
     /// Get a single meal by its ID.
     ///
     /// `weight` is derived from `recipe_stats` (recipe weight scaled by the meal's
@@ -227,7 +271,7 @@ impl MealOps {
         Ok(())
     }
 
-    /// Add a new meal.
+    /// Add a new meal. Returns the new meal's id.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_meal(
         &self,
@@ -239,11 +283,12 @@ impl MealOps {
         energy: BigDecimal,
         servings: i32,
         comment: Option<String>,
-    ) -> Result<()> {
-        sqlx::query!(
+    ) -> Result<i32> {
+        let row = sqlx::query!(
             r#"
                 INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING meal_id
             "#,
             event_id,
             recipe_id,
@@ -254,11 +299,10 @@ impl MealOps {
             servings,
             comment,
         )
-        .execute(&*self.pool)
-        .await?
-        .rows_affected();
+        .fetch_one(&*self.pool)
+        .await?;
 
-        Ok(())
+        Ok(row.meal_id)
     }
 
     /// Duplicate a single meal within its own event.

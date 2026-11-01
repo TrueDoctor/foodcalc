@@ -365,6 +365,41 @@ impl EventOps {
         Ok(records)
     }
 
+    /// Lists all events visible to the user together with planner aggregates
+    /// (meal count, ingredient cost, first/last meal time) for list views.
+    ///
+    /// Uses scalar subqueries so the (expensive) ingredient aggregate is
+    /// computed once per event instead of being multiplied across joined meals.
+    pub async fn list_summaries_for_user(&self, user_id: i64) -> Result<Vec<EventSummary>> {
+        let records = sqlx::query_as!(
+            EventSummary,
+            r#"
+            SELECT
+                e.event_id as id,
+                e.event_name as name,
+                e.comment,
+                e.group_id,
+                e.budget,
+                (SELECT COUNT(*) FROM event_meals WHERE event_id = e.event_id) as "meal_count!",
+                (SELECT COALESCE(SUM(price), 0)
+                    FROM event_ingredients_before_prep_time_resolve
+                    WHERE event_id = e.event_id) as "total_cost!",
+                (SELECT MIN(start_time) FROM event_meals WHERE event_id = e.event_id) as first_meal,
+                (SELECT MAX(start_time) FROM event_meals WHERE event_id = e.event_id) as last_meal
+            FROM events e
+            WHERE e.group_id IN (
+                SELECT group_id FROM user_groups WHERE user_id = $1
+            )
+            ORDER BY first_meal DESC NULLS LAST
+            "#,
+            user_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
     /// Adds a shopping tour to an event
     pub async fn add_shopping_tour(&self, tour: ShoppingTour) -> Result<ShoppingTour> {
         let record = sqlx::query_as!(

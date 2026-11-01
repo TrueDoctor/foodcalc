@@ -136,6 +136,7 @@ pub async fn update_meal(
                 meal.comment,
             )
             .await
+            .map(|_| ())
     };
     match result {
         Ok(_) => event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await,

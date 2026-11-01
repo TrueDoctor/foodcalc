@@ -10,7 +10,9 @@ pub struct Meal {
     pub name: String,
     pub place_id: i32,
     pub place: String,
+    #[serde(with = "time::serde::rfc3339")]
     pub start_time: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
     pub end_time: OffsetDateTime,
     pub weight: BigDecimal,
     pub energy: BigDecimal,
@@ -19,6 +21,36 @@ pub struct Meal {
     /// Whether the meal's recipe has been marked "weighed in" (amounts verified
     /// accurate to the gram). Surfaced as a warning icon in the event detail tab.
     pub weighed_in: bool,
+}
+
+/// A meal enriched with everything the event planner view shows: the scaled
+/// total weight, the recipe's energy density (the scaling base), and the
+/// meal's ingredient cost. One query instead of the meal + price + density
+/// round trips the old HTMX UI needed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlannerMeal {
+    pub meal_id: i32,
+    pub event_id: i32,
+    pub recipe_id: i32,
+    pub name: String,
+    pub weighed_in: bool,
+    pub place_id: i32,
+    pub place: String,
+    #[serde(with = "time::serde::rfc3339")]
+    pub start_time: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub end_time: OffsetDateTime,
+    pub comment: Option<String>,
+    pub servings: i32,
+    /// Planned energy per portion (kJ) — the scaling input.
+    pub energy_per_serving: BigDecimal,
+    /// Total cooked weight (kg) implied by `energy_per_serving × servings`.
+    pub weight: BigDecimal,
+    /// Recipe energy density in kJ/g; `None` if the recipe has no resolvable
+    /// ingredients (nothing to scale against).
+    pub energy_kj_per_g: Option<f64>,
+    /// Total ingredient cost under the event's source overrides.
+    pub price: BigDecimal,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

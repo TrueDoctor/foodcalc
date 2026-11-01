@@ -36,6 +36,7 @@ pub fn api_router() -> Router<MyAppState> {
         .route("/stores", get(master::stores))
         .route("/units", get(master::units))
         .route("/properties", get(master::properties))
+        .route("/places", get(master::places))
         .nest("/events", events::events_router())
         .nest("/recipes", recipes::recipes_router())
         .nest("/ingredients", ingredients::ingredients_router())

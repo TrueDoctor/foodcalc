@@ -20,6 +20,23 @@ pub struct Event {
     pub group_id: i32,
 }
 
+/// Aggregated event row for list views: adds the planner-relevant totals
+/// (meal count, ingredient cost, time span) to the plain event fields.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventSummary {
+    pub id: i32,
+    pub name: String,
+    pub comment: Option<String>,
+    pub budget: Option<BigDecimal>,
+    pub group_id: i32,
+    pub meal_count: i64,
+    pub total_cost: BigDecimal,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub first_meal: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub last_meal: Option<OffsetDateTime>,
+}
+
 impl Default for Event {
     fn default() -> Self {
         Self {
@@ -37,6 +54,7 @@ impl Default for Event {
 pub struct ShoppingTour {
     pub id: i32,
     pub event_id: i32,
+    #[serde(with = "time::serde::rfc3339")]
     pub tour_date: OffsetDateTime,
     pub store_id: i32,
     pub store_name: Option<String>,
@@ -58,6 +76,15 @@ pub struct FoodPrep {
 pub struct SourceOverride {
     pub event_id: i32,
     pub source_id: i32,
+}
+
+/// An event ingredient that has no shopping tour covering it yet.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IngredientWithoutTour {
+    pub ingredient_id: i32,
+    pub ingredient_name: String,
+    pub weight: Option<BigDecimal>,
+    pub store_name: String,
 }
 
 /// View of source overrides with additional information
@@ -98,15 +125,6 @@ pub struct ShoppingListItemWithUsage {
     pub price: Option<BigDecimal>,
     pub category: Option<String>,
     pub recipe_usage: Vec<(String, BigDecimal)>,
-}
-
-/// Custom type for ingredients without a shopping tour
-#[derive(Debug, Clone)]
-pub struct IngredientWithoutTour {
-    pub ingredient_id: i32,
-    pub ingredient_name: String,
-    pub weight: Option<BigDecimal>,
-    pub store_name: String,
 }
 
 /// Inventory associated with an event
