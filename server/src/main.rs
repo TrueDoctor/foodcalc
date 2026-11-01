@@ -13,6 +13,7 @@ use tower_sessions::cookie::Key;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use foodlib_new::auth::AuthBackend;
+mod api;
 mod frontend;
 mod htmx_middleware;
 
@@ -100,6 +101,7 @@ async fn main() {
 
     // Combine routes with middleware
     let app = Router::new()
+        .nest("/api", api::api_router())
         .merge(frontend::frontend_router())
         .with_state(state)
         .layer(Extension(new_lib))
