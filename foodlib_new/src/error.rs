@@ -32,6 +32,14 @@ pub enum Error {
 
 impl From<sqlx::Error> for Error {
     fn from(err: sqlx::Error) -> Self {
+        // A failed fetch_one is always "this row does not exist" — surface
+        // it as a domain NotFound (HTTP 404) instead of a 500.
+        if matches!(err, sqlx::Error::RowNotFound) {
+            return Error::NotFound {
+                entity: "row",
+                id: String::new(),
+            };
+        }
         Error::Database(err)
     }
 }

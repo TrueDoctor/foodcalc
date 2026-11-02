@@ -6,10 +6,106 @@ use axum::{
 
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::event::ShoppingTour;
+use foodlib_new::ops::export::{
+    EventOverviewInfo, EventOverviewMeal, EventOverviewPrep, EventOverviewTour,
+};
 use foodlib_new::Error;
+use bigdecimal::ToPrimitive;
 
 use crate::api::map_api_error;
 use crate::MyAppState;
+
+/// `GET /api/events/{id}/exports/overview` — management summary PDF: frame
+/// data with budget status, planned meals with planner numbers, shopping
+/// tours and food-prep tasks.
+pub async fn export_overview(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(event_id): Path<i32>,
+) -> Response {
+    if let Err(err) = ctx.assert_can_edit_event(event_id).await {
+        return map_api_error(err).into_response();
+    }
+    let event = match state.events().get(event_id).await {
+        Ok(event) => event,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    let total_cost = match state.events().get_total_cost(event_id).await {
+        Ok(cost) => cost,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    let meals = match state.meals().get_event_meals_planner(event_id).await {
+        Ok(meals) => meals,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    let tours = match state.events().get_shopping_tours(event_id).await {
+        Ok(tours) => tours,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    let preps = match state.events().list_food_preps(event_id).await {
+        Ok(preps) => preps,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+
+    let info = EventOverviewInfo {
+        event_name: event.name.clone(),
+        comment: event.comment.clone(),
+        budget: event.budget.clone(),
+        total_cost,
+        meals: meals
+            .iter()
+            .map(|meal| EventOverviewMeal {
+                recipe_name: meal.name.clone(),
+                place: meal.place.clone(),
+                start_time: meal.start_time,
+                servings: meal.servings,
+                weight_kg: (meal.weight.to_f64().unwrap_or(0.0) > 0.0)
+                    .then(|| meal.weight.clone()),
+                energy_per_portion_kj: meal.energy_per_serving.clone(),
+                price: meal.price.clone(),
+            })
+            .collect(),
+        tours: {
+            let mut rows = Vec::with_capacity(tours.len());
+            for tour in &tours {
+                // Item counts come from the tour's shopping list; a failed
+                // count degrades to 0 instead of failing the whole export.
+                let item_count = state
+                    .events()
+                    .get_shopping_list(tour.id)
+                    .await
+                    .map(|items| items.len() as i64)
+                    .unwrap_or(0);
+                rows.push(EventOverviewTour {
+                    tour_date: tour.tour_date,
+                    store_name: tour.store_name.clone(),
+                    item_count,
+                });
+            }
+            rows
+        },
+        preps: preps
+            .iter()
+            .map(|prep| EventOverviewPrep {
+                prep_date: prep.prep_date,
+                recipe_name: prep.recipe_name.clone(),
+                use_from: prep.use_from,
+                use_until: prep.use_until,
+            })
+            .collect(),
+    };
+    let filename = format!("{}_uebersicht", sanitize(&event.name));
+
+    #[cfg(feature = "typst")]
+    let result = foodlib_new::typst::export_event_overview(info)
+        .await
+        .map_err(|err| Error::Misc(err.to_string()));
+    #[cfg(not(feature = "typst"))]
+    let result: Result<Vec<u8>, Error> =
+        Err(Error::Misc("Server compiled without typst support".into()));
+
+    pdf_response(&filename, result)
+}
 
 /// `GET /api/events/{id}/exports/recipes` — combined PDF with every meal
 /// recipe and food-prep sheet, ordered chronologically.

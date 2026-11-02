@@ -1,7 +1,7 @@
 use crate::entities::allergen::DietaryFlags;
 use crate::entities::property::Property;
 use crate::entities::recipe::{RecipeStep, SubRecipe};
-use crate::ops::export::{EventAllergenInfo, RecipeInfo, SubrecipeSection};
+use crate::ops::export::{EventAllergenInfo, EventOverviewInfo, RecipeInfo, SubrecipeSection};
 use bigdecimal::{BigDecimal, ToPrimitive};
 use sqlx::postgres::types::PgInterval;
 use typst::foundations::Bytes;
@@ -61,6 +61,179 @@ pub async fn export_dish_labels(
 pub async fn export_event_allergens(info: EventAllergenInfo) -> eyre::Result<Vec<u8>> {
     let typst = format_event_allergens_typst(&info);
     create_pdf(typst)
+}
+
+static EVENT_OVERVIEW_TEMPLATE: &str = include_str!("../templates/event_overview.typ");
+
+/// Renders the event management overview (frame data, meals, tours, prep).
+pub async fn export_event_overview(info: EventOverviewInfo) -> eyre::Result<Vec<u8>> {
+    let typst = format_event_overview_typst(&info);
+    create_pdf(typst)
+}
+
+/// `dd.mm.yyyy` for date-only cells.
+fn format_date(t: time::OffsetDateTime) -> String {
+    use time::format_description;
+    let f = format_description::parse("[day].[month].[year]").unwrap();
+    t.format(&f).unwrap_or_default()
+}
+
+/// BigDecimal → "12.34" (2 decimals, locale-independent dot).
+fn decimal_display(value: &BigDecimal) -> String {
+    value
+        .to_f64()
+        .map(|v| format!("{v:.2}"))
+        .unwrap_or_else(|| value.to_string())
+}
+
+fn format_event_overview_typst(info: &EventOverviewInfo) -> String {
+    use std::fmt::Write;
+
+    let mut meals: Vec<_> = info.meals.iter().collect();
+    meals.sort_by_key(|meal| meal.start_time);
+    let mut tours: Vec<_> = info.tours.iter().collect();
+    tours.sort_by_key(|tour| tour.tour_date);
+    let mut preps: Vec<_> = info.preps.iter().collect();
+    preps.sort_by_key(|prep| prep.prep_date);
+
+    // Time span from the (sorted) meals; prep tasks may extend it.
+    let span = match (
+        meals.first().map(|meal| meal.start_time),
+        meals.last().map(|meal| meal.start_time),
+    ) {
+        (Some(first), Some(last)) if first.date() == last.date() => {
+            format_time(first)
+        }
+        (Some(first), Some(last)) => {
+            format!("{} – {}", format_date(first), format_date(last))
+        }
+        _ => "–".to_string(),
+    };
+    let total_portions: i64 = meals.iter().map(|meal| meal.servings as i64).sum();
+
+    let total_cost = decimal_display(&info.total_cost);
+    let (budget_display, budget_state, budget_share) = match info
+        .budget
+        .as_ref()
+        .and_then(|budget| budget.to_f64())
+    {
+        Some(budget) if budget > 0.0 => {
+            let share = (info.total_cost.to_f64().unwrap_or(0.0) / budget * 100.0)
+                .clamp(0.0, 999.0);
+            let state = if share > 100.0 {
+                "over"
+            } else if share >= 90.0 {
+                "tight"
+            } else {
+                "ok"
+            };
+            (format!("{budget:.2} €"), state.to_string(), format!("{share:.0}"))
+        }
+        _ => ("–".to_string(), "none".to_string(), String::new()),
+    };
+
+    let generated = {
+        let now = time::OffsetDateTime::now_utc();
+        format_date(now)
+    };
+
+    let mut out = EVENT_OVERVIEW_TEMPLATE.to_string();
+    writeln!(
+        out,
+        "#event_overview(\"{}\",\"{}\",(",
+        escape_typst_string(&info.event_name),
+        escape_typst_string(info.comment.as_deref().unwrap_or(""))
+    )
+    .unwrap();
+
+    // meta dict
+    writeln!(
+        out,
+        "  span: \"{}\", meal_count: \"{}\", total_cost: \"{} €\", \
+         budget_display: \"{}\", budget_state: \"{}\", budget_share: \"{}\", \
+         generated: \"{}\"),",
+        escape_typst_string(&span),
+        escape_typst_string(&format!(
+            "{} · {} Portionen",
+            if meals.len() == 1 {
+                "1 Mahlzeit".to_string()
+            } else {
+                format!("{} Mahlzeiten", meals.len())
+            },
+            total_portions
+        )),
+        escape_typst_string(&total_cost),
+        escape_typst_string(&budget_display),
+        budget_state,
+        budget_share,
+        generated
+    )
+    .unwrap();
+
+    // meals array (4th positional argument)
+    writeln!(out, "(").unwrap();
+    for meal in &meals {
+        writeln!(
+            out,
+            "(time: \"{}\", place: \"{}\", name: \"{}\", servings: {}, \
+             weight: \"{}\", kj_per_portion: \"{}\", price: \"{}\"),",
+            escape_typst_string(&format_time(meal.start_time)),
+            escape_typst_string(&meal.place),
+            escape_typst_string(&meal.recipe_name),
+            meal.servings,
+            escape_typst_string(
+                &meal
+                    .weight_kg
+                    .as_ref()
+                    .map(|kg| format!("{} kg", decimal_display(kg)))
+                    .unwrap_or_else(|| "?".to_string())
+            ),
+            escape_typst_string(&format!(
+                "{}",
+                meal.energy_per_portion_kj.to_f64().map(|v| v as i64).unwrap_or(0)
+            )),
+            escape_typst_string(&decimal_display(&meal.price)),
+        )
+        .unwrap();
+    }
+    writeln!(out, "),").unwrap();
+
+    // tours array (5th positional argument)
+    writeln!(out, "(").unwrap();
+    for tour in &tours {
+        writeln!(
+            out,
+            "(date: \"{}\", store: \"{}\", item_count: {}),",
+            escape_typst_string(&format_date(tour.tour_date)),
+            escape_typst_string(tour.store_name.as_deref().unwrap_or("Tour")),
+            tour.item_count,
+        )
+        .unwrap();
+    }
+    writeln!(out, "),").unwrap();
+
+    // preps array (6th positional argument) + closing paren of the call
+    writeln!(out, "(").unwrap();
+    for prep in &preps {
+        let window = match prep.use_from {
+            Some(from) => format!(
+                "{} – {}",
+                format_time(from),
+                format_time(prep.use_until)
+            ),
+            None => format_time(prep.use_until),
+        };
+        writeln!(
+            out,
+            "(date: \"{}\", recipe: \"{}\", window: \"{}\"),",
+            escape_typst_string(&format_date(prep.prep_date)),
+            escape_typst_string(&prep.recipe_name),
+            escape_typst_string(&window),
+        )
+        .unwrap();
+    }
+    writeln!(out, "))").unwrap();
+    out
 }
 
 fn format_dish_labels_typst(info: &EventAllergenInfo, layout: DishLabelLayout) -> String {

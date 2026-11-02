@@ -55,6 +55,7 @@ pub fn events_router() -> Router<MyAppState> {
             "/{id}/source-overrides/{source_id}",
             delete(shopping::delete_override),
         )
+        .route("/{id}/exports/overview", get(exports::export_overview))
         .route("/{id}/exports/recipes", get(exports::export_recipes))
         .route("/{id}/exports/meal/{meal_id}", get(exports::export_meal))
         .route("/{id}/exports/allergens", get(exports::export_allergens))

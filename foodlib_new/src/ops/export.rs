@@ -70,6 +70,52 @@ pub struct EventAllergenInfo {
     pub meals: Vec<MealAllergenInfo>,
 }
 
+/// One meal row for the event overview PDF.
+#[derive(Debug, Clone)]
+pub struct EventOverviewMeal {
+    pub recipe_name: String,
+    pub place: String,
+    pub start_time: time::OffsetDateTime,
+    pub servings: i32,
+    /// Total planned cooked weight in kg (None when unresolvable).
+    pub weight_kg: Option<BigDecimal>,
+    /// Planned energy per portion in kJ.
+    pub energy_per_portion_kj: BigDecimal,
+    /// Ingredient cost under the event's source overrides.
+    pub price: BigDecimal,
+}
+
+/// One shopping tour row for the event overview PDF.
+#[derive(Debug, Clone)]
+pub struct EventOverviewTour {
+    pub tour_date: time::OffsetDateTime,
+    pub store_name: Option<String>,
+    /// Number of ingredients assigned to this tour.
+    pub item_count: i64,
+}
+
+/// One food-prep task row for the event overview PDF.
+#[derive(Debug, Clone)]
+pub struct EventOverviewPrep {
+    pub prep_date: time::OffsetDateTime,
+    pub recipe_name: String,
+    pub use_from: Option<time::OffsetDateTime>,
+    pub use_until: time::OffsetDateTime,
+}
+
+/// Complete summary for the event overview PDF: frame data, meals with
+/// planner numbers, shopping tours and prep tasks.
+#[derive(Debug, Clone)]
+pub struct EventOverviewInfo {
+    pub event_name: String,
+    pub comment: Option<String>,
+    pub budget: Option<BigDecimal>,
+    pub total_cost: BigDecimal,
+    pub meals: Vec<EventOverviewMeal>,
+    pub tours: Vec<EventOverviewTour>,
+    pub preps: Vec<EventOverviewPrep>,
+}
+
 /// Prep availability windows for one event, fetched once and queried in memory.
 struct PrepWindows {
     /// (prepped recipe id, use_from, use_until).
