@@ -224,10 +224,20 @@ fn format_tour_text(
         }
         output.push_str(&format!(
             "[ ] {} – {} kg\n",
-            item.ingredient_name, item.weight
+            item.ingredient_name,
+            item.weight
+                .as_ref()
+                .map(|weight| weight.to_string())
+                .unwrap_or_else(|| "?".to_string())
         ));
         for (recipe, weight) in &item.recipe_usage {
-            output.push_str(&format!("      {recipe}: {weight} kg\n"));
+            output.push_str(&format!(
+                "      {recipe}: {} kg\n",
+                weight
+                    .as_ref()
+                    .map(|part| part.to_string())
+                    .unwrap_or_else(|| "?".to_string())
+            ));
         }
     }
     output

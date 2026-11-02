@@ -66,8 +66,11 @@ pub struct FoodPrep {
     pub id: i32,
     pub event_id: i32,
     pub recipe_id: i32,
+    #[serde(with = "time::serde::rfc3339")]
     pub prep_date: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub use_from: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
     pub use_until: OffsetDateTime,
 }
 
@@ -105,8 +108,12 @@ pub struct ShoppingListItem {
     pub event_name: String,
     pub ingredient_id: i32,
     pub ingredient_name: String,
-    pub weight: BigDecimal,
-    pub energy: BigDecimal,
+    /// Total kg to buy. `None` when the ingredient's unit weight is unknown
+    /// (no `weights` row for the recipe's unit) — the demand is then
+    /// unresolvable and the UI shows a placeholder.
+    pub weight: Option<BigDecimal>,
+    /// Energy in kJ; `None` whenever weight is `None`.
+    pub energy: Option<BigDecimal>,
     pub price: Option<BigDecimal>,
     pub tour_id: Option<i32>,
     pub category: Option<String>,
@@ -121,10 +128,11 @@ pub struct ShoppingListItem {
 pub struct ShoppingListItemWithUsage {
     pub ingredient_id: i32,
     pub ingredient_name: String,
-    pub weight: BigDecimal,
+    /// `None` when any contributing recipe row has an unknown weight.
+    pub weight: Option<BigDecimal>,
     pub price: Option<BigDecimal>,
     pub category: Option<String>,
-    pub recipe_usage: Vec<(String, BigDecimal)>,
+    pub recipe_usage: Vec<(String, Option<BigDecimal>)>,
 }
 
 /// Inventory associated with an event
@@ -132,4 +140,30 @@ pub struct ShoppingListItemWithUsage {
 pub struct EventInventory {
     pub event_id: i32,
     pub inventory_id: i32,
+}
+
+/// A food prep task plus the prepared recipe's name (timeline feed).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FoodPrepWithRecipe {
+    pub id: i32,
+    pub event_id: i32,
+    pub recipe_id: i32,
+    #[serde(with = "time::serde::rfc3339")]
+    pub prep_date: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub use_from: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub use_until: OffsetDateTime,
+    pub recipe_name: String,
+}
+
+/// Per-ingredient coverage of the event's demand by its linked inventories.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EventInventoryCoverage {
+    pub ingredient_id: i32,
+    pub ingredient_name: String,
+    /// Total demand in kg (from the resolved event shopping list).
+    pub demand_kg: BigDecimal,
+    /// Amount stocked across the event's linked inventories, in kg.
+    pub covered_kg: BigDecimal,
 }

@@ -264,7 +264,13 @@ async fn shopping_tour_form(
                                     @for item in shopping_list {
                                         tr class=(get_row_class(&item, &inventory_items)) {
                                             td { (item.ingredient_name) }
-                                            td class="text-right" { (format!("{:.2} kg", item.weight)) }
+                                            td class="text-right" {
+                                                @if let Some(ref weight) = item.weight {
+                                                    (format!("{:.2} kg", weight))
+                                                } @else {
+                                                    "? kg (keine Umrechnung)"
+                                                }
+                                            }
                                             td class="text-right" {
                                                 @if let Some(ref price) = item.price {
                                                     (format!("€{:.2}", price))
@@ -367,7 +373,13 @@ fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -
         .map(|i| i.amount.clone())
         .unwrap_or_default();
 
-    if inv_amount >= item.weight {
+    let covered = item
+        .weight
+        .as_ref()
+        .map(|weight| inv_amount >= *weight)
+        .unwrap_or(false);
+
+    if covered {
         "bg-green-100 dark:bg-green-900"
     } else if inv_amount > BigDecimal::from(0) {
         "bg-red-100 dark:bg-red-900"
@@ -396,12 +408,13 @@ fn get_inventory_amount_by_id(
 fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> String {
     let inv_amount = get_inventory_amount(item, inventory);
 
-    if inv_amount >= item.weight {
-        "Available".to_string()
-    } else if inv_amount > BigDecimal::from(0) {
-        format!("Insufficient ({:.2} kg available)", inv_amount)
-    } else {
-        "Not in inventory".to_string()
+    match item.weight.as_ref() {
+        Some(weight) if inv_amount >= *weight => "Available".to_string(),
+        Some(_) if inv_amount > BigDecimal::from(0) => {
+            format!("Insufficient ({:.2} kg available)", inv_amount)
+        }
+        Some(_) => "Not in inventory".to_string(),
+        None => "Unknown (no unit weight)".to_string(),
     }
 }
 
@@ -431,16 +444,23 @@ async fn export_plain(
             current_category = category;
         }
         let inv_amount = get_inventory_amount_by_id(item.ingredient_id, &inventory_items);
-        let status = if inv_amount > item.weight { "x" } else { " " };
-        let to_buy = (item.weight.clone() - inv_amount).max(BigDecimal::zero());
-
-        let new_price = item
-            .price
-            .as_ref()
-            .map(|p| (p / item.weight.clone()) * to_buy.clone());
+        // Unknown weight → the buy amount can't be resolved; keep the row
+        // visible with a "?" placeholder instead of inventing numbers.
+        let (status, to_buy, weight_text, new_price) = match &item.weight {
+            Some(weight) => {
+                let status = if inv_amount > *weight { "x" } else { " " };
+                let to_buy = (weight.clone() - &inv_amount).max(BigDecimal::zero());
+                let new_price = item
+                    .price
+                    .as_ref()
+                    .map(|p| (p / weight) * &to_buy);
+                (status, to_buy, format!("{:.2} kg", weight), new_price)
+            }
+            None => ("?", BigDecimal::zero(), "? kg".to_string(), None),
+        };
 
         output.push_str(&format!(
-            "[{}] {} - {:.2} kg {} -> {:.2} kg",
+            "[{}] {} - {} {} -> {}",
             status,
             item.ingredient_name,
             to_buy,
@@ -449,7 +469,7 @@ async fn export_plain(
             } else {
                 String::new()
             },
-            item.weight
+            weight_text
         ));
         // Usage breakdown without the ingredient-name prefix the Metro export uses.
         let usage = format_recipe_usage(&item.recipe_usage);
@@ -476,10 +496,13 @@ async fn export_plain(
 /// Format a per-recipe usage breakdown as "3.00kg Recipe 2.00kg Other".
 /// `usages` is the `[(recipe, kg)]` list from `tour_shopping_list_with_usage`.
 /// Returns an empty string when there are no usages.
-fn format_recipe_usage(usages: &[(String, BigDecimal)]) -> String {
+fn format_recipe_usage(usages: &[(String, Option<BigDecimal>)]) -> String {
     usages
         .iter()
-        .map(|(recipe, kg)| format!("{:.2}kg {}", kg.to_f64().unwrap_or_default(), recipe))
+        .map(|(recipe, kg)| match kg {
+            Some(kg) => format!("{:.2}kg {}", kg.to_f64().unwrap_or_default(), recipe),
+            None => format!("?kg {}", recipe),
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -508,11 +531,15 @@ async fn export_metro(
     let mut rows: Vec<(String, f64, String, bool)> = Vec::new();
 
     for item in shopping_list {
+        // Unresolvable weight (unknown unit weight) → not orderable via Metro.
+        let Some(item_weight) = item.weight else {
+            continue;
+        };
         let inv_amount = get_inventory_amount_by_id(item.ingredient_id, &inventory_items);
-        if inv_amount > item.weight {
+        if inv_amount > item_weight {
             continue;
         }
-        let weight = &item.weight - inv_amount;
+        let weight = &item_weight - inv_amount;
 
         // Find source with matching ingredient_id
         let Some(source) = sources.iter().find(|s| s.ingredient_id == item.ingredient_id) else {
@@ -643,7 +670,11 @@ async fn calculate_inventory_changes(
 
     // For each item in the shopping list
     for item in &shopping_list {
-        let mut remaining = item.weight.clone();
+        // Unresolvable weight (unknown unit weight) → nothing to deduct.
+        let Some(initial_weight) = item.weight.clone() else {
+            continue;
+        };
+        let mut remaining = initial_weight;
 
         // Try to satisfy from each inventory in order
         for inv in &inventories {

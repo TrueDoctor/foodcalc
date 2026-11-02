@@ -1,4 +1,5 @@
 use crate::entities::event::*;
+use crate::entities::inventory::Inventory;
 use crate::error::{Error, Result};
 use bigdecimal::BigDecimal;
 use sqlx::PgPool;
@@ -554,7 +555,7 @@ impl EventOps {
             SELECT sti.ingredient_id AS "ingredient_id!",
                    sti.ingredient AS "ingredient_name!",
                    sti.recipe AS "recipe!",
-                   SUM(sti.weight) AS "weight!",
+                   SUM(sti.weight) AS "weight?",
                    beis.price AS price_per_unit,
                    mc.category AS "category?"
             FROM shopping_tour_ingredients sti
@@ -573,11 +574,15 @@ impl EventOps {
 
         // Aggregate recipe-grain rows into per-ingredient items, preserving the
         // SQL ordering (category, name) for items and (desc weight) for recipes.
+        // A `None` weight (unknown unit weight) taints the ingredient total.
         let mut items: Vec<ShoppingListItemWithUsage> = Vec::new();
         for row in rows {
             match items.last_mut() {
                 Some(item) if item.ingredient_id == row.ingredient_id => {
-                    item.weight += &row.weight;
+                    item.weight = match (item.weight.take(), row.weight.clone()) {
+                        (Some(sum), Some(part)) => Some(sum + part),
+                        _ => None,
+                    };
                     item.recipe_usage.push((row.recipe, row.weight));
                 }
                 _ => items.push(ShoppingListItemWithUsage {
@@ -594,10 +599,15 @@ impl EventOps {
         }
         // Finalize price: per-unit × summed weight (matches the shopping_list
         // view's `SUM(weight) * price`). A negative sentinel (-1) means "no
-        // source priced", which we surface as None.
+        // source priced", which we surface as None. Unknown weight → None.
         for item in &mut items {
             item.price = item.price.as_ref().and_then(|per_unit| {
-                (per_unit >= &BigDecimal::from(0)).then(|| per_unit * &item.weight)
+                if per_unit < &BigDecimal::from(0) {
+                    return None;
+                }
+                item.weight
+                    .as_ref()
+                    .map(|weight| per_unit * weight)
             });
         }
         Ok(items)
@@ -613,8 +623,8 @@ impl EventOps {
                 event_name as "event_name!",
                 ingredient_id as "ingredient_id!",
                 ingredient as "ingredient_name!",
-                weight as "weight!",
-                energy as "energy!",
+                weight,
+                energy,
                 price,
                 tour_id,
                 category
@@ -640,8 +650,8 @@ impl EventOps {
                 event_name as "event_name!",
                 ingredient_id as "ingredient_id!",
                 ingredient as "ingredient_name!",
-                weight as "weight!",
-                energy as "energy!",
+                weight,
+                energy,
                 price,
                 tour_id,
                 category
@@ -1116,6 +1126,90 @@ impl EventOps {
         )
         .fetch_all(&*self.pool)
         .await?;
+        Ok(records)
+    }
+
+    /// All food prep tasks of an event with the recipe name, ordered by date
+    /// (timeline feed).
+    pub async fn list_food_preps(&self, event_id: i32) -> Result<Vec<FoodPrepWithRecipe>> {
+        let records = sqlx::query_as!(
+            FoodPrepWithRecipe,
+            r#"
+            SELECT fp.prep_id as "id", fp.event_id, fp.recipe_id, fp.prep_date,
+                fp.use_from, fp.use_until,
+                r.name AS "recipe_name!"
+            FROM food_prep fp
+            JOIN recipes r ON r.recipe_id = fp.recipe_id
+            WHERE fp.event_id = $1
+            ORDER BY fp.prep_date, fp.use_until
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// The event's linked inventories with names, for the logistics view.
+    pub async fn list_event_inventories(&self, event_id: i32) -> Result<Vec<Inventory>> {
+        let records = sqlx::query_as!(
+            Inventory,
+            r#"
+            SELECT i.inventory_id as "id", i.name, i.group_id
+            FROM event_inventories ei
+            JOIN inventories i ON i.inventory_id = ei.inventory_id
+            WHERE ei.event_id = $1
+            ORDER BY i.name
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// Per-ingredient coverage: total event demand (resolved shopping list,
+    /// i.e. after overrides) vs. the stock of the event's linked inventories.
+    /// Ingredients with zero demand are omitted.
+    pub async fn get_event_inventory_coverage(
+        &self,
+        event_id: i32,
+    ) -> Result<Vec<EventInventoryCoverage>> {
+        let records = sqlx::query_as!(
+            EventInventoryCoverage,
+            r#"
+            WITH demand AS (
+                SELECT ingredient_id, SUM(weight) AS demand_kg
+                FROM shopping_list
+                WHERE event_id = $1
+                GROUP BY ingredient_id
+            ),
+            supply AS (
+                SELECT ii.ingredient_id, SUM(ii.amount) AS covered_kg
+                FROM event_inventories ei
+                JOIN inventory_ingredients ii ON ii.inventory_id = ei.inventory_id
+                WHERE ei.event_id = $1
+                GROUP BY ii.ingredient_id
+            )
+            SELECT d.ingredient_id AS "ingredient_id!",
+                ing.name AS "ingredient_name!",
+                d.demand_kg AS "demand_kg!",
+                COALESCE(s.covered_kg, 0::numeric) AS "covered_kg!"
+            FROM demand d
+            JOIN ingredients ing ON ing.ingredient_id = d.ingredient_id
+            LEFT JOIN supply s ON s.ingredient_id = d.ingredient_id
+            -- Unresolvable demands (unknown unit weight) are surfaced as "~"
+            -- warnings in the meal plan, not as coverage rows.
+            WHERE d.demand_kg IS NOT NULL
+            ORDER BY ing.name
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
         Ok(records)
     }
 }

@@ -65,7 +65,10 @@ async fn test_shopping_list_with_source_overrides(pool: PgPool) {
             "- {} (ID: {}): {}kg at ${}",
             item.ingredient_name,
             item.ingredient_id,
-            item.weight,
+            item.weight
+                .as_ref()
+                .map(|w| w.to_string())
+                .unwrap_or_else(|| "?".to_string()),
             item.price.clone().unwrap()
         );
     }
@@ -77,7 +80,8 @@ async fn test_shopping_list_with_source_overrides(pool: PgPool) {
 
     assert_eq!(
         *tomatoes.price.as_ref().unwrap(),
-        BigDecimal::from_str("1.99").unwrap() * &tomatoes.weight
+        BigDecimal::from_str("1.99").unwrap()
+            * tomatoes.weight.as_ref().expect("test data has weights")
     );
 }
 

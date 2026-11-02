@@ -17,6 +17,7 @@ use crate::api::{bad_request, map_api_error, respond, respond_created};
 use crate::MyAppState;
 
 pub mod exports;
+pub mod logistics;
 pub mod meals;
 pub mod shopping;
 
@@ -59,6 +60,7 @@ pub fn events_router() -> Router<MyAppState> {
         .route("/{id}/exports/allergens", get(exports::export_allergens))
         .route("/{id}/exports/labels", get(exports::export_labels))
         .route("/{id}/exports/tour/{tour_id}", get(exports::export_tour))
+        .merge(logistics::logistics_router())
 }
 
 /// `GET /api/events` — all events of the user's groups with planner totals
