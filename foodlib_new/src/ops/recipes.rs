@@ -1,9 +1,12 @@
 use crate::entities::recipe::{
     Recipe, RecipeIngredient, RecipeKind, RecipeListItem, RecipeStep,
+    RecipeTreeIngredient, RecipeTreeNode,
 };
 use crate::error::{Error, Result};
 use crate::recipe::{RecipeMetaIngredient, RecipeStats, ResolvedRecipe};
+use bigdecimal::BigDecimal;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Operations for managing recipes and their components (ingredients, steps, meta-recipes)
@@ -779,5 +782,157 @@ impl RecipeOps {
 
         tx.commit().await?;
         Ok(new_id)
+    }
+
+    /// The full recursion tree of a recipe: the recipe itself with its
+    /// direct ingredients (unit-converted weights via `resolved_recipes`)
+    /// and every used sub-recipe, recursively. Cycle-safe via a depth cap
+    /// and path de-duplication.
+    ///
+    /// Structure: a depth-first walk over `meta_recipes` yields one path per
+    /// node (`"<root>.<sub>.<sub>"`); `resolved_recipes.acc` uses the same
+    /// id chains, so ingredient leaves attach to nodes by matching path.
+    pub async fn get_recipe_tree(&self, root_id: i32) -> Result<RecipeTreeNode> {
+        #[derive(Debug)]
+        struct WalkRow {
+            path: String,
+            node_id: i32,
+            parent_weight: Option<BigDecimal>,
+        }
+        let walk = sqlx::query_as!(
+            WalkRow,
+            r#"
+            WITH RECURSIVE walk(path, node_id, parent_weight, depth) AS (
+                SELECT $1::text, $2::int, NULL::numeric, 0
+                UNION ALL
+                SELECT w.path || '.' || m.child_id, m.child_id, m.weight, w.depth + 1
+                FROM walk w
+                JOIN meta_recipes m ON m.parent_id = w.node_id
+                WHERE w.depth < 10
+                  AND position('.' || m.child_id::text || '.' IN w.path || '.') = 0
+            )
+            SELECT path AS "path!", node_id AS "node_id!", parent_weight
+            FROM walk
+            "#,
+            root_id.to_string(),
+            root_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        // Node recipe data (name, kind) for every visited node.
+        let node_ids: Vec<i32> = walk.iter().map(|row| row.node_id).collect();
+        let mut name_by_id: HashMap<i32, (String, RecipeKind)> = HashMap::new();
+        for id in &node_ids {
+            if let Ok(recipe) = self.get(*id).await {
+                name_by_id.insert(*id, (recipe.name, recipe.kind));
+            }
+        }
+
+        // Leaf rows: the raw ingredient list of every walked node with the
+        // base weight (amount × kg-per-unit) — the recipe's own scale, as
+        // shown in the tree view (event scaling happens per meal elsewhere).
+        #[derive(Debug)]
+        struct LeafRow {
+            acc: String,
+            ingredient_id: i32,
+            ingredient: Option<String>,
+            weight: Option<BigDecimal>,
+            amount: BigDecimal,
+            unit_id: i32,
+            unit_name: Option<String>,
+        }
+        let leaves = sqlx::query_as!(
+            LeafRow,
+            r#"
+            WITH RECURSIVE walk(path, node_id, parent_weight, depth) AS (
+                SELECT $1::text, $2::int, NULL::numeric, 0
+                UNION ALL
+                SELECT w.path || '.' || m.child_id, m.child_id, m.weight, w.depth + 1
+                FROM walk w
+                JOIN meta_recipes m ON m.parent_id = w.node_id
+                WHERE w.depth < 10
+                  AND position('.' || m.child_id::text || '.' IN w.path || '.') = 0
+            )
+            SELECT walk.path AS "acc!",
+                   ri.ingredient_id AS "ingredient_id!",
+                   i.name AS ingredient,
+                   (ri.amount * w.weight) AS "weight?",
+                   ri.amount AS "amount!",
+                   ri.unit_id AS "unit_id!",
+                   u.name AS unit_name
+            FROM walk
+            JOIN recipe_ingredients ri ON ri.recipe_id = walk.node_id
+            LEFT JOIN ingredients i ON i.ingredient_id = ri.ingredient_id
+            LEFT JOIN weights w
+              ON w.ingredient_id = ri.ingredient_id AND w.unit_id = ri.unit_id
+            LEFT JOIN units u ON u.unit_id = ri.unit_id
+            "#,
+            root_id.to_string(),
+            root_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let mut leaves_by_acc: HashMap<String, Vec<RecipeTreeIngredient>> = HashMap::new();
+        for leaf in &leaves {
+            leaves_by_acc
+                .entry(leaf.acc.clone())
+                .or_default()
+                .push(RecipeTreeIngredient {
+                    ingredient_id: leaf.ingredient_id,
+                    name: leaf.ingredient.clone(),
+                    amount: leaf.amount.clone(),
+                    unit_id: leaf.unit_id,
+                    unit_name: leaf.unit_name.clone(),
+                    weight: leaf.weight.clone(),
+                });
+        }
+
+        // Pass A: build all nodes keyed by path.
+        let mut nodes: HashMap<String, RecipeTreeNode> = HashMap::new();
+        for row in &walk {
+            let (name, kind) = name_by_id
+                .get(&row.node_id)
+                .cloned()
+                .unwrap_or_else(|| ("?".into(), RecipeKind::Meal));
+            nodes.insert(
+                row.path.clone(),
+                RecipeTreeNode {
+                    recipe_id: row.node_id,
+                    name,
+                    kind,
+                    weight: row.parent_weight.clone(),
+                    ingredients: leaves_by_acc.remove(&row.path).unwrap_or_default(),
+                    children: vec![],
+                },
+            );
+        }
+
+        // Pass B: attach deepest-first so every parent has collected all its
+        // children before it is moved into its own parent.
+        let mut attach_order: Vec<&WalkRow> = walk.iter().collect();
+        attach_order.sort_by(|a, b| b.path.len().cmp(&a.path.len()));
+        let mut root_node: Option<RecipeTreeNode> = None;
+        for row in attach_order {
+            let node = nodes.remove(&row.path).expect("node built in pass A");
+            let parent_path = row
+                .path
+                .rsplit_once('.')
+                .map(|(parent, _)| parent.to_string());
+            match parent_path {
+                Some(parent_path) => {
+                    if let Some(parent) = nodes.get_mut(&parent_path) {
+                        parent.children.push(node);
+                    }
+                }
+                None => root_node = Some(node),
+            }
+        }
+
+        root_node.ok_or(Error::NotFound {
+            entity: "Recipe",
+            id: root_id.to_string(),
+        })
     }
 }

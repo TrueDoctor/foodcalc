@@ -19,6 +19,7 @@ pub mod ingredients;
 pub mod inventories;
 pub mod master;
 pub mod recipes;
+pub mod users;
 
 pub fn api_router() -> Router<MyAppState> {
     // Public routes: health probe and the login entry point. Everything
@@ -26,17 +27,19 @@ pub fn api_router() -> Router<MyAppState> {
     // the `protected` router below so they stay guarded.
     let public = Router::new()
         .route("/health", get(health))
-        .route("/auth/login", post(auth::login));
+        .route("/auth/login", post(auth::login))
+        .route("/auth/register", post(auth::register));
 
     let protected = Router::new()
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
         // Master data for owner/store/unit/property pickers in the UI.
-        .route("/groups", get(master::groups))
         .route("/stores", get(master::stores))
         .route("/units", get(master::units))
         .route("/properties", get(master::properties))
         .route("/places", get(master::places))
+        .nest("/users", users::users_router())
+        .nest("/groups", users::groups_router())
         .nest("/events", events::events_router())
         .nest("/recipes", recipes::recipes_router())
         .nest("/ingredients", ingredients::ingredients_router())

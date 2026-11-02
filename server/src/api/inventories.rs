@@ -9,11 +9,7 @@ use axum::{
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 
-use foodlib_new::{
-    auth_context::AuthCtx,
-    ingredient::Ingredient,
-    inventory::{Inventory, InventoryItem, InventoryItemWithName},
-};
+use foodlib_new::{auth_context::AuthCtx, inventory::Inventory, inventory::InventoryItem, inventory::InventoryItemWithName};
 
 use crate::{api::map_api_error, MyAppState};
 
@@ -38,10 +34,19 @@ pub fn inventories_router() -> Router<MyAppState> {
     .route("/{id}/items", post(add_item_to_inventory))
 }
 
-async fn list_available_inventories(State(state): State<MyAppState>) -> impl IntoResponse {
+async fn list_available_inventories(State(state): State<MyAppState>, ctx: AuthCtx) -> impl IntoResponse {
+    // Group visibility: members see their groups' inventories, admins all.
     let inventories = state.inventories().list().await;
     match inventories {
-        Ok(items) => (StatusCode::OK, Json(items)).into_response(),
+        Ok(items) => {
+            let visible: Vec<Inventory> = items
+                .into_iter()
+                .filter(|inventory| {
+                    ctx.user.is_admin || ctx.group_ids.contains(&inventory.group_id)
+                })
+                .collect();
+            (StatusCode::OK, Json(visible)).into_response()
+        }
         Err(err) => map_api_error(err).into_response(),
     }
 }

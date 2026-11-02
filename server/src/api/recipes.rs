@@ -34,6 +34,8 @@ pub fn recipes_router() -> Router<MyAppState> {
             "/{id}",
             get(get_recipe).put(update_recipe).delete(delete_recipe),
         )
+        .route("/{id}/tree", get(get_recipe_tree))
+        .route("/{id}/export", get(export_recipe_pdf))
         .route("/{id}/clone", post(clone_recipe))
         .route("/{id}/ingredients", post(add_ingredient))
         .route(
@@ -387,6 +389,110 @@ async fn get_recipe(
             weighed_in: recipe.weighed_in,
         },
     )
+}
+
+// ------------------------------------------------------------------ tree
+
+/// `GET /api/recipes/{id}/tree` — the recursion tree with resolved
+/// ingredient weights per node (view mode visualization).
+async fn get_recipe_tree(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+) -> Response {
+    let recipe = match state.recipes().get(id).await {
+        Ok(recipe) => recipe,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    if !ctx.can_access_group(recipe.group_id) {
+        return map_api_error(Error::NotFound {
+            entity: "Recipe",
+            id: id.to_string(),
+        })
+        .into_response();
+    }
+    respond(state.recipes().get_recipe_tree(id).await)
+}
+
+// ----------------------------------------------------------- recipe export
+
+#[derive(Debug, Deserialize)]
+pub struct RecipeExportQuery {
+    /// Target portions for the PDF (default: the recipe as-is).
+    pub servings: Option<u32>,
+    /// Target energy per portion in kJ (default: the recipe's own density).
+    pub energy_per_serving: Option<u32>,
+}
+
+/// `GET /api/recipes/{id}/export` — cooking instructions PDF, optionally
+/// scaled to `servings × energy_per_serving` like an event meal.
+async fn export_recipe_pdf(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+    Query(query): Query<RecipeExportQuery>,
+) -> Response {
+    let recipe = match state.recipes().get(id).await {
+        Ok(recipe) => recipe,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    if !ctx.can_access_group(recipe.group_id) {
+        return map_api_error(Error::NotFound {
+            entity: "Recipe",
+            id: id.to_string(),
+        })
+        .into_response();
+    }
+
+    // Defaults: render the base recipe (1 portion at its own total energy).
+    let stats = state.recipes().get_recipe_stats(id).await.ok();
+    let servings = query.servings.unwrap_or(1) as f64;
+    let energy_per_serving = match query.energy_per_serving {
+        Some(energy) => energy,
+        None => {
+            let total = stats
+                .as_ref()
+                .map(|stats| stats.energy.to_f64().unwrap_or(0.0))
+                .unwrap_or(0.0);
+            (total / servings.max(1.0)).round() as u32
+        }
+    };
+
+    let recipe_info = match state
+        .export()
+        .fetch_user_input_meal(id, servings, energy_per_serving, String::new())
+        .await
+    {
+        Ok(info) => info,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    let title = recipe_info.name.to_owned();
+
+    #[cfg(feature = "typst")]
+    let result = foodlib_new::typst::export_recipes(recipe_info)
+        .await
+        .map_err(|err| Error::Misc(err.to_string()));
+    #[cfg(not(feature = "typst"))]
+    let result: Result<Vec<u8>, Error> =
+        Err(Error::Misc("Server compiled without typst support".into()));
+
+    match result {
+        Ok(bytes) => (
+            [
+                (
+                    axum::http::header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{title}.pdf\""),
+                ),
+                (
+                    axum::http::header::CONTENT_TYPE,
+                    "application/pdf".to_string(),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(err) => map_api_error(err).into_response(),
+    }
 }
 
 // ------------------------------------------------------------------ clone

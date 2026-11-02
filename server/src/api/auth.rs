@@ -13,7 +13,9 @@ use axum::{
 };
 use foodlib_new::auth::{AuthSession, Credentials};
 use foodlib_new::entities::user::{Group, User};
+use foodlib_new::Error;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 use crate::{api::map_api_error, MyAppState};
 
@@ -71,6 +73,13 @@ fn unauthorized(message: &str) -> (StatusCode, Json<serde_json::Value>) {
     )
 }
 
+fn bad_input(message: &str) -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({ "error": message })),
+    )
+}
+
 /// Routes that require an authenticated session. Mounted behind
 /// `require_api_auth` (see `api::api_router`).
 pub fn protected_router() -> Router<MyAppState> {
@@ -94,6 +103,84 @@ pub async fn login(auth: AuthSession, Json(payload): Json<LoginInput>) -> Respon
         }
         Err(err) => map_api_error(err).into_response(),
     }
+}
+
+/// `POST /api/auth/register` payload.
+#[derive(Debug, Deserialize)]
+pub struct RegisterInput {
+    pub username: String,
+    pub email: String,
+    pub password: String,
+}
+
+/// Open self-registration: creates the user together with their personal
+/// group atomically and logs them in. Public endpoint — validation happens
+/// here (username/email/password policy, uniqueness pre-check).
+pub async fn register(
+    State(state): State<MyAppState>,
+    mut auth: AuthSession,
+    Json(payload): Json<RegisterInput>,
+) -> Response {
+    let username = payload.username.trim().to_string();
+    let email = payload.email.trim().to_string();
+
+    if username.len() < 3 {
+        return bad_input("username must be at least 3 characters").into_response();
+    }
+    if !email.contains('@') || email.len() < 5 {
+        return bad_input("invalid email address").into_response();
+    }
+    if payload.password.len() < 8 {
+        return bad_input("password must be at least 8 characters").into_response();
+    }
+    // Uniqueness pre-check (the DB constraints are the final arbiter).
+    if state
+        .users()
+        .get_user_by_string_reference(username.clone())
+        .await
+        .is_some()
+    {
+        return bad_input("username or email already taken").into_response();
+    }
+
+    let password_hash = match bcrypt::hash(&payload.password, 12) {
+        Ok(hash) => hash,
+        Err(err) => return map_api_error(Error::Misc(err.to_string())).into_response(),
+    };
+
+    let created = state
+        .users()
+        .create_user_with_personal_group(User {
+            id: 0,
+            username,
+            email,
+            password_hash,
+            is_admin: false,
+            created_at: OffsetDateTime::now_utc(),
+        })
+        .await;
+
+    let (user, personal_group) = match created {
+        Ok(pair) => pair,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+
+    // Log the freshly created user in (same session backend as login).
+    if let Err(err) = auth.login(&user).await {
+        return map_api_error(err.into()).into_response();
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(ApiUser {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            is_admin: user.is_admin,
+            groups: vec![ApiGroup::from(personal_group)],
+        }),
+    )
+        .into_response()
 }
 
 /// Invalidate the current session.

@@ -111,3 +111,34 @@ pub struct RecipeListItem {
     /// Total resolved energy in kJ.
     pub energy: BigDecimal,
 }
+
+/// A node of the recipe recursion tree: a recipe together with its direct
+/// ingredients (resolved weights) and its used sub-recipes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeTreeNode {
+    pub recipe_id: i32,
+    pub name: String,
+    pub kind: RecipeKind,
+    /// kg of this sub-recipe used by its parent (`None` for the root).
+    pub weight: Option<BigDecimal>,
+    /// Direct ingredients of this recipe, resolved to kg where possible.
+    pub ingredients: Vec<RecipeTreeIngredient>,
+    /// Sub-recipes used by this recipe.
+    pub children: Vec<RecipeTreeNode>,
+}
+
+/// One leaf of the tree: an ingredient row with its raw amount and the
+/// unit-converted weight the event views use.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeTreeIngredient {
+    pub ingredient_id: i32,
+    pub name: Option<String>,
+    /// Raw amount as entered on the recipe.
+    pub amount: BigDecimal,
+    pub unit_id: i32,
+    /// Unit name for display ("kg", "Stück", "Liter", …).
+    pub unit_name: Option<String>,
+    /// Unit-converted weight (kg) from the `resolved_recipes` view;
+    /// `None` when no conversion exists.
+    pub weight: Option<BigDecimal>,
+}

@@ -37,3 +37,13 @@ pub struct UserGroup {
     pub user_id: i64,
     pub group_id: i32,
 }
+
+/// Raw `(user_id, group)` join row used by `UserOps::list_users_with_groups`
+/// to group memberships in Rust with two flat queries.
+#[derive(Debug)]
+pub struct MembershipRow {
+    pub user_id: i64,
+    pub id: i32,
+    pub name: String,
+    pub is_personal: bool,
+}

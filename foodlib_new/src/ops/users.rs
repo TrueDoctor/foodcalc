@@ -195,6 +195,63 @@ impl UserOps {
         Ok(rows)
     }
 
+    /// All users together with their group memberships, grouped in Rust.
+    /// Single pair of queries instead of per-user group lookups (admin UI).
+    pub async fn list_users_with_groups(&self) -> Result<Vec<(User, Vec<Group>)>> {
+        let users = self.get_all_users().await?;
+        let memberships = sqlx::query_as!(
+            MembershipRow,
+            r#"
+            SELECT ug.user_id, g.id, g.name, g.is_personal
+            FROM user_groups ug
+            JOIN groups g ON g.id = ug.group_id
+            ORDER BY g.is_personal DESC, g.name
+            "#
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let mut groups_by_user: std::collections::HashMap<i64, Vec<Group>> =
+            std::collections::HashMap::new();
+        for row in memberships {
+            groups_by_user
+                .entry(row.user_id)
+                .or_default()
+                .push(Group {
+                    id: row.id,
+                    name: row.name,
+                    is_personal: row.is_personal,
+                });
+        }
+
+        Ok(users
+            .into_iter()
+            .map(|user| {
+                let groups = groups_by_user.remove(&user.id).unwrap_or_default();
+                (user, groups)
+            })
+            .collect())
+    }
+
+    /// All members of a group (admin UI / group management).
+    pub async fn get_group_members(&self, group_id: i32) -> Result<Vec<User>> {
+        let rows = sqlx::query_as!(
+            User,
+            r#"
+            SELECT u.id, u.username, u.email, u.password_hash, u.is_admin, u.created_at
+            FROM user_groups ug
+            JOIN users u ON u.id = ug.user_id
+            WHERE ug.group_id = $1
+            ORDER BY u.username
+            "#,
+            group_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
     /// Creates a user and their personal group atomically.
     pub async fn create_user_with_personal_group(&self, user: User) -> Result<(User, Group)> {
         let mut tx = self.pool.begin().await?;
@@ -341,6 +398,25 @@ impl UserOps {
         })?;
 
         Ok(row)
+    }
+
+    /// Number of entities (recipes, ingredients, inventories, events) owned
+    /// by a group — used to refuse deleting non-empty groups.
+    pub async fn count_owned_entities(&self, group_id: i32) -> Result<i64> {
+        let count = sqlx::query_scalar!(
+            r#"
+            SELECT
+                (SELECT COUNT(*) FROM recipes WHERE group_id = $1)
+              + (SELECT COUNT(*) FROM ingredients WHERE group_id = $1)
+              + (SELECT COUNT(*) FROM inventories WHERE group_id = $1)
+              + (SELECT COUNT(*) FROM events WHERE group_id = $1)
+            "#,
+            group_id
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+
+        Ok(count.unwrap_or(0))
     }
 
     pub async fn get_all_groups(&self) -> Result<Vec<Group>> {
