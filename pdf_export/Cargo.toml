@@ -10,5 +10,4 @@ typst = "0.15.1"
 eyre = { workspace = true }
 typst-pdf = "0.15.1"
 typst-as-lib = "0.17.0"
-serde = { version = "1.0.229", features = ["derive"] }
 time = { workspace = true }
