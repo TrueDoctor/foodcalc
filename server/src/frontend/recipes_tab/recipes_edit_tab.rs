@@ -11,7 +11,6 @@ use foodlib_new::{
 };
 use maud::{html, Markup};
 use serde::Deserialize;
-use sqlx::postgres::types::PgInterval;
 
 use crate::{
     frontend::{icons, move_group, MResponse},
@@ -112,18 +111,10 @@ impl From<UpdateRecipeStepHeader> for RecipeStep {
             order: value.step_order,
             name: value.step_name,
             description: value.step_description,
-            fixed_duration: pg_interval_from_minutes(value.fixed_duration_minutes),
-            duration_per_kg: pg_interval_from_minutes(value.duration_per_kg_minutes),
+            fixed_duration: value.fixed_duration_minutes * 60.0,
+            duration_per_kg: value.duration_per_kg_minutes * 60.0,
             recipe_id: value.recipe_id,
         }
-    }
-}
-
-fn pg_interval_from_minutes(minutes: f64) -> PgInterval {
-    PgInterval {
-        months: 0,
-        days: 0,
-        microseconds: (60_000_000. * minutes) as i64,
     }
 }
 
@@ -638,8 +629,8 @@ impl StepTableFormattable for RecipeStep {
                 td class="step-drag-handle no-label text-center cursor-grab opacity-60 select-none" title="Drag to reorder" { "⋮⋮" }
                 td data-label="Name" { input class=(format!("text {}",form_id)) name=("step_name") value=(self.name) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
                 td data-label="Description" { input class=(format!("text {}",form_id)) name="step_description" value=(self.description) hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td data-label="Duration (min)" { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td data-label="Per kg (min)" { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td data-label="Duration (min)" { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", self.fixed_duration / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td data-label="Per kg (min)" { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", self.duration_per_kg / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
                 td class="no-label" { button class="icon-btn" title="Delete" aria-label="Delete" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-step/{}/{}", recipe_id, self.id)) hx-include=(format!(".{}", form_id)) { (icons::delete()) } }
             }
         }

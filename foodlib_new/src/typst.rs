@@ -100,9 +100,9 @@ pub async fn export_event_allergens(info: EventAllergenInfo) -> eyre::Result<Vec
         .fonts([FONT_R, FONT_RI, FONT_RB, FONT_RBI])
         .build();
 
-    let dishLabel = TypstDishLabel::from_event_info(&info);
+    let dish_label = TypstDishLabel::from_event_info(&info);
     let input_data = DishLabelLayoutInput {
-        v: vec![dishLabel],
+        v: vec![dish_label],
         layout: "flat".into(),
     };
 

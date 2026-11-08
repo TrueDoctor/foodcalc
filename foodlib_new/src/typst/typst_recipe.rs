@@ -74,8 +74,8 @@ impl TypstRecipePage {
                     title: s.name.clone(),
                     desc: s.description.clone(),
                     duration: TypstDuration {
-                        fix: (s.fixed_duration.microseconds as f64) / 1_000_000.0 / 60.0,
-                        var: (s.duration_per_kg.microseconds as f64) / 1_000_000.0 / 60.0,
+                        fix: s.fixed_duration / 60.0,
+                        var: s.duration_per_kg / 60.0,
                     },
                 })
                 .collect();

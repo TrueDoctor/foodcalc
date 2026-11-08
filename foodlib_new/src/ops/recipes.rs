@@ -17,6 +17,42 @@ pub struct RecipeOps {
     pool: Arc<PgPool>,
 }
 
+fn f64_to_pg_interval(seconds: f64) -> sqlx::postgres::types::PgInterval {
+    sqlx::postgres::types::PgInterval {
+        months: 0,
+        days: 0,
+        microseconds: (seconds * 1_000_000.0) as i64,
+    }
+}
+
+fn pg_interval_to_f64(interval: &sqlx::postgres::types::PgInterval) -> f64 {
+    interval.microseconds as f64 / 1_000_000.0
+}
+
+struct RecipeStepDB {
+    id: i32,
+    recipe_id: i32,
+    order: f64,
+    name: String,
+    description: String,
+    fixed_duration: sqlx::postgres::types::PgInterval,
+    duration_per_kg: sqlx::postgres::types::PgInterval,
+}
+
+impl RecipeStepDB {
+    fn to_recipe_step(&self) -> RecipeStep {
+        RecipeStep {
+            id: self.id,
+            order: self.order,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            fixed_duration: pg_interval_to_f64(&self.fixed_duration),
+            duration_per_kg: pg_interval_to_f64(&self.duration_per_kg),
+            recipe_id: self.recipe_id,
+        }
+    }
+}
+
 impl RecipeOps {
     /// Creates a new RecipeOps instance with the given database pool
     pub fn new(pool: Arc<PgPool>) -> Self {
@@ -282,10 +318,12 @@ impl RecipeOps {
         Ok(records)
     }
 
+
+
     // Recipe Steps
     pub async fn add_step(&self, step: RecipeStep) -> Result<RecipeStep> {
         let record = sqlx::query_as!(
-            RecipeStep,
+            RecipeStepDB,
             r#"
             INSERT INTO steps (recipe_id, step_order, step_name, step_description, 
                              fixed_duration, duration_per_kg)
@@ -299,18 +337,18 @@ impl RecipeOps {
             step.order,
             step.name,
             step.description,
-            step.fixed_duration,
-            step.duration_per_kg,
+            f64_to_pg_interval(step.fixed_duration),
+            f64_to_pg_interval(step.duration_per_kg),
         )
         .fetch_one(&*self.pool)
         .await?;
 
-        Ok(record)
+        Ok(record.to_recipe_step())
     }
 
     pub async fn update_step(&self, step: RecipeStep) -> Result<RecipeStep> {
         let record = sqlx::query_as!(
-            RecipeStep,
+            RecipeStepDB,
             r#"
             UPDATE steps 
             SET step_order = $2, step_name = $3, step_description = $4,
@@ -326,8 +364,8 @@ impl RecipeOps {
             step.order,
             step.name,
             step.description,
-            step.fixed_duration,
-            step.duration_per_kg,
+            f64_to_pg_interval(step.fixed_duration),
+            f64_to_pg_interval(step.duration_per_kg),
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -336,7 +374,7 @@ impl RecipeOps {
             id: step.id.to_string(),
         })?;
 
-        Ok(record)
+        Ok(record.to_recipe_step())
     }
 
     pub async fn delete_step(&self, recipe_id: i32, step_id: i32) -> Result<()> {
@@ -363,7 +401,7 @@ impl RecipeOps {
 
     pub async fn get_steps(&self, recipe_id: i32) -> Result<Vec<RecipeStep>> {
         let records = sqlx::query_as!(
-            RecipeStep,
+            RecipeStepDB,
             r#"
             SELECT 
                 step_id as id, recipe_id, step_order as "order",
@@ -378,7 +416,11 @@ impl RecipeOps {
         .fetch_all(&*self.pool)
         .await?;
 
-        Ok(records)
+        Ok(
+            records.into_iter()
+                .map(|record| record.to_recipe_step())
+                .collect()
+        )
     }
 
     // Meta Recipes
@@ -655,8 +697,8 @@ impl RecipeOps {
                 step.order,
                 step.name,
                 step.description,
-                step.fixed_duration,
-                step.duration_per_kg,
+                f64_to_pg_interval(step.fixed_duration),
+                f64_to_pg_interval(step.duration_per_kg),
             )
             .execute(&mut *tx)
             .await?;

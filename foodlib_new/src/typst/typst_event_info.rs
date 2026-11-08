@@ -1,7 +1,6 @@
 use crate::entities::allergen::DietaryFlags;
 use crate::ops::export::EventAllergenInfo;
 use serde::Serialize;
-use std::alloc::Layout;
 use time::format_description;
 use typst::foundations::{Dict, IntoValue};
 
