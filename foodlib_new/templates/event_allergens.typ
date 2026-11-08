@@ -36,8 +36,7 @@
 )
 
 #let pretty(name) = {
-  if name in allergen_label_de { allergen_label_de.at(name) }
-  else { upper(name.at(0)) + name.slice(1) }
+  if name in allergen_label_de { allergen_label_de.at(name) } else { upper(name.at(0)) + name.slice(1) }
 }
 
 // A label carrying a may-contain trace on its axis gets a trailing asterisk;
@@ -46,16 +45,46 @@
   set text(size: 0.85em)
   let star(cond) = if cond [\*] else []
   let parts = ()
-  if d.vegan { parts.push(box(stroke: 0.5pt + green, inset: 3pt, radius: 3pt, fill: green.lighten(80%))[*vegan#star(d.vegan_trace)*]) }
-  else if d.vegetarian { parts.push(box(stroke: 0.5pt + olive, inset: 3pt, radius: 3pt, fill: olive.lighten(80%))[*vegetarisch#star(d.vegetarian_trace)*]) }
-  if d.lactose_free { parts.push(box(stroke: 0.5pt + blue, inset: 3pt, radius: 3pt, fill: blue.lighten(80%))[*laktosefrei#star(d.lactose_free_trace)*]) }
-  if d.gluten_free { parts.push(box(stroke: 0.5pt + purple, inset: 3pt, radius: 3pt, fill: purple.lighten(80%))[*glutenfrei#star(d.gluten_free_trace)*]) }
+  if d.vegan {
+    parts.push(box(
+      stroke: 0.5pt + green,
+      inset: 3pt,
+      radius: 3pt,
+      fill: green.lighten(80%),
+    )[*vegan#star(d.vegan_trace)*])
+  } else if d.vegetarian {
+    parts.push(box(
+      stroke: 0.5pt + olive,
+      inset: 3pt,
+      radius: 3pt,
+      fill: olive.lighten(80%),
+    )[*vegetarisch#star(d.vegetarian_trace)*])
+  }
+  if d.lactose_free {
+    parts.push(box(
+      stroke: 0.5pt + blue,
+      inset: 3pt,
+      radius: 3pt,
+      fill: blue.lighten(80%),
+    )[*laktosefrei#star(d.lactose_free_trace)*])
+  }
+  if d.gluten_free {
+    parts.push(box(
+      stroke: 0.5pt + purple,
+      inset: 3pt,
+      radius: 3pt,
+      fill: purple.lighten(80%),
+    )[*glutenfrei#star(d.gluten_free_trace)*])
+  }
   let has_trace = d.vegan_trace or d.vegetarian_trace or d.lactose_free_trace or d.gluten_free_trace
   if parts.len() == 0 { [] } else {
     stack(dir: ltr, spacing: 4pt, ..parts)
     if has_trace [
       #v(0.2em)
-      #text(size: 0.7em, style: "italic")[\* vegan / vegetarisch / laktosefrei / glutenfrei ohne Berücksichtigung von Spuren.]
+      #text(
+        size: 0.7em,
+        style: "italic",
+      )[\* vegan / vegetarisch / laktosefrei / glutenfrei ohne Berücksichtigung von Spuren.]
     ]
   }
 }
@@ -63,10 +92,12 @@
 // Decorative flourish built from typst primitives (no glyph dependency).
 // A short horizontal line + small diamond + line, evoking an art-deco rule.
 #let flourish() = {
-  box(baseline: -0.2em, stack(dir: ltr, spacing: 4pt,
-    line(length: 2.5em, stroke: 0.6pt, start: (0%,0.36%)),
+  box(baseline: -0.2em, stack(
+    dir: ltr,
+    spacing: 4pt,
+    line(length: 2.5em, stroke: 0.6pt, start: (0%, 0.36%)),
     rotate(45deg, square(size: 0.5em, fill: black)),
-    line(length: 2.5em, stroke: 0.6pt, start: (0%,0.36%)),
+    line(length: 2.5em, stroke: 0.6pt, start: (0%, 0.36%)),
   ))
 }
 
@@ -115,4 +146,56 @@
   align(center, text(size: 0.75em, fill: gray, style: "italic")[
     Erstellt mit Foodcalc · Angaben gem. LMIV Anhang II
   ])
+}
+
+// ======================================================================================================
+// Layout entrypoint
+#import sys: inputs
+#let data = inputs.v
+
+// DEBUG: Uncomment to test and develop with a hardcoded recipe list.
+// #let data = (
+//   (
+//     event_name: "Family Dinner",
+//     meals: (
+//       (
+//         name: "Simple Pasta",
+//         place: "Main Kitchen",
+//         time: "04.12. 18:00",
+//         servings: 4,
+//         dietary: (
+//           vegan: true,
+//           vegetarian: false,
+//           gluten_free: true,
+//           lactose_free: false,
+//           vegan_trace: true,
+//           vegetarian_trace: false,
+//           gluten_free_trace: true,
+//           lactose_free_trace: false,
+//         ),
+//         contains: (
+//           "Contains Gluten",
+//           "Dairy-Free",
+//           "Gluten-Free",
+//           "Nut-Free",
+//           "Vegan",
+//           "Vegetarian",
+//         ),
+//         may_contain: (),
+//         hinweise: (),
+//       ),
+//     ),
+//   ),
+// )
+// 
+
+
+#let last_index = data.len() - 1
+
+#for (i, event) in data.enumerate() {
+   event_allergen_overview(event.event_name, event.meals)
+  
+  if i < last_index [
+    #pagebreak()
+  ]
 }

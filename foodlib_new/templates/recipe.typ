@@ -46,50 +46,70 @@
 }
 
 #let format_weight(w) = if w < 1 [
-   #significant_digits(w * 1000) g
+  #significant_digits(w * 1000) g
 ] else [
   #significant_digits(w) kg
 ]
 
 #let format_duration(d) = if d < 60 [
-  #{calc.round(d, digits: 2)} min
+  #{ calc.round(d, digits: 2) } min
 ] else [
-  #{calc.floor(d/60)} h #{calc.round(calc.rem(d,60))} min
+  #{ calc.floor(d / 60) } h #{ calc.round(calc.rem(d, 60)) } min
 ]
 
-#let list_ingredients(ingredients) =  ingredients.map(((ingredient, amount)) =>
-rect(stroke: none, width: 100%)[
-    #format_weight(amount) #ingredient
-  ]
-)
+#let list_ingredients(ingredients) = ingredients.map(((ingredient, amount)) => rect(stroke: none, width: 100%)[
+  #format_weight(amount) #ingredient
+])
 
 // Meta-ingredients (subrecipes) carry a third element: whether they come from
 // food prep. Those are marked so the cook uses the prepped batch instead of
 // making them fresh.
-#let list_meta(items) = items.map(((ingredient, amount, from_prep)) =>
-rect(stroke: none, width: 100%)[
-    #format_weight(amount) #ingredient
-    #if from_prep [ #box(stroke: 0.5pt + orange, inset: (x: 3pt, y: 1pt), radius: 2pt, fill: orange.lighten(85%))[#text(size: 0.75em)[aus Food Prep]] ]
-  ]
-)
+#let list_meta(items) = items.map(((ingredient, amount, from_prep)) => rect(stroke: none, width: 100%)[
+  #format_weight(amount) #ingredient
+  #if from_prep [ #box(stroke: 0.5pt + orange, inset: (x: 3pt, y: 1pt), radius: 2pt, fill: orange.lighten(85%))[#text(
+    size: 0.75em,
+  )[aus Food Prep]] ]
+])
 
 #let allergen_label_de = (
-  "milch": "Milch", "gluten": "Gluten", "weizen": "Weizen", "eier": "Eier",
-  "soja": "Soja", "erdnüsse": "Erdnüsse", "schalenfrüchte": "Schalenfrüchte",
-  "sesamsamen": "Sesam", "sellerie": "Sellerie", "senf": "Senf",
-  "lupine": "Lupine", "schwefeldioxid & sulfite": "Sulfite", "fisch": "Fisch",
-  "schwein": "Schwein", "fleisch": "Fleisch", "milchprodukt": "Milchprodukt",
-  "käse": "Käse", "ei-produkt": "Ei-Produkt", "krebstiere": "Krebstiere",
-  "weichtiere": "Weichtiere", "gelatine": "Gelatine",
+  "milch": "Milch",
+  "gluten": "Gluten",
+  "weizen": "Weizen",
+  "eier": "Eier",
+  "soja": "Soja",
+  "erdnüsse": "Erdnüsse",
+  "schalenfrüchte": "Schalenfrüchte",
+  "sesamsamen": "Sesam",
+  "sellerie": "Sellerie",
+  "senf": "Senf",
+  "lupine": "Lupine",
+  "schwefeldioxid & sulfite": "Sulfite",
+  "fisch": "Fisch",
+  "schwein": "Schwein",
+  "fleisch": "Fleisch",
+  "milchprodukt": "Milchprodukt",
+  "käse": "Käse",
+  "ei-produkt": "Ei-Produkt",
+  "krebstiere": "Krebstiere",
+  "weichtiere": "Weichtiere",
+  "gelatine": "Gelatine",
   // Non-EU-14 avoidances (rendered in the separate "Hinweise" section).
-  "zwiebel": "Zwiebeln", "knoblauch": "Knoblauch", "pilz": "Pilze",
-  "apfel": "Apfel", "karotte": "Karotte", "kichererbse": "Kichererbsen",
-  "zitrus": "Zitrusfrüchte", "guar": "Guarkernmehl",
+  "zwiebel": "Zwiebeln",
+  "knoblauch": "Knoblauch",
+  "pilz": "Pilze",
+  "apfel": "Apfel",
+  "karotte": "Karotte",
+  "kichererbse": "Kichererbsen",
+  "zitrus": "Zitrusfrüchte",
+  "guar": "Guarkernmehl",
 )
 
 #let pretty_allergen(name) = {
-  if name in allergen_label_de { allergen_label_de.at(name) }
-  else { upper(name.at(0)) + name.slice(1) }
+  if name in allergen_label_de {
+    allergen_label_de.at(name)
+  } else {
+    upper(name.at(0)) + name.slice(1)
+  }
 }
 
 // A label carrying a may-contain trace on its axis gets a trailing asterisk;
@@ -98,16 +118,46 @@ rect(stroke: none, width: 100%)[
   set text(size: 0.85em)
   let star(cond) = if cond [\*] else []
   let parts = ()
-  if d.vegan { parts.push(box(stroke: 0.5pt + green, inset: 3pt, radius: 3pt, fill: green.lighten(80%))[*vegan#star(d.vegan_trace)*]) }
-  else if d.vegetarian { parts.push(box(stroke: 0.5pt + olive, inset: 3pt, radius: 3pt, fill: olive.lighten(80%))[*vegetarisch#star(d.vegetarian_trace)*]) }
-  if d.lactose_free { parts.push(box(stroke: 0.5pt + blue, inset: 3pt, radius: 3pt, fill: blue.lighten(80%))[*laktosefrei#star(d.lactose_free_trace)*]) }
-  if d.gluten_free { parts.push(box(stroke: 0.5pt + purple, inset: 3pt, radius: 3pt, fill: purple.lighten(80%))[*glutenfrei#star(d.gluten_free_trace)*]) }
+  if d.vegan {
+    parts.push(box(
+      stroke: 0.5pt + green,
+      inset: 3pt,
+      radius: 3pt,
+      fill: green.lighten(80%),
+    )[*vegan#star(d.vegan_trace)*])
+  } else if d.vegetarian {
+    parts.push(box(
+      stroke: 0.5pt + olive,
+      inset: 3pt,
+      radius: 3pt,
+      fill: olive.lighten(80%),
+    )[*vegetarisch#star(d.vegetarian_trace)*])
+  }
+  if d.lactose_free {
+    parts.push(box(
+      stroke: 0.5pt + blue,
+      inset: 3pt,
+      radius: 3pt,
+      fill: blue.lighten(80%),
+    )[*laktosefrei#star(d.lactose_free_trace)*])
+  }
+  if d.gluten_free {
+    parts.push(box(
+      stroke: 0.5pt + purple,
+      inset: 3pt,
+      radius: 3pt,
+      fill: purple.lighten(80%),
+    )[*glutenfrei#star(d.gluten_free_trace)*])
+  }
   let has_trace = d.vegan_trace or d.vegetarian_trace or d.lactose_free_trace or d.gluten_free_trace
   if parts.len() == 0 { [] } else {
     stack(dir: ltr, spacing: 4pt, ..parts)
     if has_trace [
       #v(0.2em)
-      #text(size: 0.7em, style: "italic")[\* vegan / vegetarisch / laktosefrei / glutenfrei ohne Berücksichtigung von Spuren.]
+      #text(
+        size: 0.7em,
+        style: "italic",
+      )[\* vegan / vegetarisch / laktosefrei / glutenfrei ohne Berücksichtigung von Spuren.]
     ]
   }
 }
@@ -123,7 +173,10 @@ rect(stroke: none, width: 100%)[
     ]
     #if allergens.may_contain.len() > 0 [
       \
-      #text(size: 0.85em, style: "italic")[Kann Spuren von #allergens.may_contain.map(pretty_allergen).join(", ") enthalten.]
+      #text(
+        size: 0.85em,
+        style: "italic",
+      )[Kann Spuren von #allergens.may_contain.map(pretty_allergen).join(", ") enthalten.]
     ]
     #if allergens.at("hinweise", default: ()).len() > 0 [
       \
@@ -157,14 +210,19 @@ rect(stroke: none, width: 100%)[
 #let water_note(name, kg, extras) = {
   v(0.4em)
   block(stroke: 0.5pt + blue, inset: 6pt, radius: 4pt, width: 100%, fill: blue.lighten(92%), breakable: false)[
-    *#name:* #format_weight(kg) Wasser#for (ename, ekg) in extras [ + #format_weight(ekg) #ename] #h(1fr) #sym.arrow.r aufkochen \~#format_duration(water_boil_minutes(kg)) #text(size: 0.85em, fill: gray)[(3.5 kW)]
+    *#name:* #format_weight(kg) Wasser#for (ename, ekg) in extras [+ #format_weight(ekg) #ename] #h(1fr) #sym.arrow.r aufkochen \~#format_duration(water_boil_minutes(kg)) #text(size: 0.85em, fill: gray)[(3.5 kW)]
   ]
 }
 
 // Badge confirming every ingredient amount was weighed and verified accurate
 // to the gram ("eingewogen"). Only shown once the recipe is explicitly marked.
 #let weighed_in_badge() = {
-  box(stroke: 0.5pt + green, inset: (x: 6pt, y: 3pt), radius: 3pt, fill: green.lighten(80%))[*Eingewogen* #text(size: 0.85em)[(Mengen grammgenau)]]
+  box(
+    stroke: 0.5pt + green,
+    inset: (x: 6pt, y: 3pt),
+    radius: 3pt,
+    fill: green.lighten(80%),
+  )[*Eingewogen* #text(size: 0.85em)[(Mengen grammgenau)]]
 }
 
 #let recipe(name, date, ingredients, steps, allergens, prep_for: none, weighed_in: false, water: (), root: none) = {
@@ -185,19 +243,19 @@ rect(stroke: none, width: 100%)[
     #v(0.5em)
     #rect()[
       #if ingredients.ingredients.len() > 0 [
-      #grid(
-        columns: (1fr, 1fr),
-        ..list_ingredients(ingredients.ingredients)
-      )]
+        #grid(
+          columns: (1fr, 1fr),
+          ..list_ingredients(ingredients.ingredients)
+        )]
       #if ingredients.subrecipes.len() > 0 [
         #line(length: 100%)
         #grid(
-          columns: (1fr,1fr),
-        ..list_meta(ingredients.subrecipes)
-      )]
+          columns: (1fr, 1fr),
+          ..list_meta(ingredients.subrecipes)
+        )]
     ]
     #for step in steps [
-      +  *#step.title* #h(1fr) #format_duration(step.duration.fix) fix + #format_duration(step.duration.var) \
+      + *#step.title* #h(1fr) #format_duration(step.duration.fix) fix + #format_duration(step.duration.var) \
         #step.desc
     ]
     // Boiling-water helpers inline on this recipe's page.
@@ -206,4 +264,129 @@ rect(stroke: none, width: 100%)[
     ]
   ]
 }
+
+// ======================================================================================================
+// Layout setting logic for the recipe template.
+#import sys: inputs
+
+// Native Typst array!
+#let content = inputs.v
+
+// DEBUG: Uncomment to test and develop with a hardcoded recipe list.
+// #let content = (
+//     (
+//       name: "Simple Pasta",
+//       date: "04.12.2024 18:00",
+//       ingredients: (
+//         ingredients: (("Pasta", 0.5621417331),),
+//         subrecipes: (("Simple Pasta", 0.5621417331, false),),
+//       ),
+//       steps: (
+//         (
+//           title: "Boil Water",
+//           desc: "Fill large pot with water and bring to boil",
+//           duration: (fix: 10.0, var: 0.0),
+//         ),
+//         (
+//           title: "Cook Pasta",
+//           desc: "Add pasta and cook until al dente",
+//           duration: (fix: 2.0, var: 8.0),
+//         ),
+//       ),
+//       allergens: (
+//         dietary: (
+//           vegan: true,
+//           vegan_trace: false,
+//           vegetarian: false,
+//           vegetarian_trace: false,
+//           lactose_free: false,
+//           lactose_free_trace: false,
+//           gluten_free: true,
+//           gluten_free_trace: false,
+//         ),
+//         contains: (
+//           "Contains Gluten",
+//           "Dairy-Free",
+//           "Gluten-Free",
+//           "Nut-Free",
+//           "Vegan",
+//           "Vegetarian",
+//         ),
+//         may_contain: (),
+//         hinweise: (),
+//       ),
+//       prep_for: none,
+//       weighed_in: false,
+//       water: (),
+//       root: "Simple Pasta",
+//     ),
+//     (
+//       name: "Simple Pasta",
+//       date: "04.12.2024 18:00",
+//       ingredients: (
+//         ingredients: (
+//           ("Garlic", 0.0155402248),
+//           ("Olive Oil", 0.0285940137),
+//           ("Tomato", 0.5180074945),
+//         ),
+//         subrecipes: (),
+//       ),
+//       steps: (
+//         (
+//           title: "Prep Ingredients",
+//           desc: "Dice tomatoes and mince garlic",
+//           duration: (fix: 10.0, var: 5.0),
+//         ),
+//         (
+//           title: "Cook Sauce",
+//           desc: "Simmer all ingredients",
+//           duration: (fix: 20.0, var: 15.0),
+//         ),
+//       ),
+//       allergens: (
+//         dietary: (
+//           vegan: true,
+//           vegan_trace: false,
+//           vegetarian: false,
+//           vegetarian_trace: false,
+//           lactose_free: false,
+//           lactose_free_trace: false,
+//           gluten_free: true,
+//           gluten_free_trace: false,
+//         ),
+//         contains: (
+//           "Dairy-Free",
+//           "Gluten-Free",
+//           "Nut-Free",
+//           "Vegan",
+//           "Vegetarian",
+//         ),
+//         may_contain: (),
+//         hinweise: (),
+//       ),
+//       prep_for: none,
+//       weighed_in: false,
+//       water: (),
+//       root: "Simple Pasta",
+//     ),
+// )
+
+#let last_index = content.len() - 1
+
+#for (i, elem) in content.enumerate() [
+  #recipe(
+    elem.name, // Positional
+    elem.date, // Positional
+    elem.ingredients, // Positional
+    elem.steps, // Positional
+    elem.allergens, // Positional
+    prep_for: elem.prep_for,
+    weighed_in: elem.weighed_in,
+    water: elem.water,
+    root: elem.root,
+  )
+  #if i < last_index [
+    #pagebreak()
+  ]
+]
 
