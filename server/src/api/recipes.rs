@@ -370,8 +370,8 @@ async fn get_recipe(
                     order: step.order,
                     name: step.name,
                     description: step.description,
-                    fixed_duration_seconds: interval_seconds(&step.fixed_duration),
-                    duration_per_kg_seconds: interval_seconds(&step.duration_per_kg),
+                    fixed_duration_seconds: step.fixed_duration.to_f64().unwrap() as i64,
+                    duration_per_kg_seconds: step.duration_per_kg.to_f64().unwrap() as i64,
                 })
                 .collect(),
             properties: properties
@@ -469,9 +469,10 @@ async fn export_recipe_pdf(
     let title = recipe_info.name.to_owned();
 
     #[cfg(feature = "typst")]
-    let result = foodlib_new::typst::export_recipes(recipe_info)
-        .await
-        .map_err(|err| Error::Misc(err.to_string()));
+    // TODO: Use a single Typst engine for all recipes instead of creating a new one per request.
+    let renderer = pdf_export::DocumentRenderer::new();
+    let result = renderer.export_recipes(vec![recipe_info])
+        .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]
     let result: Result<Vec<u8>, Error> =
         Err(Error::Misc("Server compiled without typst support".into()));
@@ -655,8 +656,8 @@ fn step_input_to_entity(recipe_id: i32, id: i32, payload: &RecipeStepInput) -> R
         order: payload.order,
         name: payload.name.clone(),
         description: payload.description.clone(),
-        fixed_duration: interval_from_seconds(payload.fixed_duration_seconds),
-        duration_per_kg: interval_from_seconds(payload.duration_per_kg_seconds),
+        fixed_duration: payload.fixed_duration_seconds.to_f64().unwrap(),
+        duration_per_kg: payload.duration_per_kg_seconds.to_f64().unwrap(),
     }
 }
 
@@ -666,8 +667,8 @@ fn step_to_dto(step: RecipeStep) -> RecipeStepDto {
         order: step.order,
         name: step.name,
         description: step.description,
-        fixed_duration_seconds: interval_seconds(&step.fixed_duration),
-        duration_per_kg_seconds: interval_seconds(&step.duration_per_kg),
+        fixed_duration_seconds: step.fixed_duration.to_i64().unwrap(),
+        duration_per_kg_seconds: step.duration_per_kg.to_i64().unwrap(),
     }
 }
 
