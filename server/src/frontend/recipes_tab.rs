@@ -112,7 +112,8 @@ pub async fn export_recipe_pdf(
         .await?;
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
-    let result = foodlib_new::typst::export_recipes(recipe_info).await;
+    let renderer = pdf_export::DocumentRenderer::new(); // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
+    let result = renderer.export_recipes(vec![recipe_info]);
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),

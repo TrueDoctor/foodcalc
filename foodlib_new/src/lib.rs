@@ -10,8 +10,6 @@ pub mod auth_context;
 pub mod entities;
 pub mod error;
 pub mod ops;
-#[cfg(feature = "typst")]
-pub mod typst;
 
 #[derive(Clone)]
 pub struct FoodLib {

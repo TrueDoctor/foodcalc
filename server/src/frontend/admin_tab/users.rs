@@ -141,7 +141,10 @@ async fn create_user(
         is_admin: form.is_admin.is_some(),
         created_at: OffsetDateTime::now_utc(),
     };
-    let (created, _) = foodlib.users().create_user_with_personal_group(user).await?;
+    let (created, _) = foodlib
+        .users()
+        .create_user_with_personal_group(user)
+        .await?;
     foodlib
         .users()
         .update_password(created.id, form.password)
@@ -154,11 +157,7 @@ async fn create_user(
     })
 }
 
-async fn user_detail_view(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(user_id): Path<i64>,
-) -> MResponse {
+async fn user_detail_view(foodlib: FoodLib, ctx: AuthCtx, Path(user_id): Path<i64>) -> MResponse {
     assert_admin(&ctx)?;
     render_user_detail(&foodlib, user_id).await
 }
@@ -281,11 +280,7 @@ async fn update_user(
     render_user_detail(&foodlib, user_id).await
 }
 
-async fn toggle_admin(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(user_id): Path<i64>,
-) -> MResponse {
+async fn toggle_admin(foodlib: FoodLib, ctx: AuthCtx, Path(user_id): Path<i64>) -> MResponse {
     assert_admin(&ctx)?;
     if user_id == ctx.user.id {
         return Err(Error::Forbidden(
@@ -315,15 +310,14 @@ async fn set_password(
             message: "Password cannot be empty".into(),
         });
     }
-    foodlib.users().update_password(user_id, form.password).await?;
+    foodlib
+        .users()
+        .update_password(user_id, form.password)
+        .await?;
     render_user_detail(&foodlib, user_id).await
 }
 
-async fn delete_user(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(user_id): Path<i64>,
-) -> MResponse {
+async fn delete_user(foodlib: FoodLib, ctx: AuthCtx, Path(user_id): Path<i64>) -> MResponse {
     assert_admin(&ctx)?;
     if user_id == ctx.user.id {
         return Err(Error::Forbidden("You cannot delete yourself".into()));

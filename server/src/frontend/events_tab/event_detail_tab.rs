@@ -41,7 +41,10 @@ pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
         .route("/allergen_overview/{event_id}", get(export_event_allergens))
         .route("/{event_id}", get(event_form))
         .route("/{event_id}/meal-prices", get(render_meal_prices))
-        .route("/{event_id}/uncovered-ingredients", get(render_ingredients_without_tours))
+        .route(
+            "/{event_id}/uncovered-ingredients",
+            get(render_ingredients_without_tours),
+        )
         .route(
             "/ingredients-per-serving/{meal_id}",
             get(ingredients_per_serving),
@@ -74,7 +77,6 @@ async fn handle_shift_times(
     event_form(foodlib, ctx, Path(event_id)).await
 }
 
-
 async fn render_meal_prices(
     foodlib: FoodLib,
     ctx: AuthCtx,
@@ -96,7 +98,9 @@ async fn render_meal_prices(
     let mut group_price: HashMap<i64, f64> = HashMap::new();
     for meal in &meals {
         let total = price_by_meal.get(&meal.meal_id).copied().unwrap_or(0.0);
-        *group_price.entry(meal.start_time.unix_timestamp()).or_default() += total;
+        *group_price
+            .entry(meal.start_time.unix_timestamp())
+            .or_default() += total;
     }
 
     // Whole-event total = sum of every meal's total price. Colored against the
@@ -209,7 +213,8 @@ pub async fn export_recipe_pdf(
     let recipe_info = state.export().fetch_meal_recipe(meal_id).await?;
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
-    let result = foodlib_new::typst::export_recipes(recipe_info).await;
+    let renderer = pdf_export::DocumentRenderer::new();
+    let result = renderer.export_recipes(vec![recipe_info]);
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),
@@ -235,9 +240,8 @@ pub async fn export_food_prep_pdf(
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
     let recipe_info = state.export().fetch_food_prep_recipe(prep_id).await?;
     let title = format!("{}_prep", recipe_info.name);
-
-    #[cfg(feature = "typst")]
-    let result = foodlib_new::typst::export_recipes(recipe_info).await;
+    let renderer = pdf_export::DocumentRenderer::new();
+    let result = renderer.export_recipes(vec![recipe_info]);
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),
@@ -274,11 +278,8 @@ async fn dish_labels_response(
     let filename = format!("{}_dish_labels_tent", sanitize_filename(&info.event_name));
 
     #[cfg(feature = "typst")]
-    let result = foodlib_new::typst::export_dish_labels(
-        info,
-        foodlib_new::typst::DishLabelLayout::Tent,
-    )
-    .await;
+    let renderer = pdf_export::DocumentRenderer::new(); // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
+    let result = renderer.export_dish_labels(info, DishLabelLayout::Tent);
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),
@@ -310,7 +311,8 @@ pub async fn export_event_allergens(
     let filename = format!("{}_allergene", sanitize_filename(&info.event_name));
 
     #[cfg(feature = "typst")]
-    let result = foodlib_new::typst::export_event_allergens(info).await;
+    let renderer = pdf_export::DocumentRenderer::new(); // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
+    let result = renderer.export_event_allergens(info);
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),
@@ -346,7 +348,8 @@ pub async fn export_all_pdf(
     let recipes = state.export().fetch_event_combined(event_id).await?;
 
     #[cfg(feature = "typst")]
-    let result = foodlib_new::typst::export_combined(recipes).await;
+    let renderer = pdf_export::DocumentRenderer::new(); // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
+    let result = renderer.export_recipes(recipes);
     #[cfg(not(feature = "typst"))]
     let result = {
         let _ = recipes;
@@ -373,7 +376,13 @@ pub async fn export_all_pdf(
 
 fn sanitize_filename(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -523,6 +532,7 @@ async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<i32>) -> MRespo
 
 use bigdecimal::BigDecimal;
 use std::collections::HashMap;
+use pdf_export::renderer::DishLabelLayout;
 
 async fn render_ingredients_without_tours(
     foodlib: FoodLib,
@@ -963,7 +973,12 @@ fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Ma
 
 fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
     let format = |label: &'static str, x, unit| html! { td data-label=(label) { (&format!("{:.3}{}", x, unit)) } };
-    let comment = event_meal.comment.as_deref().unwrap_or("").trim().to_string();
+    let comment = event_meal
+        .comment
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_string();
 
     html! {
         tr class="meal-row" {

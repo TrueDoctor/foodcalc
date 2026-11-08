@@ -160,11 +160,7 @@ async fn create_group(
     })
 }
 
-async fn delete_group(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(group_id): Path<i32>,
-) -> MResponse {
+async fn delete_group(foodlib: FoodLib, ctx: AuthCtx, Path(group_id): Path<i32>) -> MResponse {
     assert_can_manage_group(&foodlib, &ctx, group_id).await?;
     foodlib.users().delete_group(group_id).await?;
     Ok(html! {})

@@ -3,6 +3,7 @@ use axum::{
 };
 use axum_login::AuthnBackend;
 use axum_extra::extract::Host;
+use axum_login::AuthnBackend;
 use foodlib_new::auth::{AuthSession, Credentials};
 use maud::{html, DOCTYPE};
 

@@ -1,6 +1,5 @@
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::types::PgInterval;
 
 /// Kind of the recipe: "meal" (Gericht) or "component" (Komponente).
 /// Purely organizational — meals and components can reference each
@@ -53,8 +52,8 @@ pub struct RecipeStep {
     pub order: f64,
     pub name: String,
     pub description: String,
-    pub fixed_duration: PgInterval,  // duration in seconds
-    pub duration_per_kg: PgInterval, // duration in seconds per kg
+    pub fixed_duration: f64,  // duration in seconds
+    pub duration_per_kg: f64, // duration in seconds per kg
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

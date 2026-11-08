@@ -170,10 +170,7 @@ impl MealOps {
     /// `event_ingredients`. The two views produce identical per-meal price sums
     /// (the prep-time-resolve join only shifts `buy_by`, not the cost) but the
     /// former avoids a ~2-3x recursive-view join cost on events with food preps.
-    pub async fn get_event_meal_prices(
-        &self,
-        event_id: i32,
-    ) -> Result<Vec<(i32, BigDecimal)>> {
+    pub async fn get_event_meal_prices(&self, event_id: i32) -> Result<Vec<(i32, BigDecimal)>> {
         let rows = sqlx::query!(
             r#"
             SELECT em.meal_id as "meal_id!", COALESCE(sum(ei.price), 0) as "price!"

@@ -27,16 +27,20 @@ pub const METRO_STORE_ID: i32 = 0;
 /// also falls back to gross, so an unexpected uom can never store a value off by
 /// a factor of 1000.
 fn bundle_weight_kg(bundle: &Bundle) -> Option<BigDecimal> {
-    let net_kg = bundle.content_data.net_piece_weight.as_ref().and_then(|net| {
-        let value = BigDecimal::from_i64(net.value)?;
-        // Metro reports the unit as a full uppercase word (e.g. "GRAM"). Accept
-        // the abbreviated forms too, defensively.
-        match net.uom.to_ascii_uppercase().as_str() {
-            "GRAM" | "G" | "GRM" => Some(value / 1000),
-            "KILOGRAM" | "KG" | "KGM" => Some(value),
-            _ => None,
-        }
-    });
+    let net_kg = bundle
+        .content_data
+        .net_piece_weight
+        .as_ref()
+        .and_then(|net| {
+            let value = BigDecimal::from_i64(net.value)?;
+            // Metro reports the unit as a full uppercase word (e.g. "GRAM"). Accept
+            // the abbreviated forms too, defensively.
+            match net.uom.to_ascii_uppercase().as_str() {
+                "GRAM" | "G" | "GRM" => Some(value / 1000),
+                "KILOGRAM" | "KG" | "KGM" => Some(value),
+                _ => None,
+            }
+        });
     net_kg.or_else(|| BigDecimal::from_str(&bundle.gross_weight).ok())
 }
 
@@ -160,9 +164,10 @@ impl MetroSyncOps {
                 .filter(|s| s.ingredient_id == ingredient_id)
                 .collect();
             if matching.is_empty() {
-                report
-                    .failures
-                    .push(format!("no source row for ingredient {}", label(ingredient_id)));
+                report.failures.push(format!(
+                    "no source row for ingredient {}",
+                    label(ingredient_id)
+                ));
                 continue;
             }
 
@@ -206,10 +211,7 @@ impl MetroSyncOps {
     /// from Metro. Returns the count of deleted rows. Manually-curated tags on
     /// non-Metro ingredients (e.g. items purchased only at Edna or IKEA) are
     /// preserved.
-    async fn wipe_metro_ingredient_properties(
-        &self,
-        sources: &[MetroSource],
-    ) -> Result<usize> {
+    async fn wipe_metro_ingredient_properties(&self, sources: &[MetroSource]) -> Result<usize> {
         let ingredient_ids: Vec<i32> = sources.iter().map(|s| s.ingredient_id).collect();
         let rec = sqlx::query!(
             r#"DELETE FROM ingredient_properties WHERE ingredient_id = ANY($1)"#,
@@ -220,10 +222,7 @@ impl MetroSyncOps {
         Ok(rec.rows_affected() as usize)
     }
 
-    async fn load_metro_sources(
-        &self,
-        ingredient_id: Option<i32>,
-    ) -> Result<Vec<MetroSource>> {
+    async fn load_metro_sources(&self, ingredient_id: Option<i32>) -> Result<Vec<MetroSource>> {
         let rows: Vec<MetroSource> = match ingredient_id {
             Some(id) => sqlx::query!(
                 r#"
@@ -288,11 +287,12 @@ impl MetroSyncOps {
         source: &MetroSource,
         article: &Article,
     ) -> Result<bool> {
-        let variant = article
-            .variants
-            .values()
-            .next()
-            .ok_or_else(|| Error::Misc(format!("no variant for ingredient #{}", source.ingredient_id)))?;
+        let variant = article.variants.values().next().ok_or_else(|| {
+            Error::Misc(format!(
+                "no variant for ingredient #{}",
+                source.ingredient_id
+            ))
+        })?;
         let bundle = variant
             .bundles
             .values()
@@ -310,7 +310,12 @@ impl MetroSyncOps {
                 let gross = (f64::from_str(&b.gross_weight).unwrap_or(f64::MAX) * 1000.) as u64;
                 (net, gross)
             })
-            .ok_or_else(|| Error::Misc(format!("no bundle for ingredient #{}", source.ingredient_id)))?;
+            .ok_or_else(|| {
+                Error::Misc(format!(
+                    "no bundle for ingredient #{}",
+                    source.ingredient_id
+                ))
+            })?;
 
         let category = bundle
             .categories
@@ -321,8 +326,8 @@ impl MetroSyncOps {
         // have different prices/ids for the same net piece weight, so mixing
         // bundles yields a price/weight mismatch. Read the id off `bundle`, not
         // `article` (which would pick an arbitrary bundle's id).
-        let article_number = (!bundle.customer_display_id.is_empty())
-            .then_some(bundle.customer_display_id.as_str());
+        let article_number =
+            (!bundle.customer_display_id.is_empty()).then_some(bundle.customer_display_id.as_str());
         sqlx::query!(
             r#"
             INSERT INTO metro_categories (ingredient_source_id, category, article_number)
