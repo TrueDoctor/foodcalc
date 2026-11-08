@@ -325,11 +325,11 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             RecipeStepDB,
             r#"
-            INSERT INTO steps (recipe_id, step_order, step_name, step_description, 
-                             fixed_duration, duration_per_kg)
+            INSERT INTO steps (recipe_id, step_order, step_name, step_description,
+                               fixed_duration, duration_per_kg)
             VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING 
-                step_id as id, recipe_id, step_order as "order", 
+            RETURNING
+                step_id as id, recipe_id, step_order as "order",
                 step_name as name, step_description as description,
                 fixed_duration, duration_per_kg
             "#,
@@ -340,8 +340,8 @@ impl RecipeOps {
             f64_to_pg_interval(step.fixed_duration),
             f64_to_pg_interval(step.duration_per_kg),
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(record.to_recipe_step())
     }
@@ -403,7 +403,7 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             RecipeStepDB,
             r#"
-            SELECT 
+            SELECT
                 step_id as id, recipe_id, step_order as "order",
                 step_name as name, step_description as description,
                 fixed_duration, duration_per_kg
@@ -700,8 +700,8 @@ impl RecipeOps {
                 f64_to_pg_interval(step.fixed_duration),
                 f64_to_pg_interval(step.duration_per_kg),
             )
-            .execute(&mut *tx)
-            .await?;
+                .execute(&mut *tx)
+                .await?;
         }
 
         tx.commit().await?;

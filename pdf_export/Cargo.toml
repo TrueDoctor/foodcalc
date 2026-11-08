@@ -1,0 +1,14 @@
+[package]
+name = "pdf_export"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+foodlib_new = { path = "../foodlib_new" }
+bigdecimal = { workspace = true }
+typst = "0.15.1"
+eyre = { workspace = true }
+typst-pdf = "0.15.1"
+typst-as-lib = "0.17.0"
+serde = { version = "1.0.229", features = ["derive"] }
+time = { workspace = true }

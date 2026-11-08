@@ -242,12 +242,4 @@
 // )
 
 
-#let last_index = data.len() - 1
-
-#for (i, event) in data.enumerate() {
-  dish_labels(event.event_name, layout, event.meals)
-  
-  if i < last_index [
-    #pagebreak()
-  ]
-}
+#dish_labels(data.event_name, layout, data.meals)

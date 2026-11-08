@@ -190,12 +190,4 @@
 // 
 
 
-#let last_index = data.len() - 1
-
-#for (i, event) in data.enumerate() {
-   event_allergen_overview(event.event_name, event.meals)
-  
-  if i < last_index [
-    #pagebreak()
-  ]
-}
+#event_allergen_overview(data.event_name, data.meals)
