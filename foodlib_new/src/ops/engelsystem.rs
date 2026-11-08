@@ -88,8 +88,12 @@ impl EngelSystem {
     /// Build a client from `ENGELSYSTEM_URL` and `ENGELSYSTEM_KEY`. Returns
     /// `None` (integration disabled) when either is unset or empty.
     pub fn from_env() -> Option<Self> {
-        let base_url = std::env::var("ENGELSYSTEM_URL").ok().filter(|s| !s.is_empty())?;
-        let api_key = std::env::var("ENGELSYSTEM_KEY").ok().filter(|s| !s.is_empty())?;
+        let base_url = std::env::var("ENGELSYSTEM_URL")
+            .ok()
+            .filter(|s| !s.is_empty())?;
+        let api_key = std::env::var("ENGELSYSTEM_KEY")
+            .ok()
+            .filter(|s| !s.is_empty())?;
         Some(Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             api_key,
@@ -113,7 +117,10 @@ impl EngelSystem {
         &self,
         location_id: i32,
     ) -> Result<Vec<EngelShift>, reqwest::Error> {
-        let url = format!("{}{}/locations/{}/shifts", self.base_url, API_BASE, location_id);
+        let url = format!(
+            "{}{}/locations/{}/shifts",
+            self.base_url, API_BASE, location_id
+        );
         let resp = reqwest::Client::new()
             .get(&url)
             .header("x-api-key", &self.api_key)
@@ -154,11 +161,8 @@ impl EngelSystem {
 /// whose components are the equivalent Europe/Berlin wall-clock — matching the
 /// foodcalc convention where stored components are read directly.
 fn parse_berlin(s: &str) -> Option<OffsetDateTime> {
-    let utc = OffsetDateTime::parse(
-        s,
-        &time::format_description::well_known::Iso8601::DEFAULT,
-    )
-    .ok()?;
+    let utc =
+        OffsetDateTime::parse(s, &time::format_description::well_known::Iso8601::DEFAULT).ok()?;
     let offset = berlin_offset(utc);
     // Shift the instant into Berlin local time, then relabel it as UTC so its
     // .date()/.time() components read as the local wall-clock (foodcalc style).
@@ -171,8 +175,14 @@ fn parse_berlin(s: &str) -> Option<OffsetDateTime> {
 /// 01:00 UTC to the last Sunday of October at 01:00 UTC.
 fn berlin_offset(utc: OffsetDateTime) -> UtcOffset {
     let year = utc.year();
-    let dst_start = last_sunday(year, Month::March).with_hms(1, 0, 0).unwrap().assume_utc();
-    let dst_end = last_sunday(year, Month::October).with_hms(1, 0, 0).unwrap().assume_utc();
+    let dst_start = last_sunday(year, Month::March)
+        .with_hms(1, 0, 0)
+        .unwrap()
+        .assume_utc();
+    let dst_end = last_sunday(year, Month::October)
+        .with_hms(1, 0, 0)
+        .unwrap()
+        .assume_utc();
     if utc >= dst_start && utc < dst_end {
         UtcOffset::from_hms(2, 0, 0).unwrap()
     } else {

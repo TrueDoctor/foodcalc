@@ -265,7 +265,9 @@ const DAY_START_HOUR: i64 = 4;
 /// meal groups with the evening it belongs to.
 fn logical_date(ts: OffsetDateTime) -> Date {
     if (ts.time().hour() as i64) < DAY_START_HOUR {
-        ts.date().previous_day().expect("date within representable range")
+        ts.date()
+            .previous_day()
+            .expect("date within representable range")
     } else {
         ts.date()
     }
@@ -320,15 +322,24 @@ impl WindowBounds {
     /// Compute the shared window from all items. Falls back to a sensible
     /// working-day window (08:00–20:00) when the event has no items yet.
     fn from_items(items: &[TimelineItem]) -> Self {
-        let earliest = items.iter().map(|i| hour_pos(i.start)).fold(f64::MAX, f64::min);
+        let earliest = items
+            .iter()
+            .map(|i| hour_pos(i.start))
+            .fold(f64::MAX, f64::min);
         let latest = items.iter().map(end_hour_pos).fold(f64::MIN, f64::max);
         if items.is_empty() || earliest > latest {
-            return WindowBounds { first_hour: 8, last_hour: 20 };
+            return WindowBounds {
+                first_hour: 8,
+                last_hour: 20,
+            };
         }
         // Floor/ceil to whole hours, pad one hour each side, clamp to [0, 24].
         let first_hour = ((earliest.floor() as i64) - 1).max(0);
         let last_hour = ((latest.ceil() as i64) + 1).min(SLOTS_PER_DAY);
-        WindowBounds { first_hour, last_hour }
+        WindowBounds {
+            first_hour,
+            last_hour,
+        }
     }
 }
 
@@ -449,8 +460,11 @@ fn group_by_day(items: &[TimelineItem]) -> Vec<DayRow> {
             let bands = KIND_ORDER
                 .iter()
                 .filter_map(|&kind| {
-                    let of_kind: Vec<TimelineItem> =
-                        day_items.iter().filter(|i| i.kind == kind).cloned().collect();
+                    let of_kind: Vec<TimelineItem> = day_items
+                        .iter()
+                        .filter(|i| i.kind == kind)
+                        .cloned()
+                        .collect();
                     (!of_kind.is_empty()).then(|| Band::pack(of_kind))
                 })
                 .collect();
@@ -562,7 +576,9 @@ fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: i32, day: Dat
     let time_fmt = format_description!("[hour]:[minute]");
     let start_label = item.start.time().format(&time_fmt).unwrap_or_default();
     let end_label = item.end.time().format(&time_fmt).unwrap_or_default();
-    let colors = item.class_override.unwrap_or_else(|| item.kind.bar_classes());
+    let colors = item
+        .class_override
+        .unwrap_or_else(|| item.kind.bar_classes());
 
     // A bar is interactive when it has both a DB id and a drag key (i.e. not a
     // read-only helper). The JS attaches handlers by the `data-drag` marker.
@@ -578,7 +594,11 @@ fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: i32, day: Dat
         "group absolute top-0.5 bottom-0.5 rounded border px-2 py-0.5 text-xs \
          overflow-hidden whitespace-nowrap flex items-center {} {}",
         colors,
-        if drag_key.is_some() { "cursor-grab select-none tl-bar" } else { "" },
+        if drag_key.is_some() {
+            "cursor-grab select-none tl-bar"
+        } else {
+            ""
+        },
     );
 
     html! {
@@ -830,7 +850,11 @@ async fn handle_move(
 
     log::info!(
         "timeline move: kind={} id={} day={} start_min={} end_min={:?}",
-        form.kind, form.id, form.day, form.start_min, form.end_min
+        form.kind,
+        form.id,
+        form.day,
+        form.start_min,
+        form.end_min
     );
 
     let day = Date::parse(&form.day, format_description!("[year]-[month]-[day]"))
@@ -921,9 +945,7 @@ mod tests {
     /// Build a meal item spanning [start_h, end_h) o'clock on a fixed test day.
     fn meal(label: &str, start_h: u8, end_h: u8) -> TimelineItem {
         let day = date!(2026 - 07 - 06);
-        let at = |h: u8| {
-            PrimitiveDateTime::new(day, Time::from_hms(h, 0, 0).unwrap()).assume_utc()
-        };
+        let at = |h: u8| PrimitiveDateTime::new(day, Time::from_hms(h, 0, 0).unwrap()).assume_utc();
         TimelineItem {
             kind: ItemKind::Meal,
             id: Some(1),
@@ -967,7 +989,11 @@ mod tests {
             meal("c", 12, 13),
             meal("d", 14, 15),
         ]);
-        assert_eq!(band.lanes.len(), 1, "non-overlapping meals should share a lane");
+        assert_eq!(
+            band.lanes.len(),
+            1,
+            "non-overlapping meals should share a lane"
+        );
         assert_eq!(band.lanes[0].len(), 4);
     }
 
@@ -1000,7 +1026,10 @@ mod tests {
         ]);
         assert_eq!(band.lanes.len(), 2);
         let top_has_long = band.lanes[0].iter().any(|i| i.label == "long");
-        assert!(top_has_long, "the lane with the longest bar should be on top");
+        assert!(
+            top_has_long,
+            "the lane with the longest bar should be on top"
+        );
     }
 
     #[test]
@@ -1014,6 +1043,9 @@ mod tests {
         };
         assert_eq!(names(&forward), names(&reversed));
         // And "alpha" comes before "bravo" (name tiebreak, lane 0 first).
-        assert_eq!(names(&forward), vec!["alpha".to_string(), "bravo".to_string()]);
+        assert_eq!(
+            names(&forward),
+            vec!["alpha".to_string(), "bravo".to_string()]
+        );
     }
 }

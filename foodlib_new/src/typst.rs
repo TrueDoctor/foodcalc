@@ -1,5 +1,5 @@
-mod typst_recipe;
 mod typst_event_info;
+mod typst_recipe;
 
 use crate::ops::export::{EventAllergenInfo, RecipeInfo};
 use crate::typst::typst_event_info::{DishLabelLayoutInput, TypstDishLabel};
@@ -66,7 +66,6 @@ pub async fn export_combined(items: Vec<RecipeInfo>) -> eyre::Result<Vec<u8>> {
     Ok(typst_pdf::pdf(&doc, &Default::default()).expect("Could not generate pdf."))
 }
 
-
 pub async fn export_dish_labels(
     info: EventAllergenInfo,
     layout: DishLabelLayout,
@@ -101,9 +100,11 @@ pub async fn export_event_allergens(info: EventAllergenInfo) -> eyre::Result<Vec
         .fonts([FONT_R, FONT_RI, FONT_RB, FONT_RBI])
         .build();
 
-
     let dishLabel = TypstDishLabel::from_event_info(&info);
-    let input_data = DishLabelLayoutInput { v: vec![dishLabel], layout: "flat".into() };
+    let input_data = DishLabelLayoutInput {
+        v: vec![dishLabel],
+        layout: "flat".into(),
+    };
 
     let doc = event_allergens_template
         .compile_with_input(input_data)

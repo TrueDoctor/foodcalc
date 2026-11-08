@@ -304,11 +304,7 @@ async fn inventory_items(
     inventory_items
 }
 
-async fn save_tour(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Form(form): Form<TourForm>,
-) -> MResponse {
+async fn save_tour(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<TourForm>) -> MResponse {
     ctx.assert_can_edit_event(form.event_id).await?;
     if let Some(tour_id) = form.tour_id {
         if tour_id > 0 {
@@ -412,7 +408,10 @@ async fn export_plain(
 ) -> IResponse {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
     // Single query: tour shopping list + per-recipe usage breakdown.
-    let shopping_list = state.events().tour_shopping_list_with_usage(tour_id).await?;
+    let shopping_list = state
+        .events()
+        .tour_shopping_list_with_usage(tour_id)
+        .await?;
     let tour = state.events().get_shopping_tour(tour_id).await?;
 
     let event_inventories = state.events().get_inventories(tour.event_id).await?;
@@ -491,7 +490,10 @@ async fn export_metro(
 ) -> IResponse {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
     // Single query: tour shopping list + per-recipe usage breakdown.
-    let shopping_list = state.events().tour_shopping_list_with_usage(tour_id).await?;
+    let shopping_list = state
+        .events()
+        .tour_shopping_list_with_usage(tour_id)
+        .await?;
     let sources = state.ingredients().list_sources(None).await?;
 
     let tour = state.events().get_shopping_tour(tour_id).await?;
@@ -501,7 +503,10 @@ async fn export_metro(
     // ingredient_id -> Metro article number (e.g. "208486"), resolved from the
     // sync cache. Ingredients that can't be resolved are absent here and get
     // their name in column 1 + sorted to the bottom of the CSV.
-    let article_numbers = state.events().resolve_metro_article_numbers(tour_id).await?;
+    let article_numbers = state
+        .events()
+        .resolve_metro_article_numbers(tour_id)
+        .await?;
 
     // CSV rows: (article_number_or_name, amount, comment, resolved?). Resolved
     // rows are emitted first; unresolved (no Metro article number) sink below.
@@ -515,7 +520,10 @@ async fn export_metro(
         let weight = &item.weight - inv_amount;
 
         // Find source with matching ingredient_id
-        let Some(source) = sources.iter().find(|s| s.ingredient_id == item.ingredient_id) else {
+        let Some(source) = sources
+            .iter()
+            .find(|s| s.ingredient_id == item.ingredient_id)
+        else {
             continue;
         };
 
@@ -593,17 +601,16 @@ async fn toggle_inventory(
     if form.checked {
         state.events().add_inventory(event_id, inventory_id).await?;
     } else {
-        state.events().remove_inventory(event_id, inventory_id).await?;
+        state
+            .events()
+            .remove_inventory(event_id, inventory_id)
+            .await?;
     };
 
     shopping_tour_form(State(state), ctx, Path((event_id, form.tour_id))).await
 }
 
-async fn update_inventory(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
-) -> MResponse {
+async fn update_inventory(foodlib: FoodLib, ctx: AuthCtx, Path(tour_id): Path<i32>) -> MResponse {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
     let changes = calculate_inventory_changes(&foodlib.0, tour_id).await?;
     let tour = foodlib.events().get_shopping_tour(tour_id).await?;

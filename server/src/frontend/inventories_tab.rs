@@ -37,9 +37,7 @@ pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
 }
 
 fn is_htmx(headers: &HeaderMap) -> bool {
-    headers
-        .get("HX-Request")
-        .map_or(false, |v| v == "true")
+    headers.get("HX-Request").map_or(false, |v| v == "true")
 }
 
 #[derive(Deserialize, Default, Clone)]
@@ -466,11 +464,7 @@ async fn edit_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<i32>) -> MRespo
     })
 }
 
-async fn delete_inventory(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(id): Path<i32>,
-) -> MResponse {
+async fn delete_inventory(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<i32>) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
     foodlib.inventories().delete(id).await?;
     let inventories = foodlib.inventories().list().await?;
@@ -545,10 +539,7 @@ async fn delete_item(
     Path((id, ingredient_id)): Path<(i32, i32)>,
 ) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
-    foodlib
-        .inventories()
-        .delete_item(id, ingredient_id)
-        .await?;
+    foodlib.inventories().delete_item(id, ingredient_id).await?;
     render_contents(&foodlib, id, "").await
 }
 
@@ -569,7 +560,10 @@ async fn move_item(
     ctx.assert_can_edit_inventory(to_id).await?;
 
     let source_items = foodlib.inventories().get_items(from_id).await?;
-    let Some(source_item) = source_items.iter().find(|x| x.ingredient_id == ingredient_id) else {
+    let Some(source_item) = source_items
+        .iter()
+        .find(|x| x.ingredient_id == ingredient_id)
+    else {
         return render_contents(&foodlib, to_id, "").await;
     };
     let amount_to_move = source_item.amount.clone();
@@ -592,7 +586,10 @@ async fn move_item(
     } else {
         foodlib.inventories().add_item(dest_item).await?;
     }
-    foodlib.inventories().delete_item(from_id, ingredient_id).await?;
+    foodlib
+        .inventories()
+        .delete_item(from_id, ingredient_id)
+        .await?;
 
     let source_contents = render_contents(&foodlib, from_id, "").await?;
     let dest_contents = render_contents(&foodlib, to_id, "").await?;

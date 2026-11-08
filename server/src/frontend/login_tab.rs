@@ -131,11 +131,7 @@ async fn signup_view(user: Option<User>, Query(q): Query<NextParam>) -> IRespons
     }
     let next = safe_next(q.next.as_deref());
     if user.is_some() {
-        return Ok((
-            [("HX-Reswap", "none")],
-            axum::response::Redirect::to(&next),
-        )
-            .into_response());
+        return Ok(([("HX-Reswap", "none")], axum::response::Redirect::to(&next)).into_response());
     }
     let login_link = format!("/auth/login/form?next={}", urlencoding::encode(&next));
     let html = html! {

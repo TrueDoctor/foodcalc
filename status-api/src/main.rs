@@ -281,9 +281,12 @@ async fn fetch_allergens_for_meals(
                 contains.push(lower);
             }
         }
-        contains.sort(); contains.dedup();
-        may.sort(); may.dedup();
-        hinweise.sort(); hinweise.dedup();
+        contains.sort();
+        contains.dedup();
+        may.sort();
+        may.dedup();
+        hinweise.sort();
+        hinweise.dedup();
         let contains = foodlib_new::ops::allergens::compact_allergen_set(&contains);
         let may = foodlib_new::ops::allergens::compact_allergen_set(&may);
         let mut names: Vec<String> = contains;

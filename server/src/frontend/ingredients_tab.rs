@@ -87,7 +87,10 @@ pub async fn update_ingredient(
         }
         let updated = foodlib.ingredients().update(ingredient).await?;
         if existing.group_id != target_group {
-            foodlib.ingredients().set_group(updated.id, target_group).await?;
+            foodlib
+                .ingredients()
+                .set_group(updated.id, target_group)
+                .await?;
         }
         let refreshed = foodlib.ingredients().get(updated.id).await?;
         Ok(format_ingredient(&refreshed.into(), Some(&ctx.user), &ctx.group_ids).into_response())
@@ -765,12 +768,21 @@ async fn fetch_ingredients_and_groups(
     Ok((ingredients, user_group_ids))
 }
 
-fn format_ingredient(ingredient: &IngredientWithSource, user: Option<&User>, user_group_ids: &[i32]) -> Markup {
+fn format_ingredient(
+    ingredient: &IngredientWithSource,
+    user: Option<&User>,
+    user_group_ids: &[i32],
+) -> Markup {
     let sources_button_text = if ingredient.has_sources { "" } else { "⚠️" };
     let can_edit_this = user.map_or(false, |u| can_edit(ingredient.group_id, user_group_ids, u));
     let is_admin = user.map_or(false, |u| u.is_admin);
 
-    let comment = ingredient.comment.as_deref().unwrap_or("").trim().to_string();
+    let comment = ingredient
+        .comment
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_string();
 
     html! {
         tr id=(format!("ingredient-{}", ingredient.id)) {

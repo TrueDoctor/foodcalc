@@ -38,11 +38,7 @@ pub struct AddEventForm {
     comment: Option<String>,
 }
 
-pub async fn add(
-    foodlib: FoodLib,
-    user: User,
-    Form(form): Form<AddEventForm>,
-) -> MResponse {
+pub async fn add(foodlib: FoodLib, user: User, Form(form): Form<AddEventForm>) -> MResponse {
     let group = foodlib.users().get_personal_group(user.id).await?;
     let event = foodlib_new::event::Event {
         id: -1,

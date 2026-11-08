@@ -128,7 +128,9 @@ impl ExportOps {
             id: meal_id.to_string(),
         })?;
         let total_energy = BigDecimal::from(row.servings) * row.energy_per_serving;
-        let weight = self.calc_energy_to_weight(row.recipe_id, total_energy).await?;
+        let weight = self
+            .calc_energy_to_weight(row.recipe_id, total_energy)
+            .await?;
         let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
         let date = row.start_time.format(&format).unwrap();
         // A meal assumes any prepped subrecipe that is available at its serving
@@ -178,7 +180,10 @@ impl ExportOps {
 
         let mut info = self.fetch_recipe_info(prep.recipe_id, weight, date).await?;
         info.is_prep = true;
-        info.prep_for = self.fetch_prep_allocation(prep_id).await.unwrap_or_default();
+        info.prep_for = self
+            .fetch_prep_allocation(prep_id)
+            .await
+            .unwrap_or_default();
         info.prepped_subrecipe_ids = prepped;
         Ok(info)
     }
@@ -187,8 +192,7 @@ impl ExportOps {
     /// task — sorted chronologically (preps by prep_date, meals by start_time) so a
     /// single combined PDF reads in kitchen-workflow order.
     pub async fn fetch_event_combined(&self, event_id: i32) -> Result<Vec<RecipeInfo>> {
-        let format =
-            format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
+        let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
 
         // (sort_key, RecipeInfo). sort_key is the OffsetDateTime driving the order.
         let mut items: Vec<(time::OffsetDateTime, RecipeInfo)> = Vec::new();
@@ -204,10 +208,12 @@ impl ExportOps {
             // `meal.weight` is already the scaled total recipe weight (same
             // derivation as calc_energy_to_weight), so reuse it directly.
             let date = meal.start_time.format(&format).unwrap_or_default();
-            match self.fetch_recipe_info(meal.recipe_id, meal.weight.clone(), date).await {
+            match self
+                .fetch_recipe_info(meal.recipe_id, meal.weight.clone(), date)
+                .await
+            {
                 Ok(mut info) => {
-                    info.prepped_subrecipe_ids =
-                        windows.ids_available_at(meal.start_time, None);
+                    info.prepped_subrecipe_ids = windows.ids_available_at(meal.start_time, None);
                     items.push((meal.start_time, info));
                 }
                 // Skip meals whose recipe can't render (e.g. no subrecipes) rather
@@ -222,7 +228,10 @@ impl ExportOps {
         // Batch the two expensive recursive-view lookups across all preps once,
         // instead of one query per prep.
         let prep_weights = self.event_prep_weights(event_id).await.unwrap_or_default();
-        let prep_allocations = self.event_prep_allocations(event_id).await.unwrap_or_default();
+        let prep_allocations = self
+            .event_prep_allocations(event_id)
+            .await
+            .unwrap_or_default();
         for prep in preps {
             let weight = prep_weights
                 .get(&prep.id)
@@ -292,7 +301,9 @@ impl ExportOps {
         date: String,
     ) -> Result<RecipeInfo> {
         let total_calories = BigDecimal::from((calories as f64 * people) as u64);
-        let weight = self.calc_energy_to_weight(recipe_id, total_calories).await?;
+        let weight = self
+            .calc_energy_to_weight(recipe_id, total_calories)
+            .await?;
         self.fetch_recipe_info(recipe_id, weight, date).await
     }
 
@@ -303,11 +314,17 @@ impl ExportOps {
         calories: u32,
     ) -> Result<Vec<SubRecipe>> {
         let total_calories = BigDecimal::from((calories as f64 * people) as u64);
-        let weight = self.calc_energy_to_weight(recipe_id, total_calories).await?;
+        let weight = self
+            .calc_energy_to_weight(recipe_id, total_calories)
+            .await?;
         self.fetch_subrecipes(recipe_id, weight).await
     }
 
-    async fn calc_energy_to_weight(&self, recipe_id: i32, energy: BigDecimal) -> Result<BigDecimal> {
+    async fn calc_energy_to_weight(
+        &self,
+        recipe_id: i32,
+        energy: BigDecimal,
+    ) -> Result<BigDecimal> {
         let recipe_stats = sqlx::query!(
             r#"SELECT weight, energy FROM recipe_stats WHERE recipe_id = $1"#,
             recipe_id,
@@ -315,10 +332,18 @@ impl ExportOps {
         .fetch_one(&*self.pool)
         .await?;
 
-        let recipe_weight = recipe_stats.weight.ok_or_else(|| Error::NotFound { entity: "recipe_stats.weight", id: recipe_id.to_string() })?;
-        let recipe_energy = recipe_stats.energy.ok_or_else(|| Error::NotFound { entity: "recipe_stats.energy", id: recipe_id.to_string() })?;
+        let recipe_weight = recipe_stats.weight.ok_or_else(|| Error::NotFound {
+            entity: "recipe_stats.weight",
+            id: recipe_id.to_string(),
+        })?;
+        let recipe_energy = recipe_stats.energy.ok_or_else(|| Error::NotFound {
+            entity: "recipe_stats.energy",
+            id: recipe_id.to_string(),
+        })?;
         if recipe_energy == BigDecimal::from(0) {
-            return Err(Error::Validation { message: format!("recipe {recipe_id} has zero energy") });
+            return Err(Error::Validation {
+                message: format!("recipe {recipe_id} has zero energy"),
+            });
         }
         Ok(recipe_weight / recipe_energy * energy)
     }

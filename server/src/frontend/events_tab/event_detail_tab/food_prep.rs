@@ -42,16 +42,14 @@ async fn create_inline(
     Form(form): Form<InlinePrepForm>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
-    let prep_date =
-        super::shopping_tours::parse_datetime_local(&form.prep_date)?;
+    let prep_date = super::shopping_tours::parse_datetime_local(&form.prep_date)?;
     let use_from = form
         .use_from
         .as_deref()
         .filter(|s| !s.is_empty())
         .map(super::shopping_tours::parse_datetime_local)
         .transpose()?;
-    let use_until =
-        super::shopping_tours::parse_datetime_local(&form.use_until)?;
+    let use_until = super::shopping_tours::parse_datetime_local(&form.use_until)?;
     foodlib
         .events()
         .add_food_prep(FoodPrep {

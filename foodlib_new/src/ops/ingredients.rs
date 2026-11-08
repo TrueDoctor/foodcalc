@@ -191,7 +191,10 @@ impl IngredientOps {
         Ok(rows)
     }
 
-    pub async fn list_with_sources_for_user(&self, user_id: i64) -> Result<Vec<IngredientWithSource>> {
+    pub async fn list_with_sources_for_user(
+        &self,
+        user_id: i64,
+    ) -> Result<Vec<IngredientWithSource>> {
         let rows = sqlx::query_as!(
             IngredientWithSource,
             r#"

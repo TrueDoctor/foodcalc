@@ -1,8 +1,8 @@
 use axum::{
     body::Body, extract::Request, http::Response, middleware::Next, response::IntoResponse,
 };
-use axum_login::AuthnBackend;
 use axum_extra::extract::Host;
+use axum_login::AuthnBackend;
 use foodlib_new::auth::{AuthSession, Credentials};
 use maud::{html, DOCTYPE};
 
@@ -28,8 +28,8 @@ pub async fn htmx_middleware(
     if (host == "127.0.0.1" || host == "localhost")
         && auth.user.is_none()
         && !std::env::var("DATABASE_URL")
-        .unwrap()
-        .ends_with("food_calc")
+            .unwrap()
+            .ends_with("food_calc")
         && std::env::var("DISABLE_AUTO_LOGIN").ok().as_deref() != Some("1")
     {
         let creds = Credentials {

@@ -20,14 +20,13 @@ pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
         .route("/{event_id}/{meal_id}", delete(delete_meal))
         .route("/duplicate/{event_id}/{meal_id}", post(duplicate_meal))
         .route("/{meal_id}/price", get(meal_price_cell))
-        .route("/{meal_id}/price_per_serving", get(meal_price_per_serving_cell))
+        .route(
+            "/{meal_id}/price_per_serving",
+            get(meal_price_per_serving_cell),
+        )
 }
 
-async fn meal_price_cell(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Path(meal_id): Path<i32>,
-) -> MResponse {
+async fn meal_price_cell(foodlib: FoodLib, ctx: AuthCtx, Path(meal_id): Path<i32>) -> MResponse {
     ctx.assert_can_edit_meal(meal_id).await?;
     let price = foodlib.meals().get_meal_price(meal_id).await?;
     Ok(html! { (price.round(2).to_string()) "€" })
@@ -102,11 +101,12 @@ pub async fn update_meal(
     let end_time =
         OffsetDateTime::parse(&append_end, &time::format_description::well_known::Rfc3339)
             .map_err(|_| StatusCode::BAD_REQUEST)?;
-    let place_id = meal.place_id.filter(|&id| id >= 0).ok_or_else(|| {
-        foodlib_new::Error::Validation {
-            message: "Please select a place for the meal.".into(),
-        }
-    })?;
+    let place_id =
+        meal.place_id
+            .filter(|&id| id >= 0)
+            .ok_or_else(|| foodlib_new::Error::Validation {
+                message: "Please select a place for the meal.".into(),
+            })?;
 
     let result = if meal_id != -1 {
         state

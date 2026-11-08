@@ -2,7 +2,7 @@ use crate::entities::allergen::DietaryFlags;
 use crate::ops::export::RecipeInfo;
 use bigdecimal::ToPrimitive;
 use serde::Serialize;
-use typst::foundations::{Dict, IntoValue, Value, Array};
+use typst::foundations::{Array, Dict, IntoValue, Value};
 #[derive(Serialize, Debug, Clone)]
 pub struct TypstRecipePage {
     pub name: String,
@@ -45,7 +45,6 @@ pub struct TypstAllergens {
     pub hinweise: Vec<String>,
 }
 
-
 impl TypstRecipePage {
     /// Flattens a `RecipeInfo` into an array of individual printable Typst pages.
     pub fn from_recipe_info(info: &RecipeInfo) -> Vec<Self> {
@@ -68,14 +67,18 @@ impl TypstRecipePage {
             }
 
             // Convert intervals from microseconds to minutes
-            let steps = sub.steps.iter().map(|s| TypstStep {
-                title: s.name.clone(),
-                desc: s.description.clone(),
-                duration: TypstDuration {
-                    fix: (s.fixed_duration.microseconds as f64) / 1_000_000.0 / 60.0,
-                    var: (s.duration_per_kg.microseconds as f64) / 1_000_000.0 / 60.0,
-                },
-            }).collect();
+            let steps = sub
+                .steps
+                .iter()
+                .map(|s| TypstStep {
+                    title: s.name.clone(),
+                    desc: s.description.clone(),
+                    duration: TypstDuration {
+                        fix: (s.fixed_duration.microseconds as f64) / 1_000_000.0 / 60.0,
+                        var: (s.duration_per_kg.microseconds as f64) / 1_000_000.0 / 60.0,
+                    },
+                })
+                .collect();
 
             // Map properties to string arrays for Typst
             let allergens = TypstAllergens {
@@ -107,8 +110,6 @@ impl TypstRecipePage {
         pages
     }
 }
-
-
 
 // Typst expects a top-level dictionary with a single key "v" that contains the array of pages
 
@@ -219,11 +220,23 @@ impl IntoValue for TypstAllergens {
         dietary.insert("vegan".into(), self.dietary.vegan.into_value());
         dietary.insert("vegan_trace".into(), self.dietary.vegan_trace.into_value());
         dietary.insert("vegetarian".into(), self.dietary.vegetarian.into_value());
-        dietary.insert("vegetarian_trace".into(), self.dietary.vegetarian_trace.into_value());
-        dietary.insert("lactose_free".into(), self.dietary.lactose_free.into_value());
-        dietary.insert("lactose_free_trace".into(), self.dietary.lactose_free_trace.into_value());
+        dietary.insert(
+            "vegetarian_trace".into(),
+            self.dietary.vegetarian_trace.into_value(),
+        );
+        dietary.insert(
+            "lactose_free".into(),
+            self.dietary.lactose_free.into_value(),
+        );
+        dietary.insert(
+            "lactose_free_trace".into(),
+            self.dietary.lactose_free_trace.into_value(),
+        );
         dietary.insert("gluten_free".into(), self.dietary.gluten_free.into_value());
-        dietary.insert("gluten_free_trace".into(), self.dietary.gluten_free_trace.into_value());
+        dietary.insert(
+            "gluten_free_trace".into(),
+            self.dietary.gluten_free_trace.into_value(),
+        );
 
         dict.insert("dietary".into(), Value::Dict(dietary));
         dict.insert("contains".into(), self.contains.into_value());

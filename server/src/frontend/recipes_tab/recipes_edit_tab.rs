@@ -148,7 +148,10 @@ pub async fn handle_name_change(
         })
         .await?;
     if current.group_id != data.group_id {
-        foodlib.recipes().set_group(data.recipe_id, data.group_id).await?;
+        foodlib
+            .recipes()
+            .set_group(data.recipe_id, data.group_id)
+            .await?;
     }
     Ok(())
 }
@@ -304,11 +307,7 @@ pub async fn handle_step_add(
     let recipe_id = data.recipe_id;
     // Order is no longer user-supplied — append after the current max.
     let existing = foodlib.recipes().get_steps(recipe_id).await?;
-    data.step_order = existing
-        .iter()
-        .map(|s| s.order)
-        .fold(0.0_f64, f64::max)
-        + 1.0;
+    data.step_order = existing.iter().map(|s| s.order).fold(0.0_f64, f64::max) + 1.0;
     foodlib.recipes().add_step(data.into()).await?;
     recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
 }
@@ -355,10 +354,7 @@ fn recipe_ingredient_add_row(
 
 /// First-row inline add for the recipe-subrecipes table. Sentinel id -1; the
 /// commit handler resolves the subrecipe id by name lookup.
-fn recipe_subrecipe_add_row(
-    recipe_id: i32,
-    all_recipes: &[foodlib_new::recipe::Recipe],
-) -> Markup {
+fn recipe_subrecipe_add_row(recipe_id: i32, all_recipes: &[foodlib_new::recipe::Recipe]) -> Markup {
     let list_id = format!("subrecipe-add-datalist-{}", recipe_id);
     html! {
         tr id="recipe-subrecipe--1" {

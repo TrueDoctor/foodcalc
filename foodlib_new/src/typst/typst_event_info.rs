@@ -1,7 +1,7 @@
-use std::alloc::Layout;
 use crate::entities::allergen::DietaryFlags;
 use crate::ops::export::EventAllergenInfo;
 use serde::Serialize;
+use std::alloc::Layout;
 use time::format_description;
 use typst::foundations::{Dict, IntoValue};
 
@@ -27,8 +27,10 @@ impl TypstDishLabel {
     pub fn from_event_info(info: &EventAllergenInfo) -> Self {
         let format = format_description::parse("[day].[month]. [hour]:[minute]").unwrap();
 
-        let meals = info.meals.iter().map(|m| {
-            TypstMealAllergen {
+        let meals = info
+            .meals
+            .iter()
+            .map(|m| TypstMealAllergen {
                 name: m.recipe_name.clone(),
                 place: m.place.clone(),
                 time: m.start_time.format(&format).unwrap_or_default(),
@@ -37,8 +39,8 @@ impl TypstDishLabel {
                 contains: m.properties.iter().map(|p| p.name.clone()).collect(),
                 may_contain: vec![],
                 hinweise: vec![],
-            }
-        }).collect();
+            })
+            .collect();
 
         Self {
             event_name: info.event_name.clone(),
@@ -51,7 +53,7 @@ impl TypstDishLabel {
 #[derive(Debug, Clone)]
 pub struct DishLabelLayoutInput {
     pub v: Vec<TypstDishLabel>,
-    pub layout: String
+    pub layout: String,
 }
 
 // Top-level dictionary wrapper that provides `inputs.v`
@@ -97,9 +99,18 @@ impl IntoValue for DietaryFlags {
         dict.insert("lactose_free".into(), self.lactose_free.into_value());
         // Trace flags
         dict.insert("vegan_trace".into(), self.vegan_trace.into_value());
-        dict.insert("vegetarian_trace".into(), self.vegetarian_trace.into_value());
-        dict.insert("gluten_free_trace".into(), self.gluten_free_trace.into_value());
-        dict.insert("lactose_free_trace".into(), self.lactose_free_trace.into_value());
+        dict.insert(
+            "vegetarian_trace".into(),
+            self.vegetarian_trace.into_value(),
+        );
+        dict.insert(
+            "gluten_free_trace".into(),
+            self.gluten_free_trace.into_value(),
+        );
+        dict.insert(
+            "lactose_free_trace".into(),
+            self.lactose_free_trace.into_value(),
+        );
         dict.into_value()
     }
 }

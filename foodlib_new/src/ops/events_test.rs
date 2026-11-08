@@ -125,7 +125,10 @@ async fn test_prep_applies_to_root_recipe_direct_ingredients(pool: PgPool) {
         flour_early.is_some(),
         "coleslaw flour should buy on tour 101 (prep_date 07-02), \
          got tours: {:?}",
-        early.iter().map(|i| (i.ingredient_id, i.tour_id)).collect::<Vec<_>>()
+        early
+            .iter()
+            .map(|i| (i.ingredient_id, i.tour_id))
+            .collect::<Vec<_>>()
     );
 
     // Tour 103 (07-03, the later store-1 tour aligned with the meal date) must
@@ -162,14 +165,14 @@ async fn test_current_or_upcoming_event(pool: PgPool) {
     // After every scheduled event has finished → nothing to show. (The minimal
     // fixture's December events are also in the past by this date.)
     let after_all = datetime!(2025-01-01 00:00:00 UTC);
-    let event = ops
-        .get_current_or_upcoming_event(after_all)
-        .await
-        .unwrap();
+    let event = ops.get_current_or_upcoming_event(after_all).await.unwrap();
     assert_eq!(event, None);
 
     // Past-events query still reports the festival and prep once they're over.
-    let past = ops.get_past_events(datetime!(2024-07-09 00:00:00 UTC)).await.unwrap();
+    let past = ops
+        .get_past_events(datetime!(2024-07-09 00:00:00 UTC))
+        .await
+        .unwrap();
     assert!(past.iter().any(|e| e.id == 100));
     assert!(past.iter().any(|e| e.id == 101));
 }

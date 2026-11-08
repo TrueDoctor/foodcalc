@@ -989,10 +989,7 @@ impl EventOps {
     /// Picks the event to show by default at the given time: an ongoing event
     /// (window contains `at`) ending soonest, else the soonest upcoming event.
     /// Fully-past events are never returned; `None` means nothing is scheduled.
-    pub async fn get_current_or_upcoming_event(
-        &self,
-        at: OffsetDateTime,
-    ) -> Result<Option<Event>> {
+    pub async fn get_current_or_upcoming_event(&self, at: OffsetDateTime) -> Result<Option<Event>> {
         let record = sqlx::query_as!(
             Event,
             r#"
