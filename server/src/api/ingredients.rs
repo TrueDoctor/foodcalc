@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{delete, get, post, put},
+    routing::{delete, get, put},
     Json, Router,
 };
 use bigdecimal::BigDecimal;

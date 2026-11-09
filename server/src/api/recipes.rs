@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
     Json, Router,
 };
 use bigdecimal::{BigDecimal, ToPrimitive};
@@ -471,6 +471,7 @@ async fn export_recipe_pdf(
     #[cfg(feature = "typst")]
     // TODO: Use a single Typst engine for all recipes instead of creating a new one per request.
     let renderer = pdf_export::DocumentRenderer::new();
+    #[cfg(feature = "typst")]
     let result = renderer.export_recipes(vec![recipe_info])
         .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]

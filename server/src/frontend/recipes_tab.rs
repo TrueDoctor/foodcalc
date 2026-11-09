@@ -113,6 +113,7 @@ pub async fn export_recipe_pdf(
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
     let renderer = pdf_export::DocumentRenderer::new(); // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
+    #[cfg(feature = "typst")]
     let result = renderer.export_recipes(vec![recipe_info]);
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(

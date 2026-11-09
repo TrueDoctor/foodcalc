@@ -11,6 +11,7 @@ use foodlib_new::ops::export::{
 };
 use foodlib_new::Error;
 use bigdecimal::ToPrimitive;
+#[cfg(feature = "typst")]
 use pdf_export::renderer::DishLabelLayout;
 use crate::api::map_api_error;
 use crate::MyAppState;
@@ -103,13 +104,13 @@ pub async fn export_overview(
     // let result = foodlib_new::typst::export_event_overview(info)
     //     .await
     //     .map_err(|err| Error::Misc(err.to_string()));
-    let result = Err(Error::Misc("Typst export for event overview not implemented".into()));
+    // let result = Err(Error::Misc("Typst export for event overview not implemented".into()));
     todo!("Implement Typst export for event overview");
     #[cfg(not(feature = "typst"))]
     let result: Result<Vec<u8>, Error> =
         Err(Error::Misc("Server compiled without typst support".into()));
 
-    pdf_response(&filename, result)
+    // pdf_response(&filename, result)
 }
 
 /// `GET /api/events/{id}/exports/recipes` — combined PDF with every meal
@@ -133,9 +134,10 @@ pub async fn export_recipes(
     #[cfg(not(feature = "typst"))]
     let _ = &infos;
 
-    #[cfg(feature = "typst")]
     // TODO: Use a single Typst engine for all recipes instead of creating a new one per request.
+    #[cfg(feature = "typst")]
     let renderer = pdf_export::DocumentRenderer::new();
+    #[cfg(feature = "typst")]
     let result = renderer.export_recipes(infos)
         .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]
@@ -164,6 +166,7 @@ pub async fn export_meal(
     #[cfg(feature = "typst")]
     // TODO: Use a single Typst engine for all recipes instead of creating a new one per request.
     let renderer = pdf_export::DocumentRenderer::new();
+    #[cfg(feature = "typst")]
     let result = renderer.export_recipes(vec![info])
         .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]
@@ -191,6 +194,7 @@ pub async fn export_allergens(
     #[cfg(feature = "typst")]
     // TODO: Use a single Typst engine for all recipes instead of creating a new one per request.
     let renderer = pdf_export::DocumentRenderer::new();
+    #[cfg(feature = "typst")]
     let result = renderer.export_event_allergens(info)
         .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]
@@ -219,6 +223,7 @@ pub async fn export_labels(
     #[cfg(feature = "typst")]
     // TODO: Use a single Typst engine for all recipes instead of creating a new one per request.
     let renderer = pdf_export::DocumentRenderer::new();
+    #[cfg(feature = "typst")]
     let result = renderer.export_dish_labels(info, DishLabelLayout::Tent)
         .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]
