@@ -479,6 +479,119 @@ impl EventOps {
         Ok(records)
     }
 
+    /// Manually pins an ingredient onto a tour (overlay on the view-derived
+    /// assignment). Idempotent.
+    pub async fn add_shopping_tour_item(
+        &self,
+        tour_id: i32,
+        ingredient_id: i32,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO shopping_tour_items (tour_id, ingredient_id)
+            VALUES ($1, $2)
+            ON CONFLICT (tour_id, ingredient_id) DO NOTHING
+            "#,
+            tour_id,
+            ingredient_id,
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Removes a manual pin; the ingredient falls back to the view-derived
+    /// assignment ("without tour" when nothing matches).
+    pub async fn remove_shopping_tour_item(
+        &self,
+        tour_id: i32,
+        ingredient_id: i32,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"
+            DELETE FROM shopping_tour_items
+            WHERE tour_id = $1 AND ingredient_id = $2
+            "#,
+            tour_id,
+            ingredient_id,
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// All manual pins of an event's tours (tour_id → ingredient_id overlay).
+    pub async fn get_shopping_tour_pins(&self, event_id: i32) -> Result<Vec<TourItemPin>> {
+        let records = sqlx::query_as!(
+            TourItemPin,
+            r#"
+            SELECT sti.tour_id, sti.ingredient_id
+            FROM shopping_tour_items sti
+            JOIN shopping_tours st USING (tour_id)
+            WHERE st.event_id = $1
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(records)
+    }
+
+    /// Marks a tour as completed (locked) or reopens it for editing.
+    pub async fn set_shopping_tour_completed(&self, tour_id: i32, completed: bool) -> Result<()> {
+        if completed {
+            sqlx::query!(
+                r#"
+                INSERT INTO shopping_tour_completed (tour_id, completed_at)
+                VALUES ($1, now())
+                ON CONFLICT (tour_id) DO NOTHING
+                "#,
+                tour_id,
+            )
+            .execute(&*self.pool)
+            .await?;
+        } else {
+            sqlx::query!(
+                r#"DELETE FROM shopping_tour_completed WHERE tour_id = $1"#,
+                tour_id
+            )
+            .execute(&*self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// IDs of the event's tours that are completed (locked).
+    pub async fn get_completed_tour_ids(&self, event_id: i32) -> Result<Vec<i32>> {
+        let records = sqlx::query!(
+            r#"
+            SELECT stc.tour_id
+            FROM shopping_tour_completed stc
+            JOIN shopping_tours st USING (tour_id)
+            WHERE st.event_id = $1
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(records.into_iter().map(|row| row.tour_id).collect())
+    }
+
+    /// Whether one tour is completed (locked).
+    pub async fn is_shopping_tour_completed(&self, tour_id: i32) -> Result<bool> {
+        let row = sqlx::query!(
+            r#"
+            SELECT EXISTS(
+                SELECT 1 FROM shopping_tour_completed WHERE tour_id = $1
+            ) AS "exists!"
+            "#,
+            tour_id
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(row.exists)
+    }
+
     /// Gets shopping tour by id
     pub async fn get_shopping_tour(&self, tour_id: i32) -> Result<ShoppingTour> {
         let records = sqlx::query_as!(

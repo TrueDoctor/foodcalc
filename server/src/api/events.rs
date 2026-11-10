@@ -46,6 +46,18 @@ pub fn events_router() -> Router<MyAppState> {
             "/{id}/tours/{tour_id}",
             put(shopping::update_tour).delete(shopping::delete_tour),
         )
+        .route(
+            "/{id}/tours/{tour_id}/items",
+            post(shopping::add_tour_item),
+        )
+        .route(
+            "/{id}/tours/{tour_id}/items/{ingredient_id}",
+            delete(shopping::remove_tour_item),
+        )
+        .route(
+            "/{id}/tours/{tour_id}/completed",
+            put(shopping::set_tour_completed),
+        )
         .route("/{id}/shopping-list", get(shopping::shopping_list))
         .route(
             "/{id}/source-overrides",

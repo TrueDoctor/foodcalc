@@ -90,6 +90,14 @@ pub struct IngredientWithoutTour {
     pub store_name: String,
 }
 
+/// A manually pinned tour item: forces `ingredient_id` onto `tour_id`,
+/// overriding the view-derived store/date-window assignment.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TourItemPin {
+    pub tour_id: i32,
+    pub ingredient_id: i32,
+}
+
 /// View of source overrides with additional information
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceOverrideView {
