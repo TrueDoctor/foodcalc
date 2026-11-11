@@ -554,3 +554,17 @@ impl IngredientOps {
         Ok(rows)
     }
 }
+
+impl IngredientOps {
+    /// Transfer ownership of an ingredient to another group.
+    pub async fn set_owner_group(&self, ingredient_id: i32, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE ingredients SET group_id = $2 WHERE ingredient_id = $1"#,
+            ingredient_id,
+            group_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+}

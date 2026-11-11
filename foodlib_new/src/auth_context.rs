@@ -2,12 +2,57 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use axum::Extension;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::auth::AuthSession;
 use crate::entities::user::User;
 use crate::error::{Error, Result};
 use crate::FoodLib;
+
+/// Role of a group member (level-based ABAC): `viewer` only sees, `editor`
+/// may edit the group's resources, `manager` additionally manages members
+/// and their roles. `is_admin` is orthogonal and stays global.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupRole {
+    Viewer,
+    Editor,
+    Manager,
+}
+
+impl GroupRole {
+    pub const VIEWER: &'static str = "viewer";
+    pub const EDITOR: &'static str = "editor";
+    pub const MANAGER: &'static str = "manager";
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            GroupRole::Viewer => Self::VIEWER,
+            GroupRole::Editor => Self::EDITOR,
+            GroupRole::Manager => Self::MANAGER,
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            Self::VIEWER => Some(GroupRole::Viewer),
+            Self::EDITOR => Some(GroupRole::Editor),
+            Self::MANAGER => Some(GroupRole::Manager),
+            _ => None,
+        }
+    }
+
+    /// May create/edit/delete the group's resources (recipes, ingredients,
+    /// inventories, events)?
+    pub fn can_edit(&self) -> bool {
+        !matches!(self, GroupRole::Viewer)
+    }
+
+    /// May manage group membership and member roles?
+    pub fn can_manage(&self) -> bool {
+        matches!(self, GroupRole::Manager)
+    }
+}
 
 /// Authenticated user together with the IDs of every group they belong to.
 ///
@@ -18,18 +63,53 @@ use crate::FoodLib;
 pub struct AuthCtx {
     pub user: User,
     pub group_ids: Vec<i32>,
+    /// Role of the user in each of their groups (personal groups: `manager`).
+    roles: HashMap<i32, GroupRole>,
     pool: Arc<PgPool>,
 }
 
 impl AuthCtx {
-    /// True if the user is an admin or belongs to the given group.
+    /// True if the user is an admin or belongs to the given group (read access).
     pub fn can_access_group(&self, group_id: i32) -> bool {
         self.user.is_admin || self.group_ids.contains(&group_id)
     }
 
-    /// Returns Forbidden unless the user has access to the given group.
+    /// Role of the user in the given group; admins act as managers everywhere.
+    pub fn role_of(&self, group_id: i32) -> GroupRole {
+        if self.user.is_admin {
+            return GroupRole::Manager;
+        }
+        self.roles
+            .get(&group_id)
+            .copied()
+            .unwrap_or(GroupRole::Viewer)
+    }
+
+    /// May the user create/edit/delete resources of this group?
+    pub fn can_edit_group(&self, group_id: i32) -> bool {
+        self.role_of(group_id).can_edit()
+    }
+
+    /// May the user manage group membership / member roles?
+    pub fn can_manage_group(&self, group_id: i32) -> bool {
+        self.role_of(group_id).can_manage()
+    }
+
+    /// Returns Forbidden unless the user has read access to the given group.
     pub fn assert_group(&self, group_id: i32) -> Result<()> {
         if self.can_access_group(group_id) {
+            Ok(())
+        } else {
+            Err(Error::Forbidden(
+                "You don't have permission to access this group".into(),
+            ))
+        }
+    }
+
+    /// Returns Forbidden unless the user may edit resources of the group
+    /// (editor, manager, admin).
+    pub fn assert_can_edit_group(&self, group_id: i32) -> Result<()> {
+        if self.can_edit_group(group_id) {
             Ok(())
         } else {
             Err(Error::Forbidden(
@@ -49,7 +129,7 @@ impl AuthCtx {
             entity: "Recipe",
             id: recipe_id.to_string(),
         })?;
-        self.assert_group(group_id)
+        self.assert_can_edit_group(group_id)
     }
 
     pub async fn assert_can_edit_event(&self, event_id: i32) -> Result<()> {
@@ -63,7 +143,7 @@ impl AuthCtx {
             entity: "Event",
             id: event_id.to_string(),
         })?;
-        self.assert_group(group_id)
+        self.assert_can_edit_group(group_id)
     }
 
     pub async fn assert_can_edit_ingredient(&self, ingredient_id: i32) -> Result<()> {
@@ -77,7 +157,7 @@ impl AuthCtx {
             entity: "Ingredient",
             id: ingredient_id.to_string(),
         })?;
-        self.assert_group(group_id)
+        self.assert_can_edit_group(group_id)
     }
 
     pub async fn assert_can_edit_inventory(&self, inventory_id: i32) -> Result<()> {
@@ -91,7 +171,7 @@ impl AuthCtx {
             entity: "Inventory",
             id: inventory_id.to_string(),
         })?;
-        self.assert_group(group_id)
+        self.assert_can_edit_group(group_id)
     }
 
     /// Meals, food preps, shopping tours and source overrides all belong to an
@@ -112,7 +192,7 @@ impl AuthCtx {
             entity: "Meal",
             id: meal_id.to_string(),
         })?;
-        self.assert_group(group_id)
+        self.assert_can_edit_group(group_id)
     }
 
     pub async fn assert_can_edit_food_prep(&self, prep_id: i32) -> Result<()> {
@@ -131,7 +211,7 @@ impl AuthCtx {
             entity: "FoodPrep",
             id: prep_id.to_string(),
         })?;
-        self.assert_group(group_id)
+        self.assert_can_edit_group(group_id)
     }
 
     pub async fn assert_can_edit_shopping_tour(&self, tour_id: i32) -> Result<()> {
@@ -150,7 +230,7 @@ impl AuthCtx {
             entity: "ShoppingTour",
             id: tour_id.to_string(),
         })?;
-        self.assert_group(group_id)
+        self.assert_can_edit_group(group_id)
     }
 }
 
@@ -173,12 +253,22 @@ where
             .await
             .map_err(|_| Error::Misc("FoodLib extension missing".into()))?;
 
-        let groups = foodlib.users().get_user_groups(user.id).await?;
-        let group_ids = groups.into_iter().map(|g| g.id).collect();
+        let memberships = foodlib
+            .users()
+            .get_user_group_memberships(user.id)
+            .await?;
+        let mut group_ids = Vec::with_capacity(memberships.len());
+        let mut roles = HashMap::with_capacity(memberships.len());
+        for membership in memberships {
+            let role = GroupRole::parse(&membership.role).unwrap_or(GroupRole::Viewer);
+            group_ids.push(membership.id);
+            roles.insert(membership.id, role);
+        }
 
         Ok(AuthCtx {
             user,
             group_ids,
+            roles,
             pool: foodlib.pool_arc(),
         })
     }

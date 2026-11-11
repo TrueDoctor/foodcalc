@@ -37,6 +37,7 @@ pub fn recipes_router() -> Router<MyAppState> {
         .route("/{id}/tree", get(get_recipe_tree))
         .route("/{id}/export", get(export_recipe_pdf))
         .route("/{id}/clone", post(clone_recipe))
+        .route("/{id}/owner", put(transfer_owner))
         .route("/{id}/ingredients", post(add_ingredient))
         .route(
             "/{id}/ingredients/{ingredient_id}",
@@ -153,7 +154,7 @@ async fn create_recipe(
     ctx: AuthCtx,
     Json(payload): Json<RecipeCreateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_group(payload.group_id) {
+    if let Err(err) = ctx.assert_can_edit_group(payload.group_id) {
         return map_api_error(err).into_response();
     }
 
@@ -527,7 +528,7 @@ async fn clone_recipe(
         .into_response();
     }
     let target_group = payload.group_id.unwrap_or(source.group_id);
-    if let Err(err) = ctx.assert_group(target_group) {
+    if let Err(err) = ctx.assert_can_edit_group(target_group) {
         return map_api_error(err).into_response();
     }
 
@@ -823,6 +824,44 @@ async fn delete_sub_recipe(
         return map_api_error(err).into_response();
     }
     match state.recipes().delete_meta_ingredient(id, child_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => map_api_error(err).into_response(),
+    }
+}
+
+// ---------------------------------------------------------------- ownership
+
+#[derive(Debug, Deserialize)]
+pub struct OwnerTransferInput {
+    pub group_id: i32,
+}
+
+/// `PUT /api/recipes/{id}/owner` — explicit Besitz-Übertragung (siehe
+/// `events::transfer_owner`): Besitzer oder Manager der aktuellen Gruppe;
+/// Zielgruppe muss zugänglich sein.
+async fn transfer_owner(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+    Json(payload): Json<OwnerTransferInput>,
+) -> Response {
+    let current = match state.recipes().get(id).await {
+        Ok(recipe) => recipe,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    if !ctx.can_edit_group(current.group_id) {
+        return map_api_error(Error::Forbidden(
+            "transferring ownership requires edit rights on the current owner group".into(),
+        ))
+        .into_response();
+    }
+    if !ctx.can_access_group(payload.group_id) {
+        return map_api_error(Error::Forbidden(
+            "you can only transfer into groups you belong to".into(),
+        ))
+        .into_response();
+    }
+    match state.recipes().set_owner_group(id, payload.group_id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => map_api_error(err).into_response(),
     }

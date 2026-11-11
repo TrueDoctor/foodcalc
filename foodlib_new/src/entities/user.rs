@@ -47,3 +47,23 @@ pub struct MembershipRow {
     pub name: String,
     pub is_personal: bool,
 }
+
+/// Group as seen by one member: the group plus that member's role in it
+/// (`auth/me`, member lists). Role is one of `viewer`, `editor`, `manager`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupMembership {
+    pub id: i32,
+    pub name: String,
+    pub is_personal: bool,
+    pub role: String,
+}
+
+impl GroupMembership {
+    pub fn group(&self) -> Group {
+        Group {
+            id: self.id,
+            name: self.name.clone(),
+            is_personal: self.is_personal,
+        }
+    }
+}

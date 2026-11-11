@@ -29,6 +29,7 @@ pub fn events_router() -> Router<MyAppState> {
             get(get_event).put(update_event).delete(delete_event),
         )
         .route("/{id}/clone", post(clone_event))
+        .route("/{id}/owner", put(transfer_owner))
         .route("/{id}/meals", get(meals::list_meals).post(meals::add_meal))
         .route(
             "/{id}/meals/{meal_id}",
@@ -97,7 +98,7 @@ async fn create_event(
     ctx: AuthCtx,
     Json(payload): Json<EventCreateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_group(payload.group_id) {
+    if let Err(err) = ctx.assert_can_edit_group(payload.group_id) {
         return map_api_error(err).into_response();
     }
     let budget = match parse_budget(payload.budget) {
@@ -234,5 +235,44 @@ fn parse_budget(budget: Option<String>) -> Result<Option<BigDecimal>, Response> 
             Ok(parsed) => Ok(Some(parsed)),
             Err(_) => Err(bad_request(format!("invalid budget: {value}"))),
         },
+    }
+}
+
+// --------------------------------------------------------------- ownership
+
+#[derive(Debug, Deserialize)]
+pub struct OwnerTransferInput {
+    pub group_id: i32,
+}
+
+/// `PUT /api/events/{id}/owner` — explicit Besitz-Übertragung: erlaubt für
+/// den Besitzer (persönliche Gruppe) oder Manager der besitzenden Gruppe;
+/// die Zielgruppe muss für den Aufrufer zugänglich sein (Admin oder
+/// Mitgliedschaft). Danach regelt die Manager-Rolle der neuen Gruppe.
+async fn transfer_owner(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+    Json(payload): Json<OwnerTransferInput>,
+) -> Response {
+    let current = match state.events().get(id).await {
+        Ok(event) => event,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    if !ctx.can_edit_group(current.group_id) {
+        return map_api_error(foodlib_new::Error::Forbidden(
+            "transferring ownership requires edit rights on the current owner group".into(),
+        ))
+        .into_response();
+    }
+    if !ctx.can_access_group(payload.group_id) {
+        return map_api_error(foodlib_new::Error::Forbidden(
+            "you can only transfer into groups you belong to".into(),
+        ))
+        .into_response();
+    }
+    match state.events().set_owner_group(id, payload.group_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => map_api_error(err).into_response(),
     }
 }

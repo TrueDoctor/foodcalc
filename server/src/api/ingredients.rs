@@ -34,6 +34,7 @@ pub fn ingredients_router() -> Router<MyAppState> {
                 .put(update_ingredient)
                 .delete(delete_ingredient),
         )
+        .route("/{id}/owner", put(transfer_owner))
         .route("/{id}/sources", get(list_sources).post(add_source))
         .route(
             "/{id}/sources/{source_id}",
@@ -107,7 +108,7 @@ async fn create_ingredient(
     ctx: AuthCtx,
     Json(payload): Json<IngredientCreateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_group(payload.group_id) {
+    if let Err(err) = ctx.assert_can_edit_group(payload.group_id) {
         return map_api_error(err).into_response();
     }
     let energy = match parse_energy(&payload.energy) {
@@ -192,7 +193,6 @@ pub struct IngredientUpdateInput {
     pub energy: Option<String>,
     /// `null` clears the comment, absent keeps it.
     pub comment: Option<Option<String>>,
-    pub group_id: Option<i32>,
 }
 
 async fn update_ingredient(
@@ -208,11 +208,6 @@ async fn update_ingredient(
         Ok(ingredient) => ingredient,
         Err(err) => return map_api_error(err).into_response(),
     };
-    if let Some(group_id) = payload.group_id {
-        if let Err(err) = ctx.assert_group(group_id) {
-            return map_api_error(err).into_response();
-        }
-    }
 
     let energy = match &payload.energy {
         Some(value) => match parse_energy(value) {
@@ -227,7 +222,7 @@ async fn update_ingredient(
         name: payload.name.unwrap_or(current.name),
         energy,
         comment: payload.comment.unwrap_or(current.comment),
-        group_id: payload.group_id.unwrap_or(current.group_id),
+        group_id: current.group_id,
     };
 
     respond(state.ingredients().update(ingredient).await)
@@ -465,6 +460,47 @@ async fn delete_property(
     match state
         .properties()
         .remove_from_ingredient(id, property_id)
+        .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => map_api_error(err).into_response(),
+    }
+}
+
+// --------------------------------------------------------------- ownership
+
+#[derive(Debug, Deserialize)]
+pub struct OwnerTransferInput {
+    pub group_id: i32,
+}
+
+/// `PUT /api/ingredients/{id}/owner` — explicit Besitz-Übertragung (siehe
+/// `events::transfer_owner`).
+async fn transfer_owner(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+    Json(payload): Json<OwnerTransferInput>,
+) -> Response {
+    let current = match state.ingredients().get(id).await {
+        Ok(ingredient) => ingredient,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    if !ctx.can_edit_group(current.group_id) {
+        return map_api_error(foodlib_new::Error::Forbidden(
+            "transferring ownership requires edit rights on the current owner group".into(),
+        ))
+        .into_response();
+    }
+    if !ctx.can_access_group(payload.group_id) {
+        return map_api_error(foodlib_new::Error::Forbidden(
+            "you can only transfer into groups you belong to".into(),
+        ))
+        .into_response();
+    }
+    match state
+        .ingredients()
+        .set_owner_group(id, payload.group_id)
         .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),

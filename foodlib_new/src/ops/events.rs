@@ -1323,3 +1323,17 @@ impl EventOps {
         Ok(records)
     }
 }
+
+impl EventOps {
+    /// Transfer ownership of an event (incl. meals/tours) to another group.
+    pub async fn set_owner_group(&self, event_id: i32, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE events SET group_id = $2 WHERE event_id = $1"#,
+            event_id,
+            group_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+}

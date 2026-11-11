@@ -12,7 +12,7 @@ use axum::{
     Json, Router,
 };
 use foodlib_new::auth::{AuthSession, Credentials};
-use foodlib_new::entities::user::{Group, User};
+use foodlib_new::entities::user::{GroupMembership, User};
 use foodlib_new::Error;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -26,20 +26,23 @@ pub struct LoginInput {
     pub password: String,
 }
 
-/// Group as exposed to the SPA.
+/// Group as exposed to the SPA (with the session user's role in it).
 #[derive(Debug, Serialize)]
 pub struct ApiGroup {
     pub id: i32,
     pub name: String,
     pub is_personal: bool,
+    /// `viewer` | `editor` | `manager` (personal groups: `manager`).
+    pub role: String,
 }
 
-impl From<Group> for ApiGroup {
-    fn from(group: Group) -> Self {
+impl ApiGroup {
+    pub fn from_membership(membership: GroupMembership) -> Self {
         Self {
-            id: group.id,
-            name: group.name,
-            is_personal: group.is_personal,
+            id: membership.id,
+            name: membership.name,
+            is_personal: membership.is_personal,
+            role: membership.role,
         }
     }
 }
@@ -55,13 +58,16 @@ pub struct ApiUser {
 }
 
 impl ApiUser {
-    fn new(user: User, groups: Vec<Group>) -> Self {
+    fn new(user: User, memberships: Vec<GroupMembership>) -> Self {
         Self {
             id: user.id,
             username: user.username,
             email: user.email,
             is_admin: user.is_admin,
-            groups: groups.into_iter().map(Into::into).collect(),
+            groups: memberships
+                .into_iter()
+                .map(ApiGroup::from_membership)
+                .collect(),
         }
     }
 }
@@ -177,7 +183,12 @@ pub async fn register(
             username: user.username,
             email: user.email,
             is_admin: user.is_admin,
-            groups: vec![ApiGroup::from(personal_group)],
+            groups: vec![ApiGroup {
+                id: personal_group.id,
+                name: personal_group.name,
+                is_personal: personal_group.is_personal,
+                role: "manager".into(),
+            }],
         }),
     )
         .into_response()
@@ -197,8 +208,10 @@ pub async fn me(State(state): State<MyAppState>, auth: AuthSession) -> Response 
         return unauthorized("authentication required").into_response();
     };
 
-    match state.users().get_user_groups(user.id).await {
-        Ok(groups) => (StatusCode::OK, Json(ApiUser::new(user, groups))).into_response(),
+    match state.users().get_user_group_memberships(user.id).await {
+        Ok(memberships) => {
+            (StatusCode::OK, Json(ApiUser::new(user, memberships))).into_response()
+        }
         Err(err) => map_api_error(err).into_response(),
     }
 }

@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use foodlib_new::{
-    auth_context::AuthCtx,
+    auth_context::{AuthCtx, GroupRole},
     entities::user::{Group, User},
     Error,
 };
@@ -39,7 +39,10 @@ pub fn groups_router() -> Router<MyAppState> {
         .route("/", get(list_groups).post(create_group))
         .route("/{id}", delete(delete_group))
         .route("/{id}/members", get(list_members).post(add_member))
-        .route("/{id}/members/{user_id}", delete(remove_member))
+        .route(
+            "/{id}/members/{user_id}",
+            put(set_member_role).delete(remove_member),
+        )
 }
 
 // ------------------------------------------------------------- permission
@@ -55,8 +58,10 @@ async fn require_admin(ctx: &AuthCtx) -> Result<(), Response> {
     }
 }
 
-/// Admin or member of the group; personal groups can never be managed this
-/// way (their membership follows the owning user account).
+/// Manager of the group (or admin); personal groups can never be managed
+/// this way (their membership follows the owning user account). Under the
+/// role model this is exactly `manager` — the choke point keeps the rest of
+/// the API unchanged.
 async fn require_group_manager(
     state: &MyAppState,
     ctx: &AuthCtx,
@@ -71,9 +76,9 @@ async fn require_group_manager(
             "personal groups are managed through the owning user account".into(),
         ));
     }
-    if !ctx.user.is_admin && !ctx.group_ids.contains(&group_id) {
+    if !ctx.can_manage_group(group_id) {
         return Err(map_api_error(Error::Forbidden(
-            "you are not a member of this group".into(),
+            "managing members requires the manager role in this group".into(),
         ))
         .into_response());
     }
@@ -336,7 +341,8 @@ async fn delete_group(
     }
 }
 
-/// `GET /api/groups/{id}/members` — admin or group member.
+/// `GET /api/groups/{id}/members` — admin or group member; members carry
+/// their role (viewer/editor/manager).
 async fn list_members(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
@@ -348,12 +354,74 @@ async fn list_members(
         ))
         .into_response();
     }
-    let members = match state.users().get_group_members(id).await {
+    let members = match state.users().get_group_members_with_role(id).await {
         Ok(members) => members,
         Err(err) => return map_api_error(err).into_response(),
     };
-    (StatusCode::OK, Json(members.into_iter().map(ApiMember::from).collect::<Vec<_>>()))
-        .into_response()
+    let items = members
+        .into_iter()
+        .map(|(user, role)| ApiMemberWithRole {
+            member: ApiMember::from(user),
+            role,
+        })
+        .collect::<Vec<_>>();
+    (StatusCode::OK, Json(items)).into_response()
+}
+
+/// Member projection plus the member's role in the group.
+#[derive(Debug, Serialize)]
+pub struct ApiMemberWithRole {
+    #[serde(flatten)]
+    pub member: ApiMember,
+    pub role: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetMemberRoleInput {
+    /// `viewer` | `editor` | `manager`.
+    pub role: String,
+}
+
+/// `PUT /api/groups/{id}/members/{user_id}` — manager sets the member's
+/// role. Demoting the last manager is refused (the group must stay managed).
+async fn set_member_role(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path((id, user_id)): Path<(i32, i64)>,
+    Json(payload): Json<SetMemberRoleInput>,
+) -> Response {
+    if let Err(response) = require_group_manager(&state, &ctx, id).await {
+        return response;
+    }
+    let role = match GroupRole::parse(payload.role.trim()) {
+        Some(role) => role,
+        None => {
+            return bad_request(format!(
+                "unknown role: {} (expected viewer, editor or manager)",
+                payload.role
+            ))
+        }
+    };
+    let current = match state.users().get_member_role(user_id, id).await {
+        Ok(current) => current,
+        Err(_) => return bad_request("user is not a member of this group".into()),
+    };
+    if GroupRole::parse(&current) == Some(GroupRole::Manager)
+        && role != GroupRole::Manager
+        && state.users().count_group_managers(id).await.unwrap_or(0) <= 1
+    {
+        return bad_request(
+            "cannot demote the last manager — promote another member first".into(),
+        );
+    }
+    match state
+        .users()
+        .set_member_role(user_id, id, role.as_str())
+        .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => map_api_error(err).into_response(),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -394,7 +462,8 @@ async fn add_member(
     }
 }
 
-/// `DELETE /api/groups/{id}/members/{user_id}` — admin or group manager.
+/// `DELETE /api/groups/{id}/members/{user_id}` — admin or group manager;
+/// refuses to remove the last manager of a group.
 async fn remove_member(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
@@ -402,6 +471,19 @@ async fn remove_member(
 ) -> Response {
     if let Err(response) = require_group_manager(&state, &ctx, id).await {
         return response;
+    }
+    if state
+        .users()
+        .get_member_role(user_id, id)
+        .await
+        .ok()
+        .and_then(|role| GroupRole::parse(&role))
+        == Some(GroupRole::Manager)
+        && state.users().count_group_managers(id).await.unwrap_or(0) <= 1
+    {
+        return bad_request(
+            "cannot remove the last manager — promote another member first".into(),
+        );
     }
     match state.users().remove_user_from_group(user_id, id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),

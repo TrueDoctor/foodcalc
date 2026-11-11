@@ -25,6 +25,7 @@ pub fn inventories_router() -> Router<MyAppState> {
             "/{id}",
             get(get_inventory).put(update_inventory).delete(delete_inventory),
         )
+        .route("/{id}/owner", put(transfer_owner))
         .route("/{id}/items", get(list_items).post(add_item))
         .route(
             "/{id}/items/{ingredient_id}",
@@ -58,7 +59,7 @@ async fn create_inventory(
     ctx: AuthCtx,
     Json(payload): Json<InventoryCreateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_group(payload.group_id) {
+    if let Err(err) = ctx.assert_can_edit_group(payload.group_id) {
         return map_api_error(err).into_response();
     }
     let inventory = Inventory {
@@ -105,7 +106,6 @@ async fn get_inventory(
 #[derive(Debug, Deserialize)]
 pub struct InventoryUpdateInput {
     pub name: Option<String>,
-    pub group_id: Option<i32>,
 }
 
 /// `PUT /api/inventories/{id}` — rename / move to another owned group.
@@ -122,11 +122,6 @@ async fn update_inventory(
         Ok(inventory) => inventory,
         Err(err) => return map_api_error(err).into_response(),
     };
-    if let Some(group_id) = payload.group_id {
-        if let Err(err) = ctx.assert_group(group_id) {
-            return map_api_error(err).into_response();
-        }
-    }
     let name = match payload.name {
         Some(name) if name.trim().is_empty() => {
             return bad_request("inventory name must not be empty".to_string())
@@ -137,7 +132,7 @@ async fn update_inventory(
     let inventory = Inventory {
         id: current.id,
         name,
-        group_id: payload.group_id.unwrap_or(current.group_id),
+        group_id: current.group_id,
     };
     respond(state.inventories().update(inventory).await)
 }
@@ -242,6 +237,47 @@ async fn remove_item(
         return map_api_error(err).into_response();
     }
     match state.inventories().delete_item(id, ingredient_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => map_api_error(err).into_response(),
+    }
+}
+
+// --------------------------------------------------------------- ownership
+
+#[derive(Debug, Deserialize)]
+pub struct OwnerTransferInput {
+    pub group_id: i32,
+}
+
+/// `PUT /api/inventories/{id}/owner` — explicit Besitz-Übertragung (siehe
+/// `events::transfer_owner`).
+async fn transfer_owner(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+    Json(payload): Json<OwnerTransferInput>,
+) -> Response {
+    let current = match state.inventories().get(id).await {
+        Ok(inventory) => inventory,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    if !ctx.can_edit_group(current.group_id) {
+        return map_api_error(foodlib_new::Error::Forbidden(
+            "transferring ownership requires edit rights on the current owner group".into(),
+        ))
+        .into_response();
+    }
+    if !ctx.can_access_group(payload.group_id) {
+        return map_api_error(foodlib_new::Error::Forbidden(
+            "you can only transfer into groups you belong to".into(),
+        ))
+        .into_response();
+    }
+    match state
+        .inventories()
+        .set_owner_group(id, payload.group_id)
+        .await
+    {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => map_api_error(err).into_response(),
     }

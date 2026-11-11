@@ -165,3 +165,17 @@ impl InventoryOps {
         Ok(rows)
     }
 }
+
+impl InventoryOps {
+    /// Transfer ownership of an inventory to another group.
+    pub async fn set_owner_group(&self, inventory_id: i32, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE inventories SET group_id = $2 WHERE inventory_id = $1"#,
+            inventory_id,
+            group_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+}

@@ -978,3 +978,17 @@ impl RecipeOps {
         })
     }
 }
+
+impl RecipeOps {
+    /// Transfer ownership of a recipe to another group (Besitz-Übertragung).
+    pub async fn set_owner_group(&self, recipe_id: i32, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE recipes SET group_id = $2 WHERE recipe_id = $1"#,
+            recipe_id,
+            group_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+}

@@ -285,7 +285,7 @@ impl UserOps {
         .await?;
 
         sqlx::query!(
-            r#"INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2)"#,
+            r#"INSERT INTO user_groups (user_id, group_id, role) VALUES ($1, $2, 'manager')"#,
             created.id,
             group.id
         )
@@ -438,5 +438,99 @@ impl UserOps {
             .execute(&*self.pool)
             .await?;
         Ok(())
+    }
+}
+
+
+impl UserOps {
+    /// Memberships of one user including their role in each group (`auth/me`,
+    /// permission plumbing in `AuthCtx`).
+    pub async fn get_user_group_memberships(
+        &self,
+        user_id: i64,
+    ) -> Result<Vec<GroupMembership>> {
+        let rows = sqlx::query_as!(
+            GroupMembership,
+            r#"
+            SELECT g.id, g.name, g.is_personal, ug.role
+            FROM user_groups ug
+            JOIN groups g ON ug.group_id = g.id
+            WHERE ug.user_id = $1
+            ORDER BY g.is_personal DESC, g.name
+            "#,
+            user_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Members of a group together with their role (group management UI).
+    pub async fn get_group_members_with_role(
+        &self,
+        group_id: i32,
+    ) -> Result<Vec<(User, String)>> {
+        let members = self.get_group_members(group_id).await?;
+        let role_rows = sqlx::query!(
+            r#"SELECT user_id, role FROM user_groups WHERE group_id = $1"#,
+            group_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        let roles: std::collections::HashMap<i64, String> = role_rows
+            .into_iter()
+            .map(|row| (row.user_id, row.role))
+            .collect();
+        Ok(members
+            .into_iter()
+            .map(|member| {
+                let role = roles.get(&member.id).cloned().unwrap_or_else(|| "viewer".into());
+                (member, role)
+            })
+            .collect())
+    }
+
+    /// Role of one user in one group (last-manager guards).
+    pub async fn get_member_role(&self, user_id: i64, group_id: i32) -> Result<String> {
+        let role = sqlx::query_scalar!(
+            r#"SELECT role FROM user_groups WHERE user_id = $1 AND group_id = $2"#,
+            user_id,
+            group_id
+        )
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "membership",
+            id: format!("{group_id}/{user_id}"),
+        })?;
+        Ok(role)
+    }
+
+    /// Sets a member's role (viewer/editor/manager) in one group.
+    pub async fn set_member_role(&self, user_id: i64, group_id: i32, role: &str) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE user_groups SET role = $3 WHERE user_id = $1 AND group_id = $2"#,
+            user_id,
+            group_id,
+            role
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Number of managers in a group (protects the last manager from being
+    /// demoted or removed).
+    pub async fn count_group_managers(&self, group_id: i32) -> Result<i64> {
+        let count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) FROM user_groups
+            WHERE group_id = $1 AND role = 'manager'
+            "#,
+            group_id
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(count.unwrap_or(0))
     }
 }
