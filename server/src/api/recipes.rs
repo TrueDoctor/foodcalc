@@ -14,7 +14,6 @@ use axum::{
 use bigdecimal::{BigDecimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::postgres::types::PgInterval;
 
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::recipe::{
@@ -40,8 +39,7 @@ pub fn recipes_router() -> Router<MyAppState> {
         .route("/{id}/owner", put(transfer_owner))
         .route("/{id}/ingredients", post(add_ingredient))
         .route(
-            "/{id}/ingredients/{ingredient_id}",
-            put(update_ingredient).delete(delete_ingredient),
+            "/{id}/ingredients", put(update_ingredient).delete(delete_ingredient),
         )
         .route("/{id}/steps", post(add_step))
         .route(
@@ -279,23 +277,6 @@ pub struct RecipeDetailDto {
     pub properties: Vec<PropertyDto>,
 }
 
-/// `PgInterval` (months/days/microseconds — hours and minutes are part of
-/// the microseconds field) → total seconds.
-fn interval_seconds(interval: &PgInterval) -> i64 {
-    interval.months as i64 * 2_592_000
-        + interval.days as i64 * 86_400
-        + interval.microseconds.div_euclid(1_000_000)
-}
-
-/// Total seconds → `PgInterval` (all remainder goes to microseconds).
-fn interval_from_seconds(seconds: i64) -> PgInterval {
-    PgInterval {
-        months: 0,
-        days: (seconds / 86_400) as i32,
-        microseconds: (seconds % 86_400) * 1_000_000,
-    }
-}
-
 fn energy_kj_per_g(weight_kg: &BigDecimal, energy_kj: &BigDecimal) -> Option<f64> {
     let weight_g = weight_kg.to_f64()? * 1000.0;
     (weight_g > 0.0).then(|| energy_kj.to_f64().unwrap_or(0.0) / weight_g)
@@ -316,7 +297,7 @@ async fn get_recipe(
             entity: "Recipe",
             id: id.to_string(),
         })
-        .into_response();
+            .into_response();
     }
 
     let stats = state.recipes().get_recipe_stats(id).await.ok();
@@ -410,7 +391,7 @@ async fn get_recipe_tree(
             entity: "Recipe",
             id: id.to_string(),
         })
-        .into_response();
+            .into_response();
     }
     respond(state.recipes().get_recipe_tree(id).await)
 }
@@ -442,7 +423,7 @@ async fn export_recipe_pdf(
             entity: "Recipe",
             id: id.to_string(),
         })
-        .into_response();
+            .into_response();
     }
 
     // Defaults: render the base recipe (1 portion at its own total energy).
@@ -525,7 +506,7 @@ async fn clone_recipe(
             entity: "Recipe",
             id: id.to_string(),
         })
-        .into_response();
+            .into_response();
     }
     let target_group = payload.group_id.unwrap_or(source.group_id);
     if let Err(err) = ctx.assert_can_edit_group(target_group) {
@@ -594,7 +575,7 @@ async fn add_ingredient(
 async fn update_ingredient(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path((id, ingredient_id)): Path<(i32, i32)>,
+    Path(id): Path<i32>,
     Json(payload): Json<RecipeIngredientInput>,
 ) -> Response {
     if let Err(err) = ctx.assert_can_edit_recipe(id).await {
@@ -853,13 +834,13 @@ async fn transfer_owner(
         return map_api_error(Error::Forbidden(
             "transferring ownership requires edit rights on the current owner group".into(),
         ))
-        .into_response();
+            .into_response();
     }
     if !ctx.can_access_group(payload.group_id) {
         return map_api_error(Error::Forbidden(
             "you can only transfer into groups you belong to".into(),
         ))
-        .into_response();
+            .into_response();
     }
     match state.recipes().set_group(id, payload.group_id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),

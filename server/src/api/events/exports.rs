@@ -4,17 +4,17 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+use crate::api::map_api_error;
+use crate::MyAppState;
+use bigdecimal::ToPrimitive;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::event::ShoppingTour;
 use foodlib_new::ops::export::{
     EventOverviewInfo, EventOverviewMeal, EventOverviewPrep, EventOverviewTour,
 };
 use foodlib_new::Error;
-use bigdecimal::ToPrimitive;
 #[cfg(feature = "typst")]
 use pdf_export::renderer::DishLabelLayout;
-use crate::api::map_api_error;
-use crate::MyAppState;
 
 /// `GET /api/events/{id}/exports/overview` — management summary PDF: frame
 /// data with budget status, planned meals with planner numbers, shopping
@@ -139,7 +139,7 @@ pub async fn export_recipes(
     let renderer = pdf_export::DocumentRenderer::new();
     #[cfg(feature = "typst")]
     let result = renderer.export_recipes(infos)
-        .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
+        .map_err(|e| Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]
     let result: Result<Vec<u8>, Error> =
         Err(Error::Misc("Server compiled without typst support".into()));
@@ -168,7 +168,7 @@ pub async fn export_meal(
     let renderer = pdf_export::DocumentRenderer::new();
     #[cfg(feature = "typst")]
     let result = renderer.export_recipes(vec![info])
-        .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
+        .map_err(|e| Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]
     let result: Result<Vec<u8>, Error> =
         Err(Error::Misc("Server compiled without typst support".into()));
@@ -196,7 +196,7 @@ pub async fn export_allergens(
     let renderer = pdf_export::DocumentRenderer::new();
     #[cfg(feature = "typst")]
     let result = renderer.export_event_allergens(info)
-        .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
+        .map_err(|e| Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]
     let result: Result<Vec<u8>, Error> =
         Err(Error::Misc("Server compiled without typst support".into()));
@@ -225,7 +225,7 @@ pub async fn export_labels(
     let renderer = pdf_export::DocumentRenderer::new();
     #[cfg(feature = "typst")]
     let result = renderer.export_dish_labels(info, DishLabelLayout::Tent)
-        .map_err(|e| foodlib_new::Error::Misc(e.to_string()));
+        .map_err(|e| Error::Misc(e.to_string()));
     #[cfg(not(feature = "typst"))]
     let result: Result<Vec<u8>, Error> =
         Err(Error::Misc("Server compiled without typst support".into()));

@@ -8,8 +8,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
-    Json, Router,
+    Json,
 };
 use foodlib_new::auth::{AuthSession, Credentials};
 use foodlib_new::entities::user::{GroupMembership, User};
@@ -84,14 +83,6 @@ fn bad_input(message: &str) -> (StatusCode, Json<serde_json::Value>) {
         StatusCode::BAD_REQUEST,
         Json(serde_json::json!({ "error": message })),
     )
-}
-
-/// Routes that require an authenticated session. Mounted behind
-/// `require_api_auth` (see `api::api_router`).
-pub fn protected_router() -> Router<MyAppState> {
-    Router::new()
-        .route("/logout", post(logout))
-        .route("/me", get(me))
 }
 
 /// Login with username and password. On success the session cookie is
