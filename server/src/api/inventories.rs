@@ -275,7 +275,7 @@ async fn transfer_owner(
     }
     match state
         .inventories()
-        .set_owner_group(id, payload.group_id)
+        .set_group(id, payload.group_id)
         .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),

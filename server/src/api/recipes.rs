@@ -861,7 +861,7 @@ async fn transfer_owner(
         ))
         .into_response();
     }
-    match state.recipes().set_owner_group(id, payload.group_id).await {
+    match state.recipes().set_group(id, payload.group_id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => map_api_error(err).into_response(),
     }
