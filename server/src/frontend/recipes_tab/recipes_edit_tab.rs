@@ -114,6 +114,7 @@ impl From<UpdateRecipeStepHeader> for RecipeStep {
             fixed_duration: value.fixed_duration_minutes * 60.0,
             duration_per_kg: value.duration_per_kg_minutes * 60.0,
             recipe_id: value.recipe_id,
+            is_haccp: false,
         }
     }
 }

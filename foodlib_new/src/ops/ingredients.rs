@@ -554,3 +554,21 @@ impl IngredientOps {
         Ok(rows)
     }
 }
+impl IngredientOps {
+    /// Ids aller Zutaten, die eine bestimmte Eigenschaft tragen — Grundlage
+    /// für den Property-Filter im Zutaten-Picker (kein Voll-Laden nötig).
+    pub async fn ingredient_ids_for_property(&self, property_id: i32) -> Result<Vec<i32>> {
+        let rows = sqlx::query_scalar!(
+            r#"
+            SELECT ingredient_id
+            FROM ingredient_properties
+            WHERE property_id = $1
+            "#,
+            property_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+}

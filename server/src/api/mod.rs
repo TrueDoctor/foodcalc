@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
 use foodlib_new::auth::AuthSession;
@@ -33,6 +33,8 @@ pub fn api_router() -> Router<MyAppState> {
     let protected = Router::new()
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
+        // Admin self-grant: the only admin privilege beyond /admin itself.
+        .route("/admin/me/groups", put(users::admin_self_grant))
         // Master data for owner/store/unit/property pickers in the UI.
         .route("/stores", get(master::stores))
         .route("/units", get(master::units))

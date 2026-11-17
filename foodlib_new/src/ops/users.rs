@@ -324,6 +324,26 @@ impl UserOps {
         Ok(())
     }
 
+    /// Insert or update a membership **with** an explicit role — used for the
+    /// admin self-grant (`PUT /api/admin/me/groups`). Unlike
+    /// [`Self::add_user_to_group`] this never falls back to the column default.
+    pub async fn grant_membership(&self, user_id: i64, group_id: i32, role: &str) -> Result<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO user_groups (user_id, group_id, role)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, group_id) DO UPDATE SET role = EXCLUDED.role
+            "#,
+            user_id,
+            group_id,
+            role
+        )
+        .execute(&*self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn remove_user_from_group(&self, user_id: i64, group_id: i32) -> Result<()> {
         sqlx::query!(
             r#"DELETE FROM user_groups WHERE user_id = $1 AND group_id = $2"#,
@@ -532,5 +552,76 @@ impl UserOps {
         .fetch_one(&*self.pool)
         .await?;
         Ok(count.unwrap_or(0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::FoodLib;
+
+    #[sqlx::test]
+    async fn grant_membership_inserts_then_updates(pool: sqlx::PgPool) {
+        let lib = FoodLib::new(pool);
+        let users = lib.users();
+
+        let user_id: i64 = sqlx::query_scalar!(
+            r#"INSERT INTO users (username, email, password_hash, created_at)
+               VALUES ('alice', 'alice@example.org', 'x', NOW()) RETURNING id"#
+        )
+        .fetch_one(&*lib.pool_arc())
+        .await
+        .unwrap();
+
+        let group = users.create_group("Testgruppe").await.unwrap();
+
+        // Ohne Grant gibt es keine Mitgliedschaft — der Self-Grant macht die
+        // Rolle explizit (Default der Spalte wäre 'viewer').
+        assert!(users.get_member_role(user_id, group.id).await.is_err());
+
+        users
+            .grant_membership(user_id, group.id, "viewer")
+            .await
+            .unwrap();
+        assert_eq!(
+            users.get_member_role(user_id, group.id).await.unwrap(),
+            "viewer"
+        );
+
+        // Upsert überschreibt die Rolle statt eine zweite Zeile anzulegen.
+        users
+            .grant_membership(user_id, group.id, "editor")
+            .await
+            .unwrap();
+        assert_eq!(
+            users.get_member_role(user_id, group.id).await.unwrap(),
+            "editor"
+        );
+    }
+
+    #[sqlx::test]
+    async fn memberships_expose_roles_for_auth_context(pool: sqlx::PgPool) {
+        let lib = FoodLib::new(pool);
+        let users = lib.users();
+
+        let user_id: i64 = sqlx::query_scalar!(
+            r#"INSERT INTO users (username, email, password_hash, created_at)
+               VALUES ('bob', 'bob@example.org', 'x', NOW()) RETURNING id"#
+        )
+        .fetch_one(&*lib.pool_arc())
+        .await
+        .unwrap();
+
+        let group = users.create_group("Koch collective").await.unwrap();
+        users
+            .grant_membership(user_id, group.id, "manager")
+            .await
+            .unwrap();
+
+        // `AuthCtx` baut aus genau diesen Memberships die Rollen-Map.
+        let memberships = users.get_user_group_memberships(user_id).await.unwrap();
+        assert!(memberships
+            .iter()
+            .any(|m| m.id == group.id && m.role == "manager"));
     }
 }

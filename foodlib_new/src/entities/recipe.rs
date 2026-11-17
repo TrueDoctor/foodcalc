@@ -54,6 +54,8 @@ pub struct RecipeStep {
     pub description: String,
     pub fixed_duration: f64,  // duration in seconds
     pub duration_per_kg: f64, // duration in seconds per kg
+    /// Marks this step as a HACCP control point.
+    pub is_haccp: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

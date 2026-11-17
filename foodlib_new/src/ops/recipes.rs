@@ -42,6 +42,7 @@ struct RecipeStepDB {
     description: String,
     fixed_duration: sqlx::postgres::types::PgInterval,
     duration_per_kg: sqlx::postgres::types::PgInterval,
+    is_haccp: bool,
 }
 
 impl RecipeStepDB {
@@ -53,6 +54,7 @@ impl RecipeStepDB {
             description: self.description.clone(),
             fixed_duration: pg_interval_to_f64(&self.fixed_duration),
             duration_per_kg: pg_interval_to_f64(&self.duration_per_kg),
+            is_haccp: self.is_haccp,
             recipe_id: self.recipe_id,
         }
     }
@@ -339,12 +341,12 @@ impl RecipeOps {
             RecipeStepDB,
             r#"
             INSERT INTO steps (recipe_id, step_order, step_name, step_description,
-                               fixed_duration, duration_per_kg)
-            VALUES ($1, $2, $3, $4, $5, $6)
+                               fixed_duration, duration_per_kg, is_haccp)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING
                 step_id as id, recipe_id, step_order as "order",
                 step_name as name, step_description as description,
-                fixed_duration, duration_per_kg
+                fixed_duration, duration_per_kg, is_haccp
             "#,
             step.recipe_id,
             step.order,
@@ -352,6 +354,7 @@ impl RecipeOps {
             step.description,
             f64_to_pg_interval(step.fixed_duration),
             f64_to_pg_interval(step.duration_per_kg),
+            step.is_haccp,
         )
             .fetch_one(&*self.pool)
             .await?;
@@ -366,12 +369,13 @@ impl RecipeOps {
             UPDATE steps 
             SET step_order = $2, step_name = $3, step_description = $4,
                 fixed_duration = $5,
-                duration_per_kg = $6
+                duration_per_kg = $6,
+                is_haccp = $7
             WHERE step_id = $1
             RETURNING 
                 step_id as id, recipe_id, step_order as "order",
                 step_name as name, step_description as description,
-                fixed_duration, duration_per_kg
+                fixed_duration, duration_per_kg, is_haccp
             "#,
             step.id,
             step.order,
@@ -379,6 +383,7 @@ impl RecipeOps {
             step.description,
             f64_to_pg_interval(step.fixed_duration),
             f64_to_pg_interval(step.duration_per_kg),
+            step.is_haccp,
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -419,7 +424,7 @@ impl RecipeOps {
             SELECT
                 step_id as id, recipe_id, step_order as "order",
                 step_name as name, step_description as description,
-                fixed_duration, duration_per_kg
+                fixed_duration, duration_per_kg, is_haccp
             FROM steps
             WHERE recipe_id = $1
             ORDER BY step_order
@@ -703,9 +708,9 @@ impl RecipeOps {
                 r#"
                 INSERT INTO steps (
                     recipe_id, step_order, step_name, step_description,
-                    fixed_duration, duration_per_kg
+                    fixed_duration, duration_per_kg, is_haccp
                 )
-                VALUES ($1, $2, $3, $4, $5, $6)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 "#,
                 recipe_id,
                 step.order,
@@ -713,6 +718,7 @@ impl RecipeOps {
                 step.description,
                 f64_to_pg_interval(step.fixed_duration),
                 f64_to_pg_interval(step.duration_per_kg),
+                step.is_haccp,
             )
                 .execute(&mut *tx)
                 .await?;

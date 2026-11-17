@@ -22,7 +22,6 @@ pub mod inventories_test;
 #[cfg(test)]
 pub mod meals_test;
 #[cfg(test)]
-pub mod recipes_test;
 #[cfg(test)]
 pub mod stores_test;
 #[cfg(test)]

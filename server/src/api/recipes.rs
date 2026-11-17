@@ -106,7 +106,7 @@ async fn list_recipes(
     let items: Vec<RecipeListItemDto> = recipes
         .into_iter()
         // Group visibility: members see their groups' recipes, admins see all.
-        .filter(|recipe| ctx.user.is_admin || ctx.group_ids.contains(&recipe.group_id))
+        .filter(|recipe| ctx.group_ids.contains(&recipe.group_id))
         .filter(|recipe| {
             kind_filter
                 .as_ref()
@@ -254,6 +254,8 @@ pub struct RecipeStepDto {
     pub description: String,
     pub fixed_duration_seconds: i64,
     pub duration_per_kg_seconds: i64,
+    /// Marks this step as a HACCP control point.
+    pub is_haccp: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -354,6 +356,7 @@ async fn get_recipe(
                     description: step.description,
                     fixed_duration_seconds: step.fixed_duration.to_f64().unwrap() as i64,
                     duration_per_kg_seconds: step.duration_per_kg.to_f64().unwrap() as i64,
+                    is_haccp: step.is_haccp,
                 })
                 .collect(),
             properties: properties
@@ -630,6 +633,8 @@ pub struct RecipeStepInput {
     pub description: String,
     pub fixed_duration_seconds: i64,
     pub duration_per_kg_seconds: i64,
+    /// Marks this step as a HACCP control point.
+    pub is_haccp: bool,
 }
 
 fn step_input_to_entity(recipe_id: i32, id: i32, payload: &RecipeStepInput) -> RecipeStep {
@@ -641,6 +646,7 @@ fn step_input_to_entity(recipe_id: i32, id: i32, payload: &RecipeStepInput) -> R
         description: payload.description.clone(),
         fixed_duration: payload.fixed_duration_seconds.to_f64().unwrap(),
         duration_per_kg: payload.duration_per_kg_seconds.to_f64().unwrap(),
+        is_haccp: payload.is_haccp,
     }
 }
 
@@ -652,6 +658,7 @@ fn step_to_dto(step: RecipeStep) -> RecipeStepDto {
         description: step.description,
         fixed_duration_seconds: step.fixed_duration.to_i64().unwrap(),
         duration_per_kg_seconds: step.duration_per_kg.to_i64().unwrap(),
+        is_haccp: step.is_haccp,
     }
 }
 

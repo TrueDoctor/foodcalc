@@ -12,7 +12,8 @@ use crate::FoodLib;
 
 /// Role of a group member (level-based ABAC): `viewer` only sees, `editor`
 /// may edit the group's resources, `manager` additionally manages members
-/// and their roles. `is_admin` is orthogonal and stays global.
+/// and their roles. `is_admin` grants no implicit resource rights — an admin
+/// self-grants memberships (see users.rs) and is then bound to those roles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GroupRole {
     Viewer,
@@ -69,16 +70,16 @@ pub struct AuthCtx {
 }
 
 impl AuthCtx {
-    /// True if the user is an admin or belongs to the given group (read access).
+    /// True if the user belongs to the given group (read access). Admins
+    /// are not exempt — they read what they are a member of.
     pub fn can_access_group(&self, group_id: i32) -> bool {
-        self.user.is_admin || self.group_ids.contains(&group_id)
+        self.group_ids.contains(&group_id)
     }
 
-    /// Role of the user in the given group; admins act as managers everywhere.
+    /// Role of the user in the given group (`viewer` for non-members, which
+    /// implies no edit/manage rights). Admins hold no implicit role — they
+    /// self-grant a membership to gain one.
     pub fn role_of(&self, group_id: i32) -> GroupRole {
-        if self.user.is_admin {
-            return GroupRole::Manager;
-        }
         self.roles
             .get(&group_id)
             .copied()
@@ -271,5 +272,20 @@ where
             roles,
             pool: foodlib.pool_arc(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GroupRole;
+
+    #[test]
+    fn role_levels_match_the_abac_model() {
+        assert!(!GroupRole::Viewer.can_edit());
+        assert!(!GroupRole::Viewer.can_manage());
+        assert!(GroupRole::Editor.can_edit());
+        assert!(!GroupRole::Editor.can_manage());
+        assert!(GroupRole::Manager.can_edit());
+        assert!(GroupRole::Manager.can_manage());
     }
 }

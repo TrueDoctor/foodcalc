@@ -1,8 +1,8 @@
 //! User and group management for the SPA (admin + group members).
 //!
-//! Permission model (intentionally simple today, designed to be role-ready):
-//! `is_admin` grants global access; group membership grants access to that
-//! group. Every decision funnels through the two choke points below —
+//! Permission model (level-based ABAC): group membership grants access to
+//! that group, scoped by the member's role (viewer/editor/manager). `is_admin`
+//! does **not** imply resource rights — admins self-grant memberships below. Every decision funnels through the two choke points below —
 //! [`require_admin`] and [`require_group_manager`] — plus the existing
 //! `AuthCtx::assert_*` methods. A future per-group role model only replaces
 //! the internals of these helpers (plus one schema migration); nothing else
@@ -486,6 +486,46 @@ async fn remove_member(
         );
     }
     match state.users().remove_user_from_group(user_id, id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => map_api_error(err).into_response(),
+    }
+}
+
+// ------------------------------------------------------- admin self-grant
+
+#[derive(Debug, Deserialize)]
+pub struct AdminSelfGrantInput {
+    pub group_id: i32,
+    /// `viewer`, `editor` or `manager`.
+    pub role: String,
+}
+
+/// `PUT /api/admin/me/groups` — an admin may grant **himself** a role in any
+/// group; that is the only admin privilege beyond the `/admin` surface itself.
+/// Afterwards the ordinary ACS applies: the admin acts with that role, exactly
+/// like any other member (no implicit god-mode).
+pub async fn admin_self_grant(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Json(payload): Json<AdminSelfGrantInput>,
+) -> Response {
+    if let Err(response) = require_admin(&ctx).await {
+        return response;
+    }
+    let role = match GroupRole::parse(payload.role.trim()) {
+        Some(role) => role,
+        None => {
+            return bad_request(format!(
+                "unknown role: {} (expected viewer, editor or manager)",
+                payload.role
+            ))
+        }
+    };
+    match state
+        .users()
+        .grant_membership(ctx.user.id, payload.group_id, role.as_str())
+        .await
+    {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => map_api_error(err).into_response(),
     }

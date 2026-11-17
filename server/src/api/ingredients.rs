@@ -14,6 +14,7 @@ use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 
 use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::entities::recipe::Recipe;
 use foodlib_new::entities::ingredient::{
     Ingredient, IngredientSource, IngredientWeight, IngredientWithSource,
 };
@@ -35,6 +36,7 @@ pub fn ingredients_router() -> Router<MyAppState> {
                 .delete(delete_ingredient),
         )
         .route("/{id}/owner", put(transfer_owner))
+        .route("/{id}/usages", get(list_usages))
         .route("/{id}/sources", get(list_sources).post(add_source))
         .route(
             "/{id}/sources/{source_id}",
@@ -61,6 +63,8 @@ pub fn ingredients_router() -> Router<MyAppState> {
 pub struct IngredientListQuery {
     /// Case-insensitive substring search on the name.
     pub search: Option<String>,
+    /// Only ingredients carrying this property (e.g. a spice tag).
+    pub property_id: Option<i32>,
 }
 
 async fn list_ingredients(
@@ -74,13 +78,31 @@ async fn list_ingredients(
     };
 
     let search = query.search.unwrap_or_default().to_lowercase();
+
+    // Property filter: resolve the matching ids once, then intersect —
+    // keeps the list query untouched and the properties table is tiny.
+    let property_ids: Option<Vec<i32>> = match query.property_id {
+        Some(property_id) => match state
+            .ingredients()
+            .ingredient_ids_for_property(property_id)
+            .await
+        {
+            Ok(ids) => Some(ids),
+            Err(err) => return map_api_error(err).into_response(),
+        },
+        None => None,
+    };
     let items: Vec<&IngredientWithSource> = ingredients
         .iter()
-        .filter(|ingredient| {
-            ctx.user.is_admin || ctx.group_ids.contains(&ingredient.group_id)
-        })
+        // Admins halten sich an Mitgliedschaften (kein Inline-Bypass).
+        .filter(|ingredient| ctx.group_ids.contains(&ingredient.group_id))
         .filter(|ingredient| {
             search.is_empty() || ingredient.name.to_lowercase().contains(&search)
+        })
+        .filter(|ingredient| {
+            property_ids
+                .as_ref()
+                .map_or(true, |ids| ids.contains(&ingredient.id))
         })
         .collect();
 
@@ -506,4 +528,25 @@ async fn transfer_owner(
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => map_api_error(err).into_response(),
     }
+}
+
+// ----------------------------------------------------------------- usages
+
+/// Rezepte, die diese Zutat verwenden — nur Ressourcen sichtbarer Gruppen
+/// (kein Inline-Bypass). Grundlage für „Verwendungen“ in der Zutaten-Ansicht
+/// und die Lösch-Warnung.
+async fn list_usages(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(id): Path<i32>,
+) -> Response {
+    let recipes = match state.ingredients().usages(id).await {
+        Ok(recipes) => recipes,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    let items: Vec<&Recipe> = recipes
+        .iter()
+        .filter(|recipe| ctx.group_ids.contains(&recipe.group_id))
+        .collect();
+    json_response(StatusCode::OK, items)
 }
