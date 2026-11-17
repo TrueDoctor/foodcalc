@@ -13,7 +13,7 @@ use serde_json::json;
 
 use foodlib_new::{auth_context::AuthCtx, entities::event::Event};
 
-use crate::api::{bad_request, map_api_error, respond, respond_created};
+use crate::api::{bad_request, map_api_error, respond, respond_created, status_board};
 use crate::MyAppState;
 
 pub mod exports;
@@ -75,6 +75,7 @@ pub fn events_router() -> Router<MyAppState> {
         .route("/{id}/exports/labels", get(exports::export_labels))
         .route("/{id}/exports/tour/{tour_id}", get(exports::export_tour))
         .merge(logistics::logistics_router())
+        .merge(status_board::status_board_router())
 }
 
 /// `GET /api/events` — all events of the user's groups with planner totals

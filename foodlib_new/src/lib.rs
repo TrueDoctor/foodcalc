@@ -78,4 +78,8 @@ impl FoodLib {
     pub fn pool_arc(&self) -> Arc<PgPool> {
         self.pool.clone()
     }
+
+    pub fn status_board(&self) -> ops::status_board::StatusBoardOps {
+        ops::status_board::StatusBoardOps::new(self.pool.clone())
+    }
 }

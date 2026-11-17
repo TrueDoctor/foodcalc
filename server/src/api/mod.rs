@@ -20,6 +20,7 @@ pub mod inventories;
 pub mod master;
 pub mod recipes;
 pub mod users;
+mod status_board;
 
 pub fn api_router() -> Router<MyAppState> {
     // Public routes: health probe and the login entry point. Everything
