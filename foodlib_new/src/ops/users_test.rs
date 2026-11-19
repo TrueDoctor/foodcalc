@@ -121,7 +121,7 @@ async fn test_user_groups(pool: sqlx::PgPool) {
     let group = ops.create_group("Test Group").await.unwrap();
 
     // Add user to group
-    ops.add_user_to_group(user.id, group.id).await.unwrap();
+    ops.add_user_to_group_with_roles(user.id, group.id, &*vec!["manager".to_string()]).await.unwrap();
 
     // Verify user is in the group
     let user_groups = ops.get_user_groups(user.id).await.unwrap();

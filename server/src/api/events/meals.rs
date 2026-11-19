@@ -12,10 +12,10 @@ use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
-use foodlib_new::auth_context::AuthCtx;
-
 use crate::api::{bad_request, map_api_error, respond, respond_created};
 use crate::MyAppState;
+use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::policy::EventPerm;
 
 #[derive(Debug, Deserialize)]
 pub struct MealAddInput {
@@ -50,7 +50,7 @@ pub async fn list_meals(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::View).await {
         return map_api_error(err).into_response();
     }
     respond(state.meals().get_event_meals_planner(id).await)
@@ -65,7 +65,7 @@ pub async fn add_meal(
     Path(id): Path<i32>,
     Json(payload): Json<MealAddInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::Edit).await {
         return map_api_error(err).into_response();
     }
 
@@ -119,7 +119,7 @@ pub async fn update_meal(
     Path((event_id, meal_id)): Path<(i32, i32)>,
     Json(payload): Json<MealUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_meal(meal_id).await {
+    if let Err(err) = ctx.assert_event_action(event_id, EventPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let current = match state.meals().get_meal(meal_id).await {
@@ -190,7 +190,7 @@ pub async fn remove_meal(
     ctx: AuthCtx,
     Path((_event_id, meal_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_meal(meal_id).await {
+    if let Err(err) = ctx.assert_event_action(_event_id, EventPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.meals().remove_meal(meal_id).await {
@@ -206,7 +206,7 @@ pub async fn duplicate_meal(
     ctx: AuthCtx,
     Path((_event_id, meal_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_meal(meal_id).await {
+    if let Err(err) = ctx.assert_event_action(_event_id, EventPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.meals().duplicate_meal(meal_id).await {

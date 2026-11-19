@@ -13,18 +13,18 @@ use axum::{
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 
-use foodlib_new::auth_context::AuthCtx;
-use foodlib_new::entities::recipe::Recipe;
-use foodlib_new::entities::ingredient::{
-    Ingredient, IngredientSource, IngredientWeight, IngredientWithSource,
-};
-use foodlib_new::entities::property::Property;
-use foodlib_new::error::Error;
-
 use crate::{
     api::{bad_request, json_response, map_api_error, respond, respond_created},
     MyAppState,
 };
+use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::entities::ingredient::{
+    Ingredient, IngredientSource, IngredientWeight, IngredientWithSource,
+};
+use foodlib_new::entities::property::Property;
+use foodlib_new::entities::recipe::Recipe;
+use foodlib_new::error::Error;
+use foodlib_new::policy::{GlobalPermission, IngredientPerm, Permission};
 
 pub fn ingredients_router() -> Router<MyAppState> {
     Router::new()
@@ -130,7 +130,12 @@ async fn create_ingredient(
     ctx: AuthCtx,
     Json(payload): Json<IngredientCreateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_group(payload.group_id) {
+    // Check user is blocked
+    if let Err(err) = ctx.assert_global(GlobalPermission::AllowedToCreateNewDomainObjects) {
+        return map_api_error(err).into_response();
+    }
+    // Check user has permission to create ingredients in the target group
+    if let Err(err) = ctx.assert_group_perm(payload.group_id, Permission::Ingredient(IngredientPerm::Create)) {
         return map_api_error(err).into_response();
     }
     let energy = match parse_energy(&payload.energy) {
@@ -176,7 +181,7 @@ async fn get_ingredient(
             entity: "Ingredient",
             id: id.to_string(),
         })
-        .into_response();
+            .into_response();
     }
 
     let sources = state
@@ -223,7 +228,7 @@ async fn update_ingredient(
     Path(id): Path<i32>,
     Json(payload): Json<IngredientUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let current = match state.ingredients().get(id).await {
@@ -255,7 +260,7 @@ async fn delete_ingredient(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Delete).await {
         return map_api_error(err).into_response();
     }
     match state.ingredients().delete(id).await {
@@ -286,7 +291,7 @@ async fn add_source(
     Path(id): Path<i32>,
     Json(payload): Json<IngredientSourceInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let package_size = match parse_amount(&payload.package_size) {
@@ -317,7 +322,7 @@ async fn update_source(
     Path((id, source_id)): Path<(i32, i32)>,
     Json(payload): Json<IngredientSourceInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let package_size = match parse_amount(&payload.package_size) {
@@ -347,7 +352,7 @@ async fn delete_source(
     ctx: AuthCtx,
     Path((id, source_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.ingredients().delete_source(source_id).await {
@@ -386,7 +391,7 @@ async fn add_weight(
     Path(id): Path<i32>,
     Json(payload): Json<IngredientWeightInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let weight = match parse_amount(&payload.weight) {
@@ -408,7 +413,7 @@ async fn update_weight(
     Path((id, unit_id)): Path<(i32, i32)>,
     Json(payload): Json<IngredientWeightUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let weight = match parse_amount(&payload.weight) {
@@ -429,7 +434,7 @@ async fn delete_weight(
     ctx: AuthCtx,
     Path((id, unit_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.ingredients().delete_weight(id, unit_id).await {
@@ -458,7 +463,7 @@ async fn add_property(
     Path(id): Path<i32>,
     Json(payload): Json<IngredientPropertyInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state
@@ -476,7 +481,7 @@ async fn delete_property(
     ctx: AuthCtx,
     Path((id, property_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_ingredient(id).await {
+    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state
@@ -508,18 +513,35 @@ async fn transfer_owner(
         Ok(ingredient) => ingredient,
         Err(err) => return map_api_error(err).into_response(),
     };
-    if !ctx.can_edit_group(current.group_id) {
-        return map_api_error(foodlib_new::Error::Forbidden(
+    // Reflexive transfer
+    if current.group_id == payload.group_id {
+        return map_api_error(Error::Forbidden(
+            "ingredient already belongs to the target group".into(),
+        ))
+            .into_response();
+    }
+    // Require transfer rights
+    if let Err(_) = ctx.assert_group_perm(current.group_id, Permission::Ingredient(IngredientPerm::TransferOwner)) {
+        return map_api_error(Error::Forbidden(
             "transferring ownership requires edit rights on the current owner group".into(),
         ))
-        .into_response();
+            .into_response();
     }
+    // Require access to the target group
     if !ctx.can_access_group(payload.group_id) {
-        return map_api_error(foodlib_new::Error::Forbidden(
+        return map_api_error(Error::Forbidden(
             "you can only transfer into groups you belong to".into(),
         ))
-        .into_response();
+            .into_response();
     }
+    // Require edit rights on the target group
+    if let Err(_) = ctx.assert_group_perm(payload.group_id, Permission::Ingredient(IngredientPerm::TransferOwner)){
+        return map_api_error(Error::Forbidden(
+            "transferring ownership requires edit rights on the target group".into(),
+        ))
+            .into_response();
+    }
+
     match state
         .ingredients()
         .set_group(id, payload.group_id)

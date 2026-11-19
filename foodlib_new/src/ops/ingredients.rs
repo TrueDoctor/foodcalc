@@ -186,7 +186,7 @@ impl IngredientOps {
             SELECT ingredient_id as "id", name, energy, group_id, comment
             FROM ingredients
             WHERE group_id IN (
-                SELECT group_id FROM user_groups WHERE user_id = $1
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
             )
             ORDER BY name
             "#,
@@ -209,7 +209,7 @@ impl IngredientOps {
                 exists (select * from ingredient_sources as iss where iss.ingredient_id = ingredients.ingredient_id) as "has_sources!"
             FROM ingredients
             WHERE group_id IN (
-                SELECT group_id FROM user_groups WHERE user_id = $1
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
             )
             ORDER BY name
             "#,

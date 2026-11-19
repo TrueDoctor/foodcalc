@@ -9,13 +9,13 @@ use serde::Deserialize;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
+use crate::api::{bad_request, map_api_error, respond, respond_created};
+use crate::MyAppState;
+use foodlib_new::policy::EventPerm;
 use foodlib_new::{
     auth_context::AuthCtx,
     entities::event::{IngredientWithoutTour, ShoppingListItem, ShoppingTour},
 };
-
-use crate::api::{bad_request, map_api_error, respond, respond_created};
-use crate::MyAppState;
 
 /// Shopping list of an event, grouped by tour.
 #[derive(serde::Serialize)]
@@ -67,7 +67,7 @@ pub async fn shopping_list(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::View).await {
         return map_api_error(err).into_response();
     }
     let tours = match state.events().get_shopping_tours(id).await {
@@ -154,7 +154,7 @@ pub async fn list_tours(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::View).await {
         return map_api_error(err).into_response();
     }
     let tours = match state.events().get_shopping_tours(id).await {
@@ -187,7 +187,7 @@ pub async fn add_tour(
     Path(id): Path<i32>,
     Json(payload): Json<TourInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::ShoppingAddTour).await {
         return map_api_error(err).into_response();
     }
     let tour_date = match parse_time(&payload.tour_date) {
@@ -212,7 +212,7 @@ pub async fn update_tour(
     Path((event_id, tour_id)): Path<(i32, i32)>,
     Json(payload): Json<TourInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_shopping_tour(tour_id).await {
+    if let Err(err) = ctx.assert_event_action(event_id, EventPerm::ShoppingEditTour).await {
         return map_api_error(err).into_response();
     }
     if tour_is_completed(&state, tour_id).await {
@@ -247,7 +247,7 @@ pub async fn delete_tour(
     ctx: AuthCtx,
     Path((_event_id, tour_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_shopping_tour(tour_id).await {
+    if let Err(err) = ctx.assert_event_action(_event_id, EventPerm::ShoppingEditTour).await {
         return map_api_error(err).into_response();
     }
     if tour_is_completed(&state, tour_id).await {
@@ -279,7 +279,7 @@ pub async fn set_tour_completed(
     Path((_event_id, tour_id)): Path<(i32, i32)>,
     Json(payload): Json<TourCompletedInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_shopping_tour(tour_id).await {
+    if let Err(err) = ctx.assert_event_action(_event_id, EventPerm::ManageShopping).await {
         return map_api_error(err).into_response();
     }
     match state
@@ -301,7 +301,7 @@ pub async fn add_tour_item(
     Path((_event_id, tour_id)): Path<(i32, i32)>,
     Json(payload): Json<TourItemInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_shopping_tour(tour_id).await {
+    if let Err(err) = ctx.assert_event_action(_event_id, EventPerm::ShoppingEditTour).await {
         return map_api_error(err).into_response();
     }
     if tour_is_completed(&state, tour_id).await {
@@ -324,7 +324,7 @@ pub async fn remove_tour_item(
     ctx: AuthCtx,
     Path((_event_id, tour_id, ingredient_id)): Path<(i32, i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_shopping_tour(tour_id).await {
+    if let Err(err) = ctx.assert_event_action(_event_id, EventPerm::ShoppingEditTour).await {
         return map_api_error(err).into_response();
     }
     if tour_is_completed(&state, tour_id).await {
@@ -358,7 +358,7 @@ pub async fn list_overrides(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::View).await {
         return map_api_error(err).into_response();
     }
     respond(state.events().get_source_overrides(id).await)
@@ -372,7 +372,7 @@ pub async fn add_override(
     Path(id): Path<i32>,
     Json(payload): Json<SourceOverrideInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::ManageShopping).await {
         return map_api_error(err).into_response();
     }
     respond_created(
@@ -389,7 +389,7 @@ pub async fn delete_override(
     ctx: AuthCtx,
     Path((event_id, source_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(event_id).await {
+    if let Err(err) = ctx.assert_event_action(event_id, EventPerm::ManageShopping).await {
         return map_api_error(err).into_response();
     }
     match state

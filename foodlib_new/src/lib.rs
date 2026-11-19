@@ -10,6 +10,7 @@ pub mod auth_context;
 pub mod entities;
 pub mod error;
 pub mod ops;
+pub mod policy;
 
 #[derive(Clone)]
 pub struct FoodLib {

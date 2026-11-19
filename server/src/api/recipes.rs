@@ -15,16 +15,16 @@ use bigdecimal::{BigDecimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::{
+    api::{bad_request, json_response, map_api_error, respond, respond_created},
+    MyAppState,
+};
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::recipe::{
     Recipe, RecipeIngredient, RecipeKind, RecipeMetaIngredient, RecipeStep,
 };
 use foodlib_new::error::Error;
-
-use crate::{
-    api::{bad_request, json_response, map_api_error, respond, respond_created},
-    MyAppState,
-};
+use foodlib_new::policy::{GlobalPermission, Permission, RecipePerm};
 
 pub fn recipes_router() -> Router<MyAppState> {
     Router::new()
@@ -39,17 +39,17 @@ pub fn recipes_router() -> Router<MyAppState> {
         .route("/{id}/owner", put(transfer_owner))
         .route("/{id}/ingredients", post(add_ingredient))
         .route(
-            "/{id}/ingredients", put(update_ingredient).delete(delete_ingredient),
+            "/{id}/ingredients", put(update_ingredient).delete(remove_ingredient),
         )
         .route("/{id}/steps", post(add_step))
         .route(
             "/{id}/steps/{step_id}",
-            put(update_step).delete(delete_step),
+            put(update_step).delete(remove_step),
         )
         .route("/{id}/sub-recipes", post(add_sub_recipe))
         .route(
             "/{id}/sub-recipes/{child_id}",
-            put(update_sub_recipe).delete(delete_sub_recipe),
+            put(update_sub_recipe).delete(remove_sub_recipe),
         )
 }
 
@@ -152,7 +152,12 @@ async fn create_recipe(
     ctx: AuthCtx,
     Json(payload): Json<RecipeCreateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_group(payload.group_id) {
+    // Check user is blocked
+    if let Err(err) = ctx.assert_global(GlobalPermission::AllowedToCreateNewDomainObjects) {
+        return map_api_error(err).into_response();
+    }
+
+    if let Err(err) = ctx.assert_group_perm(payload.group_id, Permission::Recipe(RecipePerm::Create)) {
         return map_api_error(err).into_response();
     }
 
@@ -185,7 +190,7 @@ async fn update_recipe(
     Path(id): Path<i32>,
     Json(payload): Json<RecipeUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let current = match state.recipes().get(id).await {
@@ -210,7 +215,7 @@ async fn delete_recipe(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Delete).await {
         return map_api_error(err).into_response();
     }
     match state.recipes().delete(id).await {
@@ -417,6 +422,10 @@ async fn export_recipe_pdf(
     Path(id): Path<i32>,
     Query(query): Query<RecipeExportQuery>,
 ) -> Response {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Export).await {
+        return map_api_error(err).into_response();
+    }
+
     let recipe = match state.recipes().get(id).await {
         Ok(recipe) => recipe,
         Err(err) => return map_api_error(err).into_response(),
@@ -498,6 +507,10 @@ async fn clone_recipe(
     Path(id): Path<i32>,
     Json(payload): Json<RecipeCloneInput>,
 ) -> Response {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::View).await {
+        return map_api_error(err).into_response();
+    }
+
     let source = match state.recipes().get(id).await {
         Ok(recipe) => recipe,
         Err(err) => return map_api_error(err).into_response(),
@@ -512,7 +525,7 @@ async fn clone_recipe(
             .into_response();
     }
     let target_group = payload.group_id.unwrap_or(source.group_id);
-    if let Err(err) = ctx.assert_can_edit_group(target_group) {
+    if let Err(err) = ctx.assert_group_perm(target_group, Permission::Recipe(RecipePerm::Edit)) {
         return map_api_error(err).into_response();
     }
 
@@ -546,7 +559,7 @@ async fn add_ingredient(
     Path(id): Path<i32>,
     Json(payload): Json<RecipeIngredientInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let amount = match parse_amount(&payload.amount) {
@@ -581,7 +594,7 @@ async fn update_ingredient(
     Path(id): Path<i32>,
     Json(payload): Json<RecipeIngredientInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let amount = match parse_amount(&payload.amount) {
@@ -610,12 +623,12 @@ async fn update_ingredient(
     }
 }
 
-async fn delete_ingredient(
+async fn remove_ingredient(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path((id, ingredient_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.recipes().delete_ingredient(id, ingredient_id).await {
@@ -668,7 +681,7 @@ async fn add_step(
     Path(id): Path<i32>,
     Json(payload): Json<RecipeStepInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let step = step_input_to_entity(id, 0, &payload);
@@ -684,7 +697,7 @@ async fn update_step(
     Path((id, step_id)): Path<(i32, i32)>,
     Json(payload): Json<RecipeStepInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let step = step_input_to_entity(id, step_id, &payload);
@@ -694,12 +707,12 @@ async fn update_step(
     }
 }
 
-async fn delete_step(
+async fn remove_step(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path((id, step_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.recipes().delete_step(id, step_id).await {
@@ -728,7 +741,7 @@ async fn add_sub_recipe(
     Path(id): Path<i32>,
     Json(payload): Json<SubRecipeInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let weight = match parse_amount(&payload.weight) {
@@ -768,7 +781,7 @@ async fn update_sub_recipe(
     Path((id, child_id)): Path<(i32, i32)>,
     Json(payload): Json<SubRecipeWeightInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let weight = match parse_amount(&payload.weight) {
@@ -803,12 +816,12 @@ async fn update_sub_recipe(
     }
 }
 
-async fn delete_sub_recipe(
+async fn remove_sub_recipe(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path((id, child_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_recipe(id).await {
+    if let Err(err) = ctx.assert_recipe_perm(id, RecipePerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.recipes().delete_meta_ingredient(id, child_id).await {
@@ -837,18 +850,36 @@ async fn transfer_owner(
         Ok(recipe) => recipe,
         Err(err) => return map_api_error(err).into_response(),
     };
-    if !ctx.can_edit_group(current.group_id) {
+
+    // Reflexive transfer
+    if current.group_id == payload.group_id {
+        return map_api_error(Error::Forbidden(
+            "recipe already belongs to the target group".into(),
+        ))
+            .into_response();
+    }
+    // Require transfer rights
+    if let Err(_) = ctx.assert_group_perm(id, Permission::Recipe(RecipePerm::TransferOwner)) {
         return map_api_error(Error::Forbidden(
             "transferring ownership requires edit rights on the current owner group".into(),
         ))
             .into_response();
     }
+    // Require access to the target group
     if !ctx.can_access_group(payload.group_id) {
         return map_api_error(Error::Forbidden(
             "you can only transfer into groups you belong to".into(),
         ))
             .into_response();
     }
+    // Require edit rights on the target group
+    if let Err(_) = ctx.assert_group_perm(payload.group_id, Permission::Recipe(RecipePerm::TransferOwner)){
+        return map_api_error(Error::Forbidden(
+            "transferring ownership requires edit rights on the target group".into(),
+        ))
+            .into_response();
+    }
+
     match state.recipes().set_group(id, payload.group_id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => map_api_error(err).into_response(),

@@ -12,11 +12,11 @@ use axum::{
 use bigdecimal::BigDecimal;
 use serde::Deserialize;
 
+use crate::api::{bad_request, map_api_error, respond, respond_created, MyAppState};
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::inventory::{Inventory, InventoryItem};
 use foodlib_new::error::Error;
-
-use crate::api::{bad_request, map_api_error, respond, respond_created, MyAppState};
+use foodlib_new::policy::{GlobalPermission, InventoryPerm, Permission};
 
 pub fn inventories_router() -> Router<MyAppState> {
     Router::new()
@@ -59,9 +59,15 @@ async fn create_inventory(
     ctx: AuthCtx,
     Json(payload): Json<InventoryCreateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_group(payload.group_id) {
+    // Check user is blocked
+    if let Err(err) = ctx.assert_global(GlobalPermission::AllowedToCreateNewDomainObjects) {
         return map_api_error(err).into_response();
     }
+
+    if let Err(err) = ctx.assert_group_perm(payload.group_id, Permission::Inventory(InventoryPerm::Create)) {
+        return map_api_error(err).into_response();
+    }
+
     let inventory = Inventory {
         id: 0,
         name: payload.name,
@@ -115,7 +121,7 @@ async fn update_inventory(
     Path(id): Path<i32>,
     Json(payload): Json<InventoryUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_inventory(id).await {
+    if let Err(err) = ctx.assert_inventory_perm(id, InventoryPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let current = match state.inventories().get(id).await {
@@ -143,7 +149,7 @@ async fn delete_inventory(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_inventory(id).await {
+    if let Err(err) = ctx.assert_inventory_perm(id, InventoryPerm::Delete).await {
         return map_api_error(err).into_response();
     }
     match state.inventories().delete(id).await {
@@ -158,7 +164,7 @@ async fn list_items(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_inventory(id).await {
+    if let Err(err) = ctx.assert_inventory_perm(id, InventoryPerm::View).await {
         return map_api_error(err).into_response();
     }
     respond(state.inventories().get_items(id).await)
@@ -184,7 +190,7 @@ async fn add_item(
     Path(id): Path<i32>,
     Json(payload): Json<InventoryItemAddInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_inventory(id).await {
+    if let Err(err) = ctx.assert_inventory_perm(id, InventoryPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let amount = match parse_amount(&payload.amount) {
@@ -212,7 +218,7 @@ async fn update_item(
     Path((id, ingredient_id)): Path<(i32, i32)>,
     Json(payload): Json<InventoryItemUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_inventory(id).await {
+    if let Err(err) = ctx.assert_inventory_perm(id, InventoryPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let amount = match parse_amount(&payload.amount) {
@@ -233,7 +239,7 @@ async fn remove_item(
     ctx: AuthCtx,
     Path((id, ingredient_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_inventory(id).await {
+    if let Err(err) = ctx.assert_inventory_perm(id, InventoryPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.inventories().delete_item(id, ingredient_id).await {
@@ -261,17 +267,34 @@ async fn transfer_owner(
         Ok(inventory) => inventory,
         Err(err) => return map_api_error(err).into_response(),
     };
-    if !ctx.can_edit_group(current.group_id) {
-        return map_api_error(foodlib_new::Error::Forbidden(
+
+    // Reflexive transfer
+    if current.group_id == payload.group_id {
+        return map_api_error(Error::Forbidden(
+            "inventory already belongs to the target group".into(),
+        ))
+            .into_response();
+    }
+    // Require transfer rights
+    if let Err(_) = ctx.assert_group_perm(id, Permission::Inventory(InventoryPerm::Create)) {
+        return map_api_error(Error::Forbidden(
             "transferring ownership requires edit rights on the current owner group".into(),
         ))
-        .into_response();
+            .into_response();
     }
+    // Require access to the target group
     if !ctx.can_access_group(payload.group_id) {
-        return map_api_error(foodlib_new::Error::Forbidden(
+        return map_api_error(Error::Forbidden(
             "you can only transfer into groups you belong to".into(),
         ))
-        .into_response();
+            .into_response();
+    }
+    // Require edit rights on the target group
+    if let Err(_) = ctx.assert_group_perm(payload.group_id, Permission::Inventory(InventoryPerm::TransferOwner)){
+        return map_api_error(Error::Forbidden(
+            "transferring ownership requires edit rights on the target group".into(),
+        ))
+            .into_response();
     }
     match state
         .inventories()

@@ -4,6 +4,7 @@
 //! flow (`/auth/*`, maud frontend) but share the same session backend,
 //! so a login in either UI is valid in the other.
 
+use crate::{api::map_api_error, MyAppState};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -12,11 +13,10 @@ use axum::{
 };
 use foodlib_new::auth::{AuthSession, Credentials};
 use foodlib_new::entities::user::{GroupMembership, User};
+use foodlib_new::policy::{EventPerm, GlobalPermission, Permission};
 use foodlib_new::Error;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-
-use crate::{api::map_api_error, MyAppState};
 
 /// `POST /api/auth/login` payload.
 #[derive(Debug, Deserialize)]
@@ -32,7 +32,8 @@ pub struct ApiGroup {
     pub name: String,
     pub is_personal: bool,
     /// `viewer` | `editor` | `manager` (personal groups: `manager`).
-    pub role: String,
+    pub roles: Vec<String>,
+    pub permissions: Vec<Permission>,
 }
 
 impl ApiGroup {
@@ -41,7 +42,8 @@ impl ApiGroup {
             id: membership.id,
             name: membership.name,
             is_personal: membership.is_personal,
-            role: membership.role,
+            roles: membership.roles,
+            permissions: membership.permissions,
         }
     }
 }
@@ -53,16 +55,18 @@ pub struct ApiUser {
     pub username: String,
     pub email: String,
     pub is_admin: bool,
+    pub global_permissions: Vec<GlobalPermission>,
     pub groups: Vec<ApiGroup>,
 }
 
 impl ApiUser {
-    fn new(user: User, memberships: Vec<GroupMembership>) -> Self {
+    fn new(user: User, global_permissions: Vec<GlobalPermission>, memberships: Vec<GroupMembership>) -> Self {
         Self {
             id: user.id,
             username: user.username,
             email: user.email,
             is_admin: user.is_admin,
+            global_permissions: global_permissions,
             groups: memberships
                 .into_iter()
                 .map(ApiGroup::from_membership)
@@ -95,7 +99,7 @@ pub async fn login(auth: AuthSession, Json(payload): Json<LoginInput>) -> Respon
 
     match foodlib_new::auth::login(auth, credentials).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(foodlib_new::Error::UserNotFound { .. }) => {
+        Err(Error::UserNotFound { .. }) => {
             unauthorized("wrong credentials").into_response()
         }
         Err(err) => map_api_error(err).into_response(),
@@ -174,11 +178,13 @@ pub async fn register(
             username: user.username,
             email: user.email,
             is_admin: user.is_admin,
+            global_permissions: vec![GlobalPermission::AllowedToCreateNewDomainObjects],
             groups: vec![ApiGroup {
                 id: personal_group.id,
                 name: personal_group.name,
                 is_personal: personal_group.is_personal,
-                role: "manager".into(),
+                roles: vec!["manager".into()],
+                permissions: vec![Permission::Event(EventPerm::Edit)],
             }],
         }),
     )
@@ -199,10 +205,14 @@ pub async fn me(State(state): State<MyAppState>, auth: AuthSession) -> Response 
         return unauthorized("authentication required").into_response();
     };
 
-    match state.users().get_user_group_memberships(user.id).await {
-        Ok(memberships) => {
-            (StatusCode::OK, Json(ApiUser::new(user, memberships))).into_response()
-        }
-        Err(err) => map_api_error(err).into_response(),
-    }
+    let policy = match state.users().get_user_policy(user.id).await {
+        Ok(policy) => policy,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    let global_permissions = policy.global_permissions.into_iter().collect();
+    let memberships = match state.users().get_user_group_memberships(user.id).await {
+        Ok(memberships) => memberships,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    (StatusCode::OK, Json(ApiUser::new(user, global_permissions, memberships))).into_response()
 }

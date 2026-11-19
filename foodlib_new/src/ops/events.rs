@@ -331,7 +331,7 @@ impl EventOps {
             FROM events
             LEFT JOIN event_meals USING (event_id)
             WHERE group_id IN (
-                SELECT group_id FROM user_groups WHERE user_id = $1
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
             )
             GROUP BY event_id, event_name, events.comment, group_id, budget
             ORDER BY MIN(start_time) DESC
@@ -389,7 +389,7 @@ impl EventOps {
                 (SELECT MAX(start_time) FROM event_meals WHERE event_id = e.event_id) as last_meal
             FROM events e
             WHERE e.group_id IN (
-                SELECT group_id FROM user_groups WHERE user_id = $1
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
             )
             ORDER BY first_meal DESC NULLS LAST
             "#,

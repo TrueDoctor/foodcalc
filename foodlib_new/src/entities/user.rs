@@ -1,3 +1,4 @@
+use crate::policy::Permission;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -55,7 +56,8 @@ pub struct GroupMembership {
     pub id: i32,
     pub name: String,
     pub is_personal: bool,
-    pub role: String,
+    pub roles: Vec<String>,
+    pub permissions: Vec<Permission>,
 }
 
 impl GroupMembership {

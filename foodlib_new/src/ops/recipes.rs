@@ -216,7 +216,7 @@ impl RecipeOps {
                    kind as "kind: RecipeKind"
             FROM recipes
             WHERE group_id IN (
-                SELECT group_id FROM user_groups WHERE user_id = $1
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
             )
             ORDER BY name
             "#,

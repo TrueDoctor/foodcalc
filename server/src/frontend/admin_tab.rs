@@ -144,7 +144,7 @@ async fn create_group(
     let group = foodlib.users().create_group(trimmed).await?;
     foodlib
         .users()
-        .add_user_to_group(ctx.user.id, group.id)
+        .add_user_to_group_with_roles(ctx.user.id, group.id, &["manager".into()])
         .await?;
     let mut group_ids = ctx.group_ids.clone();
     group_ids.push(group.id);
@@ -227,7 +227,7 @@ async fn members_of_group(foodlib: &foodlib_new::FoodLib, group_id: i32) -> Resu
         User,
         r#"
         SELECT u.id, u.username, u.email, u.password_hash, u.is_admin, u.created_at
-        FROM user_groups ug
+        FROM user_group_roles ug
         JOIN users u ON u.id = ug.user_id
         WHERE ug.group_id = $1
         ORDER BY u.username
@@ -253,7 +253,7 @@ async fn add_member(
     let group = assert_can_manage_group(&foodlib, &ctx, group_id).await?;
     foodlib
         .users()
-        .add_user_to_group(form.user_id, group_id)
+        .add_user_to_group_with_roles(ctx.user.id, group.id, &["manager".into()])
         .await?;
     render_group_detail(&foodlib, group).await
 }

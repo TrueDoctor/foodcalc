@@ -1,12 +1,4 @@
-//! User and group management for the SPA (admin + group members).
-//!
-//! Permission model (level-based ABAC): group membership grants access to
-//! that group, scoped by the member's role (viewer/editor/manager). `is_admin`
-//! does **not** imply resource rights — admins self-grant memberships below. Every decision funnels through the two choke points below —
-//! [`require_admin`] and [`require_group_manager`] — plus the existing
-//! `AuthCtx::assert_*` methods. A future per-group role model only replaces
-//! the internals of these helpers (plus one schema migration); nothing else
-//! in the API layer may decide permissions inline.
+//! User and group management for the SPA (global permissions + group policies).
 
 use axum::{
     extract::{Path, Query, State},
@@ -19,9 +11,10 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use foodlib_new::{
-    auth_context::{AuthCtx, GroupRole},
+    auth_context::AuthCtx,
     entities::user::{Group, User},
-    Error,
+    error::Error,
+    policy::{GlobalPermission, GroupPerm, Permission},
 };
 
 use crate::api::{bad_request, map_api_error, respond, respond_created};
@@ -41,28 +34,20 @@ pub fn groups_router() -> Router<MyAppState> {
         .route("/{id}/members", get(list_members).post(add_member))
         .route(
             "/{id}/members/{user_id}",
-            put(set_member_role).delete(remove_member),
+            put(set_member_roles).delete(remove_member),
         )
 }
 
 // ------------------------------------------------------------- permission
 
-async fn require_admin(ctx: &AuthCtx) -> Result<(), Response> {
-    if ctx.user.is_admin {
-        Ok(())
-    } else {
-        Err(map_api_error(Error::Forbidden(
-            "admin privileges required".into(),
-        ))
-        .into_response())
-    }
+fn require_global(ctx: &AuthCtx, perm: GlobalPermission) -> Result<(), Response> {
+    ctx.assert_global(perm)
+        .map_err(|err| map_api_error(err).into_response())
 }
 
-/// Manager of the group (or admin); personal groups can never be managed
-/// this way (their membership follows the owning user account). Under the
-/// role model this is exactly `manager` — the choke point keeps the rest of
-/// the API unchanged.
-async fn require_group_manager(
+/// Ensures the group exists, is NOT a personal workspace, and the caller holds
+/// `group:manage_members` in that group.
+async fn require_group_member_manager(
     state: &MyAppState,
     ctx: &AuthCtx,
     group_id: i32,
@@ -76,11 +61,8 @@ async fn require_group_manager(
             "personal groups are managed through the owning user account".into(),
         ));
     }
-    if !ctx.can_manage_group(group_id) {
-        return Err(map_api_error(Error::Forbidden(
-            "managing members requires the manager role in this group".into(),
-        ))
-        .into_response());
+    if let Err(err) = ctx.assert_group_perm(group_id, Permission::Group(GroupPerm::ManageMembers)) {
+        return Err(map_api_error(err).into_response());
     }
     Ok(group)
 }
@@ -99,13 +81,13 @@ pub struct UserWithGroups {
     pub groups: Vec<Group>,
 }
 
-/// `GET /api/users` (admin) — users with their group memberships.
+/// `GET /api/users` — users with their group memberships.
 async fn list_users(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Query(query): Query<UserListQuery>,
 ) -> Response {
-    if let Err(response) = require_admin(&ctx).await {
+    if let Err(response) = require_global(&ctx, GlobalPermission::ManageUsers) {
         return response;
     }
     let rows = match state.users().list_users_with_groups().await {
@@ -137,14 +119,14 @@ pub struct UserUpdateInput {
     pub is_admin: Option<bool>,
 }
 
-/// `PUT /api/users/{id}` (admin) — change username/email/admin flag.
+/// `PUT /api/users/{id}` — change username/email/admin flag.
 async fn update_user(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(id): Path<i64>,
     Json(payload): Json<UserUpdateInput>,
 ) -> Response {
-    if let Err(response) = require_admin(&ctx).await {
+    if let Err(response) = require_global(&ctx, GlobalPermission::ManageUsers) {
         return response;
     }
     let current = match state.users().get_user(id).await {
@@ -170,14 +152,14 @@ async fn update_user(
     }
 }
 
-/// `DELETE /api/users/{id}` (admin) — cascade delete; refuses when the
-/// user's personal group still owns entities.
+/// `DELETE /api/users/{id}` — cascade delete; refuses when the user's
+/// personal group still owns entities.
 async fn delete_user(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(id): Path<i64>,
 ) -> Response {
-    if let Err(response) = require_admin(&ctx).await {
+    if let Err(response) = require_global(&ctx, GlobalPermission::ManageUsers) {
         return response;
     }
     if id == ctx.user.id {
@@ -197,7 +179,7 @@ pub struct PasswordChangeInput {
 }
 
 /// `PUT /api/users/{id}/password` — self-service (with current password)
-/// or admin reset (without).
+/// or user-manager reset (without).
 async fn change_password(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
@@ -206,7 +188,7 @@ async fn change_password(
 ) -> Response {
     let is_self = ctx.user.id == id;
     if !is_self {
-        if let Err(response) = require_admin(&ctx).await {
+        if let Err(response) = require_global(&ctx, GlobalPermission::ManageUsers) {
             return response;
         }
     }
@@ -242,8 +224,6 @@ async fn change_password(
 
 // ----------------------------------------------------------------- groups
 
-/// User projection without the password hash — the entity must never be
-/// serialized directly to API clients.
 #[derive(Debug, Serialize)]
 pub struct ApiMember {
     pub id: i64,
@@ -266,10 +246,10 @@ impl From<User> for ApiMember {
     }
 }
 
-/// `GET /api/groups` — admins see every group, members their own (picker
-/// semantics stay compatible with `masterApi.groups`).
+/// `GET /api/groups` — user managers see every group (for admin assignment),
+/// regular members see their own.
 async fn list_groups(State(state): State<MyAppState>, ctx: AuthCtx) -> Response {
-    let groups = if ctx.user.is_admin {
+    let groups = if ctx.can_global(GlobalPermission::ManageUsers) {
         state.users().get_all_groups().await
     } else {
         state.users().get_user_groups(ctx.user.id).await
@@ -282,13 +262,14 @@ pub struct GroupCreateInput {
     pub name: String,
 }
 
-/// `POST /api/groups` (admin) — create a non-personal group.
+/// `POST /api/groups` — create a non-personal group and assign the creator
+/// as `manager`.
 async fn create_group(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Json(payload): Json<GroupCreateInput>,
 ) -> Response {
-    if let Err(response) = require_admin(&ctx).await {
+    if let Err(response) = require_global(&ctx, GlobalPermission::AllowedToCreateNewDomainObjects) {
         return response;
     }
     let name = payload.name.trim().to_string();
@@ -305,26 +286,32 @@ async fn create_group(
         return bad_request(format!("group name already taken: {name}"));
     }
 
-    respond_created(state.users().create_group(&name).await)
+    // `create_group_with_owner(name, user_id)` creates the group and inserts
+    // `(user_id, group_id, "manager")` into `user_group_roles` in one tx.
+    respond_created(
+        state
+            .users()
+            .create_group_with_manager(&name, ctx.user.id)
+            .await,
+    )
 }
 
-/// `DELETE /api/groups/{id}` (admin) — refuses personal and non-empty groups.
+/// `DELETE /api/groups/{id}` — requires `group:delete` on the group; refuses
+/// personal and non-empty groups.
 async fn delete_group(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(response) = require_admin(&ctx).await {
-        return response;
+    if let Err(err) = ctx.assert_group_perm(id, Permission::Group(GroupPerm::Delete)) {
+        return map_api_error(err).into_response();
     }
     let group = match state.users().get_group(id).await {
         Ok(group) => group,
         Err(err) => return map_api_error(err).into_response(),
     };
     if group.is_personal {
-        return bad_request(
-            "personal groups are deleted with their owning user".into(),
-        );
+        return bad_request("personal groups are deleted with their owning user".into());
     }
     match state.users().count_owned_entities(id).await {
         Ok(count) if count > 0 => {
@@ -341,84 +328,99 @@ async fn delete_group(
     }
 }
 
-/// `GET /api/groups/{id}/members` — admin or group member; members carry
-/// their role (viewer/editor/manager).
+/// `GET /api/groups/{id}/members` — members (or user admins) see member list
+/// with all assigned role slugs.
 async fn list_members(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if !ctx.user.is_admin && !ctx.group_ids.contains(&id) {
+    if !ctx.can_global(GlobalPermission::ManageUsers) && !ctx.can_access_group(id) {
         return map_api_error(Error::Forbidden(
             "you are not a member of this group".into(),
         ))
-        .into_response();
+            .into_response();
     }
-    let members = match state.users().get_group_members_with_role(id).await {
+    let members = match state.users().get_group_members_with_roles(id).await {
         Ok(members) => members,
         Err(err) => return map_api_error(err).into_response(),
     };
     let items = members
         .into_iter()
-        .map(|(user, role)| ApiMemberWithRole {
+        .map(|(user, roles)| ApiMemberWithRoles {
             member: ApiMember::from(user),
-            role,
+            roles,
         })
         .collect::<Vec<_>>();
     (StatusCode::OK, Json(items)).into_response()
 }
 
-/// Member projection plus the member's role in the group.
+/// Member projection plus all assigned role slugs in the group.
 #[derive(Debug, Serialize)]
-pub struct ApiMemberWithRole {
+pub struct ApiMemberWithRoles {
     #[serde(flatten)]
     pub member: ApiMember,
-    pub role: String,
+    pub roles: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SetMemberRoleInput {
-    /// `viewer` | `editor` | `manager`.
-    pub role: String,
+pub struct SetMemberRolesInput {
+    /// Non-empty list of role slugs (e.g. `["viewer"]` or `["editor", "kitchen"]`).
+    pub roles: Vec<String>,
 }
 
-/// `PUT /api/groups/{id}/members/{user_id}` — manager sets the member's
-/// role. Demoting the last manager is refused (the group must stay managed).
-async fn set_member_role(
+/// `PUT /api/groups/{id}/members/{user_id}` — replaces the member's role set.
+/// Refuses if the change would leave the group with zero members holding
+/// `group:manage_members`.
+async fn set_member_roles(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path((id, user_id)): Path<(i32, i64)>,
-    Json(payload): Json<SetMemberRoleInput>,
+    Json(payload): Json<SetMemberRolesInput>,
 ) -> Response {
-    if let Err(response) = require_group_manager(&state, &ctx, id).await {
+    if let Err(response) = require_group_member_manager(&state, &ctx, id).await {
         return response;
     }
-    let role = match GroupRole::parse(payload.role.trim()) {
-        Some(role) => role,
-        None => {
-            return bad_request(format!(
-                "unknown role: {} (expected viewer, editor or manager)",
-                payload.role
-            ))
-        }
-    };
-    let current = match state.users().get_member_role(user_id, id).await {
-        Ok(current) => current,
-        Err(_) => return bad_request("user is not a member of this group".into()),
-    };
-    if GroupRole::parse(&current) == Some(GroupRole::Manager)
-        && role != GroupRole::Manager
-        && state.users().count_group_managers(id).await.unwrap_or(0) <= 1
-    {
-        return bad_request(
-            "cannot demote the last manager — promote another member first".into(),
-        );
+
+    let mut roles: Vec<String> = payload
+        .roles
+        .into_iter()
+        .map(|r| r.trim().to_string())
+        .filter(|r| !r.is_empty())
+        .collect();
+    roles.sort();
+    roles.dedup();
+
+    if roles.is_empty() {
+        return bad_request("a group member must have at least one role".into());
     }
-    match state
+
+    // Validate all role slugs exist in DB `roles` table
+    if !state.users().validate_role_slugs(&roles) {
+        return bad_request("one or more unknown role slugs provided".into());
+    }
+
+    // Ensure at least one member in the group retains `group:manage_members`
+    let would_leave_unmanaged = match state
         .users()
-        .set_member_role(user_id, id, role.as_str())
+        .would_leave_group_without_permission(
+            id,
+            user_id,
+            &roles,
+            Permission::Group(GroupPerm::ManageMembers),
+        )
         .await
     {
+        Ok(unmanaged) => unmanaged,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+    if would_leave_unmanaged {
+        return bad_request(
+            "cannot remove the last member able to manage group members".into(),
+        );
+    }
+
+    match state.users().set_member_roles(user_id, id, &roles).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => map_api_error(err).into_response(),
     }
@@ -428,17 +430,18 @@ async fn set_member_role(
 pub struct AddMemberInput {
     /// Username, email or numeric id of the user to add.
     pub user: String,
+    /// Optional initial role slugs (defaults to `["viewer"]`).
+    pub roles: Option<Vec<String>>,
 }
 
-/// `POST /api/groups/{id}/members` — admin or group manager; personal
-/// groups are excluded. Resolves the member by username/email/id.
+/// `POST /api/groups/{id}/members` — adds a user to the group with initial roles.
 async fn add_member(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(id): Path<i32>,
     Json(payload): Json<AddMemberInput>,
 ) -> Response {
-    if let Err(response) = require_group_manager(&state, &ctx, id).await {
+    if let Err(response) = require_group_member_manager(&state, &ctx, id).await {
         return response;
     }
 
@@ -448,43 +451,62 @@ async fn add_member(
         .await
     {
         Some(user) => user,
-        None => {
-            return bad_request(format!("unknown user: {}", payload.user));
-        }
+        None => return bad_request(format!("unknown user: {}", payload.user)),
     };
-    match state.users().add_user_to_group(user.id, id).await {
+
+    let roles = payload.roles.unwrap_or_else(|| vec!["viewer".to_string()]);
+    if !state.users().validate_role_slugs(&roles) {
+        return bad_request("one or more unknown role slugs provided".into());
+    }
+
+    match state
+        .users()
+        .add_user_to_group_with_roles(user.id, id, &roles)
+        .await
+    {
         Ok(()) => (
             StatusCode::CREATED,
-            Json(serde_json::json!(ApiMember::from(user))),
+            Json(serde_json::json!(ApiMemberWithRoles {
+                member: ApiMember::from(user),
+                roles,
+            })),
         )
             .into_response(),
         Err(err) => map_api_error(err).into_response(),
     }
 }
 
-/// `DELETE /api/groups/{id}/members/{user_id}` — admin or group manager;
-/// refuses to remove the last manager of a group.
+/// `DELETE /api/groups/{id}/members/{user_id}` — refuses to remove the last
+/// member holding `group:manage_members`.
 async fn remove_member(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path((id, user_id)): Path<(i32, i64)>,
 ) -> Response {
-    if let Err(response) = require_group_manager(&state, &ctx, id).await {
+    if let Err(response) = require_group_member_manager(&state, &ctx, id).await {
         return response;
     }
-    if state
+
+    let would_leave_unmanaged = match state
         .users()
-        .get_member_role(user_id, id)
+        .would_leave_group_without_permission(
+            id,
+            user_id,
+            &[],
+            Permission::Group(GroupPerm::ManageMembers),
+        )
         .await
-        .ok()
-        .and_then(|role| GroupRole::parse(&role))
-        == Some(GroupRole::Manager)
-        && state.users().count_group_managers(id).await.unwrap_or(0) <= 1
     {
+        Ok(unmanaged) => unmanaged,
+        Err(err) => return map_api_error(err).into_response(),
+    };
+
+    if would_leave_unmanaged {
         return bad_request(
-            "cannot remove the last manager — promote another member first".into(),
+            "cannot remove the last member able to manage group members".into(),
         );
     }
+
     match state.users().remove_user_from_group(user_id, id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => map_api_error(err).into_response(),
@@ -496,34 +518,28 @@ async fn remove_member(
 #[derive(Debug, Deserialize)]
 pub struct AdminSelfGrantInput {
     pub group_id: i32,
-    /// `viewer`, `editor` or `manager`.
     pub role: String,
 }
 
-/// `PUT /api/admin/me/groups` — an admin may grant **himself** a role in any
-/// group; that is the only admin privilege beyond the `/admin` surface itself.
-/// Afterwards the ordinary ACS applies: the admin acts with that role, exactly
-/// like any other member (no implicit god-mode).
+/// `PUT /api/admin/me/groups` — a global user-manager may grant **themselves**
+/// a role in any group; afterwards standard group policies apply.
 pub async fn admin_self_grant(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Json(payload): Json<AdminSelfGrantInput>,
 ) -> Response {
-    if let Err(response) = require_admin(&ctx).await {
+    if let Err(response) = require_global(&ctx, GlobalPermission::ManageUsers) {
         return response;
     }
-    let role = match GroupRole::parse(payload.role.trim()) {
-        Some(role) => role,
-        None => {
-            return bad_request(format!(
-                "unknown role: {} (expected viewer, editor or manager)",
-                payload.role
-            ))
-        }
-    };
+    let role = payload.role.trim();
+
+    if !state.users().validate_role_slugs(&[role.to_string()]) {
+        return bad_request("one or more unknown role slugs provided".into());
+    }
+
     match state
         .users()
-        .grant_membership(ctx.user.id, payload.group_id, role.as_str())
+        .grant_membership(ctx.user.id, payload.group_id, role)
         .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),

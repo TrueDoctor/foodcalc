@@ -9,9 +9,9 @@ use axum::{
     Json, Router,
 };
 
-use foodlib_new::auth_context::AuthCtx;
-
 use crate::api::{map_api_error, respond, MyAppState};
+use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::policy::EventPerm;
 
 pub fn logistics_router() -> Router<MyAppState> {
     Router::new()
@@ -27,7 +27,7 @@ pub fn logistics_router() -> Router<MyAppState> {
 /// `GET /api/events/{id}/preps` — food prep tasks with recipe names
 /// (timeline feed).
 async fn list_preps(State(state): State<MyAppState>, ctx: AuthCtx, Path(id): Path<i32>) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::View).await {
         return map_api_error(err).into_response();
     }
     respond(state.events().list_food_preps(id).await)
@@ -39,7 +39,7 @@ async fn list_event_inventories(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::View).await {
         return map_api_error(err).into_response();
     }
     respond(state.events().list_event_inventories(id).await)
@@ -52,7 +52,7 @@ async fn add_event_inventory(
     ctx: AuthCtx,
     Path((id, inventory_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.inventories().get(inventory_id).await {
@@ -83,7 +83,7 @@ async fn remove_event_inventory(
     ctx: AuthCtx,
     Path((id, inventory_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     match state.events().remove_inventory(id, inventory_id).await {
@@ -99,7 +99,7 @@ async fn inventory_coverage(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::View).await {
         return map_api_error(err).into_response();
     }
     respond(state.events().get_event_inventory_coverage(id).await)

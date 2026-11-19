@@ -342,7 +342,7 @@ async fn add_to_group(
     assert_admin(&ctx)?;
     foodlib
         .users()
-        .add_user_to_group(user_id, form.group_id)
+        .add_user_to_group_with_roles(user_id, form.group_id, &["manager".parse().unwrap()])
         .await?;
     render_user_detail(&foodlib, user_id).await
 }

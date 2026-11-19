@@ -12,6 +12,7 @@ use foodlib_new::entities::event::ShoppingTour;
 use foodlib_new::ops::export::{
     EventOverviewInfo, EventOverviewMeal, EventOverviewPrep, EventOverviewTour,
 };
+use foodlib_new::policy::EventPerm;
 use foodlib_new::Error;
 #[cfg(feature = "typst")]
 use pdf_export::renderer::DishLabelLayout;
@@ -24,7 +25,7 @@ pub async fn export_overview(
     ctx: AuthCtx,
     Path(event_id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(event_id).await {
+    if let Err(err) = ctx.assert_event_action(event_id, EventPerm::Export).await {
         return map_api_error(err).into_response();
     }
     let event = match state.events().get(event_id).await {
@@ -120,7 +121,7 @@ pub async fn export_recipes(
     ctx: AuthCtx,
     Path(event_id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(event_id).await {
+    if let Err(err) = ctx.assert_event_action(event_id, EventPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let event = match state.events().get(event_id).await {
@@ -154,7 +155,7 @@ pub async fn export_meal(
     ctx: AuthCtx,
     Path((_event_id, meal_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_meal(meal_id).await {
+    if let Err(err) = ctx.assert_event_action(_event_id, EventPerm::Export).await {
         return map_api_error(err).into_response();
     }
     let info = match state.export().fetch_meal_recipe(meal_id).await {
@@ -182,7 +183,7 @@ pub async fn export_allergens(
     ctx: AuthCtx,
     Path(event_id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(event_id).await {
+    if let Err(err) = ctx.assert_event_action(event_id, EventPerm::Export).await {
         return map_api_error(err).into_response();
     }
     let info = match state.export().fetch_event_allergens(event_id).await {
@@ -211,7 +212,7 @@ pub async fn export_labels(
     ctx: AuthCtx,
     Path(event_id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(event_id).await {
+    if let Err(err) = ctx.assert_event_action(event_id, EventPerm::Export).await {
         return map_api_error(err).into_response();
     }
     let info = match state.export().fetch_event_allergens(event_id).await {
@@ -240,7 +241,7 @@ pub async fn export_tour(
     ctx: AuthCtx,
     Path((_event_id, tour_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_shopping_tour(tour_id).await {
+    if let Err(err) = ctx.assert_event_action(_event_id, EventPerm::Export).await {
         return map_api_error(err).into_response();
     }
     let tour = match state.events().get_shopping_tour(tour_id).await {

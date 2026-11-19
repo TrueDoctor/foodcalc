@@ -11,10 +11,10 @@ use bigdecimal::BigDecimal;
 use serde::Deserialize;
 use serde_json::json;
 
-use foodlib_new::{auth_context::AuthCtx, entities::event::Event};
-
 use crate::api::{bad_request, map_api_error, respond, respond_created, status_board};
 use crate::MyAppState;
+use foodlib_new::policy::{EventPerm, GlobalPermission, Permission};
+use foodlib_new::{auth_context::AuthCtx, entities::event::Event, Error};
 
 pub mod exports;
 pub mod logistics;
@@ -99,7 +99,12 @@ async fn create_event(
     ctx: AuthCtx,
     Json(payload): Json<EventCreateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_group(payload.group_id) {
+    // Check user is blocked
+    if let Err(err) = ctx.assert_global(GlobalPermission::AllowedToCreateNewDomainObjects) {
+        return map_api_error(err).into_response();
+    }
+
+    if let Err(err) = ctx.assert_group_perm(payload.group_id, Permission::Event(EventPerm::Create)) {
         return map_api_error(err).into_response();
     }
     let budget = match parse_budget(payload.budget) {
@@ -132,7 +137,7 @@ async fn update_event(
     Path(id): Path<i32>,
     Json(payload): Json<EventUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::Edit).await {
         return map_api_error(err).into_response();
     }
     let current = match state.events().get(id).await {
@@ -165,7 +170,7 @@ async fn delete_event(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::Delete).await {
         return map_api_error(err).into_response();
     }
     match state.events().delete(id).await {
@@ -181,7 +186,7 @@ async fn clone_event(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::Clone).await {
         return map_api_error(err).into_response();
     }
     let event = match state.events().get(id).await {
@@ -201,7 +206,7 @@ async fn get_event(
     ctx: AuthCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_can_edit_event(id).await {
+    if let Err(err) = ctx.assert_event_action(id, EventPerm::View).await {
         return map_api_error(err).into_response();
     }
     let event = match state.events().get(id).await {
@@ -260,18 +265,36 @@ async fn transfer_owner(
         Ok(event) => event,
         Err(err) => return map_api_error(err).into_response(),
     };
-    if !ctx.can_edit_group(current.group_id) {
-        return map_api_error(foodlib_new::Error::Forbidden(
+
+    // Reflexive transfer
+    if current.group_id == payload.group_id {
+        return map_api_error(Error::Forbidden(
+            "event already belongs to the target group".into(),
+        ))
+            .into_response();
+    }
+    // Require transfer rights
+    if let Err(_) = ctx.assert_group_perm(current.group_id, Permission::Event(EventPerm::TransferOwner)) {
+        return map_api_error(Error::Forbidden(
             "transferring ownership requires edit rights on the current owner group".into(),
         ))
-        .into_response();
+            .into_response();
     }
+    // Require access to the target group
     if !ctx.can_access_group(payload.group_id) {
-        return map_api_error(foodlib_new::Error::Forbidden(
+        return map_api_error(Error::Forbidden(
             "you can only transfer into groups you belong to".into(),
         ))
-        .into_response();
+            .into_response();
     }
+    // Require edit rights on the target group
+    if let Err(_) = ctx.assert_group_perm(payload.group_id, Permission::Event(EventPerm::TransferOwner)) {
+        return map_api_error(Error::Forbidden(
+            "transferring ownership requires edit rights on the target group".into(),
+        ))
+            .into_response();
+    }
+
     match state.events().set_group(id, payload.group_id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => map_api_error(err).into_response(),
