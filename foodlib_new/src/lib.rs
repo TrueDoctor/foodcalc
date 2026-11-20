@@ -83,4 +83,8 @@ impl FoodLib {
     pub fn status_board(&self) -> ops::status_board::StatusBoardOps {
         ops::status_board::StatusBoardOps::new(self.pool.clone())
     }
+
+    pub fn audit(&self) -> ops::audit::AuditOps {
+        ops::audit::AuditOps::new(self.pool.clone())
+    }
 }

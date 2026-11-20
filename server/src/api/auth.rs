@@ -13,6 +13,7 @@ use axum::{
 };
 use foodlib_new::auth::{AuthSession, Credentials};
 use foodlib_new::entities::user::{GroupMembership, User};
+use foodlib_new::ops::audit::{action, AuditRecord};
 use foodlib_new::policy::{EventPerm, GlobalPermission, Permission};
 use foodlib_new::Error;
 use serde::{Deserialize, Serialize};
@@ -91,18 +92,80 @@ fn bad_input(message: &str) -> (StatusCode, Json<serde_json::Value>) {
 
 /// Login with username and password. On success the session cookie is
 /// set; the SPA resolves the current user via `/api/auth/me` afterwards.
-pub async fn login(auth: AuthSession, Json(payload): Json<LoginInput>) -> Response {
+pub async fn login(
+    State(state): State<MyAppState>,
+    auth: AuthSession,
+    Json(payload): Json<LoginInput>,
+) -> Response {
+    let attempted_username = payload.username.clone();
     let credentials = Credentials {
         username: payload.username,
         password: payload.password,
     };
 
-    match foodlib_new::auth::login(auth, credentials).await {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+    let result = foodlib_new::auth::login(auth, credentials).await;
+    match result {
+        Ok(_) => {
+            let actor = state
+                .users()
+                .get_user_by_string_reference(attempted_username.clone())
+                .await;
+            audit_auth(
+                &state,
+                actor.as_ref().map(|user| user.id),
+                &attempted_username,
+                action::LOGIN_SUCCESS,
+                serde_json::json!({}),
+            )
+            .await;
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(Error::UserNotFound { .. }) => {
+            audit_auth(
+                &state,
+                None,
+                &attempted_username,
+                action::LOGIN_FAILED,
+                serde_json::json!({}),
+            )
+            .await;
             unauthorized("wrong credentials").into_response()
         }
-        Err(err) => map_api_error(err).into_response(),
+        Err(err) => {
+            audit_auth(
+                &state,
+                None,
+                &attempted_username,
+                action::LOGIN_FAILED,
+                serde_json::json!({ "error": err.to_string() }),
+            )
+            .await;
+            map_api_error(err).into_response()
+        }
+    }
+}
+
+/// Best-effort audit for authentication events; failures are logged but do
+/// not change the response.
+async fn audit_auth(
+    state: &MyAppState,
+    actor_user_id: Option<i64>,
+    actor_username: &str,
+    action: &'static str,
+    details: serde_json::Value,
+) {
+    if let Err(err) = state
+        .audit()
+        .record(AuditRecord {
+            actor_user_id,
+            actor_username,
+            action,
+            details: Some(details),
+            ..Default::default()
+        })
+        .await
+    {
+        log::error!("auth event not audited: {err}");
     }
 }
 
@@ -171,6 +234,15 @@ pub async fn register(
         return map_api_error(err.into()).into_response();
     }
 
+    audit_auth(
+        &state,
+        Some(user.id),
+        &user.username,
+        action::REGISTER,
+        serde_json::json!({ "email": user.email }),
+    )
+    .await;
+
     (
         StatusCode::CREATED,
         Json(ApiUser {
@@ -192,9 +264,20 @@ pub async fn register(
 }
 
 /// Invalidate the current session.
-pub async fn logout(mut auth: AuthSession) -> Response {
+pub async fn logout(State(state): State<MyAppState>, mut auth: AuthSession) -> Response {
+    let actor = auth.user.clone();
     if let Err(err) = auth.logout().await {
         return map_api_error(err.into()).into_response();
+    }
+    if let Some(user) = actor {
+        audit_auth(
+            &state,
+            Some(user.id),
+            &user.username,
+            action::LOGOUT,
+            serde_json::json!({}),
+        )
+        .await;
     }
     StatusCode::NO_CONTENT.into_response()
 }

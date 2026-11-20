@@ -603,6 +603,197 @@ impl UserOps {
         slugs.iter().all(|slug| BuiltInRole::from_slug(slug).is_some())
     }
 
+    /// Replaces a user's global permissions (admin access drawer).
+    /// The self-lockout guard lives in the API layer (needs the caller).
+    pub async fn set_user_global_permissions(
+        &self,
+        user_id: i64,
+        permissions: &[GlobalPermission],
+    ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query!(
+            r#"DELETE FROM user_global_permissions WHERE user_id = $1"#,
+            user_id
+        )
+        .execute(&mut *tx)
+        .await?;
+        for permission in permissions {
+            sqlx::query!(
+                r#"
+                INSERT INTO user_global_permissions (user_id, permission)
+                VALUES ($1, $2)
+                ON CONFLICT DO NOTHING
+                "#,
+                user_id,
+                permission.as_str()
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// All users with their per-group roles and global permissions in three
+    /// flat queries (admin user list, no N+1).
+    pub async fn list_users_detailed(
+        &self,
+    ) -> Result<Vec<(User, Vec<GroupMembership>, Vec<GlobalPermission>)>> {
+        let users = self.get_all_users().await?;
+
+        let global_rows = sqlx::query!(
+            r#"SELECT user_id, permission FROM user_global_permissions"#
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        let mut globals_by_user: HashMap<i64, Vec<GlobalPermission>> = HashMap::new();
+        for row in global_rows {
+            if let Ok(permission) = row.permission.parse::<GlobalPermission>() {
+                globals_by_user
+                    .entry(row.user_id)
+                    .or_default()
+                    .push(permission);
+            }
+        }
+
+        let membership_rows = sqlx::query!(
+            r#"
+            SELECT ugr.user_id, g.id, g.name, g.is_personal, ugr.role_slug
+            FROM user_group_roles ugr
+            JOIN groups g ON g.id = ugr.group_id
+            ORDER BY ugr.user_id, g.is_personal DESC, g.name, ugr.role_slug
+            "#
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let mut memberships_by_user: HashMap<i64, Vec<GroupMembership>> = HashMap::new();
+        for row in membership_rows {
+            let memberships = memberships_by_user.entry(row.user_id).or_default();
+            match memberships.iter_mut().find(|m| m.id == row.id) {
+                Some(existing) => {
+                    existing.roles.push(row.role_slug.clone());
+                    for &permission in permissions_for_role_slug(&row.role_slug) {
+                        if !existing.permissions.contains(&permission) {
+                            existing.permissions.push(permission);
+                        }
+                    }
+                }
+                None => memberships.push(GroupMembership {
+                    id: row.id,
+                    name: row.name,
+                    is_personal: row.is_personal,
+                    roles: vec![row.role_slug.clone()],
+                    permissions: permissions_for_role_slug(&row.role_slug).to_vec(),
+                }),
+            }
+        }
+
+        Ok(users
+            .into_iter()
+            .map(|user| {
+                let memberships = memberships_by_user.remove(&user.id).unwrap_or_default();
+                let global_permissions = globals_by_user.remove(&user.id).unwrap_or_default();
+                (user, memberships, global_permissions)
+            })
+            .collect())
+    }
+
+    // ---------------------------------------------------------------------
+    // Default roles for new members
+    // ---------------------------------------------------------------------
+
+    /// Group-level default roles; `None` means "inherit the global default".
+    pub async fn get_group_default_roles(&self, group_id: i32) -> Result<Option<Vec<String>>> {
+        let row = sqlx::query!(r#"SELECT default_roles FROM groups WHERE id = $1"#, group_id)
+            .fetch_optional(&*self.pool)
+            .await?
+            .ok_or(Error::NotFound {
+                entity: "Group",
+                id: group_id.to_string(),
+            })?;
+        Ok(row.default_roles)
+    }
+
+    /// Sets the group-level default roles for new members.
+    pub async fn set_group_default_roles(&self, group_id: i32, roles: &[String]) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE groups SET default_roles = $1 WHERE id = $2"#,
+            roles,
+            group_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Resets the group default to "inherit the global default".
+    pub async fn clear_group_default_roles(&self, group_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"UPDATE groups SET default_roles = NULL WHERE id = $1"#,
+            group_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Global default roles for new members
+    /// (`app_settings['groups.default_member_roles']`, fallback `[viewer]`).
+    pub async fn get_global_member_default_roles(&self) -> Result<Vec<String>> {
+        let row = sqlx::query!(
+            r#"SELECT value FROM app_settings WHERE key = 'groups.default_member_roles'"#
+        )
+        .fetch_optional(&*self.pool)
+        .await?;
+        Ok(row
+            .and_then(|row| serde_json::from_str::<Vec<String>>(&row.value).ok())
+            .unwrap_or_else(|| vec!["viewer".to_string()]))
+    }
+
+    pub async fn set_global_member_default_roles(&self, roles: &[String]) -> Result<()> {
+        let value =
+            serde_json::to_string(roles).map_err(|err| Error::Misc(err.to_string()))?;
+        sqlx::query!(
+            r#"
+            INSERT INTO app_settings (key, value)
+            VALUES ('groups.default_member_roles', $1)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            "#,
+            value
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Number of organizational groups that override the global default.
+    pub async fn count_groups_with_own_defaults(&self) -> Result<i64> {
+        let count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) AS "count!"
+            FROM groups
+            WHERE default_roles IS NOT NULL AND is_personal = FALSE
+            "#
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(count)
+    }
+
+    /// Resolution chain for a new member's roles:
+    /// explicit choice → group default → global default → `[viewer]`.
+    /// Personal groups and group creation always assign `manager` explicitly
+    /// and never pass through here.
+    pub async fn resolve_member_default_roles(&self, group_id: i32) -> Result<Vec<String>> {
+        if let Some(roles) = self.get_group_default_roles(group_id).await? {
+            if !roles.is_empty() {
+                return Ok(roles);
+            }
+        }
+        self.get_global_member_default_roles().await
+    }
+
     /// Guards against removing or demoting the last member whose roles grant `required_perm`
     /// (such as `Permission::Group(GroupPerm::ManageMembers)`).
     pub async fn would_leave_group_without_permission(

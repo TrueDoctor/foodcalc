@@ -13,6 +13,7 @@ use serde_json::json;
 
 use crate::MyAppState;
 
+pub mod audit;
 pub mod auth;
 pub mod events;
 pub mod ingredients;
@@ -42,6 +43,9 @@ pub fn api_router() -> Router<MyAppState> {
         .route("/properties", get(master::properties))
         .route("/places", get(master::places))
         .nest("/users", users::users_router())
+        .nest("/roles", users::roles_router())
+        .nest("/settings", users::settings_router())
+        .nest("/audit", audit::audit_router())
         .nest("/groups", users::groups_router())
         .nest("/events", events::events_router())
         .nest("/recipes", recipes::recipes_router())

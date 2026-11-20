@@ -38,7 +38,7 @@ async fn test_get_ingredient(pool: sqlx::PgPool) {
 
     // Test getting non-existent ingredient
     let err = ops.get(9999).await.unwrap_err();
-    assert!(matches!(err, Error::Database(_)));
+    assert!(matches!(err, Error::NotFound { .. }));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -112,7 +112,7 @@ async fn test_delete_ingredient(pool: sqlx::PgPool) {
     ops.delete(ingredient.id).await.unwrap();
 
     let err = ops.get(ingredient.id).await.unwrap_err();
-    assert!(matches!(err, Error::Database(_)));
+    assert!(matches!(err, Error::NotFound { .. }));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]

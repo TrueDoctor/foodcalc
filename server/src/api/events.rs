@@ -19,6 +19,7 @@ use foodlib_new::{auth_context::AuthCtx, entities::event::Event, Error};
 pub mod exports;
 pub mod logistics;
 pub mod meals;
+pub mod members;
 pub mod shopping;
 
 pub fn events_router() -> Router<MyAppState> {
@@ -30,6 +31,7 @@ pub fn events_router() -> Router<MyAppState> {
         )
         .route("/{id}/clone", post(clone_event))
         .route("/{id}/owner", put(transfer_owner))
+        .nest("/{id}/members", members::members_router())
         .route("/{id}/meals", get(meals::list_meals).post(meals::add_meal))
         .route(
             "/{id}/meals/{meal_id}",
@@ -222,12 +224,18 @@ async fn get_event(
         Err(err) => return map_api_error(err).into_response(),
     };
 
+    let group_id = event.group_id;
+
     (
         StatusCode::OK,
         Json(json!({
             "event": event,
             "meals": meals,
             "total_cost": total_cost,
+            // Resolved permissions of the caller for this event — the SPA
+            // builds its capability guards from this (covers direct event
+            // collaborators that are not members of the owning group).
+            "permissions": ctx.policy.resolved_event_permissions(id, group_id),
         })),
     )
         .into_response()

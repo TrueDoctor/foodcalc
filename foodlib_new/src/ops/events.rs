@@ -1,8 +1,10 @@
 use crate::entities::event::*;
 use crate::entities::inventory::Inventory;
+use crate::entities::user::User;
 use crate::error::{Error, Result};
 use bigdecimal::BigDecimal;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
 use time::OffsetDateTime;
 
@@ -1321,5 +1323,120 @@ impl EventOps {
         .await?;
 
         Ok(records)
+    }
+
+    // ---------------------------------------------------------------------
+    // Direct per-event collaborators (`event_user_roles`)
+    // ---------------------------------------------------------------------
+
+    /// All direct collaborators of an event with their assigned role slugs.
+    pub async fn list_event_members(&self, event_id: i32) -> Result<Vec<(User, Vec<String>)>> {
+        let members = sqlx::query_as!(
+            User,
+            r#"
+            SELECT DISTINCT u.id, u.username, u.email, u.password_hash, u.is_admin, u.created_at
+            FROM event_user_roles eur
+            JOIN users u ON u.id = eur.user_id
+            WHERE eur.event_id = $1
+            ORDER BY u.username
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let role_rows = sqlx::query!(
+            r#"
+            SELECT user_id, role_slug
+            FROM event_user_roles
+            WHERE event_id = $1
+            ORDER BY role_slug
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let mut roles_by_user: HashMap<i64, Vec<String>> = HashMap::new();
+        for row in role_rows {
+            roles_by_user
+                .entry(row.user_id)
+                .or_default()
+                .push(row.role_slug);
+        }
+
+        Ok(members
+            .into_iter()
+            .map(|member| {
+                let roles = roles_by_user.remove(&member.id).unwrap_or_default();
+                (member, roles)
+            })
+            .collect())
+    }
+
+    pub async fn add_event_member(
+        &self,
+        user_id: i64,
+        event_id: i32,
+        roles: &[String],
+    ) -> Result<()> {
+        for role in roles {
+            sqlx::query!(
+                r#"
+                INSERT INTO event_user_roles (user_id, event_id, role_slug)
+                VALUES ($1, $2, $3)
+                ON CONFLICT DO NOTHING
+                "#,
+                user_id,
+                event_id,
+                role
+            )
+            .execute(&*self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn set_event_member_roles(
+        &self,
+        user_id: i64,
+        event_id: i32,
+        roles: &[String],
+    ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query!(
+            r#"DELETE FROM event_user_roles WHERE user_id = $1 AND event_id = $2"#,
+            user_id,
+            event_id
+        )
+        .execute(&mut *tx)
+        .await?;
+        for role in roles {
+            sqlx::query!(
+                r#"
+                INSERT INTO event_user_roles (user_id, event_id, role_slug)
+                VALUES ($1, $2, $3)
+                ON CONFLICT DO NOTHING
+                "#,
+                user_id,
+                event_id,
+                role
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn remove_event_member(&self, user_id: i64, event_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"DELETE FROM event_user_roles WHERE user_id = $1 AND event_id = $2"#,
+            user_id,
+            event_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
     }
 }

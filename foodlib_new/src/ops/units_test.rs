@@ -34,7 +34,7 @@ async fn test_get_unit(pool: sqlx::PgPool) {
 
     // Test getting non-existent unit
     let err = ops.get(9999).await.unwrap_err();
-    assert!(matches!(err, Error::Database(_)));
+    assert!(matches!(err, Error::NotFound { .. }));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -91,7 +91,7 @@ async fn test_delete_unit(pool: sqlx::PgPool) {
     ops.delete(unit.id).await.unwrap();
 
     let err = ops.get(unit.id).await.unwrap_err();
-    assert!(matches!(err, Error::Database(_)));
+    assert!(matches!(err, Error::NotFound { .. }));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]

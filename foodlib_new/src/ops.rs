@@ -8,6 +8,7 @@ pub mod recipes;
 pub mod stores;
 pub mod units;
 // tbd
+pub mod audit;
 pub mod events;
 pub mod inventories;
 pub mod meals;

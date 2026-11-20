@@ -17,10 +17,10 @@ INSERT INTO groups (id, name, is_personal) VALUES
   (1, 'admin', TRUE),
   (2, 'user', TRUE);
 
--- User group assignments
-INSERT INTO user_groups (user_id, group_id) VALUES
-  (1, 1),  -- admin in personal group
-  (2, 2);  -- user in personal group
+-- User group assignments (multi-role RBAC; legacy semantics = full manager access)
+INSERT INTO user_group_roles (user_id, group_id, role_slug) VALUES
+  (1, 1, 'manager'),  -- admin in personal group
+  (2, 2, 'manager');  -- user in personal group
 
 -- Ingredients with energy in kJ/g
 INSERT INTO ingredients (ingredient_id, name, energy, comment, group_id) VALUES

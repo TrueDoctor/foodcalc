@@ -11,6 +11,10 @@ pub enum GlobalPermission {
     ManageUsers,
     ManageMasterData,
     AllowedToCreateNewDomainObjects, // Groups, Events, Recipes, Ingredients, Inventories // Lock-down a user
+    /// System configuration (e.g. global default member roles).
+    ManageSettings,
+    /// Reading the audit log (ISO 27001 A.8.15 / A.5.28).
+    ViewAuditLog,
 }
 
 impl GlobalPermission {
@@ -19,6 +23,8 @@ impl GlobalPermission {
             Self::ManageUsers => "admin:manage_users",
             Self::ManageMasterData => "admin:manage_master_data",
             Self::AllowedToCreateNewDomainObjects => "admin:allow_creating", // Positive permission for blocking users
+            Self::ManageSettings => "admin:manage_settings",
+            Self::ViewAuditLog => "admin:view_audit_log",
         }
     }
 }
@@ -31,6 +37,8 @@ impl FromStr for GlobalPermission {
             "admin:manage_users" => Ok(Self::ManageUsers),
             "admin:manage_master_data" => Ok(Self::ManageMasterData),
             "admin:allow_creating" => Ok(Self::AllowedToCreateNewDomainObjects),
+            "admin:manage_settings" => Ok(Self::ManageSettings),
+            "admin:view_audit_log" => Ok(Self::ViewAuditLog),
             _ => Err(UnknownPermissionError(s.to_owned())),
         }
     }
@@ -97,6 +105,8 @@ pub enum InventoryPerm {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GroupPerm {
     ManageMembers,
+    /// Group configuration: rename, default member roles.
+    ManageSettings,
     Delete,
 }
 
@@ -138,6 +148,7 @@ impl Permission {
             Self::Inventory(InventoryPerm::TransferOwner) => "inventories:transfer_owner",
             // Group
             Self::Group(GroupPerm::ManageMembers) => "group:manage_members",
+            Self::Group(GroupPerm::ManageSettings) => "group:manage_settings",
             Self::Group(GroupPerm::Delete) => "group:delete",
         }
     }
@@ -183,6 +194,7 @@ impl FromStr for Permission {
             "inventories:transfer_owner" => Ok(Self::Inventory(InventoryPerm::TransferOwner)),
             // Group
             "group:manage_members" => Ok(Self::Group(GroupPerm::ManageMembers)),
+            "group:manage_settings" => Ok(Self::Group(GroupPerm::ManageSettings)),
             "group:delete" => Ok(Self::Group(GroupPerm::Delete)),
             _ => Err(UnknownPermissionError(s.to_owned())),
         }
@@ -228,93 +240,267 @@ impl_str_serde!(Permission);
 impl_str_serde!(GlobalPermission);
 
 // ============================================================================
-// 4. Hard-coded Built-in Roles (Viewer, Editor, Manager)
+// 4. Built-in Role Catalog (R2)
+//
+// Single source of truth for role definitions, served to the SPA via
+// `GET /api/roles` — the frontend never hardcodes role slugs. If roles move
+// into the database later, only this section and `permissions_for_role_slug`
+// change; stored `user_group_roles.role_slug` values remain valid.
 // ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltInRole {
+    /// Leser — read-only baseline.
     Viewer,
-    Editor,
+    /// Koch — meals, recipes, ingredients, inventory bookings, status board.
+    Cook,
+    /// Einkauf — shopping tours and related inventory bookings.
+    Shopper,
+    /// Lager — inventory administration.
+    Stocker,
+    /// Ausgabe — serving counter / status board operation.
+    Serving,
+    /// Teammitglied — composite allrounder without destructive rights.
+    Team,
+    /// Leitung — everything, including destructive and member management.
     Manager,
 }
 
 impl BuiltInRole {
+    /// Legacy slugs map onto their R2 successor (`editor` → `team`).
     pub fn from_slug(slug: &str) -> Option<Self> {
         match slug {
             "viewer" => Some(Self::Viewer),
-            "editor" => Some(Self::Editor),
+            "cook" => Some(Self::Cook),
+            "shopper" => Some(Self::Shopper),
+            "stocker" => Some(Self::Stocker),
+            "serving" => Some(Self::Serving),
+            "team" | "editor" => Some(Self::Team),
             "manager" => Some(Self::Manager),
             _ => None,
         }
     }
 
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Self::Viewer => "viewer",
+            Self::Cook => "cook",
+            Self::Shopper => "shopper",
+            Self::Stocker => "stocker",
+            Self::Serving => "serving",
+            Self::Team => "team",
+            Self::Manager => "manager",
+        }
+    }
+
     pub const fn permissions(self) -> &'static [Permission] {
+        use EventPerm as Ev;
         use IngredientPerm as Ing;
         use InventoryPerm as Inv;
         use RecipePerm as Rec;
 
         match self {
             Self::Viewer => &[
-                Permission::Event(EventPerm::View),
-                Permission::Event(EventPerm::ViewCalculation),
+                Permission::Event(Ev::View),
+                Permission::Event(Ev::ViewCalculation),
+                Permission::Event(Ev::Export),
+                Permission::Recipe(Rec::View),
+                Permission::Recipe(Rec::Export),
+                Permission::Ingredient(Ing::View),
+                Permission::Inventory(Inv::View),
+            ],
+            Self::Cook => &[
+                Permission::Event(Ev::View),
+                Permission::Event(Ev::ViewCalculation),
+                Permission::Event(Ev::Export),
+                Permission::Event(Ev::Edit),
+                Permission::Event(Ev::ManageMeals),
+                Permission::Event(Ev::OperateStatusBoard),
+                Permission::Recipe(Rec::View),
+                Permission::Recipe(Rec::Export),
+                Permission::Recipe(Rec::Create),
+                Permission::Recipe(Rec::Edit),
+                Permission::Ingredient(Ing::View),
+                Permission::Ingredient(Ing::Create),
+                Permission::Ingredient(Ing::Edit),
+                Permission::Inventory(Inv::View),
+                Permission::Inventory(Inv::Edit),
+            ],
+            Self::Shopper => &[
+                Permission::Event(Ev::View),
+                Permission::Event(Ev::ViewCalculation),
+                Permission::Event(Ev::Export),
+                Permission::Event(Ev::ManageShopping),
+                Permission::Event(Ev::ShoppingAddTour),
+                Permission::Event(Ev::ShoppingEditTour),
+                Permission::Recipe(Rec::View),
+                Permission::Ingredient(Ing::View),
+                Permission::Inventory(Inv::View),
+                Permission::Inventory(Inv::Edit),
+            ],
+            Self::Stocker => &[
+                Permission::Event(Ev::View),
+                Permission::Event(Ev::ViewCalculation),
+                Permission::Recipe(Rec::View),
+                Permission::Ingredient(Ing::View),
+                Permission::Ingredient(Ing::Edit),
+                Permission::Inventory(Inv::View),
+                Permission::Inventory(Inv::Create),
+                Permission::Inventory(Inv::Edit),
+            ],
+            Self::Serving => &[
+                Permission::Event(Ev::View),
+                Permission::Event(Ev::OperateStatusBoard),
                 Permission::Recipe(Rec::View),
                 Permission::Ingredient(Ing::View),
                 Permission::Inventory(Inv::View),
             ],
-            Self::Editor => &[
-                Permission::Event(EventPerm::View),
-                Permission::Event(EventPerm::ViewCalculation),
+            Self::Team => &[
+                Permission::Event(Ev::View),
+                Permission::Event(Ev::ViewCalculation),
+                Permission::Event(Ev::Export),
+                Permission::Event(Ev::Create),
+                Permission::Event(Ev::Edit),
+                Permission::Event(Ev::Clone),
+                Permission::Event(Ev::ManageMeals),
+                Permission::Event(Ev::ManageShopping),
+                Permission::Event(Ev::ShoppingAddTour),
+                Permission::Event(Ev::ShoppingEditTour),
+                Permission::Event(Ev::OperateStatusBoard),
                 Permission::Recipe(Rec::View),
-                Permission::Ingredient(Ing::View),
-                Permission::Inventory(Inv::View),
-                Permission::Event(EventPerm::Create),
-                Permission::Event(EventPerm::Edit),
-                Permission::Event(EventPerm::Clone),
-                Permission::Event(EventPerm::ManageMeals),
-                Permission::Event(EventPerm::ManageShopping),
-                Permission::Event(EventPerm::ShoppingAddTour),
-                Permission::Event(EventPerm::ShoppingEditTour),
-                Permission::Event(EventPerm::OperateStatusBoard),
+                Permission::Recipe(Rec::Export),
                 Permission::Recipe(Rec::Create),
                 Permission::Recipe(Rec::Edit),
+                Permission::Ingredient(Ing::View),
                 Permission::Ingredient(Ing::Create),
                 Permission::Ingredient(Ing::Edit),
+                Permission::Inventory(Inv::View),
                 Permission::Inventory(Inv::Create),
                 Permission::Inventory(Inv::Edit),
             ],
             Self::Manager => &[
-                Permission::Event(EventPerm::View),
-                Permission::Event(EventPerm::ViewCalculation),
+                Permission::Event(Ev::View),
+                Permission::Event(Ev::ViewCalculation),
+                Permission::Event(Ev::Export),
+                Permission::Event(Ev::Create),
+                Permission::Event(Ev::Edit),
+                Permission::Event(Ev::Clone),
+                Permission::Event(Ev::ManageMeals),
+                Permission::Event(Ev::ManageShopping),
+                Permission::Event(Ev::ShoppingAddTour),
+                Permission::Event(Ev::ShoppingEditTour),
+                Permission::Event(Ev::OperateStatusBoard),
+                Permission::Event(Ev::Delete),
+                Permission::Event(Ev::TransferOwner),
                 Permission::Recipe(Rec::View),
-                Permission::Ingredient(Ing::View),
-                Permission::Inventory(Inv::View),
-                Permission::Event(EventPerm::Create),
-                Permission::Event(EventPerm::Edit),
-                Permission::Event(EventPerm::Clone),
-                Permission::Event(EventPerm::ManageMeals),
-                Permission::Event(EventPerm::ManageShopping),
-                Permission::Event(EventPerm::ShoppingAddTour),
-                Permission::Event(EventPerm::ShoppingEditTour),
-                Permission::Event(EventPerm::OperateStatusBoard),
+                Permission::Recipe(Rec::Export),
                 Permission::Recipe(Rec::Create),
                 Permission::Recipe(Rec::Edit),
-                Permission::Ingredient(Ing::Create),
-                Permission::Ingredient(Ing::Edit),
-                Permission::Inventory(Inv::Create),
-                Permission::Inventory(Inv::Edit),
-                Permission::Event(EventPerm::Delete),
-                Permission::Event(EventPerm::TransferOwner),
                 Permission::Recipe(Rec::Delete),
                 Permission::Recipe(Rec::TransferOwner),
+                Permission::Ingredient(Ing::View),
+                Permission::Ingredient(Ing::Create),
+                Permission::Ingredient(Ing::Edit),
                 Permission::Ingredient(Ing::Delete),
                 Permission::Ingredient(Ing::TransferOwner),
+                Permission::Inventory(Inv::View),
+                Permission::Inventory(Inv::Create),
+                Permission::Inventory(Inv::Edit),
                 Permission::Inventory(Inv::Delete),
                 Permission::Inventory(Inv::TransferOwner),
                 Permission::Group(GroupPerm::ManageMembers),
+                Permission::Group(GroupPerm::ManageSettings),
                 Permission::Group(GroupPerm::Delete),
             ],
         }
     }
+}
+
+/// Category used to group roles in the assignment UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RoleCategory {
+    /// General membership presets (Leser, Teammitglied, Leitung).
+    Basic,
+    /// Domain roles for departments (Küche, Einkauf, Lager, Ausgabe).
+    Domain,
+}
+
+/// Role definition as served to the SPA via `GET /api/roles`.
+/// The frontend renders roles purely from this catalog — never hardcoded.
+#[derive(Debug, Clone, Serialize)]
+pub struct RoleDefinition {
+    pub slug: &'static str,
+    /// German display name; the SPA overrides it via `common:roles.<slug>`.
+    pub name: &'static str,
+    pub description: &'static str,
+    pub category: RoleCategory,
+    pub is_system: bool,
+    pub permissions: Vec<Permission>,
+}
+
+impl BuiltInRole {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Viewer => "Leser",
+            Self::Cook => "Koch",
+            Self::Shopper => "Einkauf",
+            Self::Stocker => "Lager",
+            Self::Serving => "Ausgabe",
+            Self::Team => "Teammitglied",
+            Self::Manager => "Leitung",
+        }
+    }
+
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::Viewer => "Darf Veranstaltungen, Rezepte, Zutaten und Inventare ansehen und Exporte herunterladen.",
+            Self::Cook => "Plant Mahlzeiten, pflegt Rezepte und Zutaten und bucht verbrauchte Mengen aus Inventaren ab.",
+            Self::Shopper => "Plant und bearbeitet Einkaufstouren und bucht eingekaufte Mengen in Inventare.",
+            Self::Stocker => "Verwaltet Inventare und deren Bestände sowie Zutatenstammdaten.",
+            Self::Serving => "Bedient das Statusboard (Küche/Ausgabe) während der Veranstaltung.",
+            Self::Team => "Allrounder ohne Destruktives: kann planen und bearbeiten, aber nichts löschen, übertragen oder Mitglieder verwalten.",
+            Self::Manager => "Volle Kontrolle: inklusive Löschen, Eigentumsübertragung und Mitgliederverwaltung der Gruppe.",
+        }
+    }
+
+    pub const fn category(self) -> RoleCategory {
+        match self {
+            Self::Viewer | Self::Team | Self::Manager => RoleCategory::Basic,
+            Self::Cook | Self::Shopper | Self::Stocker | Self::Serving => RoleCategory::Domain,
+        }
+    }
+
+    pub const fn all() -> [BuiltInRole; 7] {
+        [
+            Self::Viewer,
+            Self::Cook,
+            Self::Shopper,
+            Self::Stocker,
+            Self::Serving,
+            Self::Team,
+            Self::Manager,
+        ]
+    }
+
+    pub fn definition(self) -> RoleDefinition {
+        RoleDefinition {
+            slug: self.slug(),
+            name: self.name(),
+            description: self.description(),
+            category: self.category(),
+            is_system: true,
+            permissions: self.permissions().to_vec(),
+        }
+    }
+}
+
+/// The complete role catalog for `GET /api/roles`.
+pub fn all_definitions() -> Vec<RoleDefinition> {
+    BuiltInRole::all()
+        .iter()
+        .map(|role| role.definition())
+        .collect()
 }
 
 /// Single seam to replace later if roles ever move into the database.
