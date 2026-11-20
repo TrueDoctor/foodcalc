@@ -21,7 +21,7 @@ pub mod inventories;
 pub mod master;
 pub mod recipes;
 pub mod users;
-mod status_board;
+pub mod status_board;
 
 pub fn api_router() -> Router<MyAppState> {
     // Public routes: health probe and the login entry point. Everything
@@ -132,3 +132,10 @@ pub fn bad_request(message: String) -> Response {
     (StatusCode::BAD_REQUEST, Json(json!({ "error": message }))).into_response()
 }
 
+/// Maps a foodlib result to a `204 No Content` (or mapped error) response.
+pub fn respond_no_content(result: Result<()>) -> Response {
+    match result {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(err) => map_api_error(err).into_response(),
+    }
+}

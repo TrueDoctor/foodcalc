@@ -15,6 +15,7 @@ pub enum GlobalPermission {
     ManageSettings,
     /// Reading the audit log (ISO 27001 A.8.15 / A.5.28).
     ViewAuditLog,
+    ViewUserProfiles,
 }
 
 impl GlobalPermission {
@@ -25,6 +26,7 @@ impl GlobalPermission {
             Self::AllowedToCreateNewDomainObjects => "admin:allow_creating", // Positive permission for blocking users
             Self::ManageSettings => "admin:manage_settings",
             Self::ViewAuditLog => "admin:view_audit_log",
+            Self::ViewUserProfiles => "admin:view_user_profiles",
         }
     }
 }
@@ -39,6 +41,7 @@ impl FromStr for GlobalPermission {
             "admin:allow_creating" => Ok(Self::AllowedToCreateNewDomainObjects),
             "admin:manage_settings" => Ok(Self::ManageSettings),
             "admin:view_audit_log" => Ok(Self::ViewAuditLog),
+            "admin:view_user_profiles" => Ok(Self::ViewUserProfiles),
             _ => Err(UnknownPermissionError(s.to_owned())),
         }
     }

@@ -13,6 +13,9 @@ pub enum Error {
     Validation {
         message: String,
     },
+    InvalidInput {
+        message: String,
+    },
     Conflict {
         message: String,
     },
@@ -79,6 +82,7 @@ impl fmt::Display for Error {
             Error::Database(e) => write!(f, "Database error: {}", e),
             Error::NotFound { entity, id } => write!(f, "{} with id {} not found", entity, id),
             Error::Validation { message } => write!(f, "Validation error: {}", message),
+            Error::InvalidInput { message } => write!(f, "Invalid input: {}", message),
             Error::Conflict { message } => write!(f, "Conflict error: {}", message),
             Error::UserNotFound { name } => write!(f, "Did not find user: {}", name),
             Error::Hashing => write!(f, "Failed to compute hash"),

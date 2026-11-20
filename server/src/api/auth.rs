@@ -3,8 +3,14 @@
 //! These live under `/api/auth/*` and are separate from the HTML login
 //! flow (`/auth/*`, maud frontend) but share the same session backend,
 //! so a login in either UI is valid in the other.
+//!
+//! The session mechanics (`AuthSession`) are transport-specific and stay
+//! here; registration, profile resolution and the auth audit trail live in
+//! `crate::app::auth`.
 
-use crate::{api::map_api_error, MyAppState};
+use crate::app::auth;
+use crate::api::map_api_error;
+use crate::MyAppState;
 use axum::{
     extract::State,
     http::StatusCode,
@@ -12,68 +18,20 @@ use axum::{
     Json,
 };
 use foodlib_new::auth::{AuthSession, Credentials};
-use foodlib_new::entities::user::{GroupMembership, User};
-use foodlib_new::ops::audit::{action, AuditRecord};
-use foodlib_new::policy::{EventPerm, GlobalPermission, Permission};
+use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::ops::audit::action;
 use foodlib_new::Error;
-use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use serde::Deserialize;
+
+// Input DTOs shared with the app layer (the profile DTOs live in `app::auth`
+// and are consumed by other transports too).
+pub use crate::app::auth::RegisterInput;
 
 /// `POST /api/auth/login` payload.
 #[derive(Debug, Deserialize)]
 pub struct LoginInput {
     pub username: String,
     pub password: String,
-}
-
-/// Group as exposed to the SPA (with the session user's role in it).
-#[derive(Debug, Serialize)]
-pub struct ApiGroup {
-    pub id: i32,
-    pub name: String,
-    pub is_personal: bool,
-    /// `viewer` | `editor` | `manager` (personal groups: `manager`).
-    pub roles: Vec<String>,
-    pub permissions: Vec<Permission>,
-}
-
-impl ApiGroup {
-    pub fn from_membership(membership: GroupMembership) -> Self {
-        Self {
-            id: membership.id,
-            name: membership.name,
-            is_personal: membership.is_personal,
-            roles: membership.roles,
-            permissions: membership.permissions,
-        }
-    }
-}
-
-/// The authenticated user together with the groups they belong to.
-#[derive(Debug, Serialize)]
-pub struct ApiUser {
-    pub id: i64,
-    pub username: String,
-    pub email: String,
-    pub is_admin: bool,
-    pub global_permissions: Vec<GlobalPermission>,
-    pub groups: Vec<ApiGroup>,
-}
-
-impl ApiUser {
-    fn new(user: User, global_permissions: Vec<GlobalPermission>, memberships: Vec<GroupMembership>) -> Self {
-        Self {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            is_admin: user.is_admin,
-            global_permissions: global_permissions,
-            groups: memberships
-                .into_iter()
-                .map(ApiGroup::from_membership)
-                .collect(),
-        }
-    }
 }
 
 fn unauthorized(message: &str) -> (StatusCode, Json<serde_json::Value>) {
@@ -83,18 +41,11 @@ fn unauthorized(message: &str) -> (StatusCode, Json<serde_json::Value>) {
     )
 }
 
-fn bad_input(message: &str) -> (StatusCode, Json<serde_json::Value>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(serde_json::json!({ "error": message })),
-    )
-}
-
 /// Login with username and password. On success the session cookie is
 /// set; the SPA resolves the current user via `/api/auth/me` afterwards.
 pub async fn login(
     State(state): State<MyAppState>,
-    auth: AuthSession,
+    auth_session: AuthSession,
     Json(payload): Json<LoginInput>,
 ) -> Response {
     let attempted_username = payload.username.clone();
@@ -103,14 +54,14 @@ pub async fn login(
         password: payload.password,
     };
 
-    let result = foodlib_new::auth::login(auth, credentials).await;
+    let result = foodlib_new::auth::login(auth_session, credentials).await;
     match result {
         Ok(_) => {
             let actor = state
                 .users()
                 .get_user_by_string_reference(attempted_username.clone())
                 .await;
-            audit_auth(
+            auth::audit_auth(
                 &state,
                 actor.as_ref().map(|user| user.id),
                 &attempted_username,
@@ -121,7 +72,7 @@ pub async fn login(
             StatusCode::NO_CONTENT.into_response()
         }
         Err(Error::UserNotFound { .. }) => {
-            audit_auth(
+            auth::audit_auth(
                 &state,
                 None,
                 &attempted_username,
@@ -132,7 +83,7 @@ pub async fn login(
             unauthorized("wrong credentials").into_response()
         }
         Err(err) => {
-            audit_auth(
+            auth::audit_auth(
                 &state,
                 None,
                 &attempted_username,
@@ -145,132 +96,35 @@ pub async fn login(
     }
 }
 
-/// Best-effort audit for authentication events; failures are logged but do
-/// not change the response.
-async fn audit_auth(
-    state: &MyAppState,
-    actor_user_id: Option<i64>,
-    actor_username: &str,
-    action: &'static str,
-    details: serde_json::Value,
-) {
-    if let Err(err) = state
-        .audit()
-        .record(AuditRecord {
-            actor_user_id,
-            actor_username,
-            action,
-            details: Some(details),
-            ..Default::default()
-        })
-        .await
-    {
-        log::error!("auth event not audited: {err}");
-    }
-}
-
-/// `POST /api/auth/register` payload.
-#[derive(Debug, Deserialize)]
-pub struct RegisterInput {
-    pub username: String,
-    pub email: String,
-    pub password: String,
-}
-
 /// Open self-registration: creates the user together with their personal
-/// group atomically and logs them in. Public endpoint — validation happens
-/// here (username/email/password policy, uniqueness pre-check).
+/// group atomically (validation and audit in `app::auth`) and logs them in.
+/// Public endpoint — no session required.
 pub async fn register(
     State(state): State<MyAppState>,
-    mut auth: AuthSession,
+    mut auth_session: AuthSession,
     Json(payload): Json<RegisterInput>,
 ) -> Response {
-    let username = payload.username.trim().to_string();
-    let email = payload.email.trim().to_string();
-
-    if username.len() < 3 {
-        return bad_input("username must be at least 3 characters").into_response();
-    }
-    if !email.contains('@') || email.len() < 5 {
-        return bad_input("invalid email address").into_response();
-    }
-    if payload.password.len() < 8 {
-        return bad_input("password must be at least 8 characters").into_response();
-    }
-    // Uniqueness pre-check (the DB constraints are the final arbiter).
-    if state
-        .users()
-        .get_user_by_string_reference(username.clone())
-        .await
-        .is_some()
-    {
-        return bad_input("username or email already taken").into_response();
-    }
-
-    let password_hash = match bcrypt::hash(&payload.password, 12) {
-        Ok(hash) => hash,
-        Err(err) => return map_api_error(Error::Misc(err.to_string())).into_response(),
-    };
-
-    let created = state
-        .users()
-        .create_user_with_personal_group(User {
-            id: 0,
-            username,
-            email,
-            password_hash,
-            is_admin: false,
-            created_at: OffsetDateTime::now_utc(),
-        })
-        .await;
-
-    let (user, personal_group) = match created {
+    let (user, profile) = match auth::register(&state, payload).await {
         Ok(pair) => pair,
         Err(err) => return map_api_error(err).into_response(),
     };
 
     // Log the freshly created user in (same session backend as login).
-    if let Err(err) = auth.login(&user).await {
+    if let Err(err) = auth_session.login(&user).await {
         return map_api_error(err.into()).into_response();
     }
 
-    audit_auth(
-        &state,
-        Some(user.id),
-        &user.username,
-        action::REGISTER,
-        serde_json::json!({ "email": user.email }),
-    )
-    .await;
-
-    (
-        StatusCode::CREATED,
-        Json(ApiUser {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            is_admin: user.is_admin,
-            global_permissions: vec![GlobalPermission::AllowedToCreateNewDomainObjects],
-            groups: vec![ApiGroup {
-                id: personal_group.id,
-                name: personal_group.name,
-                is_personal: personal_group.is_personal,
-                roles: vec!["manager".into()],
-                permissions: vec![Permission::Event(EventPerm::Edit)],
-            }],
-        }),
-    )
-        .into_response()
+    (StatusCode::CREATED, Json(profile)).into_response()
 }
 
 /// Invalidate the current session.
-pub async fn logout(State(state): State<MyAppState>, mut auth: AuthSession) -> Response {
-    let actor = auth.user.clone();
-    if let Err(err) = auth.logout().await {
+pub async fn logout(State(state): State<MyAppState>, mut auth_session: AuthSession) -> Response {
+    let actor = auth_session.user.clone();
+    if let Err(err) = auth_session.logout().await {
         return map_api_error(err.into()).into_response();
     }
     if let Some(user) = actor {
-        audit_auth(
+        auth::audit_auth(
             &state,
             Some(user.id),
             &user.username,
@@ -282,20 +136,12 @@ pub async fn logout(State(state): State<MyAppState>, mut auth: AuthSession) -> R
     StatusCode::NO_CONTENT.into_response()
 }
 
-/// The session user plus their groups; 401 when not logged in.
-pub async fn me(State(state): State<MyAppState>, auth: AuthSession) -> Response {
-    let Some(user) = auth.user else {
-        return unauthorized("authentication required").into_response();
-    };
-
-    let policy = match state.users().get_user_policy(user.id).await {
-        Ok(policy) => policy,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-    let global_permissions = policy.global_permissions.into_iter().collect();
-    let memberships = match state.users().get_user_group_memberships(user.id).await {
-        Ok(memberships) => memberships,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-    (StatusCode::OK, Json(ApiUser::new(user, global_permissions, memberships))).into_response()
+/// The session user plus their groups. Unauthenticated requests are already
+/// rejected by `require_api_auth`; the `AuthCtx` extractor resolves the
+/// policy for the profile.
+pub async fn me(State(state): State<MyAppState>, ctx: AuthCtx) -> Response {
+    match auth::current_user(&state, &ctx).await {
+        Ok(profile) => (StatusCode::OK, Json(profile)).into_response(),
+        Err(err) => map_api_error(err).into_response(),
+    }
 }

@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
+use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{Extension, Router};
 use axum_login::{
@@ -13,24 +13,14 @@ use tower_sessions::cookie::Key;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use foodlib_new::auth::AuthBackend;
+mod app;
 mod api;
+#[cfg(feature = "legacy-frontend")]
 mod frontend;
+#[cfg(feature = "legacy-frontend")]
 mod htmx_middleware;
 
-type FoodLib = Extension<foodlib_new::FoodLib>;
-
-#[derive(Clone)]
-pub struct MyAppState {
-    pub db: foodlib_new::FoodLib,
-}
-
-impl Deref for MyAppState {
-    type Target = foodlib_new::FoodLib;
-
-    fn deref(&self) -> &Self::Target {
-        &self.db
-    }
-}
+pub use app::state::{FoodLib, MyAppState};
 
 #[tokio::main]
 async fn main() {
@@ -99,13 +89,20 @@ async fn main() {
     let state = MyAppState { db: lib.clone() };
     let new_lib = lib;
 
-    // Combine routes with middleware
-    let app = Router::new()
-        .nest("/api", api::api_router())
-        .merge(frontend::frontend_router())
-        .with_state(state)
-        .layer(Extension(new_lib))
-        .layer(axum::middleware::from_fn(htmx_middleware::htmx_middleware))
+    // Combine routes with middleware. The legacy HTMX frontend (and its
+    // page-wrapping middleware) is compile-time optional via the
+    // `legacy-frontend` feature.
+    let router = Router::new().nest("/api", api::api_router());
+
+    #[cfg(feature = "legacy-frontend")]
+    let router = router.merge(frontend::frontend_router());
+
+    let app = router.with_state(state).layer(Extension(new_lib));
+
+    #[cfg(feature = "legacy-frontend")]
+    let app = app.layer(axum::middleware::from_fn(htmx_middleware::htmx_middleware));
+
+    let app = app
         .layer(auth_layer)
         .layer(CorsLayer::very_permissive())
         .layer(TraceLayer::new_for_http());

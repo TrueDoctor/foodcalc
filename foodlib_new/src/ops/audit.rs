@@ -34,6 +34,7 @@ pub mod action {
 
     pub const OWNER_TRANSFERRED: &str = "ownership.owner.transferred";
     pub const ENTITY_CREATED: &str = "ownership.entity.created";
+    pub const ENTITY_UPDATED: &str = "ownership.entity.updated";
     pub const ENTITY_DELETED: &str = "ownership.entity.deleted";
 
     pub const AUDIT_READ: &str = "audit.read";

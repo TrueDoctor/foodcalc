@@ -1,7 +1,9 @@
+//! Status board endpoints — thin handlers over `crate::app::status_board`.
+//! The status/urgency/availability validation lives in the app layer.
+
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
-    response::{IntoResponse, Response},
+    response::Response,
     routing::{get, post, put},
     Json, Router,
 };
@@ -10,7 +12,8 @@ use serde_json::json;
 
 use foodlib_new::ops::status_board::CreateReorderInput;
 
-use crate::api::{bad_request, map_api_error, respond, respond_created};
+use crate::api::{respond, respond_created, respond_no_content};
+use crate::app::status_board;
 use crate::MyAppState;
 
 #[derive(Debug, Deserialize)]
@@ -33,7 +36,7 @@ pub fn status_board_router() -> Router<MyAppState> {
 }
 
 async fn get_board(State(state): State<MyAppState>, Path(id): Path<i32>) -> Response {
-    respond(state.status_board().get_board(id).await)
+    respond(status_board::get_board(&state, id).await)
 }
 
 async fn post_reorder(
@@ -41,16 +44,8 @@ async fn post_reorder(
     Path(id): Path<i32>,
     Json(payload): Json<CreateReorderInput>,
 ) -> Response {
-    if payload.amount_label.trim().is_empty() {
-        return bad_request("amount_label must not be empty".parse().unwrap());
-    }
-    if !matches!(payload.urgency.as_str(), "normal" | "urgent" | "critical") {
-        return bad_request(format!("invalid urgency: {}", payload.urgency));
-    }
     respond_created(
-        state
-            .status_board()
-            .create_reorder(id, payload)
+        status_board::create_reorder(&state, id, payload)
             .await
             .map(|reorder_id| json!({ "id": reorder_id })),
     )
@@ -61,19 +56,9 @@ async fn put_reorder_status(
     Path((id, reorder_id)): Path<(i32, i32)>,
     Json(payload): Json<ReorderStatusBody>,
 ) -> Response {
-    if !matches!(
-        payload.status.as_str(),
-        "requested" | "preparing" | "en_route" | "delivered"
-    ) {
-        return bad_request(format!("invalid status: {}", payload.status));
-    }
-    match state
-        .status_board()
-        .update_reorder_status(id, reorder_id, &payload.status)
-    {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_no_content(
+        status_board::update_reorder_status(&state, id, reorder_id, &payload.status).await,
+    )
 }
 
 async fn put_availability(
@@ -81,19 +66,14 @@ async fn put_availability(
     Path((id, meal_id)): Path<(i32, i32)>,
     Json(payload): Json<AvailabilityBody>,
 ) -> Response {
-    if !matches!(
-        payload.availability.as_str(),
-        "available" | "low" | "replenishing" | "sold_out"
-    ) {
-        return bad_request(format!("invalid availability: {}", payload.availability));
-    }
-    match state.status_board().set_meal_availability(
-        id,
-        meal_id,
-        &payload.availability,
-        payload.eta_minutes,
-    ) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_no_content(
+        status_board::set_meal_availability(
+            &state,
+            id,
+            meal_id,
+            &payload.availability,
+            payload.eta_minutes,
+        )
+        .await,
+    )
 }

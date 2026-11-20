@@ -1,26 +1,35 @@
-use std::str::FromStr;
+//! Event endpoints. Handlers are thin: they extract inputs, delegate to the
+//! application layer (`crate::app::events`) and map errors to HTTP. All
+//! permission checks, orchestration and audit logging live in the app layer.
 
+use axum::http::request::Parts;
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
+    extract::{FromRequestParts, Path, State},
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Json, Router,
 };
-use bigdecimal::BigDecimal;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::api::{bad_request, map_api_error, respond, respond_created, status_board};
+use crate::api::{map_api_error, respond, respond_created, respond_no_content};
+use crate::app::{events, AppCtx, Channel};
 use crate::MyAppState;
-use foodlib_new::policy::{EventPerm, GlobalPermission, Permission};
-use foodlib_new::{auth_context::AuthCtx, entities::event::Event, Error};
 
 pub mod exports;
 pub mod logistics;
 pub mod meals;
 pub mod members;
 pub mod shopping;
+
+// Re-exported so handlers share the input DTOs with the app layer.
+pub use crate::app::events::{EventCreateInput, EventUpdateInput};
+
+
+#[derive(Debug, Deserialize)]
+pub struct OwnerTransferInput {
+    pub group_id: i32,
+}
 
 pub fn events_router() -> Router<MyAppState> {
     Router::new()
@@ -77,234 +86,87 @@ pub fn events_router() -> Router<MyAppState> {
         .route("/{id}/exports/labels", get(exports::export_labels))
         .route("/{id}/exports/tour/{tour_id}", get(exports::export_tour))
         .merge(logistics::logistics_router())
-        .merge(status_board::status_board_router())
+        .merge(crate::api::status_board::status_board_router())
+}
+
+/// App-layer context for REST handlers: the resolved `AuthCtx` plus the
+/// `Channel::RestApi` marker. Implemented as an extractor so thin handlers
+/// can take `ctx: AppCtx` directly.
+impl FromRequestParts<MyAppState> for AppCtx {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &MyAppState,
+    ) -> Result<Self, Self::Rejection> {
+        let ctx = foodlib_new::auth_context::AuthCtx::from_request_parts(parts, state)
+            .await
+            .map_err(|err| map_api_error(err).into_response())?;
+        Ok(AppCtx::new(ctx, Channel::RestApi))
+    }
 }
 
 /// `GET /api/events` — all events of the user's groups with planner totals
 /// (meal count, ingredient cost, time span), newest activity first.
-async fn list_events(State(state): State<MyAppState>, ctx: AuthCtx) -> Response {
-    respond(state.events().list_summaries_for_user(ctx.user.id).await)
+async fn list_events(State(state): State<MyAppState>, ctx: AppCtx) -> Response {
+    respond(events::list_summaries(&state, &ctx.ctx).await)
 }
 
-#[derive(Debug, Deserialize)]
-pub struct EventCreateInput {
-    pub name: String,
-    pub comment: Option<String>,
-    /// Budget as a decimal string (BigDecimal over the wire).
-    pub budget: Option<String>,
-    pub group_id: i32,
+/// `GET /api/events/{id}` — event detail: frame data, planned meals, total
+/// cost and the caller's resolved permissions for the event.
+async fn get_event(State(state): State<MyAppState>, ctx: AppCtx, Path(id): Path<i32>) -> Response {
+    respond(events::get_event_details(&state, &ctx.ctx, id).await)
 }
 
 /// `POST /api/events` — create an event owned by one of the user's groups.
 async fn create_event(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    ctx: AppCtx,
     Json(payload): Json<EventCreateInput>,
 ) -> Response {
-    // Check user is blocked
-    if let Err(err) = ctx.assert_global(GlobalPermission::AllowedToCreateNewDomainObjects) {
-        return map_api_error(err).into_response();
-    }
-
-    if let Err(err) = ctx.assert_group_perm(payload.group_id, Permission::Event(EventPerm::Create)) {
-        return map_api_error(err).into_response();
-    }
-    let budget = match parse_budget(payload.budget) {
-        Ok(budget) => budget,
-        Err(response) => return response,
-    };
-
-    let event = Event {
-        id: 0,
-        name: payload.name,
-        comment: payload.comment,
-        budget,
-        group_id: payload.group_id,
-    };
-    respond_created(state.events().create(event).await)
-}
-
-#[derive(Debug, Deserialize)]
-pub struct EventUpdateInput {
-    pub name: Option<String>,
-    /// `null` keeps the current comment; an empty string clears it.
-    pub comment: Option<String>,
-    pub budget: Option<String>,
+    respond_created(events::create_new_event(&state, &ctx, payload).await)
 }
 
 /// `PUT /api/events/{id}` — update the event's frame data.
 async fn update_event(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    ctx: AppCtx,
     Path(id): Path<i32>,
     Json(payload): Json<EventUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_event_action(id, EventPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    let current = match state.events().get(id).await {
-        Ok(event) => event,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-    let budget = match parse_budget(payload.budget) {
-        Ok(budget) => budget.or(current.budget),
-        Err(response) => return response,
-    };
-    let comment = match payload.comment {
-        Some(comment) if comment.is_empty() => None,
-        Some(comment) => Some(comment),
-        None => current.comment,
-    };
-
-    let updated = Event {
-        id: current.id,
-        name: payload.name.unwrap_or(current.name),
-        comment,
-        budget,
-        group_id: current.group_id,
-    };
-    respond(state.events().update(updated).await)
+    respond(events::update_event(&state, &ctx, id, payload).await)
 }
 
 /// `DELETE /api/events/{id}` — delete the event (cascades to meals/tours).
 async fn delete_event(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    ctx: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_event_action(id, EventPerm::Delete).await {
-        return map_api_error(err).into_response();
-    }
-    match state.events().delete(id).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_no_content(events::delete_event(&state, &ctx, id).await)
 }
 
 /// `POST /api/events/{id}/clone` — duplicate the event incl. meals and source
 /// overrides. Returns `{ "id": <new event id> }`.
 async fn clone_event(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    ctx: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_event_action(id, EventPerm::Clone).await {
-        return map_api_error(err).into_response();
-    }
-    let event = match state.events().get(id).await {
-        Ok(event) => event,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-    match state.events().duplicate(id, event.group_id).await {
-        Ok(new_id) => respond_created(Ok(json!({ "id": new_id }))),
-        Err(err) => map_api_error(err).into_response(),
-    }
-}
-
-/// `GET /api/events/{id}` — event frame + planned meals (with scaled weight,
-/// energy density and price) + the event's total ingredient cost.
-async fn get_event(
-    State(state): State<MyAppState>,
-    ctx: AuthCtx,
-    Path(id): Path<i32>,
-) -> Response {
-    if let Err(err) = ctx.assert_event_action(id, EventPerm::View).await {
-        return map_api_error(err).into_response();
-    }
-    let event = match state.events().get(id).await {
-        Ok(event) => event,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-    let meals = match state.meals().get_event_meals_planner(id).await {
-        Ok(meals) => meals,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-    let total_cost = match state.events().get_total_cost(id).await {
-        Ok(cost) => cost,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-
-    let group_id = event.group_id;
-
-    (
-        StatusCode::OK,
-        Json(json!({
-            "event": event,
-            "meals": meals,
-            "total_cost": total_cost,
-            // Resolved permissions of the caller for this event — the SPA
-            // builds its capability guards from this (covers direct event
-            // collaborators that are not members of the owning group).
-            "permissions": ctx.policy.resolved_event_permissions(id, group_id),
-        })),
+    respond_created(
+        events::clone_created_event(&state, &ctx, id)
+            .await
+            .map(|id| json!({ "id": id })),
     )
-        .into_response()
 }
 
-/// Parses a budget decimal string; an empty string clears the budget.
-fn parse_budget(budget: Option<String>) -> Result<Option<BigDecimal>, Response> {
-    match budget.as_deref() {
-        None | Some("") => Ok(None),
-        Some(value) => match BigDecimal::from_str(value) {
-            Ok(parsed) => Ok(Some(parsed)),
-            Err(_) => Err(bad_request(format!("invalid budget: {value}"))),
-        },
-    }
-}
-
-// --------------------------------------------------------------- ownership
-
-#[derive(Debug, Deserialize)]
-pub struct OwnerTransferInput {
-    pub group_id: i32,
-}
-
-/// `PUT /api/events/{id}/owner` — explicit Besitz-Übertragung: erlaubt für
-/// den Besitzer (persönliche Gruppe) oder Manager der besitzenden Gruppe;
-/// die Zielgruppe muss für den Aufrufer zugänglich sein (Admin oder
-/// Mitgliedschaft). Danach regelt die Manager-Rolle der neuen Gruppe.
+/// `PUT /api/events/{id}/owner` — explicit Besitz-Übertragung (siehe
+/// `crate::app::events::transfer_owner`).
 async fn transfer_owner(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    ctx: AppCtx,
     Path(id): Path<i32>,
     Json(payload): Json<OwnerTransferInput>,
 ) -> Response {
-    let current = match state.events().get(id).await {
-        Ok(event) => event,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-
-    // Reflexive transfer
-    if current.group_id == payload.group_id {
-        return map_api_error(Error::Forbidden(
-            "event already belongs to the target group".into(),
-        ))
-            .into_response();
-    }
-    // Require transfer rights
-    if let Err(_) = ctx.assert_group_perm(current.group_id, Permission::Event(EventPerm::TransferOwner)) {
-        return map_api_error(Error::Forbidden(
-            "transferring ownership requires edit rights on the current owner group".into(),
-        ))
-            .into_response();
-    }
-    // Require access to the target group
-    if !ctx.can_access_group(payload.group_id) {
-        return map_api_error(Error::Forbidden(
-            "you can only transfer into groups you belong to".into(),
-        ))
-            .into_response();
-    }
-    // Require edit rights on the target group
-    if let Err(_) = ctx.assert_group_perm(payload.group_id, Permission::Event(EventPerm::TransferOwner)) {
-        return map_api_error(Error::Forbidden(
-            "transferring ownership requires edit rights on the target group".into(),
-        ))
-            .into_response();
-    }
-
-    match state.events().set_group(id, payload.group_id).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_no_content(events::transfer_event_owner(&state, &ctx, id, payload.group_id).await)
 }

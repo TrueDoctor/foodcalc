@@ -1,30 +1,21 @@
 //! Ingredient endpoints: filtered list, composed detail (sources, unit
 //! weights, properties), CRUD and source/weight/property management.
 
-use std::str::FromStr;
-
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
-    response::{IntoResponse, Response},
+    response::Response,
     routing::{delete, get, put},
     Json, Router,
 };
-use bigdecimal::BigDecimal;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
+use crate::app::ingredients;
+use crate::app::ingredients::{IngredientCreateInput, IngredientPropertyInput, IngredientSourceInput, IngredientUpdateInput, IngredientWeightInput, IngredientWeightUpdateInput};
 use crate::{
-    api::{bad_request, json_response, map_api_error, respond, respond_created},
+    api::{respond, respond_created, respond_no_content},
+    app::AppCtx,
     MyAppState,
 };
-use foodlib_new::auth_context::AuthCtx;
-use foodlib_new::entities::ingredient::{
-    Ingredient, IngredientSource, IngredientWeight, IngredientWithSource,
-};
-use foodlib_new::entities::property::Property;
-use foodlib_new::entities::recipe::Recipe;
-use foodlib_new::error::Error;
-use foodlib_new::policy::{GlobalPermission, IngredientPerm, Permission};
 
 pub fn ingredients_router() -> Router<MyAppState> {
     Router::new()
@@ -59,439 +50,158 @@ pub fn ingredients_router() -> Router<MyAppState> {
 
 // ------------------------------------------------------------------ list
 
-#[derive(Debug, Deserialize)]
-pub struct IngredientListQuery {
-    /// Case-insensitive substring search on the name.
-    pub search: Option<String>,
-    /// Only ingredients carrying this property (e.g. a spice tag).
-    pub property_id: Option<i32>,
-}
+// List/search DTOs live in the application layer.
+pub use crate::app::ingredients::IngredientListQuery;
 
 async fn list_ingredients(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    ctx: AppCtx,
     Query(query): Query<IngredientListQuery>,
 ) -> Response {
-    let ingredients = match state.ingredients().list_with_sources().await {
-        Ok(ingredients) => ingredients,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-
-    let search = query.search.unwrap_or_default().to_lowercase();
-
-    // Property filter: resolve the matching ids once, then intersect —
-    // keeps the list query untouched and the properties table is tiny.
-    let property_ids: Option<Vec<i32>> = match query.property_id {
-        Some(property_id) => match state
-            .ingredients()
-            .ingredient_ids_for_property(property_id)
-            .await
-        {
-            Ok(ids) => Some(ids),
-            Err(err) => return map_api_error(err).into_response(),
-        },
-        None => None,
-    };
-    let items: Vec<&IngredientWithSource> = ingredients
-        .iter()
-        // Admins halten sich an Mitgliedschaften (kein Inline-Bypass).
-        .filter(|ingredient| ctx.group_ids.contains(&ingredient.group_id))
-        .filter(|ingredient| {
-            search.is_empty() || ingredient.name.to_lowercase().contains(&search)
-        })
-        .filter(|ingredient| {
-            property_ids
-                .as_ref()
-                .map_or(true, |ids| ids.contains(&ingredient.id))
-        })
-        .collect();
-
-    json_response(StatusCode::OK, items)
+    respond(ingredients::list_ingredients(&state, &ctx, query).await)
 }
 
 // ---------------------------------------------------------------- create
 
-#[derive(Debug, Deserialize)]
-pub struct IngredientCreateInput {
-    pub name: String,
-    /// Energy density in kJ/g.
-    pub energy: String,
-    pub comment: Option<String>,
-    pub group_id: i32,
-}
 
-fn parse_energy(value: &str) -> Result<BigDecimal, Response> {
-    BigDecimal::from_str(value)
-        .map_err(|_| bad_request(format!("invalid energy value: {value}")))
-}
 
 async fn create_ingredient(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Json(payload): Json<IngredientCreateInput>,
 ) -> Response {
-    // Check user is blocked
-    if let Err(err) = ctx.assert_global(GlobalPermission::AllowedToCreateNewDomainObjects) {
-        return map_api_error(err).into_response();
-    }
-    // Check user has permission to create ingredients in the target group
-    if let Err(err) = ctx.assert_group_perm(payload.group_id, Permission::Ingredient(IngredientPerm::Create)) {
-        return map_api_error(err).into_response();
-    }
-    let energy = match parse_energy(&payload.energy) {
-        Ok(energy) => energy,
-        Err(response) => return response,
-    };
-
-    let ingredient = Ingredient {
-        id: 0,
-        name: payload.name,
-        energy,
-        comment: payload.comment,
-        group_id: payload.group_id,
-    };
-
-    respond_created(state.ingredients().create(ingredient).await)
+    respond_created(ingredients::create_ingredient(&state, &actor, payload).await)
 }
 
 // ---------------------------------------------------------------- detail
 
-#[derive(Debug, Serialize)]
-pub struct IngredientDetailDto {
-    pub ingredient: Ingredient,
-    pub sources: Vec<IngredientSource>,
-    /// Per-unit gram weights for amount conversions.
-    pub weights: Vec<IngredientWeight>,
-    /// Allergen / dietary properties aggregated for this ingredient.
-    pub properties: Vec<Property>,
-}
+
 
 async fn get_ingredient(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    let ingredient = match state.ingredients().get(id).await {
-        Ok(ingredient) => ingredient,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-    // Group-private reads: non-members get a plain 404.
-    if !ctx.can_access_group(ingredient.group_id) {
-        return map_api_error(Error::NotFound {
-            entity: "Ingredient",
-            id: id.to_string(),
-        })
-            .into_response();
-    }
-
-    let sources = state
-        .ingredients()
-        .get_sources(id)
-        .await
-        .unwrap_or_default();
-    let weights = state
-        .ingredients()
-        .get_weights(id)
-        .await
-        .unwrap_or_default();
-    let properties = state
-        .properties()
-        .get_ingredient_properties(id)
-        .await
-        .map(|summary| summary.properties)
-        .unwrap_or_default();
-
-    json_response(
-        StatusCode::OK,
-        IngredientDetailDto {
-            ingredient,
-            sources,
-            weights,
-            properties,
-        },
-    )
+    respond(ingredients::get_ingredient(&state, &actor, id).await)
 }
 
 // ------------------------------------------------------- update / delete
 
-#[derive(Debug, Deserialize)]
-pub struct IngredientUpdateInput {
-    pub name: Option<String>,
-    pub energy: Option<String>,
-    /// `null` clears the comment, absent keeps it.
-    pub comment: Option<Option<String>>,
-}
+
 
 async fn update_ingredient(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path(id): Path<i32>,
     Json(payload): Json<IngredientUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    let current = match state.ingredients().get(id).await {
-        Ok(ingredient) => ingredient,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-
-    let energy = match &payload.energy {
-        Some(value) => match parse_energy(value) {
-            Ok(energy) => energy,
-            Err(response) => return response,
-        },
-        None => current.energy,
-    };
-
-    let ingredient = Ingredient {
-        id: current.id,
-        name: payload.name.unwrap_or(current.name),
-        energy,
-        comment: payload.comment.unwrap_or(current.comment),
-        group_id: current.group_id,
-    };
-
-    respond(state.ingredients().update(ingredient).await)
+    respond(ingredients::update_ingredient(&state, &actor, id, &payload).await)
 }
 
 async fn delete_ingredient(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Delete).await {
-        return map_api_error(err).into_response();
-    }
-    match state.ingredients().delete(id).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_no_content(ingredients::delete_ingredient(&state, &actor, id).await)
 }
 
 // ---------------------------------------------------------------- sources
 
-#[derive(Debug, Deserialize)]
-pub struct IngredientSourceInput {
-    pub store_id: i32,
-    pub package_size: String,
-    pub unit_id: i32,
-    pub price: String,
-    pub url: Option<String>,
-    pub comment: Option<String>,
-}
-
-async fn list_sources(State(state): State<MyAppState>, Path(id): Path<i32>) -> Response {
-    respond(state.ingredients().get_sources(id).await)
+async fn list_sources(
+    State(state): State<MyAppState>,
+    actor: AppCtx,
+    Path(id): Path<i32>
+) -> Response {
+    respond(ingredients::list_sources(&state, &actor, id).await)
 }
 
 async fn add_source(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path(id): Path<i32>,
     Json(payload): Json<IngredientSourceInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    let package_size = match parse_amount(&payload.package_size) {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
-    let price = match parse_amount(&payload.price) {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
-
-    let source = IngredientSource {
-        id: 0,
-        ingredient_id: id,
-        store_id: payload.store_id,
-        package_size,
-        unit_id: payload.unit_id,
-        price,
-        url: payload.url,
-        comment: payload.comment,
-    };
-    respond_created(state.ingredients().add_source(source).await)
+   respond_created(ingredients::add_source(&state, &actor, id, payload).await)
 }
 
 async fn update_source(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path((id, source_id)): Path<(i32, i32)>,
     Json(payload): Json<IngredientSourceInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    let package_size = match parse_amount(&payload.package_size) {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
-    let price = match parse_amount(&payload.price) {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
-
-    let source = IngredientSource {
-        id: source_id,
-        ingredient_id: id,
-        store_id: payload.store_id,
-        package_size,
-        unit_id: payload.unit_id,
-        price,
-        url: payload.url,
-        comment: payload.comment,
-    };
-    respond(state.ingredients().update_source(source).await)
+   respond(ingredients::update_source(&state, &actor, id, source_id, payload).await)
 }
 
 async fn delete_source(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path((id, source_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    match state.ingredients().delete_source(source_id).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_no_content(ingredients::delete_source(&state, &actor, id, source_id).await)
 }
 
-// ---------------------------------------------------------------- weights
 
-/// Parses a decimal amount ("1.5") into a `BigDecimal`.
-fn parse_amount(value: &str) -> Result<BigDecimal, Response> {
-    BigDecimal::from_str(value)
-        .map_err(|_| bad_request(format!("invalid decimal amount: {value}")))
-}
 
-#[derive(Debug, Deserialize)]
-pub struct IngredientWeightInput {
-    pub unit_id: i32,
-    /// Weight in **kg** per unit of `unit_id` (e.g. 1 piece = 0.12 kg).
-    pub weight: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct IngredientWeightUpdateInput {
-    pub weight: String,
-}
-
-async fn list_weights(State(state): State<MyAppState>, Path(id): Path<i32>) -> Response {
-    respond(state.ingredients().get_weights(id).await)
+async fn list_weights(
+    State(state): State<MyAppState>,
+    actor: AppCtx,
+    Path(id): Path<i32>) -> Response {
+    respond(ingredients::list_weights(&state, &actor, id).await)
 }
 
 async fn add_weight(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path(id): Path<i32>,
     Json(payload): Json<IngredientWeightInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    let weight = match parse_amount(&payload.weight) {
-        Ok(weight) => weight,
-        Err(response) => return response,
-    };
-
-    let input = IngredientWeight {
-        ingredient_id: id,
-        unit_id: payload.unit_id,
-        weight: weight.clone(),
-    };
-    respond_created(state.ingredients().add_weight(input).await)
+    respond_created(ingredients::add_weight(&state, &actor, id, payload).await)
 }
 
 async fn update_weight(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path((id, unit_id)): Path<(i32, i32)>,
     Json(payload): Json<IngredientWeightUpdateInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    let weight = match parse_amount(&payload.weight) {
-        Ok(weight) => weight,
-        Err(response) => return response,
-    };
-
-    let input = IngredientWeight {
-        ingredient_id: id,
-        unit_id,
-        weight: weight.clone(),
-    };
-    respond(state.ingredients().update_weight(input).await)
+    respond(ingredients::update_weight(&state, &actor, id, unit_id, payload).await)
 }
 
 async fn delete_weight(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path((id, unit_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    match state.ingredients().delete_weight(id, unit_id).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_no_content(ingredients::delete_weight(&state, &actor, id, unit_id).await)
 }
 
 // ------------------------------------------------------------- properties
 
-#[derive(Debug, Deserialize)]
-pub struct IngredientPropertyInput {
-    pub property_id: i32,
-}
-
 async fn get_ingredient_properties(
     State(state): State<MyAppState>,
+    actor: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    respond(state.properties().get_ingredient_properties(id).await)
+    respond(ingredients::list_ingredient_properties(&state, &actor, id).await)
 }
 
 async fn add_property(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path(id): Path<i32>,
     Json(payload): Json<IngredientPropertyInput>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    match state
-        .properties()
-        .assign_to_ingredient(id, payload.property_id)
-        .await
-    {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_created(ingredients::add_property(&state, &actor, id, payload).await)
 }
 
 async fn delete_property(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    actor: AppCtx,
     Path((id, property_id)): Path<(i32, i32)>,
 ) -> Response {
-    if let Err(err) = ctx.assert_ingredient_perm(id, IngredientPerm::Edit).await {
-        return map_api_error(err).into_response();
-    }
-    match state
-        .properties()
-        .remove_from_ingredient(id, property_id)
-        .await
-    {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_no_content(ingredients::delete_property(&state, &actor, id, property_id).await)
 }
 
 // --------------------------------------------------------------- ownership
@@ -505,51 +215,13 @@ pub struct OwnerTransferInput {
 /// `events::transfer_owner`).
 async fn transfer_owner(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    ctx: AppCtx,
     Path(id): Path<i32>,
     Json(payload): Json<OwnerTransferInput>,
 ) -> Response {
-    let current = match state.ingredients().get(id).await {
-        Ok(ingredient) => ingredient,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-    // Reflexive transfer
-    if current.group_id == payload.group_id {
-        return map_api_error(Error::Forbidden(
-            "ingredient already belongs to the target group".into(),
-        ))
-            .into_response();
-    }
-    // Require transfer rights
-    if let Err(_) = ctx.assert_group_perm(current.group_id, Permission::Ingredient(IngredientPerm::TransferOwner)) {
-        return map_api_error(Error::Forbidden(
-            "transferring ownership requires edit rights on the current owner group".into(),
-        ))
-            .into_response();
-    }
-    // Require access to the target group
-    if !ctx.can_access_group(payload.group_id) {
-        return map_api_error(Error::Forbidden(
-            "you can only transfer into groups you belong to".into(),
-        ))
-            .into_response();
-    }
-    // Require edit rights on the target group
-    if let Err(_) = ctx.assert_group_perm(payload.group_id, Permission::Ingredient(IngredientPerm::TransferOwner)){
-        return map_api_error(Error::Forbidden(
-            "transferring ownership requires edit rights on the target group".into(),
-        ))
-            .into_response();
-    }
-
-    match state
-        .ingredients()
-        .set_group(id, payload.group_id)
-        .await
-    {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => map_api_error(err).into_response(),
-    }
+    respond_no_content(
+        ingredients::transfer_owner(&state, &ctx, id, payload.group_id).await,
+    )
 }
 
 // ----------------------------------------------------------------- usages
@@ -559,16 +231,8 @@ async fn transfer_owner(
 /// und die Lösch-Warnung.
 async fn list_usages(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    ctx: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    let recipes = match state.ingredients().usages(id).await {
-        Ok(recipes) => recipes,
-        Err(err) => return map_api_error(err).into_response(),
-    };
-    let items: Vec<&Recipe> = recipes
-        .iter()
-        .filter(|recipe| ctx.group_ids.contains(&recipe.group_id))
-        .collect();
-    json_response(StatusCode::OK, items)
+    respond(ingredients::usages(&state, &ctx.ctx, id).await)
 }
