@@ -78,7 +78,12 @@ impl Amount {
 
 impl std::fmt::Display for Amount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        // Forward the precision specifier so `{:.2}` keeps working through the
+        // newtype (BigDecimal honors it).
+        match f.precision() {
+            Some(p) => write!(f, "{:.p$}", self.0, p = p),
+            None => write!(f, "{}", self.0),
+        }
     }
 }
 

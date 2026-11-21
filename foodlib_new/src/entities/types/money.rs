@@ -118,7 +118,12 @@ impl Money {
 
 impl std::fmt::Display for Money {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        // Forward the precision specifier so `{:.2}` keeps working through the
+        // newtype (BigDecimal honors it).
+        match f.precision() {
+            Some(p) => write!(f, "{:.p$}", self.0, p = p),
+            None => write!(f, "{}", self.0),
+        }
     }
 }
 
@@ -197,6 +202,15 @@ impl std::ops::Div<i64> for Money {
     type Output = Self;
     fn div(self, rhs: i64) -> Self {
         Money(self.0 / BigDecimal::from(rhs))
+    }
+}
+
+/// Unit price (€/kg) per purchased quantity (kg) yields money — the inverse
+/// of the scaling bridge below.
+impl std::ops::Div<&Amount> for Money {
+    type Output = Money;
+    fn div(self, rhs: &Amount) -> Money {
+        Money(self.0 / rhs.get().clone())
     }
 }
 
