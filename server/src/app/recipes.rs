@@ -15,8 +15,8 @@ use foodlib_new::recipe::Recipe;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::app::exports::ExportedFile;
 // Export artifact shared with the events exports (filename + mime + bytes).
-pub use crate::app::events::exports::ExportedFile;
 use foodlib_new::entities::types::amount::Amount;
 
 #[derive(Debug, Deserialize)]
@@ -447,13 +447,11 @@ pub async fn export_pdf(
         .export()
         .fetch_user_input_meal(id, servings, energy_per_serving, String::new())
         .await?;
-    let title = recipe_info.name.to_owned();
-    let bytes = crate::app::events::exports::render_recipes(vec![recipe_info])?;
-    Ok(ExportedFile {
-        filename: title,
-        mime: "application/pdf",
-        bytes,
+    let filename = crate::app::exports::sanitize_filename(&recipe_info.name);
+    crate::app::exports::render_pdf(state, filename, move |pdf| {
+        pdf.export_recipes(vec![recipe_info])
     })
+        .await
 }
 
 // ------------------------------------------------------------------- clone

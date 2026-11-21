@@ -93,5 +93,16 @@ pub async fn export_tour(
     ctx: AppCtx,
     Path((event_id, tour_id)): Path<(i32, i32)>,
 ) -> Response {
-    file_response(exports::export_shopping_tour_list(&state, &ctx, EventId(event_id), TourId(tour_id)).await, "txt")
+
+    file_response(
+        exports::export_shopping_tour_list(
+            &state,
+            &ctx,
+            EventId(event_id),
+            TourId(tour_id),
+            exports::TourExportQuery::default(),
+        )
+            .await,
+        "txt",
+    )
 }

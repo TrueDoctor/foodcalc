@@ -1,0 +1,77 @@
+use bigdecimal::ToPrimitive;
+
+use foodlib_new::entities::types::amount::Amount;
+
+use super::{text::format_recipe_usage, TourExportData};
+use crate::app::{Error, Result};
+
+pub fn render_shopping_tour(data: &TourExportData) -> Result<Vec<u8>> {
+    let metro = data
+        .metro
+        .as_ref()
+        .ok_or_else(|| Error::Misc("Missing Metro context for CSV export".into()))?;
+
+    let empty_stock = std::collections::HashMap::new();
+    let stock = data.inventory_stock.as_ref().unwrap_or(&empty_stock);
+
+    let mut rows: Vec<(String, i64, String, bool)> = Vec::new();
+
+    for item in &data.items {
+        let Some(item_weight) = &item.weight else {
+            continue;
+        };
+
+        let inv_amount = stock
+            .get(&item.ingredient_id)
+            .cloned()
+            .unwrap_or_else(Amount::zero);
+
+        if inv_amount >= *item_weight {
+            continue;
+        }
+        let weight = item_weight.clone() - inv_amount.clone();
+
+        let Some(source) = metro
+            .sources
+            .iter()
+            .find(|s| s.ingredient_id == item.ingredient_id)
+        else {
+            continue;
+        };
+
+        let Some(package_size) = source.package_size.to_f64().filter(|&s| s > 0.0) else {
+            continue;
+        };
+        let weight_f64 = weight.to_f64().unwrap_or(0.0);
+        let packages = (weight_f64 / package_size).ceil() as i64;
+        let total_kg = packages as f64 * package_size;
+
+        let mut comment = format!(
+            "{}({} * {:.2}kg = {:.2}kg)",
+            item.ingredient_name, packages, package_size, total_kg
+        );
+        let usage = format_recipe_usage(&item.recipe_usage);
+        if !usage.is_empty() {
+            comment.push_str(&format!(": {usage}"));
+        }
+
+        match metro.article_numbers.get(&item.ingredient_id) {
+            Some(article) => rows.push((article.clone(), packages, comment, true)),
+            None => rows.push((item.ingredient_name.clone(), packages, comment, false)),
+        }
+    }
+
+    rows.sort_by_key(|(_, _, _, resolved)| !*resolved);
+
+    let mut output = String::new();
+    for (col1, packages, comment, _) in rows {
+        let comment_field = if comment.is_empty() {
+            String::new()
+        } else {
+            format!("\"{}\"", comment.replace('"', "\"\""))
+        };
+        output.push_str(&format!("{},{},{}\n", col1, packages, comment_field));
+    }
+
+    Ok(output.into_bytes())
+}

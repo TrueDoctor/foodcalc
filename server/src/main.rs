@@ -86,7 +86,7 @@ async fn main() {
     let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
 
     let lib = foodlib_new::FoodLib::new(pool.clone());
-    let state = MyAppState { db: lib.clone() };
+    let state = MyAppState::new(lib.clone());
     let new_lib = lib;
 
     // Combine routes with middleware. The legacy HTMX frontend (and its

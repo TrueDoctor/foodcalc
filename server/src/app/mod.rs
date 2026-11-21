@@ -21,6 +21,7 @@ pub mod users;
 pub mod state;
 pub(crate) mod inventories;
 mod lib;
+pub mod exports;
 
 pub use foodlib_new::error::{Error, Result};
 pub use state::MyAppState;
