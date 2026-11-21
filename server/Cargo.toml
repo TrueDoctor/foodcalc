@@ -7,9 +7,9 @@ edition = "2021"
 
 
 [features]
-default = []
-typst = ["dep:pdf_export"]
+default = ["legacy-frontend"]
 legacy-frontend = []
+typst = ["dep:pdf_export"]
 
 [dependencies]
 axum.workspace = true

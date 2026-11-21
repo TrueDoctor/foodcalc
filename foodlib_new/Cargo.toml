@@ -5,6 +5,8 @@ edition = "2021"
 
 [features]
 axum = ["dep:axum", "dep:maud"]
+default = ["legacy-frontend"]
+legacy-frontend = []
 
 [dependencies]
 sqlx.workspace = true
