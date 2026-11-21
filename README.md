@@ -1,93 +1,91 @@
 # Foodcalc
 
-Foodcalc ist ein Planungs- und Verwaltungssystem für das Catering großer Veranstaltungen —
-vom Abendessen für 30 Personen bis zur Bewirtung von rund 500 Personen über 7 Tage.
-Es ist als self-hosted Anwendung für Gruppen und Vereine gedacht: mehrere Personen planen
-gemeinsam Events, kochen nach denselben Unterlagen und behalten Lager und Kosten im Blick.
+Foodcalc is a self-hosted catering planning and management system for large-scale events — from a 30-person dinner to a 7-day event feeding around 500 people. Built for volunteer groups and associations, it enables teams to collaboratively plan menus, cook from unified production sheets, and track inventory and costs.
 
-## Kernidee: Energiebasierte Skalierung
+## Core Concept: Energy-Based Scaling
 
-Rezepte skalieren nicht beliebig linear — ein Rezept, das für 4 Personen geschrieben ist,
-verhält sich bei 300 Personen anders. Foodcalc skaliert deshalb über die Energie:
+Recipes do not scale linearly from 4 servings to 300. Foodcalc scales production quantities based on nutritional energy:
 
-- Jede Zutat hat eine **Energiedichte (kJ/g)**; daraus ergibt sich die Energiedichte des Rezepts.
-- Für jede Speise/Mahlzeit wird ein **gewünschter Energiebedarf pro Person** und die Personenzahl
-  angegeben — daraus berechnet die App die **Kochmenge (kg)**, sodass der Energiebedarf der Leute
-  gesichert ist.
-- Positionen, die sich nicht über Energie skalieren lassen (Getränke, Stückgut), werden als
-  feste Stück-/Mengen-Ziele geplant.
+- Every ingredient carries an **energy density (kJ/g)**, from which the recipe's overall energy density is calculated.
+- Each meal defines a **target energy per person** and headcount — Foodcalc calculates the required **cooking weight (kg)** so attendees' energy needs are met.
+- Items that cannot be scaled by energy (beverages, packaged unit goods) are planned as fixed piece or volume targets.
 
-## Funktionen
+## Core Features
 
-- **Veranstaltungen** — Budget, mehrere Mahlzeiten über mehrere Tage, Zeitplanung als
-  Gantt-artige Timeline (Mahlzeiten, Einkaufstouren, Vorkochen; Drag&Drop), Event-Vorlagen per Klon.
-- **Rezepte** — klassifiziert als Mahlzeit oder Komponente (beim Event austauschbar einsetzbar),
-  mit Zutaten, Sub-Komponenten und Arbeitsschritten (fixe + mengenabhängige Arbeitszeit,
-  HACCP-Kontrollpunkte). Suche/Filter beim Zusammenstellen, Schnell-Anlegen fehlender Zutaten.
-- **Zutaten** — Energiedichte, mehrere Eigenschaften (Gewürz, vegan, Allergene — Grundlage für
-  Filter und Allergenlisten), Einheitsgewichte für Umrechnungen, Bezugsquellen und Preise
-  (inkl. automatischer Preisabruf für Metro).
-- **Inventare** — Lagerbestände von Gruppen mit Bestandsabgleich, private Event-Inventare,
-  protokollierte Buchungen.
-- **Einkaufsplanung** — Einkaufslisten pro Händler (Touren), Abdeckung gegen Bestände mit
-  manueller Aufteilung pro Position, sperrbare Listen, Listen-Export.
-- **Exporte** — skalierte Koch-PDFs (je Speise oder gesamt), Allergenlisten, Einkaufslisten,
-  Event-Übersicht.
-- **Rechte** — gruppenscopes Rollenmodell (Leser / Bearbeiter / Verwalter), übertragbare
-  Eigentümerschaft (Person ↔ Gruppe), Administratoren ohne pauschalen Ressourcenzugriff.
+- **Events** — Budget tracking, multi-day meal schedules, Gantt-style timeline (meals, shopping tours, food prep with drag & drop), and event cloning from templates.
+- **Recipes** — Classified as full meals or reusable sub-components, with ingredients, nested components, and preparation steps (fixed + quantity-dependent prep times, HACCP control points). Includes search/filtering and inline creation of missing ingredients.
+- **Ingredients** — Energy density, multi-tag properties (spices, vegan, allergens — powering filters and allergen matrices), unit weights for conversions, suppliers, and pricing (including automated Metro price synchronization).
+- **Inventories** — Group-level stock tracking with reconciliation, event-scoped inventories, and auditable stock bookings.
+- **Shopping Planning** — Supplier-grouped shopping lists (tours), automatic stock deduction with manual per-item split overrides, tour locking, and printable/exportable shopping lists.
+- **Exports** — Scaled cooking sheets (per dish or full event), allergen lists, shopping lists, and event overviews rendered via Typst.
+- **Access Control & Auditing** — Group-scoped RBAC (`viewer` / `editor` / `manager`), transferable ownership (user ↔ group), per-event role overrides, and an append-only security audit log.
 
-## Architektur
+## Interfaces & Integrations
 
-```
+### REST API (`/api/*`)
+Foodcalc provides a JSON REST API backed by a dedicated application layer (`server/src/app/`), exposing events, meals, food prep, shopping tours, recipes, ingredients, inventories, status boards, user/group RBAC management, and audit logs to external tools and modern frontends.
+- Full OpenAPI specification: [`server/foodcalc_rest_specification.yaml`](./server/foodcalc_rest_specification.yaml)
+
+
+### Web Frontend
+Currently, Foodcalc provides a server-rendered HTML UI built with `maud` and HTMX/vanilla JS.
+It is available at `/`.
+> Note: It is planned to be complemented and eventually replaced by a Single Page Application (SPA) via the REST-API
+
+### Planned & Upcoming Features
+- **OAuth2 / OIDC Login** *(planned on a dedicated branch)* — Optional single sign-on alongside local password authentication.
+- **Single Page Application (SPA)** *(planned on a dedicated branch)* — React + TypeScript + Vite frontend with full REST API coverage, including event planning, recipe management, and inventory tracking.
+- **External Food Database Integration (USDA FDC)** *(planned on a dedicated branch)* — Automated ingredient nutrition and allergen lookup.
+- **SPA Feature Parity & Enhancements** — Piece-based targets for non-energy-scalable items, cost calculation tab (cost per meal/portion/tour vs. budget), standalone allergen PDFs, global document management, and reorder/availability tracking (see [`REQUIREMENTS.md`](./REQUIREMENTS.md)).
+
+## Architecture
+
+```text
 foodcalc/
-├── server/                 # REST-API (axum) inkl. PDF-Export (Typst);
-│                           # enthält noch die legacy server-rendered UI (maud)
-├── foodlib_new/            # Datenlayer: Ops, Entities, Auth, Migrationen (sqlx / PostgreSQL)
-├── frontend/spa-frontend/  # SPA: React + TypeScript + Vite (TanStack Query, i18n de/en)
-├── foodlib/                # legacy Datenlayer (wird zurückgebaut)
-└── cli-client/             # legacy CLI (wird zurückgebaut)
-```
+├── server/                 # Axum web server: JSON REST API (/api/*), MCP server (/mcp),
+│                           # and legacy server-rendered UI (maud)
+├── pdf_export/             # Typst templating and PDF rendering engine
+├── foodlib_new/            # Core domain library: ops, entities, RBAC policy, SQLx migrations
+├── metro-scrape/           # Metro supplier catalog & price synchronization
+├── frontend/spa-frontend/  # React + TypeScript + Vite SPA (on feat/spa-frontend)
+├── foodlib/                # Legacy data layer (being phased out)
+└── cli-client/             # Legacy CLI client (being phased out)
+``` 
 
-Das SPA ersetzt die legacy server-rendered UI schrittweise (Feature-Parität in Arbeit).
 
-## Entwicklung
+## Development
 
-Voraussetzungen: Rust-Toolchain, PostgreSQL, Node.js/npm.
+### Prerequisites
 
-Backend:
+* Rust toolchain (stable)
+* PostgreSQL
+* `sqlx-cli` (for running database migrations)
+
+### Setup & Run
 
 ```sh
-# DATABASE_URL (PostgreSQL) in foodlib_new/.env setzen, dann:
+# Configure DATABASE_URL (PostgreSQL) in foodlib_new/.env, then apply migrations:
 cd foodlib_new && sqlx migrate run
 cargo run -p server
+
 ```
 
-Frontend:
+To build the server without PDF/Typst support:
 
 ```sh
-cd frontend/spa-frontend
-npm ci
-npm run dev   # Entwicklungsserver mit Proxy zum Backend
+cargo build -p server --no-default-features
+
 ```
 
-Qualitäts-Gates:
+### Quality Gates
 
 ```sh
-cd frontend/spa-frontend && npm run build && npm run lint && npm test
-cargo check && cargo test -p foodlib_new
+cargo check --workspace
+cargo test -p foodlib_new
+
 ```
 
-Frontend-Konventionen (Komponenten-Schichten, i18n-Pflicht, REMOVED-BY-DESIGN-Marker):
-siehe `frontend/spa-frontend/README.md`.
+## Documentation
 
-## Dokumentation
-
-- [REQUIREMENTS.md](./REQUIREMENTS.md) — Requirements/User Stories (MoSCoW) mit Soll-Ist-Status
-- [REST-API-Spezifikation](./server/foodcalc_rest_specification.yaml) — REST-API-Spezifikation
-
-## Status / Fahrplan
-
-Im SPA-Umbau noch offen (Details siehe REQUIREMENTS.md): Stück-Ziele für nicht
-energieskalierbare Positionen, Kalkulations-Tab (Kosten je Mahlzeit/Portion/Tour vs. Budget),
-Allergenlisten-PDF, globale Dokumentenverwaltung, Nachbestellungs-/Verfügbarkeitsmodul,
-OAuth2-Anmeldung (optional).
+* [`REQUIREMENTS.md`](./REQUIREMENTS.md) — MoSCoW requirements and user stories with implementation status
+* [`server/foodcalc_rest_specification.yaml`](./server/foodcalc_rest_specification.yaml) — OpenAPI REST specification
