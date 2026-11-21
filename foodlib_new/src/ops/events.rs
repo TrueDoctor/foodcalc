@@ -1,7 +1,10 @@
 use crate::entities::event::*;
+use crate::entities::inventory::Inventory;
+use crate::entities::user::User;
 use crate::error::{Error, Result};
 use bigdecimal::BigDecimal;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
 use time::OffsetDateTime;
 
@@ -330,7 +333,7 @@ impl EventOps {
             FROM events
             LEFT JOIN event_meals USING (event_id)
             WHERE group_id IN (
-                SELECT group_id FROM user_groups WHERE user_id = $1
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
             )
             GROUP BY event_id, event_name, events.comment, group_id, budget
             ORDER BY MIN(start_time) DESC
@@ -358,6 +361,41 @@ impl EventOps {
             GROUP BY event_id, event_name, events.comment, group_id, budget
             ORDER BY MIN(start_time) DESC
             "#
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// Lists all events visible to the user together with planner aggregates
+    /// (meal count, ingredient cost, first/last meal time) for list views.
+    ///
+    /// Uses scalar subqueries so the (expensive) ingredient aggregate is
+    /// computed once per event instead of being multiplied across joined meals.
+    pub async fn list_summaries_for_user(&self, user_id: i64) -> Result<Vec<EventSummary>> {
+        let records = sqlx::query_as!(
+            EventSummary,
+            r#"
+            SELECT
+                e.event_id as id,
+                e.event_name as name,
+                e.comment,
+                e.group_id,
+                e.budget,
+                (SELECT COUNT(*) FROM event_meals WHERE event_id = e.event_id) as "meal_count!",
+                (SELECT COALESCE(SUM(price), 0)
+                    FROM event_ingredients_before_prep_time_resolve
+                    WHERE event_id = e.event_id) as "total_cost!",
+                (SELECT MIN(start_time) FROM event_meals WHERE event_id = e.event_id) as first_meal,
+                (SELECT MAX(start_time) FROM event_meals WHERE event_id = e.event_id) as last_meal
+            FROM events e
+            WHERE e.group_id IN (
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
+            )
+            ORDER BY first_meal DESC NULLS LAST
+            "#,
+            user_id
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -443,6 +481,119 @@ impl EventOps {
         Ok(records)
     }
 
+    /// Manually pins an ingredient onto a tour (overlay on the view-derived
+    /// assignment). Idempotent.
+    pub async fn add_shopping_tour_item(
+        &self,
+        tour_id: i32,
+        ingredient_id: i32,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO shopping_tour_items (tour_id, ingredient_id)
+            VALUES ($1, $2)
+            ON CONFLICT (tour_id, ingredient_id) DO NOTHING
+            "#,
+            tour_id,
+            ingredient_id,
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Removes a manual pin; the ingredient falls back to the view-derived
+    /// assignment ("without tour" when nothing matches).
+    pub async fn remove_shopping_tour_item(
+        &self,
+        tour_id: i32,
+        ingredient_id: i32,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"
+            DELETE FROM shopping_tour_items
+            WHERE tour_id = $1 AND ingredient_id = $2
+            "#,
+            tour_id,
+            ingredient_id,
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// All manual pins of an event's tours (tour_id → ingredient_id overlay).
+    pub async fn get_shopping_tour_pins(&self, event_id: i32) -> Result<Vec<TourItemPin>> {
+        let records = sqlx::query_as!(
+            TourItemPin,
+            r#"
+            SELECT sti.tour_id, sti.ingredient_id
+            FROM shopping_tour_items sti
+            JOIN shopping_tours st USING (tour_id)
+            WHERE st.event_id = $1
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(records)
+    }
+
+    /// Marks a tour as completed (locked) or reopens it for editing.
+    pub async fn set_shopping_tour_completed(&self, tour_id: i32, completed: bool) -> Result<()> {
+        if completed {
+            sqlx::query!(
+                r#"
+                INSERT INTO shopping_tour_completed (tour_id, completed_at)
+                VALUES ($1, now())
+                ON CONFLICT (tour_id) DO NOTHING
+                "#,
+                tour_id,
+            )
+            .execute(&*self.pool)
+            .await?;
+        } else {
+            sqlx::query!(
+                r#"DELETE FROM shopping_tour_completed WHERE tour_id = $1"#,
+                tour_id
+            )
+            .execute(&*self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// IDs of the event's tours that are completed (locked).
+    pub async fn get_completed_tour_ids(&self, event_id: i32) -> Result<Vec<i32>> {
+        let records = sqlx::query!(
+            r#"
+            SELECT stc.tour_id
+            FROM shopping_tour_completed stc
+            JOIN shopping_tours st USING (tour_id)
+            WHERE st.event_id = $1
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+        Ok(records.into_iter().map(|row| row.tour_id).collect())
+    }
+
+    /// Whether one tour is completed (locked).
+    pub async fn is_shopping_tour_completed(&self, tour_id: i32) -> Result<bool> {
+        let row = sqlx::query!(
+            r#"
+            SELECT EXISTS(
+                SELECT 1 FROM shopping_tour_completed WHERE tour_id = $1
+            ) AS "exists!"
+            "#,
+            tour_id
+        )
+        .fetch_one(&*self.pool)
+        .await?;
+        Ok(row.exists)
+    }
+
     /// Gets shopping tour by id
     pub async fn get_shopping_tour(&self, tour_id: i32) -> Result<ShoppingTour> {
         let records = sqlx::query_as!(
@@ -519,7 +670,7 @@ impl EventOps {
             SELECT sti.ingredient_id AS "ingredient_id!",
                    sti.ingredient AS "ingredient_name!",
                    sti.recipe AS "recipe!",
-                   SUM(sti.weight) AS "weight!",
+                   SUM(sti.weight) AS "weight?",
                    beis.price AS price_per_unit,
                    mc.category AS "category?"
             FROM shopping_tour_ingredients sti
@@ -538,11 +689,15 @@ impl EventOps {
 
         // Aggregate recipe-grain rows into per-ingredient items, preserving the
         // SQL ordering (category, name) for items and (desc weight) for recipes.
+        // A `None` weight (unknown unit weight) taints the ingredient total.
         let mut items: Vec<ShoppingListItemWithUsage> = Vec::new();
         for row in rows {
             match items.last_mut() {
                 Some(item) if item.ingredient_id == row.ingredient_id => {
-                    item.weight += &row.weight;
+                    item.weight = match (item.weight.take(), row.weight.clone()) {
+                        (Some(sum), Some(part)) => Some(sum + part),
+                        _ => None,
+                    };
                     item.recipe_usage.push((row.recipe, row.weight));
                 }
                 _ => items.push(ShoppingListItemWithUsage {
@@ -559,10 +714,15 @@ impl EventOps {
         }
         // Finalize price: per-unit × summed weight (matches the shopping_list
         // view's `SUM(weight) * price`). A negative sentinel (-1) means "no
-        // source priced", which we surface as None.
+        // source priced", which we surface as None. Unknown weight → None.
         for item in &mut items {
             item.price = item.price.as_ref().and_then(|per_unit| {
-                (per_unit >= &BigDecimal::from(0)).then(|| per_unit * &item.weight)
+                if per_unit < &BigDecimal::from(0) {
+                    return None;
+                }
+                item.weight
+                    .as_ref()
+                    .map(|weight| per_unit * weight)
             });
         }
         Ok(items)
@@ -578,8 +738,8 @@ impl EventOps {
                 event_name as "event_name!",
                 ingredient_id as "ingredient_id!",
                 ingredient as "ingredient_name!",
-                weight as "weight!",
-                energy as "energy!",
+                weight,
+                energy,
                 price,
                 tour_id,
                 category
@@ -605,8 +765,8 @@ impl EventOps {
                 event_name as "event_name!",
                 ingredient_id as "ingredient_id!",
                 ingredient as "ingredient_name!",
-                weight as "weight!",
-                energy as "energy!",
+                weight,
+                energy,
                 price,
                 tour_id,
                 category
@@ -989,10 +1149,7 @@ impl EventOps {
     /// Picks the event to show by default at the given time: an ongoing event
     /// (window contains `at`) ending soonest, else the soonest upcoming event.
     /// Fully-past events are never returned; `None` means nothing is scheduled.
-    pub async fn get_current_or_upcoming_event(
-        &self,
-        at: OffsetDateTime,
-    ) -> Result<Option<Event>> {
+    pub async fn get_current_or_upcoming_event(&self, at: OffsetDateTime) -> Result<Option<Event>> {
         let record = sqlx::query_as!(
             Event,
             r#"
@@ -1082,5 +1239,204 @@ impl EventOps {
         .fetch_all(&*self.pool)
         .await?;
         Ok(records)
+    }
+
+    /// All food prep tasks of an event with the recipe name, ordered by date
+    /// (timeline feed).
+    pub async fn list_food_preps(&self, event_id: i32) -> Result<Vec<FoodPrepWithRecipe>> {
+        let records = sqlx::query_as!(
+            FoodPrepWithRecipe,
+            r#"
+            SELECT fp.prep_id as "id", fp.event_id, fp.recipe_id, fp.prep_date,
+                fp.use_from, fp.use_until,
+                r.name AS "recipe_name!"
+            FROM food_prep fp
+            JOIN recipes r ON r.recipe_id = fp.recipe_id
+            WHERE fp.event_id = $1
+            ORDER BY fp.prep_date, fp.use_until
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// The event's linked inventories with names, for the logistics view.
+    pub async fn list_event_inventories(&self, event_id: i32) -> Result<Vec<Inventory>> {
+        let records = sqlx::query_as!(
+            Inventory,
+            r#"
+            SELECT i.inventory_id as "id", i.name, i.group_id
+            FROM event_inventories ei
+            JOIN inventories i ON i.inventory_id = ei.inventory_id
+            WHERE ei.event_id = $1
+            ORDER BY i.name
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// Per-ingredient coverage: total event demand (resolved shopping list,
+    /// i.e. after overrides) vs. the stock of the event's linked inventories.
+    /// Ingredients with zero demand are omitted.
+    pub async fn get_event_inventory_coverage(
+        &self,
+        event_id: i32,
+    ) -> Result<Vec<EventInventoryCoverage>> {
+        let records = sqlx::query_as!(
+            EventInventoryCoverage,
+            r#"
+            WITH demand AS (
+                SELECT ingredient_id, SUM(weight) AS demand_kg
+                FROM shopping_list
+                WHERE event_id = $1
+                GROUP BY ingredient_id
+            ),
+            supply AS (
+                SELECT ii.ingredient_id, SUM(ii.amount) AS covered_kg
+                FROM event_inventories ei
+                JOIN inventory_ingredients ii ON ii.inventory_id = ei.inventory_id
+                WHERE ei.event_id = $1
+                GROUP BY ii.ingredient_id
+            )
+            SELECT d.ingredient_id AS "ingredient_id!",
+                ing.name AS "ingredient_name!",
+                d.demand_kg AS "demand_kg!",
+                COALESCE(s.covered_kg, 0::numeric) AS "covered_kg!"
+            FROM demand d
+            JOIN ingredients ing ON ing.ingredient_id = d.ingredient_id
+            LEFT JOIN supply s ON s.ingredient_id = d.ingredient_id
+            -- Unresolvable demands (unknown unit weight) are surfaced as "~"
+            -- warnings in the meal plan, not as coverage rows.
+            WHERE d.demand_kg IS NOT NULL
+            ORDER BY ing.name
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    // ---------------------------------------------------------------------
+    // Direct per-event collaborators (`event_user_roles`)
+    // ---------------------------------------------------------------------
+
+    /// All direct collaborators of an event with their assigned role slugs.
+    pub async fn list_event_members(&self, event_id: i32) -> Result<Vec<(User, Vec<String>)>> {
+        let members = sqlx::query_as!(
+            User,
+            r#"
+            SELECT DISTINCT u.id, u.username, u.email, u.password_hash, u.is_admin, u.created_at
+            FROM event_user_roles eur
+            JOIN users u ON u.id = eur.user_id
+            WHERE eur.event_id = $1
+            ORDER BY u.username
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let role_rows = sqlx::query!(
+            r#"
+            SELECT user_id, role_slug
+            FROM event_user_roles
+            WHERE event_id = $1
+            ORDER BY role_slug
+            "#,
+            event_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let mut roles_by_user: HashMap<i64, Vec<String>> = HashMap::new();
+        for row in role_rows {
+            roles_by_user
+                .entry(row.user_id)
+                .or_default()
+                .push(row.role_slug);
+        }
+
+        Ok(members
+            .into_iter()
+            .map(|member| {
+                let roles = roles_by_user.remove(&member.id).unwrap_or_default();
+                (member, roles)
+            })
+            .collect())
+    }
+
+    pub async fn add_event_member(
+        &self,
+        user_id: i64,
+        event_id: i32,
+        roles: &[String],
+    ) -> Result<()> {
+        for role in roles {
+            sqlx::query!(
+                r#"
+                INSERT INTO event_user_roles (user_id, event_id, role_slug)
+                VALUES ($1, $2, $3)
+                ON CONFLICT DO NOTHING
+                "#,
+                user_id,
+                event_id,
+                role
+            )
+            .execute(&*self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn set_event_member_roles(
+        &self,
+        user_id: i64,
+        event_id: i32,
+        roles: &[String],
+    ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query!(
+            r#"DELETE FROM event_user_roles WHERE user_id = $1 AND event_id = $2"#,
+            user_id,
+            event_id
+        )
+        .execute(&mut *tx)
+        .await?;
+        for role in roles {
+            sqlx::query!(
+                r#"
+                INSERT INTO event_user_roles (user_id, event_id, role_slug)
+                VALUES ($1, $2, $3)
+                ON CONFLICT DO NOTHING
+                "#,
+                user_id,
+                event_id,
+                role
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn remove_event_member(&self, user_id: i64, event_id: i32) -> Result<()> {
+        sqlx::query!(
+            r#"DELETE FROM event_user_roles WHERE user_id = $1 AND event_id = $2"#,
+            user_id,
+            event_id
+        )
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
     }
 }

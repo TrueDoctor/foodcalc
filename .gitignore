@@ -8,3 +8,4 @@ status-api/feedback.log
 .env
 
 .playwright-mcp/
+.vscode/settings.json

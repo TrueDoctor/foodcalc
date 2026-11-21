@@ -5,7 +5,7 @@ use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::error::Error;
-use foodlib_new::recipe::Recipe;
+use foodlib_new::recipe::{Recipe, RecipeKind};
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
@@ -112,7 +112,9 @@ pub async fn export_recipe_pdf(
         .await?;
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
-    let result = foodlib_new::typst::export_recipes(recipe_info).await;
+    let renderer = pdf_export::DocumentRenderer::new(); // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
+    #[cfg(feature = "typst")]
+    let result = renderer.export_recipes(vec![recipe_info]);
     #[cfg(not(feature = "typst"))]
     let result = Err(foodlib_new::Error::Misc(
         "Server compiled without typst support".into(),
@@ -292,6 +294,7 @@ async fn add_recipe(
         comment: recipe_data.comment,
         group_id: group.id,
         weighed_in: false,
+        kind: RecipeKind::Meal,
     };
 
     let created_recipe = foodlib.recipes().create(recipe).await?;

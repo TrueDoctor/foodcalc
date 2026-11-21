@@ -13,6 +13,9 @@ pub enum Error {
     Validation {
         message: String,
     },
+    InvalidInput {
+        message: String,
+    },
     Conflict {
         message: String,
     },
@@ -32,6 +35,14 @@ pub enum Error {
 
 impl From<sqlx::Error> for Error {
     fn from(err: sqlx::Error) -> Self {
+        // A failed fetch_one is always "this row does not exist" — surface
+        // it as a domain NotFound (HTTP 404) instead of a 500.
+        if matches!(err, sqlx::Error::RowNotFound) {
+            return Error::NotFound {
+                entity: "row",
+                id: String::new(),
+            };
+        }
         Error::Database(err)
     }
 }
@@ -71,6 +82,7 @@ impl fmt::Display for Error {
             Error::Database(e) => write!(f, "Database error: {}", e),
             Error::NotFound { entity, id } => write!(f, "{} with id {} not found", entity, id),
             Error::Validation { message } => write!(f, "Validation error: {}", message),
+            Error::InvalidInput { message } => write!(f, "Invalid input: {}", message),
             Error::Conflict { message } => write!(f, "Conflict error: {}", message),
             Error::UserNotFound { name } => write!(f, "Did not find user: {}", name),
             Error::Hashing => write!(f, "Failed to compute hash"),

@@ -1,3 +1,4 @@
+use crate::policy::Permission;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -8,6 +9,7 @@ pub struct User {
     pub email: String,
     pub password_hash: String,
     pub is_admin: bool,
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
 }
 
@@ -35,4 +37,35 @@ pub struct Group {
 pub struct UserGroup {
     pub user_id: i64,
     pub group_id: i32,
+}
+
+/// Raw `(user_id, group)` join row used by `UserOps::list_users_with_groups`
+/// to group memberships in Rust with two flat queries.
+#[derive(Debug)]
+pub struct MembershipRow {
+    pub user_id: i64,
+    pub id: i32,
+    pub name: String,
+    pub is_personal: bool,
+}
+
+/// Group as seen by one member: the group plus that member's role in it
+/// (`auth/me`, member lists). Role is one of `viewer`, `editor`, `manager`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupMembership {
+    pub id: i32,
+    pub name: String,
+    pub is_personal: bool,
+    pub roles: Vec<String>,
+    pub permissions: Vec<Permission>,
+}
+
+impl GroupMembership {
+    pub fn group(&self) -> Group {
+        Group {
+            id: self.id,
+            name: self.name.clone(),
+            is_personal: self.is_personal,
+        }
+    }
 }

@@ -1,9 +1,9 @@
 use axum::{
     body::Body, extract::Request, http::Response, middleware::Next, response::IntoResponse,
 };
+use axum_login::AuthnBackend;
 use axum_extra::extract::Host;
-use foodlib_new::auth::AuthSession;
-use foodlib_new::user::User;
+use foodlib_new::auth::{AuthSession, Credentials};
 use maud::{html, DOCTYPE};
 
 use crate::frontend::home;
@@ -20,7 +20,10 @@ pub async fn htmx_middleware(
         .get("HX-Request")
         .map_or(false, |v| v == "true");
 
-    let (host, _) = host.split_once(':').unwrap_or_default();
+    let host = host
+        .split_once(':')
+        .map(|(name, _)| name)
+        .unwrap_or(host.as_str());
     #[cfg(debug_assertions)]
     if (host == "127.0.0.1" || host == "localhost")
         && auth.user.is_none()
@@ -29,18 +32,18 @@ pub async fn htmx_middleware(
             .ends_with("food_calc")
         && std::env::var("DISABLE_AUTO_LOGIN").ok().as_deref() != Some("1")
     {
-        let user = User {
+        let creds = Credentials {
             username: "test".into(),
-            id: 0,
-            is_admin: true,
-            // TODO: replace this with a better way to handle this
-            password_hash: String::from("password"),
-            ..Default::default()
+            password: "password".into(),
         };
-        auth.login(&user).await.unwrap();
-        log::info!("logged in test user");
-        // When the user sends their first request, log them in and retry the request
-        return axum::response::Redirect::to(req.uri().path()).into_response();
+
+        if let Ok(Some(user)) = auth.backend.authenticate(creds).await {
+            if auth.login(&user).await.is_ok() {
+                log::info!("logged in test user");
+                // When the user sends their first request, log them in and retry the request.
+                return axum::response::Redirect::to(req.uri().path()).into_response();
+            }
+        }
     }
     let response = next.run(req).await;
 

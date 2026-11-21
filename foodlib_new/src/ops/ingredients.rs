@@ -1,6 +1,11 @@
 // foodlib_new/src/ops/ingredients.rs
 
-use crate::{entities::ingredient::*, error::Result, recipe::Recipe, Error};
+use crate::{
+    entities::ingredient::*,
+    error::Result,
+    recipe::{Recipe, RecipeKind},
+    Error,
+};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -87,7 +92,8 @@ impl IngredientOps {
                 name,
                 group_id,
                 comment,
-                weighed_in
+                weighed_in,
+                kind as "kind: RecipeKind"
             FROM recipes JOIN recipe_ingredients USING(recipe_id)
             WHERE ingredient_id = $1
             "#,
@@ -180,7 +186,7 @@ impl IngredientOps {
             SELECT ingredient_id as "id", name, energy, group_id, comment
             FROM ingredients
             WHERE group_id IN (
-                SELECT group_id FROM user_groups WHERE user_id = $1
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
             )
             ORDER BY name
             "#,
@@ -191,7 +197,10 @@ impl IngredientOps {
         Ok(rows)
     }
 
-    pub async fn list_with_sources_for_user(&self, user_id: i64) -> Result<Vec<IngredientWithSource>> {
+    pub async fn list_with_sources_for_user(
+        &self,
+        user_id: i64,
+    ) -> Result<Vec<IngredientWithSource>> {
         let rows = sqlx::query_as!(
             IngredientWithSource,
             r#"
@@ -200,7 +209,7 @@ impl IngredientOps {
                 exists (select * from ingredient_sources as iss where iss.ingredient_id = ingredients.ingredient_id) as "has_sources!"
             FROM ingredients
             WHERE group_id IN (
-                SELECT group_id FROM user_groups WHERE user_id = $1
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
             )
             ORDER BY name
             "#,
@@ -542,6 +551,24 @@ impl IngredientOps {
             .fetch_all(&*self.pool)
             .await?,
         };
+        Ok(rows)
+    }
+}
+impl IngredientOps {
+    /// Ids aller Zutaten, die eine bestimmte Eigenschaft tragen — Grundlage
+    /// für den Property-Filter im Zutaten-Picker (kein Voll-Laden nötig).
+    pub async fn ingredient_ids_for_property(&self, property_id: i32) -> Result<Vec<i32>> {
+        let rows = sqlx::query_scalar!(
+            r#"
+            SELECT ingredient_id
+            FROM ingredient_properties
+            WHERE property_id = $1
+            "#,
+            property_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
         Ok(rows)
     }
 }

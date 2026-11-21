@@ -10,8 +10,7 @@ pub mod auth_context;
 pub mod entities;
 pub mod error;
 pub mod ops;
-#[cfg(feature = "typst")]
-pub mod typst;
+pub mod policy;
 
 #[derive(Clone)]
 pub struct FoodLib {
@@ -79,5 +78,13 @@ impl FoodLib {
 
     pub fn pool_arc(&self) -> Arc<PgPool> {
         self.pool.clone()
+    }
+
+    pub fn status_board(&self) -> ops::status_board::StatusBoardOps {
+        ops::status_board::StatusBoardOps::new(self.pool.clone())
+    }
+
+    pub fn audit(&self) -> ops::audit::AuditOps {
+        ops::audit::AuditOps::new(self.pool.clone())
     }
 }

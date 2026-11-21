@@ -70,7 +70,7 @@ async fn test_delete_inventory(pool: sqlx::PgPool) {
     ops.delete(inventory.id).await.unwrap();
 
     let err = ops.get(inventory.id).await.unwrap_err();
-    assert!(matches!(err, Error::Database(_)));
+    assert!(matches!(err, Error::NotFound { .. }));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]

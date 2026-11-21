@@ -421,7 +421,10 @@ fn classify_avoidance_label(text: &str) -> Vec<&'static str> {
             (r(r"zwiebel"), ZWIEBEL),
             (r(r"\bknoblauch"), KNOBLAUCH),
             // Mushrooms: generic + the common named varieties.
-            (r(r"\b(pilz|champignon|steinpilz|pfifferling|austernpilz|shiitake)"), PILZ),
+            (
+                r(r"\b(pilz|champignon|steinpilz|pfifferling|austernpilz|shiitake)"),
+                PILZ,
+            ),
             // Apple. "Apfelsine" (= orange) is sanitized to a citrus marker before
             // matching (see below), so `apfel` here is safe. Matches Apfelsaft/
             // Apfelmus/Äpfel; umlaut plural needs its own alternative.
@@ -430,7 +433,10 @@ fn classify_avoidance_label(text: &str) -> Vec<&'static str> {
             (r(r"\bkichererbse"), KICHERERBSE),
             // Citrus: orange, Zitrone, Limette, Mandarine, Grapefruit, Clementine,
             // the generic "Zitrus…" stem, plus the sanitized "apfelsine" marker.
-            (r(r"\b(orange|zitrone|zitrus|limette|mandarine|grapefruit|clementine|<<zitrus>>)"), ZITRUS),
+            (
+                r(r"\b(orange|zitrone|zitrus|limette|mandarine|grapefruit|clementine|<<zitrus>>)"),
+                ZITRUS,
+            ),
             // Guar gum (E412) — a thickener some people are allergic to. Catches
             // Guarkernmehl / Guarmehl / Guarkernmehl and the bare "guar" stem.
             (r(r"\bguar"), GUAR),
@@ -788,7 +794,10 @@ mod tests {
         // A milk trace on an otherwise non-vegan product keeps lactose-free, flagged.
         let trace_on_nonvegan = dietary_flags(&[p("fleisch"), p("~spuren-milch")]);
         assert!(!trace_on_nonvegan.vegan);
-        assert!(trace_on_nonvegan.lactose_free, "milk trace keeps lactose-free");
+        assert!(
+            trace_on_nonvegan.lactose_free,
+            "milk trace keeps lactose-free"
+        );
         assert!(
             trace_on_nonvegan.lactose_free_trace,
             "lactose-free holds only via ignored trace"
@@ -800,7 +809,10 @@ mod tests {
         // Gluten-free now uses the asterisk model: a trace keeps the label but
         // flags it. Only a REAL gluten property removes it.
         let with_gluten_trace = dietary_flags(&[p("~spuren-gluten")]);
-        assert!(with_gluten_trace.gluten_free, "gluten trace keeps gluten-free");
+        assert!(
+            with_gluten_trace.gluten_free,
+            "gluten trace keeps gluten-free"
+        );
         assert!(
             with_gluten_trace.gluten_free_trace,
             "gluten-free holds only via ignored trace → asterisk"
@@ -828,16 +840,29 @@ mod tests {
         assert_eq!(classify_allergen_label("roggenmehl"), vec!["gluten"]);
         assert_eq!(classify_allergen_label("gerstenmalz"), vec!["gluten"]);
         assert_eq!(classify_allergen_label("haferflocken"), vec!["gluten"]);
-        assert_eq!(classify_allergen_label("grünkern"), vec!["gluten"], "grünkern is dehulled spelt → gluten");
+        assert_eq!(
+            classify_allergen_label("grünkern"),
+            vec!["gluten"],
+            "grünkern is dehulled spelt → gluten"
+        );
     }
 
     #[test]
     fn avoidance_classification() {
         assert_eq!(classify_avoidance_label("zwiebeln"), vec!["zwiebel"]);
         assert_eq!(classify_avoidance_label("röstzwiebeln"), vec!["zwiebel"]);
-        assert_eq!(classify_avoidance_label("champignons, geschnitten"), vec!["pilz"]);
-        assert_eq!(classify_avoidance_label("knoblauchgranulat"), vec!["knoblauch"]);
-        assert_eq!(classify_avoidance_label("kichererbsenmehl"), vec!["kichererbse"]);
+        assert_eq!(
+            classify_avoidance_label("champignons, geschnitten"),
+            vec!["pilz"]
+        );
+        assert_eq!(
+            classify_avoidance_label("knoblauchgranulat"),
+            vec!["knoblauch"]
+        );
+        assert_eq!(
+            classify_avoidance_label("kichererbsenmehl"),
+            vec!["kichererbse"]
+        );
         // Citrus, including the tricky "Apfelsine" (orange, not apple).
         assert_eq!(classify_avoidance_label("orangensaft"), vec!["zitrus"]);
         assert_eq!(
@@ -906,7 +931,10 @@ mod tests {
         let d = dietary_flags(&props);
         assert!(!d.gluten_free, "wheat flour must NOT be gluten-free");
         assert!(!d.gluten_free_trace, "real gluten → no asterisk, no label");
-        assert!(d.vegan && !d.vegan_trace, "flour is vegan; its traces are non-animal");
+        assert!(
+            d.vegan && !d.vegan_trace,
+            "flour is vegan; its traces are non-animal"
+        );
         // The 'contains' list still surfaces gluten (weizen collapses under it).
         let contains = compact_allergen_set(&["gluten".to_string(), "weizen".to_string()]);
         assert!(contains.contains(&"gluten".to_string()));

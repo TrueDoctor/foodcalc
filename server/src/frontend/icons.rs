@@ -51,11 +51,7 @@ pub fn duplicate() -> Markup {
 
 /// Trash can (delete) — danger tint, hover deepens.
 pub fn delete() -> Markup {
-    icon(
-        "0 0 448 512",
-        DELETE,
-        "!text-red-500 hover:!text-red-600",
-    )
+    icon("0 0 448 512", DELETE, "!text-red-500 hover:!text-red-600")
 }
 
 // Horizontal bars offset like a Gantt chart (timeline).

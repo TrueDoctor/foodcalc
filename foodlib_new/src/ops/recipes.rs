@@ -1,7 +1,12 @@
-use crate::entities::recipe::{Recipe, RecipeIngredient, RecipeStep};
+use crate::entities::recipe::{
+    Recipe, RecipeIngredient, RecipeKind, RecipeListItem, RecipeStep,
+    RecipeTreeIngredient, RecipeTreeNode,
+};
 use crate::error::{Error, Result};
 use crate::recipe::{RecipeMetaIngredient, RecipeStats, ResolvedRecipe};
+use bigdecimal::BigDecimal;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Operations for managing recipes and their components (ingredients, steps, meta-recipes)
@@ -15,6 +20,44 @@ use std::sync::Arc;
 /// All operations use transactions where appropriate to maintain data consistency.
 pub struct RecipeOps {
     pool: Arc<PgPool>,
+}
+
+fn f64_to_pg_interval(seconds: f64) -> sqlx::postgres::types::PgInterval {
+    sqlx::postgres::types::PgInterval {
+        months: 0,
+        days: 0,
+        microseconds: (seconds * 1_000_000.0) as i64,
+    }
+}
+
+fn pg_interval_to_f64(interval: &sqlx::postgres::types::PgInterval) -> f64 {
+    interval.microseconds as f64 / 1_000_000.0
+}
+
+struct RecipeStepDB {
+    id: i32,
+    recipe_id: i32,
+    order: f64,
+    name: String,
+    description: String,
+    fixed_duration: sqlx::postgres::types::PgInterval,
+    duration_per_kg: sqlx::postgres::types::PgInterval,
+    is_haccp: bool,
+}
+
+impl RecipeStepDB {
+    fn to_recipe_step(&self) -> RecipeStep {
+        RecipeStep {
+            id: self.id,
+            order: self.order,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            fixed_duration: pg_interval_to_f64(&self.fixed_duration),
+            duration_per_kg: pg_interval_to_f64(&self.duration_per_kg),
+            is_haccp: self.is_haccp,
+            recipe_id: self.recipe_id,
+        }
+    }
 }
 
 impl RecipeOps {
@@ -32,13 +75,15 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            INSERT INTO recipes (name, comment, group_id)
-            VALUES ($1, $2, $3)
-            RETURNING recipe_id as id, name, comment, group_id, weighed_in
+            INSERT INTO recipes (name, comment, group_id, kind)
+            VALUES ($1, $2, $3, $4::text::recipe_kind)
+            RETURNING recipe_id as id, name, comment, group_id, weighed_in,
+                     kind as "kind: RecipeKind"
             "#,
             recipe.name,
             recipe.comment,
             recipe.group_id,
+            recipe.kind.as_str(),
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -50,7 +95,8 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+                   kind as "kind: RecipeKind"
             FROM recipes
             WHERE recipe_id = $1
             "#,
@@ -70,7 +116,8 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+                   kind as "kind: RecipeKind"
             FROM recipes
             WHERE name = $1
             "#,
@@ -91,14 +138,16 @@ impl RecipeOps {
             Recipe,
             r#"
             UPDATE recipes
-            SET name = $1, comment = $2, weighed_in = $4
+            SET name = $1, comment = $2, weighed_in = $4, kind = $5::text::recipe_kind
             WHERE recipe_id = $3
-            RETURNING recipe_id as id, name, comment, group_id, weighed_in
+            RETURNING recipe_id as id, name, comment, group_id, weighed_in,
+                     kind as "kind: RecipeKind"
             "#,
             recipe.name,
             recipe.comment,
             recipe.id,
-            recipe.weighed_in
+            recipe.weighed_in,
+            recipe.kind.as_str()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -163,10 +212,11 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+                   kind as "kind: RecipeKind"
             FROM recipes
             WHERE group_id IN (
-                SELECT group_id FROM user_groups WHERE user_id = $1
+                SELECT group_id FROM user_group_roles WHERE user_id = $1
             )
             ORDER BY name
             "#,
@@ -183,7 +233,8 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in
+            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+                   kind as "kind: RecipeKind"
             FROM recipes
             ORDER BY recipe_id
             "#
@@ -282,52 +333,57 @@ impl RecipeOps {
         Ok(records)
     }
 
+
+
     // Recipe Steps
     pub async fn add_step(&self, step: RecipeStep) -> Result<RecipeStep> {
         let record = sqlx::query_as!(
-            RecipeStep,
+            RecipeStepDB,
             r#"
-            INSERT INTO steps (recipe_id, step_order, step_name, step_description, 
-                             fixed_duration, duration_per_kg)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING 
-                step_id as id, recipe_id, step_order as "order", 
+            INSERT INTO steps (recipe_id, step_order, step_name, step_description,
+                               fixed_duration, duration_per_kg, is_haccp)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING
+                step_id as id, recipe_id, step_order as "order",
                 step_name as name, step_description as description,
-                fixed_duration, duration_per_kg
+                fixed_duration, duration_per_kg, is_haccp
             "#,
             step.recipe_id,
             step.order,
             step.name,
             step.description,
-            step.fixed_duration,
-            step.duration_per_kg,
+            f64_to_pg_interval(step.fixed_duration),
+            f64_to_pg_interval(step.duration_per_kg),
+            step.is_haccp,
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
-        Ok(record)
+        Ok(record.to_recipe_step())
     }
 
     pub async fn update_step(&self, step: RecipeStep) -> Result<RecipeStep> {
         let record = sqlx::query_as!(
-            RecipeStep,
+            RecipeStepDB,
             r#"
             UPDATE steps 
             SET step_order = $2, step_name = $3, step_description = $4,
                 fixed_duration = $5,
-                duration_per_kg = $6
+                duration_per_kg = $6,
+                is_haccp = $7
             WHERE step_id = $1
             RETURNING 
                 step_id as id, recipe_id, step_order as "order",
                 step_name as name, step_description as description,
-                fixed_duration, duration_per_kg
+                fixed_duration, duration_per_kg, is_haccp
             "#,
             step.id,
             step.order,
             step.name,
             step.description,
-            step.fixed_duration,
-            step.duration_per_kg,
+            f64_to_pg_interval(step.fixed_duration),
+            f64_to_pg_interval(step.duration_per_kg),
+            step.is_haccp,
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -336,7 +392,7 @@ impl RecipeOps {
             id: step.id.to_string(),
         })?;
 
-        Ok(record)
+        Ok(record.to_recipe_step())
     }
 
     pub async fn delete_step(&self, recipe_id: i32, step_id: i32) -> Result<()> {
@@ -363,12 +419,12 @@ impl RecipeOps {
 
     pub async fn get_steps(&self, recipe_id: i32) -> Result<Vec<RecipeStep>> {
         let records = sqlx::query_as!(
-            RecipeStep,
+            RecipeStepDB,
             r#"
-            SELECT 
+            SELECT
                 step_id as id, recipe_id, step_order as "order",
                 step_name as name, step_description as description,
-                fixed_duration, duration_per_kg
+                fixed_duration, duration_per_kg, is_haccp
             FROM steps
             WHERE recipe_id = $1
             ORDER BY step_order
@@ -378,7 +434,11 @@ impl RecipeOps {
         .fetch_all(&*self.pool)
         .await?;
 
-        Ok(records)
+        Ok(
+            records.into_iter()
+                .map(|record| record.to_recipe_step())
+                .collect()
+        )
     }
 
     // Meta Recipes
@@ -545,7 +605,7 @@ impl RecipeOps {
             Recipe,
             r#"
             WITH matching_recipes AS (
-                SELECT r.recipe_id, r.name, r.comment, r.group_id, r.weighed_in,
+                SELECT r.recipe_id, r.name, r.comment, r.group_id, r.weighed_in, r.kind,
                        COUNT(DISTINCT ri.ingredient_id) as matching_ingredients,
                        (SELECT COUNT(DISTINCT ingredient_id)
                         FROM recipe_ingredients
@@ -560,7 +620,8 @@ impl RecipeOps {
                 name,
                 comment,
                 group_id,
-                weighed_in
+                weighed_in,
+                kind as "kind: RecipeKind"
             FROM matching_recipes
             ORDER BY 
                 matching_ingredients::float / total_ingredients DESC,
@@ -647,22 +708,279 @@ impl RecipeOps {
                 r#"
                 INSERT INTO steps (
                     recipe_id, step_order, step_name, step_description,
-                    fixed_duration, duration_per_kg
+                    fixed_duration, duration_per_kg, is_haccp
                 )
-                VALUES ($1, $2, $3, $4, $5, $6)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 "#,
                 recipe_id,
                 step.order,
                 step.name,
                 step.description,
-                step.fixed_duration,
-                step.duration_per_kg,
+                f64_to_pg_interval(step.fixed_duration),
+                f64_to_pg_interval(step.duration_per_kg),
+                step.is_haccp,
             )
-            .execute(&mut *tx)
-            .await?;
+                .execute(&mut *tx)
+                .await?;
         }
 
         tx.commit().await?;
         Ok(())
+    }
+
+    /// Lists all recipes together with their aggregated stats from the
+    /// `recipe_stats` view (weight kg / energy kJ). Empty recipes get 0/0,
+    /// which lets callers compute the energy density (kJ/g) safely.
+    pub async fn list_with_stats(&self) -> Result<Vec<RecipeListItem>> {
+        let records = sqlx::query_as!(
+            RecipeListItem,
+            r#"
+            SELECT
+                r.recipe_id as id,
+                r.name,
+                r.comment,
+                r.group_id,
+                r.kind as "kind: RecipeKind",
+                r.weighed_in,
+                COALESCE(s.weight, 0) as "weight!",
+                COALESCE(s.energy, 0) as "energy!"
+            FROM recipes r
+            LEFT JOIN recipe_stats s ON s.recipe_id = r.recipe_id
+            ORDER BY r.name
+            "#
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// Deep-copies a recipe (ingredients, steps, sub-recipes) into a new,
+    /// independent recipe owned by `group_id`. Returns the new recipe id.
+    pub async fn duplicate(
+        &self,
+        recipe_id: i32,
+        new_name: Option<String>,
+        new_group_id: i32,
+    ) -> Result<i32> {
+        let mut tx = self.pool.begin().await?;
+
+        let source = sqlx::query!(
+            r#"SELECT name, comment, kind as "kind: RecipeKind", weighed_in FROM recipes WHERE recipe_id = $1"#,
+            recipe_id
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "Recipe",
+            id: recipe_id.to_string(),
+        })?;
+
+        let name = new_name.unwrap_or_else(|| format!("{} (Kopie)", source.name));
+
+        let new_id: i32 = sqlx::query_scalar!(
+            r#"
+            INSERT INTO recipes (name, comment, group_id, weighed_in, kind)
+            VALUES ($1, $2, $3, $4, $5::text::recipe_kind)
+            RETURNING recipe_id
+            "#,
+            name,
+            source.comment,
+            new_group_id,
+            source.weighed_in,
+            source.kind.as_str()
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id)
+            SELECT $1, ingredient_id, amount, unit_id
+            FROM recipe_ingredients WHERE recipe_id = $2
+            "#,
+            new_id,
+            recipe_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO steps (recipe_id, step_order, step_name, step_description, fixed_duration, duration_per_kg)
+            SELECT $1, step_order, step_name, step_description, fixed_duration, duration_per_kg
+            FROM steps WHERE recipe_id = $2
+            "#,
+            new_id,
+            recipe_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO meta_recipes (parent_id, child_id, weight)
+            SELECT $1, child_id, weight FROM meta_recipes WHERE parent_id = $2
+            "#,
+            new_id,
+            recipe_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(new_id)
+    }
+
+    /// The full recursion tree of a recipe: the recipe itself with its
+    /// direct ingredients (unit-converted weights via `resolved_recipes`)
+    /// and every used sub-recipe, recursively. Cycle-safe via a depth cap
+    /// and path de-duplication.
+    ///
+    /// Structure: a depth-first walk over `meta_recipes` yields one path per
+    /// node (`"<root>.<sub>.<sub>"`); `resolved_recipes.acc` uses the same
+    /// id chains, so ingredient leaves attach to nodes by matching path.
+    pub async fn get_recipe_tree(&self, root_id: i32) -> Result<RecipeTreeNode> {
+        #[derive(Debug)]
+        struct WalkRow {
+            path: String,
+            node_id: i32,
+            parent_weight: Option<BigDecimal>,
+        }
+        let walk = sqlx::query_as!(
+            WalkRow,
+            r#"
+            WITH RECURSIVE walk(path, node_id, parent_weight, depth) AS (
+                SELECT $1::text, $2::int, NULL::numeric, 0
+                UNION ALL
+                SELECT w.path || '.' || m.child_id, m.child_id, m.weight, w.depth + 1
+                FROM walk w
+                JOIN meta_recipes m ON m.parent_id = w.node_id
+                WHERE w.depth < 10
+                  AND position('.' || m.child_id::text || '.' IN w.path || '.') = 0
+            )
+            SELECT path AS "path!", node_id AS "node_id!", parent_weight
+            FROM walk
+            "#,
+            root_id.to_string(),
+            root_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        // Node recipe data (name, kind) for every visited node.
+        let node_ids: Vec<i32> = walk.iter().map(|row| row.node_id).collect();
+        let mut name_by_id: HashMap<i32, (String, RecipeKind)> = HashMap::new();
+        for id in &node_ids {
+            if let Ok(recipe) = self.get(*id).await {
+                name_by_id.insert(*id, (recipe.name, recipe.kind));
+            }
+        }
+
+        // Leaf rows: the raw ingredient list of every walked node with the
+        // base weight (amount × kg-per-unit) — the recipe's own scale, as
+        // shown in the tree view (event scaling happens per meal elsewhere).
+        #[derive(Debug)]
+        struct LeafRow {
+            acc: String,
+            ingredient_id: i32,
+            ingredient: Option<String>,
+            weight: Option<BigDecimal>,
+            amount: BigDecimal,
+            unit_id: i32,
+            unit_name: Option<String>,
+        }
+        let leaves = sqlx::query_as!(
+            LeafRow,
+            r#"
+            WITH RECURSIVE walk(path, node_id, parent_weight, depth) AS (
+                SELECT $1::text, $2::int, NULL::numeric, 0
+                UNION ALL
+                SELECT w.path || '.' || m.child_id, m.child_id, m.weight, w.depth + 1
+                FROM walk w
+                JOIN meta_recipes m ON m.parent_id = w.node_id
+                WHERE w.depth < 10
+                  AND position('.' || m.child_id::text || '.' IN w.path || '.') = 0
+            )
+            SELECT walk.path AS "acc!",
+                   ri.ingredient_id AS "ingredient_id!",
+                   i.name AS ingredient,
+                   (ri.amount * w.weight) AS "weight?",
+                   ri.amount AS "amount!",
+                   ri.unit_id AS "unit_id!",
+                   u.name AS unit_name
+            FROM walk
+            JOIN recipe_ingredients ri ON ri.recipe_id = walk.node_id
+            LEFT JOIN ingredients i ON i.ingredient_id = ri.ingredient_id
+            LEFT JOIN weights w
+              ON w.ingredient_id = ri.ingredient_id AND w.unit_id = ri.unit_id
+            LEFT JOIN units u ON u.unit_id = ri.unit_id
+            "#,
+            root_id.to_string(),
+            root_id
+        )
+        .fetch_all(&*self.pool)
+        .await?;
+
+        let mut leaves_by_acc: HashMap<String, Vec<RecipeTreeIngredient>> = HashMap::new();
+        for leaf in &leaves {
+            leaves_by_acc
+                .entry(leaf.acc.clone())
+                .or_default()
+                .push(RecipeTreeIngredient {
+                    ingredient_id: leaf.ingredient_id,
+                    name: leaf.ingredient.clone(),
+                    amount: leaf.amount.clone(),
+                    unit_id: leaf.unit_id,
+                    unit_name: leaf.unit_name.clone(),
+                    weight: leaf.weight.clone(),
+                });
+        }
+
+        // Pass A: build all nodes keyed by path.
+        let mut nodes: HashMap<String, RecipeTreeNode> = HashMap::new();
+        for row in &walk {
+            let (name, kind) = name_by_id
+                .get(&row.node_id)
+                .cloned()
+                .unwrap_or_else(|| ("?".into(), RecipeKind::Meal));
+            nodes.insert(
+                row.path.clone(),
+                RecipeTreeNode {
+                    recipe_id: row.node_id,
+                    name,
+                    kind,
+                    weight: row.parent_weight.clone(),
+                    ingredients: leaves_by_acc.remove(&row.path).unwrap_or_default(),
+                    children: vec![],
+                },
+            );
+        }
+
+        // Pass B: attach deepest-first so every parent has collected all its
+        // children before it is moved into its own parent.
+        let mut attach_order: Vec<&WalkRow> = walk.iter().collect();
+        attach_order.sort_by(|a, b| b.path.len().cmp(&a.path.len()));
+        let mut root_node: Option<RecipeTreeNode> = None;
+        for row in attach_order {
+            let node = nodes.remove(&row.path).expect("node built in pass A");
+            let parent_path = row
+                .path
+                .rsplit_once('.')
+                .map(|(parent, _)| parent.to_string());
+            match parent_path {
+                Some(parent_path) => {
+                    if let Some(parent) = nodes.get_mut(&parent_path) {
+                        parent.children.push(node);
+                    }
+                }
+                None => root_node = Some(node),
+            }
+        }
+
+        root_node.ok_or(Error::NotFound {
+            entity: "Recipe",
+            id: root_id.to_string(),
+        })
     }
 }

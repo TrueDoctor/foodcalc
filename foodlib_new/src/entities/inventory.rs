@@ -15,7 +15,7 @@ pub struct InventoryItem {
     pub amount: BigDecimal,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct InventoryItemWithName {
     pub inventory_id: i32,
     pub ingredient_id: i32,

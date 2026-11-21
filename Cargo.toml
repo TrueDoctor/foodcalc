@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["metro-scrape", "server", "status-api", "foodlib_new"]
+members = ["metro-scrape", "server", "status-api", "foodlib_new", "pdf_export"]
 default-members = ["server", "foodlib_new"]
 exclude = ["foodlib", "cli-client", "api"]
 
@@ -25,7 +25,7 @@ log = "0.4"
 eyre = "0.6"
 serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
-time = { version = "0.3", features = ["serde", "parsing", "local-offset"] }
+time = { version = "0.3", features = ["serde", "serde-well-known", "parsing", "local-offset"] }
 regex = "1"
 axum-login = "0.17"
 futures = { version = "0.3", default-features = false }
