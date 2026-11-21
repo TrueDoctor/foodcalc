@@ -1,6 +1,6 @@
 use axum::{
     extract::{Form, Path, State},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use axum_login::login_required;
 use foodlib_new::{
@@ -8,6 +8,7 @@ use foodlib_new::{
     auth_context::AuthCtx,
     entities::types::ids::{GroupId, UserId},
     error::{Error, Result},
+    policy::{GroupPerm, Permission},
     user::{Group, User},
 };
 use maud::{html, Markup};
@@ -37,6 +38,10 @@ pub(crate) fn admin_router() -> axum::Router<MyAppState> {
         .route(
             "/groups/{group_id}/members/{user_id}/roles",
             get(role_edit_form).post(set_member_roles),
+        )
+        .route(
+            "/groups/{group_id}/default-roles",
+            put(put_default_roles).delete(clear_default_roles),
         )
         .route("/metro-sync", get(metro_sync_view))
         .route("/metro-sync", post(metro_sync_run))
@@ -182,7 +187,7 @@ async fn group_members_view(
 ) -> MResponse {
     let group = state.users().get_group(group_id).await?;
     let members = app::users::list_members(&state, &ctx, group_id).await?;
-    render_group_detail(&state, group, members).await
+    render_group_detail(&state, &ctx, group, members).await
 }
 
 /// Role checkboxes shared by the member editor and (later) the group
@@ -246,9 +251,16 @@ fn member_roles_row(group_id: GroupId, member: &app::users::MemberWithRoles) -> 
 
 async fn render_group_detail(
     state: &MyAppState,
+    ctx: &WebCtx,
     group: Group,
     members: Vec<app::users::MemberWithRoles>,
 ) -> MResponse {
+    // Default-roles section is only interactive for holders of
+    // `group:manage_settings`; everyone else just sees the resolved defaults.
+    let can_manage_settings = ctx
+        .ctx
+        .has_group_permission(group.id, Permission::Group(GroupPerm::ManageSettings));
+    let defaults = app::users::get_default_roles(state, ctx, group.id).await.ok();
     let all_users = state.db.users().get_all_users().await?;
     let member_ids: std::collections::HashSet<UserId> =
         members.iter().map(|m| m.member.id).collect();
@@ -304,6 +316,43 @@ async fn render_group_detail(
                 }
                 button class="btn btn-primary" type="submit" { "Add member" }
             }
+            // Default roles for new members of this group. Only holders of
+            // `group:manage_settings` get the editor; others see what a new
+            // member would receive.
+            @if let Some(d) = &defaults {
+                details class="border rounded-lg p-3 mt-4" {
+                    summary class="cursor-pointer font-semibold" {
+                        "Standard-Rollen für neue Mitglieder"
+                        @if d.inherited {
+                            span class="text-xs opacity-60 ml-2" { "(erbt global)" }
+                        }
+                    }
+                    p class="text-sm opacity-80 mt-2 mb-2" {
+                        "Neue Mitglieder erhalten automatisch: "
+                        (role_chips(&d.resolved))
+                    }
+                    @if can_manage_settings {
+                        form class="flex flex-col gap-2 mt-2"
+                            hx-put=(format!("/admin/groups/{}/default-roles", group.id))
+                            hx-target="#group-detail"
+                            hx-swap="outerHTML" {
+                            (role_checkboxes("roles", d.roles.as_deref().unwrap_or(&[])))
+                            div class="flex gap-2" {
+                                button class="btn btn-primary" type="submit" { "Speichern" }
+                                @if !d.inherited {
+                                    button class="btn btn-cancel" type="button"
+                                        hx-delete=(format!("/admin/groups/{}/default-roles", group.id))
+                                        hx-target="#group-detail"
+                                        hx-swap="outerHTML"
+                                        hx-confirm="Zurücksetzen auf den globalen Standard?" {
+                                            "Globalen Standard erben"
+                                        }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     })
 }
@@ -330,7 +379,7 @@ async fn add_member(
     app::users::add_member(&state, &ctx, group_id, input).await?;
     let group = state.users().get_group(group_id).await?;
     let members = app::users::list_members(&state, &ctx, group_id).await?;
-    render_group_detail(&state, group, members).await
+    render_group_detail(&state, &ctx, group, members).await
 }
 
 async fn remove_member(
@@ -341,7 +390,7 @@ async fn remove_member(
     app::users::remove_member(&state, &ctx, group_id, user_id).await?;
     let group = state.users().get_group(group_id).await?;
     let members = app::users::list_members(&state, &ctx, group_id).await?;
-    render_group_detail(&state, group, members).await
+    render_group_detail(&state, &ctx, group, members).await
 }
 
 /// `GET …/roles` — the checkbox editor row for one member.
@@ -380,7 +429,34 @@ async fn set_member_roles(
     app::users::set_member_roles(&state, &ctx, group_id, user_id, input).await?;
     let group = state.users().get_group(group_id).await?;
     let members = app::users::list_members(&state, &ctx, group_id).await?;
-    render_group_detail(&state, group, members).await
+    render_group_detail(&state, &ctx, group, members).await
+}
+
+/// `PUT …/default-roles` — set the group's default roles for new members
+/// (guard `group:manage_settings`, validated in the app layer).
+async fn put_default_roles(
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
+    Path(group_id): Path<GroupId>,
+    Form(form): Form<SetRolesForm>,
+) -> MResponse {
+    let input = app::users::GroupDefaultRolesInput { roles: form.roles };
+    app::users::put_default_roles(&state, &ctx, group_id, input).await?;
+    let group = state.users().get_group(group_id).await?;
+    let members = app::users::list_members(&state, &ctx, group_id).await?;
+    render_group_detail(&state, &ctx, group, members).await
+}
+
+/// `DELETE …/default-roles` — reset to "inherit the global default".
+async fn clear_default_roles(
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
+    Path(group_id): Path<GroupId>,
+) -> MResponse {
+    app::users::clear_default_roles(&state, &ctx, group_id).await?;
+    let group = state.users().get_group(group_id).await?;
+    let members = app::users::list_members(&state, &ctx, group_id).await?;
+    render_group_detail(&state, &ctx, group, members).await
 }
 
 
