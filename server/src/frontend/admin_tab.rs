@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Form, Path},
+    extract::{Form, Path, State},
     routing::{delete, get, post},
 };
 use axum_login::login_required;
@@ -13,6 +13,8 @@ use foodlib_new::{
 use maud::{html, Markup};
 use serde::Deserialize;
 
+use crate::app;
+use crate::frontend::ctx::WebCtx;
 use crate::frontend::LOGIN_URL;
 use crate::{FoodLib, MyAppState};
 
@@ -31,6 +33,10 @@ pub(crate) fn admin_router() -> axum::Router<MyAppState> {
         .route(
             "/groups/{group_id}/members/{user_id}",
             delete(remove_member),
+        )
+        .route(
+            "/groups/{group_id}/members/{user_id}/roles",
+            get(role_edit_form).post(set_member_roles),
         )
         .route("/metro-sync", get(metro_sync_view))
         .route("/metro-sync", post(metro_sync_run))
@@ -170,18 +176,82 @@ async fn delete_group(foodlib: FoodLib, ctx: AuthCtx, Path(group_id): Path<Group
 }
 
 async fn group_members_view(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
     Path(group_id): Path<GroupId>,
 ) -> MResponse {
-    let group = assert_can_manage_group(&foodlib, &ctx, group_id).await?;
-    render_group_detail(&foodlib, group).await
+    let group = state.users().get_group(group_id).await?;
+    let members = app::users::list_members(&state, &ctx, group_id).await?;
+    render_group_detail(&state, group, members).await
 }
 
-async fn render_group_detail(foodlib: &foodlib_new::FoodLib, group: Group) -> MResponse {
-    let members = members_of_group(foodlib, group.id).await?;
-    let all_users = foodlib.users().get_all_users().await?;
-    let member_ids: std::collections::HashSet<UserId> = members.iter().map(|u| u.id).collect();
+/// Role checkboxes shared by the member editor and (later) the group
+/// default-roles section. Slugs come from the app layer's role catalog —
+/// never hardcoded.
+fn role_checkboxes(name: &str, selected: &[String]) -> Markup {
+    html! {
+        div class="flex flex-wrap gap-3" {
+            @for def in app::users::role_catalog() {
+                label class="flex items-center gap-1 text-sm" {
+                    input type="checkbox" name=(name) value=(def.slug)
+                        checked[selected.contains(&def.slug.to_string())];
+                    (def.name)
+                }
+            }
+        }
+    }
+}
+
+/// Chip per assigned role, shown in the members table.
+fn role_chips(roles: &[String]) -> Markup {
+    html! {
+        div class="flex flex-wrap gap-1" {
+            @for role in roles {
+                span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800 border border-blue-300" {
+                    (role)
+                }
+            }
+            @if roles.is_empty() {
+                span class="text-xs opacity-60" { "keine" }
+            }
+        }
+    }
+}
+
+/// The edit affordance row for one member's roles: a form with one checkbox
+/// per catalog role. Saving posts all checked slugs to the
+/// `set_member_roles` use-case (guard, validation, last-manager protection
+/// and audit live there).
+fn member_roles_row(group_id: GroupId, member: &app::users::MemberWithRoles) -> Markup {
+    html! {
+        tr class="bg-gray-50 dark:bg-gray-800" {
+            td colspan="4" {
+                form class="flex flex-col gap-2"
+                    hx-post=(format!("/admin/groups/{}/members/{}/roles", group_id, member.member.id))
+                    hx-target="#group-detail"
+                    hx-swap="outerHTML" {
+                    (role_checkboxes("roles", &member.roles))
+                    div class="flex gap-2" {
+                        button class="btn btn-primary" type="submit" { "Rollen speichern" }
+                        button class="btn btn-cancel" type="button"
+                            hx-get=(format!("/admin/groups/{}/members", group_id))
+                            hx-target="#group-detail"
+                            hx-swap="outerHTML" { "Abbrechen" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn render_group_detail(
+    state: &MyAppState,
+    group: Group,
+    members: Vec<app::users::MemberWithRoles>,
+) -> MResponse {
+    let all_users = state.db.users().get_all_users().await?;
+    let member_ids: std::collections::HashSet<UserId> =
+        members.iter().map(|m| m.member.id).collect();
     let candidates: Vec<&User> = all_users
         .iter()
         .filter(|u| !member_ids.contains(&u.id))
@@ -191,32 +261,46 @@ async fn render_group_detail(foodlib: &foodlib_new::FoodLib, group: Group) -> MR
         div id="group-detail" class="w-full mt-6 border-t pt-4" {
             p class="text-2xl mb-2" { "Members of \"" (group.name) "\"" }
             table class="w-full text-inherit table-auto responsive-card mb-4" {
-                thead { tr { th { "Username" } th { "Email" } th { "Remove" } } }
+                thead { tr { th { "Username" } th { "Email" } th { "Rollen" } th { "Aktionen" } } }
                 tbody id=(format!("group-{}-members", group.id)) {
                     @if members.is_empty() {
-                        tr { td colspan="3" class="text-center opacity-70" { "No members" } }
+                        tr { td colspan="4" class="text-center opacity-70" { "No members" } }
                     }
-                    @for u in &members {
-                        tr id=(format!("group-{}-member-{}", group.id, u.id)) {
-                            td data-label="Username" { (u.username) }
-                            td data-label="Email" { (u.email) }
-                            td class="no-label" { button class="btn btn-cancel"
-                                hx-delete=(format!("/admin/groups/{}/members/{}", group.id, u.id))
-                                hx-target=(format!("#group-{}-member-{}", group.id, u.id))
-                                hx-swap="outerHTML" { "Remove" } }
+                    @for m in &members {
+                        tr id=(format!("group-{}-member-{}", group.id, m.member.id)) {
+                            td data-label="Username" { (m.member.username) }
+                            td data-label="Email" { (m.member.email) }
+                            td data-label="Rollen" { (role_chips(&m.roles)) }
+                            td class="no-label" {
+                                div class="flex gap-1 justify-end" {
+                                    button class="btn btn-primary"
+                                        hx-get=(format!("/admin/groups/{}/members/{}/roles", group.id, m.member.id))
+                                        hx-target=(format!("#group-{}-member-{}", group.id, m.member.id))
+                                        hx-swap="afterend" { "Rollen" }
+                                    button class="btn btn-cancel"
+                                        hx-delete=(format!("/admin/groups/{}/members/{}", group.id, m.member.id))
+                                        hx-target="#group-detail"
+                                        hx-swap="outerHTML"
+                                        hx-confirm="Mitglied wirklich entfernen?" { "Remove" }
+                                }
+                            }
                         }
                     }
                 }
             }
-            form class="flex flex-row gap-2"
+            form class="flex flex-row gap-2 items-start"
                 hx-post=(format!("/admin/groups/{}/members", group.id))
                 hx-target="#group-detail"
                 hx-swap="outerHTML" {
-                select class="fc-select grow" name="user_id" required="required" {
+                select class="fc-select grow" name="user" required="required" {
                     option value="" { "Select user to add..." }
                     @for u in &candidates {
-                        option value=(u.id) { (u.username) " (" (u.email) ")" }
+                        option value=(u.id.get()) { (u.username) " (" (u.email) ")" }
                     }
+                }
+                div class="flex flex-col gap-1" {
+                    p class="text-sm font-semibold" { "Initiale Rollen (optional)" }
+                    (role_checkboxes("roles", &[]))
                 }
                 button class="btn btn-primary" type="submit" { "Add member" }
             }
@@ -224,55 +308,81 @@ async fn render_group_detail(foodlib: &foodlib_new::FoodLib, group: Group) -> MR
     })
 }
 
-async fn members_of_group(foodlib: &foodlib_new::FoodLib, group_id: GroupId) -> Result<Vec<User>> {
-    let pool = foodlib.pool_arc();
-    let rows = sqlx::query_as!(
-        User,
-        r#"
-        SELECT u.id, u.username, u.email, u.password_hash, u.is_admin, u.created_at
-        FROM user_group_roles ug
-        JOIN users u ON u.id = ug.user_id
-        WHERE ug.group_id = $1
-        ORDER BY u.username
-        "#,
-        group_id.get()
-    )
-    .fetch_all(&*pool)
-    .await?;
-    Ok(rows)
-}
-
 #[derive(Deserialize)]
 struct AddMemberForm {
-    user_id: UserId,
+    /// Username, email or numeric id — resolved by the app layer.
+    user: String,
+    /// Optional initial roles; empty → the group's default roles.
+    #[serde(default)]
+    roles: Vec<String>,
 }
 
 async fn add_member(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
     Path(group_id): Path<GroupId>,
     Form(form): Form<AddMemberForm>,
 ) -> MResponse {
-    let group = assert_can_manage_group(&foodlib, &ctx, group_id).await?;
-    foodlib
-        .users()
-        .add_user_to_group_with_roles(ctx.user.id, group.id, &["manager".into()])
-        .await?;
-    render_group_detail(&foodlib, group).await
+    let input = app::users::AddMemberInput {
+        user: form.user,
+        roles: if form.roles.is_empty() { None } else { Some(form.roles) },
+    };
+    app::users::add_member(&state, &ctx, group_id, input).await?;
+    let group = state.users().get_group(group_id).await?;
+    let members = app::users::list_members(&state, &ctx, group_id).await?;
+    render_group_detail(&state, group, members).await
 }
 
 async fn remove_member(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
     Path((group_id, user_id)): Path<(GroupId, UserId)>,
 ) -> MResponse {
-    assert_can_manage_group(&foodlib, &ctx, group_id).await?;
-    foodlib
-        .users()
-        .remove_user_from_group(user_id, group_id)
-        .await?;
-    Ok(html! {})
+    app::users::remove_member(&state, &ctx, group_id, user_id).await?;
+    let group = state.users().get_group(group_id).await?;
+    let members = app::users::list_members(&state, &ctx, group_id).await?;
+    render_group_detail(&state, group, members).await
 }
+
+/// `GET …/roles` — the checkbox editor row for one member.
+async fn role_edit_form(
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
+    Path((group_id, user_id)): Path<(GroupId, UserId)>,
+) -> MResponse {
+    let members = app::users::list_members(&state, &ctx, group_id).await?;
+    let member = members
+        .iter()
+        .find(|m| m.member.id == user_id)
+        .ok_or(Error::NotFound {
+            entity: "GroupMember",
+            id: user_id.to_string(),
+        })?;
+    Ok(member_roles_row(group_id, member))
+}
+
+#[derive(Deserialize)]
+struct SetRolesForm {
+    /// All checked role slugs. At least one is enforced by the app layer.
+    #[serde(default)]
+    roles: Vec<String>,
+}
+
+/// `POST …/roles` — replace the member's role set via the app use-case
+/// (validates slugs, protects the last manager, writes the audit log).
+async fn set_member_roles(
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
+    Path((group_id, user_id)): Path<(GroupId, UserId)>,
+    Form(form): Form<SetRolesForm>,
+) -> MResponse {
+    let input = app::users::SetMemberRolesInput { roles: form.roles };
+    app::users::set_member_roles(&state, &ctx, group_id, user_id, input).await?;
+    let group = state.users().get_group(group_id).await?;
+    let members = app::users::list_members(&state, &ctx, group_id).await?;
+    render_group_detail(&state, group, members).await
+}
+
 
 async fn metro_sync_view(ctx: AuthCtx) -> MResponse {
     if !ctx.user.is_admin {
