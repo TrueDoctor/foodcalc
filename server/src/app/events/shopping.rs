@@ -3,45 +3,46 @@
 //! `app::events` itself.)
 
 use foodlib_new::entities::event::{SourceOverride, SourceOverrideView};
+use foodlib_new::entities::types::ids::{EventId, IngredientSourceId};
 use foodlib_new::policy::EventPerm;
 
 use crate::app::{AppCtx, MyAppState, Result};
 
-/// `GET /api/events/{id}/source-overrides` — per-event reroutes of
-/// ingredients to a different source/store. Requires `events:view`.
+/// list all source overrides for an event.
+/// Requires `ViewEvent`.
 pub async fn list_overrides(
     state: &MyAppState,
     ctx: &AppCtx,
-    event_id: i32,
+    event_id: EventId,
 ) -> Result<Vec<SourceOverrideView>> {
-    ctx.ctx.assert_event_action(event_id, EventPerm::View).await?;
+    ctx.ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
     state.events().get_source_overrides(event_id).await
 }
 
-/// `POST /api/events/{id}/source-overrides` — reroute an ingredient source
-/// for this event (idempotent upsert). Requires `events:manage_shopping`.
-pub async fn add_override(
+/// Overrides the default source for an item for this event.
+/// Requires `ShoppingTourEdit`.
+pub async fn add_default_override(
     state: &MyAppState,
     ctx: &AppCtx,
-    event_id: i32,
-    source_id: i32,
+    event_id: EventId,
+    source_id: IngredientSourceId,
 ) -> Result<SourceOverride> {
     ctx.ctx
-        .assert_event_action(event_id, EventPerm::ManageShopping)
+        .assert_event_action(event_id, EventPerm::ShoppingTourEdit)
         .await?;
-    state.events().set_source_override(event_id, source_id).await
+    state.events().set_source_default_override(EventId(event_id.get()), source_id).await
 }
 
-/// `DELETE /api/events/{id}/source-overrides/{source_id}` — remove a reroute.
-/// Requires `events:manage_shopping`.
+/// removes the default source override for an item for this event.
+/// Requires `ShoppingTourEdit`.
 pub async fn delete_override(
     state: &MyAppState,
     ctx: &AppCtx,
-    event_id: i32,
-    source_id: i32,
+    event_id: EventId,
+    source_id: IngredientSourceId,
 ) -> Result<()> {
     ctx.ctx
-        .assert_event_action(event_id, EventPerm::ManageShopping)
+        .assert_event_action(event_id, EventPerm::ShoppingTourEdit)
         .await?;
-    state.events().delete_source_override(event_id, source_id).await
+    state.events().delete_source_override(EventId(event_id.get()), source_id).await
 }

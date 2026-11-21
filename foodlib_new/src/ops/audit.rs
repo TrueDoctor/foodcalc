@@ -5,10 +5,12 @@
 //! failing audit write surfaces as an error log instead of blocking the
 //! change). Auth events are recorded directly in the auth handlers.
 
+use crate::entities::types::ids::{EntityId, EventId, GroupId, UserId};
 use crate::error::Result;
 use sqlx::PgPool;
 use std::sync::Arc;
 use time::OffsetDateTime;
+
 
 /// Closed set of audit action names, namespaced like permissions.
 pub mod action {
@@ -46,14 +48,14 @@ pub struct AuditEntry {
     pub id: i64,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
-    pub actor_user_id: Option<i64>,
+    pub actor_user_id: Option<UserId>,
     pub actor_username: String,
     pub action: String,
-    pub target_user_id: Option<i64>,
+    pub target_user_id: Option<UserId>,
     pub entity_type: Option<String>,
-    pub entity_id: Option<i32>,
-    pub group_id: Option<i32>,
-    pub event_id: Option<i32>,
+    pub entity_id: Option<EntityId>,
+    pub group_id: Option<GroupId>,
+    pub event_id: Option<EventId>,
     /// JSON object serialized as text (kept as `TEXT` to avoid requiring the
     /// sqlx `json` feature).
     pub details: String,
@@ -61,14 +63,14 @@ pub struct AuditEntry {
 
 #[derive(Clone, Debug, Default)]
 pub struct AuditRecord<'a> {
-    pub actor_user_id: Option<i64>,
+    pub actor_user_id: Option<UserId>,
     pub actor_username: &'a str,
     pub action: &'a str,
-    pub target_user_id: Option<i64>,
+    pub target_user_id: Option<UserId>,
     pub entity_type: Option<&'a str>,
-    pub entity_id: Option<i32>,
-    pub group_id: Option<i32>,
-    pub event_id: Option<i32>,
+    pub entity_id: Option<EntityId>,
+    pub group_id: Option<GroupId>,
+    pub event_id: Option<EventId>,
     pub details: Option<serde_json::Value>,
 }
 
@@ -92,14 +94,14 @@ impl AuditOps {
                  entity_type, entity_id, group_id, event_id, details)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
-            record.actor_user_id,
+            record.actor_user_id.map(UserId::get),
             record.actor_username,
             record.action,
-            record.target_user_id,
+            record.target_user_id.map(UserId::get),
             record.entity_type,
-            record.entity_id,
-            record.group_id,
-            record.event_id,
+            record.entity_id.as_ref().map(EntityId::get),
+            record.group_id.map(GroupId::get),
+            record.event_id.map(EventId::get),
             record
                 .details
                 .as_ref()
@@ -116,8 +118,13 @@ impl AuditOps {
         let rows = sqlx::query_as!(
             AuditEntry,
             r#"
-            SELECT id, created_at, actor_user_id, actor_username, action,
-                   target_user_id, entity_type, entity_id, group_id, event_id, details
+            SELECT id, created_at,
+                   actor_user_id as "actor_user_id: UserId", actor_username, action,
+                   target_user_id as "target_user_id: UserId", entity_type,
+                   entity_id as "entity_id: EntityId",
+                   group_id as "group_id: GroupId",
+                   event_id as "event_id: EventId",
+                   details
             FROM audit_log
             WHERE ($1::timestamptz IS NULL OR created_at >= $1)
               AND ($2::timestamptz IS NULL OR created_at <= $2)
@@ -130,10 +137,10 @@ impl AuditOps {
             "#,
             filter.from,
             filter.until,
-            filter.actor_user_id,
+            filter.actor_user_id.map(UserId::get),
             filter.action_prefix.map(|p| format!("{p}%")),
-            filter.group_id,
-            filter.event_id,
+            filter.group_id.map(GroupId::get),
+            filter.event_id.map(EventId::get),
             filter.limit as i64,
             filter.offset as i64
         )
@@ -157,10 +164,10 @@ impl AuditOps {
             "#,
             filter.from,
             filter.until,
-            filter.actor_user_id,
+            filter.actor_user_id.map(UserId::get),
             filter.action_prefix.map(|p| format!("{p}%")),
-            filter.group_id,
-            filter.event_id
+            filter.group_id.map(GroupId::get),
+            filter.event_id.map(EventId::get)
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -184,11 +191,11 @@ impl AuditOps {
 pub struct AuditFilter<'a> {
     pub from: Option<OffsetDateTime>,
     pub until: Option<OffsetDateTime>,
-    pub actor_user_id: Option<i64>,
+    pub actor_user_id: Option<UserId>,
     /// Matched as `prefix%` (e.g. `access.` for the whole access namespace).
     pub action_prefix: Option<&'a str>,
-    pub group_id: Option<i32>,
-    pub event_id: Option<i32>,
+    pub group_id: Option<GroupId>,
+    pub event_id: Option<EventId>,
     pub limit: i32,
     pub offset: i32,
 }

@@ -1,7 +1,8 @@
-use bigdecimal::BigDecimal;
 use sqlx::PgPool;
 use std::sync::Arc;
 
+use crate::entities::types::amount::Amount;
+use crate::entities::types::ids::UnitId;
 use crate::{
     entities::unit::*,
     error::{Error, Result},
@@ -33,7 +34,7 @@ impl UnitOps {
         Ok(row)
     }
 
-    pub async fn get(&self, id: i32) -> Result<Unit> {
+    pub async fn get(&self, id: UnitId) -> Result<Unit> {
         let row = sqlx::query_as!(
             Unit,
             r#"
@@ -41,7 +42,7 @@ impl UnitOps {
             FROM units 
             WHERE unit_id = $1
             "#,
-            id
+            id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -59,7 +60,7 @@ impl UnitOps {
             RETURNING unit_id as "id", name
             "#,
             unit.name,
-            unit.id
+            unit.id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -67,29 +68,29 @@ impl UnitOps {
         Ok(row)
     }
 
-    pub async fn delete(&self, id: i32) -> Result<()> {
+    pub async fn delete(&self, id: UnitId) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
         // Delete from base_conversions
         sqlx::query!(
             r#"DELETE FROM base_conversions WHERE from_unit = $1 OR to_unit = $1"#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
 
         // Delete from weights
-        sqlx::query!(r#"DELETE FROM weights WHERE unit_id = $1"#, id)
+        sqlx::query!(r#"DELETE FROM weights WHERE unit_id = $1"#, id.get())
             .execute(&mut *tx)
             .await?;
 
         // Delete from ingredient_sources
-        sqlx::query!(r#"DELETE FROM ingredient_sources WHERE unit_id = $1"#, id)
+        sqlx::query!(r#"DELETE FROM ingredient_sources WHERE unit_id = $1"#, id.get())
             .execute(&mut *tx)
             .await?;
 
         // Finally delete the unit
-        sqlx::query!(r#"DELETE FROM units WHERE unit_id = $1"#, id)
+        sqlx::query!(r#"DELETE FROM units WHERE unit_id = $1"#, id.get())
             .execute(&mut *tx)
             .await?;
 
@@ -119,12 +120,12 @@ impl UnitOps {
             r#"
             INSERT INTO base_conversions (from_unit, to_unit, from_amount, to_amount)
             VALUES ($1, $2, $3, $4)
-            RETURNING from_unit, to_unit, from_amount, to_amount
+            RETURNING from_unit as "from_unit: UnitId", to_unit as "to_unit: UnitId", from_amount as "from_amount: Amount", to_amount as "to_amount: Amount"
             "#,
-            conversion.from_unit,
-            conversion.to_unit,
-            conversion.from_amount,
-            conversion.to_amount,
+            conversion.from_unit.get(),
+            conversion.to_unit.get(),
+            conversion.from_amount.get(),
+            conversion.to_amount.get(),
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -139,12 +140,12 @@ impl UnitOps {
             UPDATE base_conversions
             SET from_amount = $3, to_amount = $4
             WHERE from_unit = $1 AND to_unit = $2
-            RETURNING from_unit, to_unit, from_amount, to_amount
+            RETURNING from_unit as "from_unit: UnitId", to_unit as "to_unit: UnitId", from_amount as "from_amount: Amount", to_amount as "to_amount: Amount"
             "#,
-            conversion.from_unit,
-            conversion.to_unit,
-            conversion.from_amount,
-            conversion.to_amount,
+            conversion.from_unit.get(),
+            conversion.to_unit.get(),
+            conversion.from_amount.get(),
+            conversion.to_amount.get(),
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -152,14 +153,14 @@ impl UnitOps {
         Ok(row)
     }
 
-    pub async fn delete_conversion(&self, from_unit: i32, to_unit: i32) -> Result<()> {
+    pub async fn delete_conversion(&self, from_unit: UnitId, to_unit: UnitId) -> Result<()> {
         sqlx::query!(
             r#"
             DELETE FROM base_conversions 
             WHERE from_unit = $1 AND to_unit = $2
             "#,
-            from_unit,
-            to_unit
+            from_unit.get(),
+            to_unit.get()
         )
         .execute(&*self.pool)
         .await?;
@@ -167,27 +168,28 @@ impl UnitOps {
         Ok(())
     }
 
-    pub async fn get_conversion(&self, from_unit: i32, to_unit: i32) -> Result<Option<BigDecimal>> {
+    pub async fn get_conversion(&self, from_unit: UnitId, to_unit: UnitId) -> Result<Option<Amount>> {
         let row = sqlx::query!(
             r#"
             SELECT to_amount / from_amount as "conversion_factor!"
             FROM conversions 
             WHERE from_unit = $1 AND to_unit = $2
             "#,
-            from_unit,
-            to_unit
+            from_unit.get(),
+            to_unit.get()
         )
         .fetch_optional(&*self.pool)
         .await?;
+        
+        Ok(row.map(|r| Amount::from(r.conversion_factor)))
 
-        Ok(row.map(|r| r.conversion_factor))
     }
 
     pub async fn get_all_conversions(&self) -> Result<Vec<ConversionRow>> {
         let rows = sqlx::query_as!(
             ConversionRow,
             r#"
-            SELECT from_unit as "from_unit!", to_unit as "to_unit!", from_amount as "from_amount!", to_amount as "to_amount!" 
+            SELECT from_unit as "from_unit!: UnitId", to_unit as "to_unit!: UnitId", from_amount as "from_amount!", to_amount as "to_amount!" 
             FROM conversions
             "#
         )
@@ -199,10 +201,10 @@ impl UnitOps {
 
     pub async fn convert_unit(
         &self,
-        amount: BigDecimal,
-        from_unit: i32,
-        to_unit: i32,
-    ) -> Result<BigDecimal> {
+        amount: Amount,
+        from_unit: UnitId,
+        to_unit: UnitId,
+    ) -> Result<Amount> {
         let conversion_factor = self.get_conversion(from_unit, to_unit).await?;
 
         match conversion_factor {
@@ -210,7 +212,8 @@ impl UnitOps {
             None => Err(Error::Validation {
                 message: format!(
                     "No conversion path found from unit {} to unit {}",
-                    from_unit, to_unit
+                    from_unit.get(),
+                    to_unit.get()
                 ),
             }),
         }

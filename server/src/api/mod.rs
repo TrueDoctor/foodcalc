@@ -86,22 +86,36 @@ async fn health() -> impl IntoResponse {
 }
 
 pub fn map_api_error(err: foodlib_new::Error) -> (StatusCode, Json<serde_json::Value>) {
-    let status = match err {
-        foodlib_new::Error::NotFound { .. } => StatusCode::NOT_FOUND,
-        foodlib_new::Error::Unauthorized(_) | foodlib_new::Error::Forbidden(_) => {
-            StatusCode::UNAUTHORIZED
+    let (status, message) = match &err {
+        foodlib_new::Error::NotFound { .. } => (StatusCode::NOT_FOUND, err.to_string()),
+        foodlib_new::Error::Unauthorized(_) => (
+            StatusCode::UNAUTHORIZED,
+            "Authentication required".to_string(),
+        ),
+        foodlib_new::Error::Forbidden(_) => (StatusCode::FORBIDDEN, err.to_string()),
+        foodlib_new::Error::Validation { .. }
+        | foodlib_new::Error::Conflict { .. }
+        | foodlib_new::Error::InvalidInput { .. } => (StatusCode::BAD_REQUEST, err.to_string()),
+        foodlib_new::Error::Database(_) => {
+            tracing::error!(error = ?err, "Database error in API handler");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "An internal database error occurred".to_string(),
+            )
         }
-        foodlib_new::Error::Validation { .. } | foodlib_new::Error::Conflict { .. } => {
-            StatusCode::BAD_REQUEST
+        _ => {
+            tracing::error!(error = ?err, "Unhandled internal error in API handler");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "An internal error occurred".to_string(),
+            )
         }
-        foodlib_new::Error::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        _ => StatusCode::UNPROCESSABLE_ENTITY,
     };
 
     (
         status,
         Json(json!({
-            "error": err.to_string(),
+            "error": message,
         })),
     )
 }
@@ -125,11 +139,6 @@ pub fn respond_created<T: Serialize>(result: Result<T>) -> Response {
         Ok(value) => json_response(StatusCode::CREATED, value),
         Err(err) => map_api_error(err).into_response(),
     }
-}
-
-/// Plain JSON error response for input validation failures.
-pub fn bad_request(message: String) -> Response {
-    (StatusCode::BAD_REQUEST, Json(json!({ "error": message }))).into_response()
 }
 
 /// Maps a foodlib result to a `204 No Content` (or mapped error) response.

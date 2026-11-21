@@ -9,6 +9,8 @@ use axum::{
     Json, Router,
 };
 
+use foodlib_new::entities::types::ids::{EventId, UserId};
+
 use crate::api::{respond, respond_created, respond_no_content};
 use crate::app::events::members;
 use crate::app::AppCtx;
@@ -29,7 +31,7 @@ async fn list_members(
     ctx: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    respond(members::list(&state, &ctx.ctx, id).await)
+    respond(members::list(&state, &ctx.ctx, EventId(id)).await)
 }
 
 /// `POST /api/events/{id}/members` — grant a user event-level roles.
@@ -39,7 +41,7 @@ async fn add_member(
     Path(id): Path<i32>,
     Json(payload): Json<AddEventMemberInput>,
 ) -> Response {
-    respond_created(members::add(&state, &ctx, id, payload).await)
+    respond_created(members::add(&state, &ctx, EventId(id), payload).await)
 }
 
 /// `PUT /api/events/{id}/members/{user_id}` — replaces the collaborator's
@@ -50,7 +52,7 @@ async fn set_member_roles(
     Path((id, user_id)): Path<(i32, i64)>,
     Json(payload): Json<EventMemberRolesInput>,
 ) -> Response {
-    respond_no_content(members::set_roles(&state, &ctx, id, user_id, payload).await)
+    respond_no_content(members::set_roles(&state, &ctx, EventId(id), UserId(user_id), payload).await)
 }
 
 /// `DELETE /api/events/{id}/members/{user_id}` — revokes all event-level
@@ -60,5 +62,5 @@ async fn remove_member(
     ctx: AppCtx,
     Path((id, user_id)): Path<(i32, i64)>,
 ) -> Response {
-    respond_no_content(members::remove(&state, &ctx, id, user_id).await)
+    respond_no_content(members::remove(&state, &ctx, EventId(id), UserId(user_id)).await)
 }

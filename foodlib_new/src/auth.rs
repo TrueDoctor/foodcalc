@@ -2,12 +2,14 @@ use async_trait::async_trait;
 use axum::extract::{FromRequestParts, OptionalFromRequestParts};
 use axum::http::request::Parts;
 use axum_login::{AuthUser, AuthnBackend, UserId};
-use bcrypt;
 use serde::Deserialize;
-use sqlx::postgres::PgPool;
+use sqlx::PgPool;
 use std::sync::Arc;
+#[cfg(feature = "legacy-frontend")]
 use time::OffsetDateTime;
 
+
+use crate::entities::types::ids::UserId as DbUserId;
 use crate::entities::user::User;
 use crate::error::{Error, Result};
 use crate::ops::users::UserOps;
@@ -19,7 +21,7 @@ pub struct Credentials {
 }
 
 impl AuthUser for User {
-    type Id = i64;
+    type Id = DbUserId;
 
     fn id(&self) -> Self::Id {
         self.id
@@ -30,7 +32,8 @@ impl AuthUser for User {
     }
 }
 
-// Helper extractor to get the current user from the session
+pub type AuthSession = axum_login::AuthSession<AuthBackend>;
+
 impl<S> FromRequestParts<S> for User
 where
     S: Send + Sync,
@@ -39,16 +42,15 @@ where
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self> {
-        // Extract the auth session
         let auth = AuthSession::from_request_parts(parts, state)
             .await
-            .map_err(|_| Error::Unauthorized("no auth headers".to_string()))?;
+            .map_err(|_| Error::Unauthorized("No auth session available".into()))?;
 
-        // Make sure the user is logged in
         auth.user
-            .ok_or(Error::Unauthorized("Authentication required".to_string()))
+            .ok_or_else(|| Error::Unauthorized("Authentication required".into()))
     }
 }
+
 impl<S> OptionalFromRequestParts<S> for User
 where
     S: Send + Sync,
@@ -57,10 +59,7 @@ where
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Option<Self>> {
-        // Extract the auth session
         let auth = AuthSession::from_request_parts(parts, state).await.ok();
-
-        // Make sure the user is logged in
         Ok(auth.and_then(|a| a.user))
     }
 }
@@ -90,24 +89,19 @@ impl AuthnBackend for AuthBackend {
             .get_user_by_string_reference(creds.username)
             .await;
 
-        Ok(
-            user.filter(|user| {
-                bcrypt::verify(creds.password, &user.password_hash).unwrap_or(false)
-            }),
-        )
+        Ok(user.filter(|u| bcrypt::verify(&creds.password, &u.password_hash).unwrap_or(false)))
     }
 
     async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<Self::User>> {
         match self.user_ops.get_user(*user_id).await {
-            Err(Error::UserNotFound { .. }) => Ok(None),
-            a => a.map(Some),
+            Err(Error::UserNotFound { .. } | Error::NotFound { .. }) => Ok(None),
+            res => res.map(Some),
         }
     }
 }
 
-// Type alias for convenience
-pub type AuthSession = axum_login::AuthSession<AuthBackend>;
 
+#[cfg(feature = "legacy-frontend")]
 pub async fn login(mut auth: AuthSession, credentials: Credentials) -> Result<AuthSession> {
     let username = credentials.username.clone();
     let user = auth
@@ -120,40 +114,41 @@ pub async fn login(mut auth: AuthSession, credentials: Credentials) -> Result<Au
     Ok(auth)
 }
 
+#[cfg(feature = "legacy-frontend")]
 pub async fn logout(mut auth: AuthSession) -> Result<()> {
     auth.logout().await?;
     Ok(())
 }
 
+#[cfg(feature = "legacy-frontend")]
 pub async fn register(
     backend: &AuthBackend,
     email: String,
     credentials: Credentials,
     is_admin: bool,
 ) -> Result<User> {
+    let password_hash = bcrypt::hash(&credentials.password, 12)
+        .map_err(|err| Error::Misc(err.to_string()))?;
+
     backend
         .user_ops
         .create_user_with_personal_group(User {
-            id: -1,
+            id: DbUserId(0),
             username: credentials.username,
             email,
-            password_hash: bcrypt::hash(&credentials.password, 12).unwrap(),
+            password_hash,
             is_admin,
-            created_at: OffsetDateTime::now_local().unwrap_or(OffsetDateTime::now_utc()),
+            created_at: OffsetDateTime::now_utc(),
         })
         .await
         .map(|(user, _group)| user)
-        .map_err(Into::into)
 }
 
+#[cfg(feature = "legacy-frontend")]
 pub async fn change_password(
     backend: &AuthBackend,
-    user_id: i64,
+    user_id: DbUserId,
     new_password: String,
 ) -> Result<User> {
-    backend
-        .user_ops
-        .update_password(user_id, new_password)
-        .await
-        .map_err(Into::into)
+    backend.user_ops.update_password(user_id, new_password).await
 }

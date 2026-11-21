@@ -8,6 +8,7 @@ use axum::{
     response::Response,
     Json,
 };
+use foodlib_new::entities::types::ids::{EventId, MealId};
 use serde_json::json;
 
 use crate::api::{respond, respond_created, respond_no_content};
@@ -23,7 +24,7 @@ pub async fn list_meals(
     ctx: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    respond(meals::list(&state, &ctx.ctx, id).await)
+    respond(meals::list(&state, &ctx.ctx, EventId(id)).await)
 }
 
 /// `POST /api/events/{id}/meals` — plan a recipe as a meal. Energy scaling:
@@ -36,7 +37,7 @@ pub async fn add_meal(
     Json(payload): Json<MealAddInput>,
 ) -> Response {
     respond_created(
-        meals::add_meal_to_event(&state, &ctx, id, payload)
+        meals::add_meal_to_event(&state, &ctx, EventId(id), payload)
             .await
             .map(|meal_id| json!({ "meal_id": meal_id })),
     )
@@ -50,7 +51,7 @@ pub async fn update_meal(
     Path((event_id, meal_id)): Path<(i32, i32)>,
     Json(payload): Json<MealUpdateInput>,
 ) -> Response {
-    respond_no_content(meals::update_meal_of_event(&state, &ctx, event_id, meal_id, payload).await)
+    respond_no_content(meals::update_meal_of_event(&state, &ctx, EventId(event_id), MealId(meal_id), payload).await)
 }
 
 /// `DELETE /api/events/{id}/meals/{meal_id}` — unplan the meal.
@@ -59,7 +60,7 @@ pub async fn remove_meal(
     ctx: AppCtx,
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> Response {
-    respond_no_content(meals::remove_meal_from_event(&state, &ctx, event_id, meal_id).await)
+    respond_no_content(meals::remove_meal_from_event(&state, &ctx, EventId(event_id), MealId(meal_id)).await)
 }
 
 /// `POST /api/events/{id}/meals/{meal_id}/duplicate` — copy the meal within
@@ -70,7 +71,7 @@ pub async fn duplicate_meal(
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> Response {
     respond_created(
-        meals::duplicate_meal_within_event(&state, &ctx, event_id, meal_id)
+        meals::duplicate_meal_within_event(&state, &ctx, EventId(event_id), MealId(meal_id))
             .await
             .map(|new_id| json!({ "meal_id": new_id })),
     )

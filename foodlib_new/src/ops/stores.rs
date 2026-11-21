@@ -3,7 +3,7 @@
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use crate::{entities::store::*, error::Result};
+use crate::{entities::store::*, error::Result, entities::types::ids::StoreId};
 
 #[derive(Clone)]
 pub struct StoreOps {
@@ -31,7 +31,7 @@ impl StoreOps {
         Ok(row)
     }
 
-    pub async fn get(&self, id: i32) -> Result<Store> {
+    pub async fn get(&self, id: StoreId) -> Result<Store> {
         let row = sqlx::query_as!(
             Store,
             r#"
@@ -39,7 +39,7 @@ impl StoreOps {
             FROM stores 
             WHERE store_id = $1
             "#,
-            id
+            id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -73,7 +73,7 @@ impl StoreOps {
             RETURNING store_id as "id", name
             "#,
             store.name,
-            store.id
+            store.id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -81,7 +81,7 @@ impl StoreOps {
         Ok(row)
     }
 
-    pub async fn delete(&self, id: i32) -> Result<()> {
+    pub async fn delete(&self, id: StoreId) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
         // First handle ingredient sources
@@ -90,7 +90,7 @@ impl StoreOps {
             DELETE FROM ingredient_sources 
             WHERE store_id = $1
             "#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
@@ -101,7 +101,7 @@ impl StoreOps {
             DELETE FROM shopping_tours
             WHERE store_id = $1
             "#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
@@ -112,7 +112,7 @@ impl StoreOps {
             DELETE FROM stores 
             WHERE store_id = $1
             "#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;

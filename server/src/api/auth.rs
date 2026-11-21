@@ -8,8 +8,12 @@
 //! here; registration, profile resolution and the auth audit trail live in
 //! `crate::app::auth`.
 
-use crate::app::auth;
 use crate::api::map_api_error;
+use crate::app::auth;
+use crate::app::auth::LoginInput;
+// Input DTOs shared with the app layer (the profile DTOs live in `app::auth`
+// and are consumed by other transports too).
+pub use crate::app::auth::RegisterInput;
 use crate::MyAppState;
 use axum::{
     extract::State,
@@ -17,22 +21,10 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use foodlib_new::auth::{AuthSession, Credentials};
+use foodlib_new::auth::AuthSession;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::ops::audit::action;
-use foodlib_new::Error;
-use serde::Deserialize;
 
-// Input DTOs shared with the app layer (the profile DTOs live in `app::auth`
-// and are consumed by other transports too).
-pub use crate::app::auth::RegisterInput;
-
-/// `POST /api/auth/login` payload.
-#[derive(Debug, Deserialize)]
-pub struct LoginInput {
-    pub username: String,
-    pub password: String,
-}
 
 fn unauthorized(message: &str) -> (StatusCode, Json<serde_json::Value>) {
     (
@@ -41,59 +33,21 @@ fn unauthorized(message: &str) -> (StatusCode, Json<serde_json::Value>) {
     )
 }
 
-/// Login with username and password. On success the session cookie is
-/// set; the SPA resolves the current user via `/api/auth/me` afterwards.
 pub async fn login(
     State(state): State<MyAppState>,
-    auth_session: AuthSession,
+    mut auth_session: AuthSession,
     Json(payload): Json<LoginInput>,
 ) -> Response {
-    let attempted_username = payload.username.clone();
-    let credentials = Credentials {
-        username: payload.username,
-        password: payload.password,
+    let user = match auth::authenticate(&state, payload).await {
+        Ok(user) => user,
+        Err(err) => return map_api_error(err).into_response(),
     };
 
-    let result = foodlib_new::auth::login(auth_session, credentials).await;
-    match result {
-        Ok(_) => {
-            let actor = state
-                .users()
-                .get_user_by_string_reference(attempted_username.clone())
-                .await;
-            auth::audit_auth(
-                &state,
-                actor.as_ref().map(|user| user.id),
-                &attempted_username,
-                action::LOGIN_SUCCESS,
-                serde_json::json!({}),
-            )
-            .await;
-            StatusCode::NO_CONTENT.into_response()
-        }
-        Err(Error::UserNotFound { .. }) => {
-            auth::audit_auth(
-                &state,
-                None,
-                &attempted_username,
-                action::LOGIN_FAILED,
-                serde_json::json!({}),
-            )
-            .await;
-            unauthorized("wrong credentials").into_response()
-        }
-        Err(err) => {
-            auth::audit_auth(
-                &state,
-                None,
-                &attempted_username,
-                action::LOGIN_FAILED,
-                serde_json::json!({ "error": err.to_string() }),
-            )
-            .await;
-            map_api_error(err).into_response()
-        }
+    if let Err(err) = auth_session.login(&user).await {
+        return map_api_error(err.into()).into_response();
     }
+
+    StatusCode::NO_CONTENT.into_response()
 }
 
 /// Open self-registration: creates the user together with their personal

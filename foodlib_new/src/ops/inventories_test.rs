@@ -1,7 +1,13 @@
 // inventories_test.rs
 
-use crate::{entities::inventory::*, error::Error, ops::inventories::InventoryOps};
-use bigdecimal::BigDecimal;
+use crate::{
+    entities::inventory::*,
+    error::Error,
+    entities::types::ids::{GroupId, IngredientId, InventoryId},
+    ops::inventories::InventoryOps,
+};
+
+use crate::entities::types::amount::Amount;
 use pretty_assertions::assert_eq;
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -9,14 +15,14 @@ async fn test_create_inventory(pool: sqlx::PgPool) {
     let ops = InventoryOps::new(pool.into());
 
     let inventory = Inventory {
-        id: -1,
+        id: InventoryId(-1),
         name: "Test Inventory".to_string(),
-        group_id: 1,
+        group_id: GroupId(1),
     };
 
     let created = ops.create(inventory.clone()).await.unwrap();
     assert_eq!(created.name, inventory.name);
-    assert!(created.id > 0);
+    assert!(created.id > InventoryId(0));
 
     // Verify it exists in DB
     let fetched = ops.get(created.id).await.unwrap();
@@ -30,9 +36,9 @@ async fn test_update_inventory(pool: sqlx::PgPool) {
     // Create a test inventory to update
     let inventory = ops
         .create(Inventory {
-            id: -1,
+            id: InventoryId(-1),
             name: "Test Inventory".to_string(),
-            group_id: 1,
+            group_id: GroupId(1),
         })
         .await
         .unwrap();
@@ -41,7 +47,7 @@ async fn test_update_inventory(pool: sqlx::PgPool) {
         .update(Inventory {
             id: inventory.id,
             name: "Updated Inventory".to_string(),
-            group_id: 1,
+            group_id: GroupId(1),
         })
         .await
         .unwrap();
@@ -60,9 +66,9 @@ async fn test_delete_inventory(pool: sqlx::PgPool) {
     // Create temporary inventory to delete
     let inventory = ops
         .create(Inventory {
-            id: -1,
+            id: InventoryId(-1),
             name: "To Delete".to_string(),
-            group_id: 1,
+            group_id: GroupId(1),
         })
         .await
         .unwrap();
@@ -85,13 +91,13 @@ async fn test_list_inventories(pool: sqlx::PgPool) {
         .iter()
         .find(|i| i.name == "Main Pantry")
         .unwrap();
-    assert_eq!(main_pantry.id, 1);
+    assert_eq!(main_pantry.id, InventoryId(1));
 
     let backup_storage = inventories
         .iter()
         .find(|i| i.name == "Backup Storage")
         .unwrap();
-    assert_eq!(backup_storage.id, 2);
+    assert_eq!(backup_storage.id, InventoryId(2));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -100,9 +106,9 @@ async fn test_inventory_items(pool: sqlx::PgPool) {
 
     // Test adding item
     let item = InventoryItem {
-        inventory_id: 1,
-        ingredient_id: 1,
-        amount: BigDecimal::from(100),
+        inventory_id: InventoryId(1),
+        ingredient_id: IngredientId(1),
+        amount: Amount::from(100),
     };
 
     let created = ops.add_item(item.clone()).await.unwrap();
@@ -110,18 +116,18 @@ async fn test_inventory_items(pool: sqlx::PgPool) {
 
     // Test updating item
     let mut updated = created.clone();
-    updated.amount = BigDecimal::from(200);
+    updated.amount = Amount::from(200);
     let result = ops.update_item(updated.clone()).await.unwrap();
     assert_eq!(result, updated);
 
     // Test fetching items
-    let items = ops.get_items(1).await.unwrap();
+    let items = ops.get_items(InventoryId(1)).await.unwrap();
     let mut updated: InventoryItemWithName = updated.into();
     updated.name = "Pasta".into();
     assert!(items.contains(&updated));
 
     // Test deleting item
-    ops.delete_item(1, 1).await.unwrap();
-    let items = ops.get_items(1).await.unwrap();
+    ops.delete_item(InventoryId(1), IngredientId(1)).await.unwrap();
+    let items = ops.get_items(InventoryId(1)).await.unwrap();
     assert!(!items.iter().any(|x| x.ingredient_id == item.ingredient_id));
 }

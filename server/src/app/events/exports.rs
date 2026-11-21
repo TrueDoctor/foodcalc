@@ -7,6 +7,7 @@
 use bigdecimal::ToPrimitive;
 
 use foodlib_new::entities::event::ShoppingTour;
+use foodlib_new::entities::types::ids::{EventId, MealId, TourId};
 use foodlib_new::ops::export::{EventAllergenInfo, EventOverviewInfo, EventOverviewMeal, EventOverviewPrep, EventOverviewTour};
 use foodlib_new::policy::EventPerm;
 
@@ -80,8 +81,8 @@ fn render_export_dish_labels(info: EventAllergenInfo) -> Result<Vec<u8>> {
 /// `GET …/exports/overview` — management summary PDF: frame data with budget
 /// status, planned meals with planner numbers, shopping tours and food-prep
 /// tasks. Requires `events:export`.
-pub async fn export_summary_pdf(state: &MyAppState, ctx: &AppCtx, event_id: i32) -> Result<ExportedFile> {
-    ctx.ctx.assert_event_action(event_id, EventPerm::Export).await?;
+pub async fn export_summary_pdf(state: &MyAppState, ctx: &AppCtx, event_id: EventId) -> Result<ExportedFile> {
+    ctx.ctx.assert_event_action(event_id, EventPerm::ExportMealPlan).await?;
     let event = state.events().get(event_id).await?;
     let total_cost = state.events().get_total_cost(event_id).await?;
     let meals = state.meals().get_event_meals_planner(event_id).await?;
@@ -152,13 +153,13 @@ pub async fn export_summary_pdf(state: &MyAppState, ctx: &AppCtx, event_id: i32)
 }
 
 /// `GET …/exports/recipes` — combined PDF with every meal recipe and
-/// food-prep sheet, ordered chronologically. Requires `events:edit`.
+/// food-prep sheet, ordered chronologically. Requires `events:export`.
 pub async fn export_all_recipes_for_one_event(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
+    event_id: EventId,
 ) -> Result<ExportedFile> {
-    actor.ctx.assert_event_action(event_id, EventPerm::Edit).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ExportMealPlan).await?;
     let event = state.events().get(event_id).await?;
     let infos = state.export().fetch_event_combined(event_id).await?;
     let bytes = render_recipes(infos)?;
@@ -174,10 +175,10 @@ pub async fn export_all_recipes_for_one_event(
 pub async fn export_recipe_for_meal(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    meal_id: i32,
+    event_id: EventId,
+    meal_id: MealId,
 ) -> Result<ExportedFile> {
-    actor.ctx.assert_event_action(event_id, EventPerm::Export).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ExportMealPlan).await?;
     let info = state.export().fetch_meal_recipe(meal_id).await?;
     let title = info.name.to_owned();
     let bytes = render_recipes(vec![info])?;
@@ -193,9 +194,9 @@ pub async fn export_recipe_for_meal(
 pub async fn export_allergen_list_for_event(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
+    event_id: EventId,
 ) -> Result<ExportedFile> {
-    actor.ctx.assert_event_action(event_id, EventPerm::Export).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ExportMealPlan).await?;
     let info = state.export().fetch_event_allergens(event_id).await?;
     let filename = format!("{}_allergene", sanitize(&info.event_name));
 
@@ -214,9 +215,9 @@ pub async fn export_allergen_list_for_event(
 pub async fn export_dish_labels(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
+    event_id: EventId,
 ) -> Result<ExportedFile> {
-    actor.ctx.assert_event_action(event_id, EventPerm::Export).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ExportMealPlan).await?;
     let info = state.export().fetch_event_allergens(event_id).await?;
     let filename = format!("{}_dish_labels_tent", sanitize(&info.event_name));
 
@@ -232,11 +233,11 @@ pub async fn export_dish_labels(
 pub async fn export_shopping_tour_list(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    tour_id: i32,
+    event_id: EventId,
+    tour_id: TourId,
 ) -> Result<ExportedFile> {
     // Permission check
-    actor.ctx.assert_event_action(event_id, EventPerm::Export).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ExportMealPlan).await?;
 
     let tour: ShoppingTour = state.events().get_shopping_tour(tour_id).await?;
     let items = state

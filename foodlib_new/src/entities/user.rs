@@ -1,10 +1,11 @@
 use crate::policy::Permission;
+use crate::entities::types::ids::{GroupId, UserId};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    pub id: i64,
+    pub id: UserId,
     pub username: String,
     pub email: String,
     pub password_hash: String,
@@ -16,7 +17,7 @@ pub struct User {
 impl Default for User {
     fn default() -> Self {
         Self {
-            id: -1,
+            id: UserId(-1),
             username: "test".into(),
             email: "test@example.com".into(),
             password_hash: "test".into(),
@@ -28,23 +29,23 @@ impl Default for User {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Group {
-    pub id: i32,
+    pub id: GroupId,
     pub name: String,
     pub is_personal: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserGroup {
-    pub user_id: i64,
-    pub group_id: i32,
+    pub user_id: UserId,
+    pub group_id: GroupId,
 }
 
 /// Raw `(user_id, group)` join row used by `UserOps::list_users_with_groups`
 /// to group memberships in Rust with two flat queries.
 #[derive(Debug)]
 pub struct MembershipRow {
-    pub user_id: i64,
-    pub id: i32,
+    pub user_id: UserId,
+    pub id: GroupId,
     pub name: String,
     pub is_personal: bool,
 }
@@ -53,7 +54,7 @@ pub struct MembershipRow {
 /// (`auth/me`, member lists). Role is one of `viewer`, `editor`, `manager`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GroupMembership {
-    pub id: i32,
+    pub id: GroupId,
     pub name: String,
     pub is_personal: bool,
     pub roles: Vec<String>,

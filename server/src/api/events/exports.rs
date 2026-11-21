@@ -9,6 +9,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+use foodlib_new::entities::types::ids::{EventId, MealId, TourId};
+
 use crate::api::map_api_error;
 use crate::app::{events::exports, AppCtx};
 use crate::MyAppState;
@@ -42,7 +44,7 @@ pub async fn export_overview(
     ctx: AppCtx,
     Path(event_id): Path<i32>,
 ) -> Response {
-    file_response(exports::export_summary_pdf(&state, &ctx, event_id).await, "pdf")
+    file_response(exports::export_summary_pdf(&state, &ctx, EventId(event_id)).await, "pdf")
 }
 
 /// `GET /api/events/{id}/exports/recipes` — combined PDF with every meal
@@ -52,7 +54,7 @@ pub async fn export_recipes(
     ctx: AppCtx,
     Path(event_id): Path<i32>,
 ) -> Response {
-    file_response(exports::export_all_recipes_for_one_event(&state, &ctx, event_id).await, "pdf")
+    file_response(exports::export_all_recipes_for_one_event(&state, &ctx, EventId(event_id)).await, "pdf")
 }
 
 /// `GET /api/events/{id}/exports/meal/{meal_id}` — the meal's recipe PDF,
@@ -62,7 +64,7 @@ pub async fn export_meal(
     ctx: AppCtx,
     Path((event_id, meal_id)): Path<(i32, i32)>,
 ) -> Response {
-    file_response(exports::export_recipe_for_meal(&state, &ctx, event_id, meal_id).await, "pdf")
+    file_response(exports::export_recipe_for_meal(&state, &ctx, EventId(event_id), MealId(meal_id)).await, "pdf")
 }
 
 /// `GET /api/events/{id}/exports/allergens` — allergen list PDF for the event.
@@ -71,7 +73,7 @@ pub async fn export_allergens(
     ctx: AppCtx,
     Path(event_id): Path<i32>,
 ) -> Response {
-    file_response(exports::export_allergen_list_for_event(&state, &ctx, event_id).await, "pdf")
+    file_response(exports::export_allergen_list_for_event(&state, &ctx, EventId(event_id)).await, "pdf")
 }
 
 /// `GET /api/events/{id}/exports/labels` — tent-card dish labels PDF with the
@@ -81,7 +83,7 @@ pub async fn export_labels(
     ctx: AppCtx,
     Path(event_id): Path<i32>,
 ) -> Response {
-    file_response(exports::export_dish_labels(&state, &ctx, event_id).await, "pdf")
+    file_response(exports::export_dish_labels(&state, &ctx, EventId(event_id)).await, "pdf")
 }
 
 /// `GET /api/events/{id}/exports/tour/{tour_id}` — the tour's shopping list
@@ -91,5 +93,5 @@ pub async fn export_tour(
     ctx: AppCtx,
     Path((event_id, tour_id)): Path<(i32, i32)>,
 ) -> Response {
-    file_response(exports::export_shopping_tour_list(&state, &ctx, event_id, tour_id).await, "txt")
+    file_response(exports::export_shopping_tour_list(&state, &ctx, EventId(event_id), TourId(tour_id)).await, "txt")
 }

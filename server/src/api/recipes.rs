@@ -6,17 +6,22 @@
 use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Response},
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use foodlib_new::entities::recipe::RecipeKind;
+use foodlib_new::entities::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId};
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::api::{respond, respond_created, respond_no_content};
-use crate::app::recipes;
+use crate::app::recipes::{
+    self, RecipeCloneInput, RecipeExportQuery, RecipeIngredientInput, RecipeListQuery,
+    RecipeStepInput, RecipeUpdateInput, SubRecipeInput, SubRecipeWeightInput,
+};
 use crate::app::AppCtx;
 use crate::MyAppState;
+
 
 pub fn recipes_router() -> Router<MyAppState> {
     Router::new()
@@ -29,9 +34,13 @@ pub fn recipes_router() -> Router<MyAppState> {
         .route("/{id}/export", get(export_recipe_pdf))
         .route("/{id}/clone", post(clone_recipe))
         .route("/{id}/owner", put(transfer_owner))
-        .route("/{id}/ingredients", post(add_ingredient))
         .route(
-            "/{id}/ingredients", put(update_ingredient).delete(remove_ingredient),
+            "/{id}/ingredients",
+            post(add_ingredient).put(update_ingredient),
+        )
+        .route(
+            "/{id}/ingredients/{ingredient_id}",
+            delete(remove_ingredient),
         )
         .route("/{id}/steps", post(add_step))
         .route(
@@ -45,19 +54,12 @@ pub fn recipes_router() -> Router<MyAppState> {
         )
 }
 
-use crate::app::recipes::RecipeUpdateInput;
-// DTOs shared with the app layer.
-pub use crate::app::recipes::{
-    RecipeCloneInput, RecipeExportQuery, RecipeIngredientInput, RecipeListQuery, RecipeStepInput,
-    SubRecipeInput, SubRecipeWeightInput,
-};
-
 #[derive(Debug, Deserialize)]
 pub struct RecipeCreateInput {
     pub name: String,
     pub comment: Option<String>,
     pub kind: RecipeKind,
-    pub group_id: i32,
+    pub group_id: GroupId,
     pub weighed_in: Option<bool>,
 }
 
@@ -74,21 +76,24 @@ async fn create_recipe(
     actor: AppCtx,
     Json(payload): Json<RecipeCreateInput>,
 ) -> Response {
-    respond_created(recipes::create_new_recipe(
-        &state,
-        &actor,
-        payload.name,
-        payload.comment,
-        payload.kind,
-        payload.group_id,
-        payload.weighed_in,
-    ).await)
+    respond_created(
+        recipes::create_new_recipe(
+            &state,
+            &actor,
+            payload.name,
+            payload.comment,
+            payload.kind,
+            payload.group_id,
+            payload.weighed_in,
+        )
+            .await,
+    )
 }
 
 async fn update_recipe(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
     Json(payload): Json<RecipeUpdateInput>,
 ) -> Response {
     respond(recipes::update_recipe(&state, &actor, id, payload).await)
@@ -97,7 +102,7 @@ async fn update_recipe(
 async fn delete_recipe(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
 ) -> Response {
     respond_no_content(recipes::delete_recipe(&state, &actor, id).await)
 }
@@ -105,7 +110,7 @@ async fn delete_recipe(
 async fn get_recipe(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
 ) -> Response {
     respond(recipes::get_recipe(&state, &actor, id).await)
 }
@@ -115,7 +120,7 @@ async fn get_recipe(
 async fn get_recipe_tree(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
 ) -> Response {
     respond(recipes::tree(&state, &actor, id).await)
 }
@@ -125,7 +130,7 @@ async fn get_recipe_tree(
 async fn export_recipe_pdf(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
     Query(query): Query<RecipeExportQuery>,
 ) -> Response {
     match recipes::export_pdf(&state, &actor, id, query).await {
@@ -147,7 +152,7 @@ async fn export_recipe_pdf(
 async fn clone_recipe(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
     Json(payload): Json<RecipeCloneInput>,
 ) -> Response {
     respond_created(
@@ -162,7 +167,7 @@ async fn clone_recipe(
 async fn add_ingredient(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
     Json(payload): Json<RecipeIngredientInput>,
 ) -> Response {
     respond_created(recipes::add_ingredient(&state, &actor, id, payload).await)
@@ -171,7 +176,7 @@ async fn add_ingredient(
 async fn update_ingredient(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
     Json(payload): Json<RecipeIngredientInput>,
 ) -> Response {
     respond(recipes::update_ingredient(&state, &actor, id, payload).await)
@@ -180,7 +185,7 @@ async fn update_ingredient(
 async fn remove_ingredient(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path((id, ingredient_id)): Path<(i32, i32)>,
+    Path((id, ingredient_id)): Path<(RecipeId, IngredientId)>,
 ) -> Response {
     respond_no_content(recipes::remove_ingredient(&state, &actor, id, ingredient_id).await)
 }
@@ -190,7 +195,7 @@ async fn remove_ingredient(
 async fn add_step(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
     Json(payload): Json<RecipeStepInput>,
 ) -> Response {
     respond_created(recipes::add_step(&state, &actor, id, payload).await)
@@ -199,7 +204,7 @@ async fn add_step(
 async fn update_step(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path((id, step_id)): Path<(i32, i32)>,
+    Path((id, step_id)): Path<(RecipeId, RecipeStepId)>,
     Json(payload): Json<RecipeStepInput>,
 ) -> Response {
     respond(recipes::update_step(&state, &actor, id, step_id, payload).await)
@@ -208,7 +213,7 @@ async fn update_step(
 async fn remove_step(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path((id, step_id)): Path<(i32, i32)>,
+    Path((id, step_id)): Path<(RecipeId, RecipeStepId)>,
 ) -> Response {
     respond_no_content(recipes::remove_step(&state, &actor, id, step_id).await)
 }
@@ -218,7 +223,7 @@ async fn remove_step(
 async fn add_sub_recipe(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
     Json(payload): Json<SubRecipeInput>,
 ) -> Response {
     respond_created(recipes::add_sub_recipe(&state, &actor, id, payload).await)
@@ -227,7 +232,7 @@ async fn add_sub_recipe(
 async fn update_sub_recipe(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path((id, child_id)): Path<(i32, i32)>,
+    Path((id, child_id)): Path<(RecipeId, RecipeId)>,
     Json(payload): Json<SubRecipeWeightInput>,
 ) -> Response {
     respond(recipes::update_sub_recipe(&state, &actor, id, child_id, payload).await)
@@ -236,7 +241,7 @@ async fn update_sub_recipe(
 async fn remove_sub_recipe(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path((id, child_id)): Path<(i32, i32)>,
+    Path((id, child_id)): Path<(RecipeId, RecipeId)>,
 ) -> Response {
     respond_no_content(recipes::remove_sub_recipe(&state, &actor, id, child_id).await)
 }
@@ -245,7 +250,7 @@ async fn remove_sub_recipe(
 
 #[derive(Debug, Deserialize)]
 pub struct OwnerTransferInput {
-    pub group_id: i32,
+    pub group_id: GroupId,
 }
 
 /// `PUT /api/recipes/{id}/owner` — explicit Besitz-Übertragung (siehe
@@ -254,10 +259,8 @@ pub struct OwnerTransferInput {
 async fn transfer_owner(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<RecipeId>,
     Json(payload): Json<OwnerTransferInput>,
 ) -> Response {
-    respond_no_content(
-        recipes::transfer_owner(&state, &actor, id, payload.group_id).await,
-    )
+    respond_no_content(recipes::transfer_owner(&state, &actor, id, payload.group_id).await)
 }

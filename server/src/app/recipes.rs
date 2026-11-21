@@ -9,6 +9,7 @@ use super::{assert_ownership_transfer, AppCtx, Error, MyAppState, Result};
 use bigdecimal::ToPrimitive;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::recipe::{RecipeIngredient, RecipeKind, RecipeListItem, RecipeMetaIngredient, RecipeStep};
+use foodlib_new::entities::types::ids::{GroupId, IngredientId, PropertyId, RecipeId, RecipeStepId, UnitId};
 use foodlib_new::policy::{Permission, RecipePerm};
 use foodlib_new::recipe::Recipe;
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,7 @@ use serde_json::json;
 
 // Export artifact shared with the events exports (filename + mime + bytes).
 pub use crate::app::events::exports::ExportedFile;
+use foodlib_new::entities::types::amount::Amount;
 
 #[derive(Debug, Deserialize)]
 pub struct RecipeListQuery {
@@ -27,10 +29,10 @@ pub struct RecipeListQuery {
 
 #[derive(Debug, Serialize)]
 pub struct RecipeListItemDto {
-    pub id: i32,
+    pub id: RecipeId,
     pub name: String,
     pub comment: Option<String>,
-    pub group_id: i32,
+    pub group_id: GroupId,
     pub group_name: String,
     pub kind: RecipeKind,
     pub weighed_in: bool,
@@ -45,15 +47,15 @@ pub async fn create_new_recipe(
     name: String,
     comment: Option<String>,
     kind: RecipeKind,
-    group_id: i32,
+    group_id: GroupId,
     weighed_in: Option<bool>,
-) -> Result<i32> {
+) -> Result<RecipeId> {
     // Permission checks
-    actor.ctx.assert_global(foodlib_new::policy::GlobalPermission::AllowedToCreateNewDomainObjects)?;
+    actor.ctx.assert_global(foodlib_new::policy::GlobalPermission::CreateResources)?;
     actor.ctx.assert_group_perm(group_id, Permission::Recipe(RecipePerm::Create))?;
 
     let recipe = Recipe {
-        id: 0,
+        id: RecipeId(0),
         name,
         comment,
         group_id,
@@ -72,7 +74,7 @@ pub async fn create_new_recipe(
         actor,
         audit::action::ENTITY_CREATED,
         Some("recipe"),
-        Some(created_recipe.id),
+        Some(created_recipe.id.into()),
         Some(group_id),
         None,
         None,
@@ -93,7 +95,7 @@ pub struct RecipeUpdateInput {
 pub async fn update_recipe(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: RecipeId,
     input: RecipeUpdateInput,
 ) -> Result<()> {
     let current = state.recipes().get(id).await?;
@@ -115,7 +117,7 @@ pub async fn update_recipe(
         actor,
         audit::action::ENTITY_UPDATED,
         Some("recipe"),
-        Some(id),
+        Some(id.into()),
         Some(current.group_id),
         None,
         Some(json!(recipe)),
@@ -127,7 +129,7 @@ pub async fn update_recipe(
 pub async fn delete_recipe(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: RecipeId,
 ) -> Result<()> {
     let current = state.recipes().get(id).await?;
     actor.ctx.assert_group_perm(current.group_id, Permission::Recipe(RecipePerm::Delete))?;
@@ -139,7 +141,7 @@ pub async fn delete_recipe(
         actor,
         audit::action::ENTITY_DELETED,
         Some("recipe"),
-        Some(id),
+        Some(id.into()),
         Some(current.group_id),
         None,
         None,
@@ -148,17 +150,21 @@ pub async fn delete_recipe(
     Ok(())
 }
 
-/// `GET /api/recipes` — recipes visible to the caller (their groups), with
-/// group names resolved and optional kind/text filtering.
+/// Recipes visible to the caller (groups where they hold `RecipePerm::View`,
+/// or all groups for admins), with group names resolved and optional kind/text filtering.
 pub async fn list_recipes(
     state: &MyAppState,
     ctx: &AuthCtx,
     query: RecipeListQuery,
 ) -> Result<Vec<RecipeListItemDto>> {
     let recipes = state.recipes().list_with_stats().await?;
-    let groups = state.users().get_user_groups(ctx.user.id).await?;
+    let groups = if ctx.user.is_admin {
+        state.users().list_groups().await?
+    } else {
+        state.users().get_user_groups(ctx.user.id).await?
+    };
 
-    let group_name_by_id: HashMap<i32, String> = groups
+    let group_name_by_id: HashMap<GroupId, String> = groups
         .into_iter()
         .map(|group| (group.id, group.name))
         .collect();
@@ -176,15 +182,17 @@ pub async fn list_recipes(
 
     Ok(recipes
         .into_iter()
-        // Group visibility: members see their groups' recipes, admins see all.
-        .filter(|recipe| ctx.group_ids.contains(&recipe.group_id))
+        // Group visibility: members with `RecipePerm::View` see their groups' recipes; admins see all.
+        .filter(|recipe| {
+            ctx.has_group_permission(recipe.group_id, Permission::Recipe(RecipePerm::View))
+        })
         .filter(|recipe| kind_filter.as_ref().map_or(true, |kind| &recipe.kind == kind))
         .filter(|recipe| search.is_empty() || recipe.name.to_lowercase().contains(&search))
         .map(|recipe| to_dto(recipe, &group_name_by_id))
         .collect())
 }
 
-fn to_dto(recipe: RecipeListItem, group_name_by_id: &HashMap<i32, String>) -> RecipeListItemDto {
+fn to_dto(recipe: RecipeListItem, group_name_by_id: &HashMap<GroupId, String>) -> RecipeListItemDto {
     let weight_g = recipe.weight.to_f64().unwrap_or(0.0) * 1000.0;
     let energy_kj_per_g =
         (weight_g > 0.0).then(|| recipe.energy.to_f64().unwrap_or(0.0) / weight_g);
@@ -209,31 +217,31 @@ fn to_dto(recipe: RecipeListItem, group_name_by_id: &HashMap<i32, String>) -> Re
 #[derive(Debug, Serialize)]
 pub struct RecipeStatsDto {
     /// Total resolved ingredient weight in kg.
-    pub weight_kg: bigdecimal::BigDecimal,
+    pub weight_kg: Amount,
     /// Total resolved energy in kJ.
-    pub energy_kj: bigdecimal::BigDecimal,
+    pub energy_kj: Amount,
     /// Energy density — the basis for scaling portions.
     pub energy_kj_per_g: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct RecipeIngredientDto {
-    pub ingredient_id: i32,
+    pub ingredient_id: IngredientId,
     pub name: Option<String>,
-    pub amount: bigdecimal::BigDecimal,
-    pub unit_id: i32,
+    pub amount: Amount,
+    pub unit_id: UnitId,
 }
 
 #[derive(Debug, Serialize)]
 pub struct SubRecipeDto {
-    pub recipe_id: i32,
+    pub recipe_id: RecipeId,
     pub name: String,
-    pub weight: bigdecimal::BigDecimal,
+    pub weight: Amount,
 }
 
 #[derive(Debug, Serialize)]
 pub struct RecipeStepDto {
-    pub id: i32,
+    pub id: RecipeStepId,
     pub order: f64,
     pub name: String,
     pub description: String,
@@ -245,16 +253,16 @@ pub struct RecipeStepDto {
 
 #[derive(Debug, Serialize)]
 pub struct PropertyDto {
-    pub id: i32,
+    pub id: PropertyId,
     pub name: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct RecipeDetailDto {
-    pub id: i32,
+    pub id: RecipeId,
     pub name: String,
     pub comment: Option<String>,
-    pub group_id: i32,
+    pub group_id: GroupId,
     pub kind: RecipeKind,
     pub weighed_in: bool,
     pub stats: Option<RecipeStatsDto>,
@@ -265,7 +273,7 @@ pub struct RecipeDetailDto {
 }
 
 /// Energy density in kJ/g from a stats row (kg / kJ); `None` for zero weight.
-pub fn energy_kj_per_g(weight_kg: &bigdecimal::BigDecimal, energy_kj: &bigdecimal::BigDecimal) -> Option<f64> {
+pub fn energy_kj_per_g(weight_kg: &Amount, energy_kj: &Amount) -> Option<f64> {
     let weight_g = weight_kg.to_f64()? * 1000.0;
     (weight_g > 0.0).then(|| energy_kj.to_f64().unwrap_or(0.0) / weight_g)
 }
@@ -273,7 +281,7 @@ pub fn energy_kj_per_g(weight_kg: &bigdecimal::BigDecimal, energy_kj: &bigdecima
 pub async fn get_recipe(
     state: &MyAppState,
     actor: &AppCtx,
-    recipe_id: i32
+    recipe_id: RecipeId
 ) -> Result<RecipeDetailDto> {
     let recipe = state.recipes().get(recipe_id).await?;
     // Group-private reads: non-members get a plain 404.
@@ -346,14 +354,14 @@ pub async fn get_recipe(
     })
 }
 
-/// `PUT /api/recipes/{id}/owner` — explicit Besitz-Übertragung (siehe
+/// explicit Besitz-Übertragung (siehe
 /// `events::transfer_owner`): Besitzer oder Manager der aktuellen Gruppe;
 /// Zielgruppe muss zugänglich sein.
 pub async fn transfer_owner(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
-    target_group_id: i32,
+    id: RecipeId,
+    target_group_id: GroupId,
 ) -> Result<()> {
     let ctx = &actor.ctx;
     let current = state.recipes().get(id).await?;
@@ -368,12 +376,12 @@ pub async fn transfer_owner(
     audit::record(
         state,
         actor,
-        foodlib_new::ops::audit::action::OWNER_TRANSFERRED,
+        audit::action::OWNER_TRANSFERRED,
         Some("recipe"),
-        Some(id),
+        Some(id.into()),
         Some(target_group_id),
         None,
-        Some(serde_json::json!({ "from_group_id": current.group_id })),
+        Some(json!({ "from_group_id": current.group_id })),
     )
     .await;
     Ok(())
@@ -381,18 +389,18 @@ pub async fn transfer_owner(
 
 // ------------------------------------------------------------------- tree
 
-/// `GET /api/recipes/{id}/tree` — the recursion tree with resolved ingredient
+/// the recursion tree with resolved ingredient
 /// weights per node (view mode visualization).
-pub async fn tree(state: &MyAppState, actor: &AppCtx, id: i32) -> Result<serde_json::Value> {
-    let recipe = state.recipes().get(id).await?;
+pub async fn tree(state: &MyAppState, actor: &AppCtx, recipe_id: RecipeId) -> Result<serde_json::Value> {
+    let recipe = state.recipes().get(recipe_id).await?;
     // Group-private reads: non-members get a plain 404.
     if !actor.ctx.can_access_group(recipe.group_id) {
         return Err(Error::NotFound {
             entity: "Recipe",
-            id: id.to_string(),
+            id: recipe_id.to_string(),
         });
     }
-    let tree = state.recipes().get_recipe_tree(id).await?;
+    let tree = state.recipes().get_recipe_tree(recipe_id).await?;
     Ok(serde_json::to_value(tree).map_err(|err| Error::Misc(err.to_string()))?)
 }
 
@@ -406,13 +414,10 @@ pub struct RecipeExportQuery {
     pub energy_per_serving: Option<u32>,
 }
 
-/// `GET /api/recipes/{id}/export` — cooking instructions PDF, optionally
-/// scaled to `servings × energy_per_serving` like an event meal. Requires
-/// `recipes:export` plus read access to the owning group.
 pub async fn export_pdf(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: RecipeId,
     query: RecipeExportQuery,
 ) -> Result<ExportedFile> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Export).await?;
@@ -461,15 +466,15 @@ pub struct RecipeCloneInput {
     pub group_id: Option<i32>,
 }
 
-/// `POST /api/recipes/{id}/clone` — deep clone into an (optional) target
+/// deep clone into an (optional) target
 /// group. Read access to the source is enough — the copy is owned by the
 /// target group, which requires write access.
 pub async fn clone_recipe(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: RecipeId,
     input: RecipeCloneInput,
-) -> Result<i32> {
+) -> Result<RecipeId> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::View).await?;
     let source = state.recipes().get(id).await?;
     if !actor.ctx.can_access_group(source.group_id) {
@@ -478,7 +483,11 @@ pub async fn clone_recipe(
             id: id.to_string(),
         });
     }
-    let target_group = input.group_id.unwrap_or(source.group_id);
+
+    let target_group = input.group_id
+        .map(GroupId)
+        .unwrap_or(source.group_id);
+
     actor
         .ctx
         .assert_group_perm(target_group, Permission::Recipe(RecipePerm::Edit))?;
@@ -493,24 +502,24 @@ pub async fn clone_recipe(
 
 #[derive(Debug, Deserialize)]
 pub struct RecipeIngredientInput {
-    pub ingredient_id: i32,
+    pub ingredient_id: IngredientId,
     pub amount: String,
-    pub unit_id: i32,
+    pub unit_id: UnitId,
 }
 
-fn parse_amount(value: &str) -> Result<bigdecimal::BigDecimal> {
+fn parse_amount(value: &str) -> Result<Amount> {
     use std::str::FromStr;
-    bigdecimal::BigDecimal::from_str(value)
+    Amount::from_str(value)
         .map_err(|_| Error::Validation {
             message: format!("invalid decimal amount: {value}"),
         })
 }
 
-/// `POST /api/recipes/{id}/ingredients` — add an ingredient line.
+/// add an ingredient line.
 pub async fn add_ingredient(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: RecipeId,
     input: RecipeIngredientInput,
 ) -> Result<RecipeIngredientDto> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
@@ -531,11 +540,11 @@ pub async fn add_ingredient(
     })
 }
 
-/// `PUT /api/recipes/{id}/ingredients` — replace an ingredient line.
+/// replace an ingredient line.
 pub async fn update_ingredient(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: RecipeId,
     input: RecipeIngredientInput,
 ) -> Result<RecipeIngredientDto> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
@@ -556,8 +565,8 @@ pub async fn update_ingredient(
     })
 }
 
-/// `DELETE /api/recipes/{id}/ingredients/{ingredient_id}` — remove the line.
-pub async fn remove_ingredient(state: &MyAppState, actor: &AppCtx, id: i32, ingredient_id: i32) -> Result<()> {
+/// remove the line.
+pub async fn remove_ingredient(state: &MyAppState, actor: &AppCtx, id: RecipeId, ingredient_id: IngredientId) -> Result<()> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
     state.recipes().delete_ingredient(id, ingredient_id).await?;
     Ok(())
@@ -576,7 +585,7 @@ pub struct RecipeStepInput {
     pub is_haccp: bool,
 }
 
-fn step_input_to_entity(recipe_id: i32, id: i32, payload: &RecipeStepInput) -> RecipeStep {
+fn step_input_to_entity(recipe_id: RecipeId, id: RecipeStepId, payload: &RecipeStepInput) -> RecipeStep {
     RecipeStep {
         id,
         recipe_id,
@@ -601,25 +610,25 @@ fn step_to_dto(step: RecipeStep) -> RecipeStepDto {
     }
 }
 
-/// `POST /api/recipes/{id}/steps` — add a step.
+/// add a step.
 pub async fn add_step(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: RecipeId,
     input: RecipeStepInput,
 ) -> Result<RecipeStepDto> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
-    let step = step_input_to_entity(id, 0, &input);
+    let step = step_input_to_entity(id, RecipeStepId(0), &input); //TODO: RecipeStepId should be generated by the database, not hardcoded to 0
     let record = state.recipes().add_step(step).await?;
     Ok(step_to_dto(record))
 }
 
-/// `PUT /api/recipes/{id}/steps/{step_id}` — replace a step.
+/// replace a step.
 pub async fn update_step(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
-    step_id: i32,
+    id: RecipeId,
+    step_id: RecipeStepId,
     input: RecipeStepInput,
 ) -> Result<RecipeStepDto> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
@@ -628,8 +637,8 @@ pub async fn update_step(
     Ok(step_to_dto(record))
 }
 
-/// `DELETE /api/recipes/{id}/steps/{step_id}` — remove a step.
-pub async fn remove_step(state: &MyAppState, actor: &AppCtx, id: i32, step_id: i32) -> Result<()> {
+/// remove a step.
+pub async fn remove_step(state: &MyAppState, actor: &AppCtx, id: RecipeId, step_id: RecipeStepId) -> Result<()> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
     state.recipes().delete_step(id, step_id).await?;
     Ok(())
@@ -639,7 +648,7 @@ pub async fn remove_step(state: &MyAppState, actor: &AppCtx, id: i32, step_id: i
 
 #[derive(Debug, Deserialize)]
 pub struct SubRecipeInput {
-    pub child_recipe_id: i32,
+    pub child_recipe_id: RecipeId,
     /// Weight of the child recipe used by the parent, in kg.
     pub weight: String,
 }
@@ -649,12 +658,10 @@ pub struct SubRecipeWeightInput {
     pub weight: String,
 }
 
-/// `POST /api/recipes/{id}/sub-recipes` — reference another recipe as an
-/// ingredient. Responds with the child name for instant UI feedback.
 pub async fn add_sub_recipe(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: RecipeId,
     input: SubRecipeInput,
 ) -> Result<SubRecipeDto> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
@@ -679,13 +686,11 @@ pub async fn add_sub_recipe(
     })
 }
 
-/// `PUT /api/recipes/{id}/sub-recipes/{child_id}` — change the referenced
-/// weight.
 pub async fn update_sub_recipe(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
-    child_id: i32,
+    id: RecipeId,
+    child_id: RecipeId,
     input: SubRecipeWeightInput,
 ) -> Result<SubRecipeDto> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
@@ -710,8 +715,7 @@ pub async fn update_sub_recipe(
     })
 }
 
-/// `DELETE /api/recipes/{id}/sub-recipes/{child_id}` — remove the reference.
-pub async fn remove_sub_recipe(state: &MyAppState, actor: &AppCtx, id: i32, child_id: i32) -> Result<()> {
+pub async fn remove_sub_recipe(state: &MyAppState, actor: &AppCtx, id: RecipeId, child_id: RecipeId) -> Result<()> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
     state.recipes().delete_meta_ingredient(id, child_id).await?;
     Ok(())

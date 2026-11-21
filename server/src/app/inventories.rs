@@ -1,7 +1,9 @@
 use super::{assert_ownership_transfer, audit, AppCtx, MyAppState, Result};
-use bigdecimal::BigDecimal;
+
+use foodlib_new::entities::types::amount::Amount;
+use foodlib_new::entities::types::ids::{GroupId, IngredientId, InventoryId};
 use foodlib_new::inventory::{Inventory, InventoryItem, InventoryItemWithName};
-use foodlib_new::policy::{InventoryPerm, Permission};
+use foodlib_new::policy::{GlobalPermission, InventoryPerm, Permission};
 use serde::Deserialize;
 use serde_json::json;
 use std::str::FromStr;
@@ -9,21 +11,18 @@ use std::str::FromStr;
 pub async fn list_inventories(
     state: &MyAppState,
     actor: &AppCtx,
-    // query: IngredientListQuery,
 ) -> Result<Vec<Inventory>> {
     let inventories = state.inventories().list().await?;
-    let visible: Vec<Inventory> = inventories
+    Ok(inventories
         .into_iter()
         .filter(|inventory| actor.ctx.can_access_group(inventory.group_id))
-        .collect();
-    Ok(visible)
+        .collect())
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct InventoryCreateInput {
     pub name: String,
-    pub group_id: i32,
+    pub group_id: GroupId,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,25 +35,26 @@ pub async fn create_inventory(
     actor: &AppCtx,
     input: InventoryCreateInput,
 ) -> Result<Inventory> {
-    // Check user is blocked
-    actor.ctx.assert_global(foodlib_new::policy::GlobalPermission::AllowedToCreateNewDomainObjects)?;
-    actor.ctx.assert_group_perm(input.group_id, foodlib_new::policy::Permission::Inventory(foodlib_new::policy::InventoryPerm::Create))?;
+    actor
+        .ctx
+        .assert_global(GlobalPermission::CreateResources)?;
+    actor.ctx.assert_group_perm(
+        input.group_id,
+        Permission::Inventory(InventoryPerm::Create),
+    )?;
 
-    // Act
     let inventory = Inventory {
-        id: 0,
+        id: InventoryId::default(),
         name: input.name,
         group_id: input.group_id,
     };
-    let created = state.inventories().create(inventory).await?;
-    // Return
-    Ok(created)
+    state.inventories().create(inventory).await
 }
 
 pub async fn get_inventory(
     state: &MyAppState,
     ctx: &AppCtx,
-    id: i32,
+    id: InventoryId,
 ) -> Result<Inventory> {
     let inventory = state.inventories().get(id).await?;
     if !ctx.ctx.can_access_group(inventory.group_id) {
@@ -69,33 +69,32 @@ pub async fn get_inventory(
 pub async fn update_inventory(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: InventoryId,
     input: InventoryUpdateInput,
 ) -> Result<Inventory> {
-    // Get current inventory
     let current = state.inventories().get(id).await?;
-    // Check permissions
-    actor.ctx.assert_inventory_perm(id, foodlib_new::policy::InventoryPerm::Edit).await?;
-    actor.ctx.assert_group_perm(current.group_id, foodlib_new::policy::Permission::Inventory(foodlib_new::policy::InventoryPerm::Edit))?;
+    actor
+        .ctx
+        .assert_inventory_perm(id, InventoryPerm::EditMetadata)
+        .await?;
+    actor
+        .ctx
+        .assert_group_perm(current.group_id, Permission::Inventory(InventoryPerm::EditMetadata))?;
 
-    // Update fields
-    let name = input.name.unwrap_or(current.name);
     let updated = Inventory {
         id: current.id,
-        name,
+        name: input.name.unwrap_or(current.name),
         group_id: current.group_id,
     };
 
-    // Save
     let saved = state.inventories().update(updated).await?;
 
-    // Log the update action
     audit::record(
         state,
         actor,
-        foodlib_new::ops::audit::action::ENTITY_UPDATED,
+        audit::action::ENTITY_UPDATED,
         Some("inventory"),
-        Some(id),
+        Some(id.into()),
         Some(current.group_id),
         None,
         Some(json!(saved)),
@@ -108,24 +107,25 @@ pub async fn update_inventory(
 pub async fn delete_inventory(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: InventoryId,
 ) -> Result<()> {
-    // Get current inventory
     let current = state.inventories().get(id).await?;
-    // Check permissions
-    actor.ctx.assert_inventory_perm(id, foodlib_new::policy::InventoryPerm::Delete).await?;
-    actor.ctx.assert_group_perm(current.group_id, foodlib_new::policy::Permission::Inventory(foodlib_new::policy::InventoryPerm::Delete))?;
+    actor
+        .ctx
+        .assert_inventory_perm(id, InventoryPerm::Delete)
+        .await?;
+    actor
+        .ctx
+        .assert_group_perm(current.group_id, Permission::Inventory(InventoryPerm::Delete))?;
 
-    // Delete
     state.inventories().delete(id).await?;
 
-    // Log the delete action
     audit::record(
         state,
         actor,
-        foodlib_new::ops::audit::action::ENTITY_DELETED,
+        audit::action::ENTITY_DELETED,
         Some("inventory"),
-        Some(id),
+        Some(id.into()),
         Some(current.group_id),
         None,
         None,
@@ -135,11 +135,11 @@ pub async fn delete_inventory(
     Ok(())
 }
 
-
 // ---------------------------------------------------------------- items
+
 #[derive(Debug, Deserialize)]
 pub struct InventoryItemAddInput {
-    pub ingredient_id: i32,
+    pub ingredient_id: IngredientId,
     /// Decimal string, amount in kg.
     pub amount: String,
 }
@@ -153,34 +153,28 @@ pub struct InventoryItemUpdateInput {
 pub async fn list_inventory_items(
     state: &MyAppState,
     actor: &AppCtx,
-    inventory_id: i32,
+    inventory_id: InventoryId,
 ) -> Result<Vec<InventoryItemWithName>> {
-    // Check permissions
-    actor.ctx.assert_inventory_perm(inventory_id, foodlib_new::policy::InventoryPerm::View).await?;
-    let items = state.inventories().get_items(inventory_id).await?;
-    Ok(items)
+    actor
+        .ctx
+        .assert_inventory_perm(inventory_id, InventoryPerm::View)
+        .await?;
+    state.inventories().get_items(inventory_id).await
 }
 
 pub async fn add_inventory_item(
     state: &MyAppState,
     actor: &AppCtx,
-    inventory_id: i32,
+    inventory_id: InventoryId,
     input: InventoryItemAddInput,
 ) -> Result<InventoryItem> {
-    // Check permissions
-    actor.ctx.assert_inventory_perm(inventory_id, foodlib_new::policy::InventoryPerm::Edit).await?;
+    actor
+        .ctx
+        .assert_inventory_perm(inventory_id, InventoryPerm::EditMetadata)
+        .await?;
 
-    let amount: BigDecimal = BigDecimal::from_str(&input.amount)
-        .map_err(|_|             foodlib_new::Error::InvalidInput {
-            message: format!("invalid amount value: {}", input.amount)
-        })?;
-    if amount <= BigDecimal::from(0) {
-        return Err(foodlib_new::Error::InvalidInput {
-            message: format!("amount must be positive: {}", input.amount),
-        });
-    }
+    let amount = parse_positive_amount(&input.amount)?;
 
-    // Add item
     let item = InventoryItem {
         inventory_id,
         ingredient_id: input.ingredient_id,
@@ -188,13 +182,12 @@ pub async fn add_inventory_item(
     };
     let result = state.inventories().add_item(item).await?;
 
-    // Log the add action
     audit::record(
         state,
         actor,
-        foodlib_new::ops::audit::action::ENTITY_CREATED,
+        audit::action::ENTITY_CREATED,
         Some("inventory_item"),
-        Some(result.inventory_id),
+        Some(result.inventory_id.into()),
         None,
         None,
         Some(json!(result)),
@@ -207,66 +200,61 @@ pub async fn add_inventory_item(
 pub async fn update_inventory_item(
     state: &MyAppState,
     actor: &AppCtx,
-    inventory_id: i32,
-    ingredient_id: i32,
+    inventory_id: InventoryId,
+    ingredient_id: IngredientId,
     input: InventoryItemUpdateInput,
 ) -> Result<InventoryItem> {
-    // Check permissions
-    actor.ctx.assert_inventory_perm(inventory_id, foodlib_new::policy::InventoryPerm::Edit).await?;
+    actor
+        .ctx
+        .assert_inventory_perm(inventory_id, InventoryPerm::EditMetadata)
+        .await?;
 
-    let amount: BigDecimal = BigDecimal::from_str(&input.amount)
-        .map_err(|_|             foodlib_new::Error::InvalidInput {
-            message: format!("invalid amount value: {}", input.amount)
-        })?;
-    if amount <= BigDecimal::from(0) {
-        return Err(foodlib_new::Error::InvalidInput {
-            message: format!("amount must be positive: {}", input.amount),
-        });
-    }
+    let amount = parse_positive_amount(&input.amount)?;
 
-    // Update item
     let item = InventoryItem {
         inventory_id,
         ingredient_id,
         amount,
     };
-    let item = state.inventories().update_item(item).await?;
+    let updated = state.inventories().update_item(item).await?;
 
-    // Log the update action
     audit::record(
         state,
         actor,
-        foodlib_new::ops::audit::action::ENTITY_UPDATED,
+        audit::action::ENTITY_UPDATED,
         Some("inventory_item"),
-        Some(ingredient_id),
+        Some(ingredient_id.into()),
         None,
         None,
-        Some(json!(item)),
+        Some(json!(updated)),
     )
         .await;
 
-    Ok(item)
+    Ok(updated)
 }
 
 pub async fn remove_inventory_item(
     state: &MyAppState,
     actor: &AppCtx,
-    inventory_id: i32,
-    ingredient_id: i32,
+    inventory_id: InventoryId,
+    ingredient_id: IngredientId,
 ) -> Result<()> {
-    // Check permissions
-    actor.ctx.assert_inventory_perm(inventory_id, foodlib_new::policy::InventoryPerm::Edit).await?;
+    actor
+        .ctx
+        .assert_inventory_perm(inventory_id, InventoryPerm::EditMetadata)
+        .await?;
 
-    // Remove item
-    state.inventories().delete_item(inventory_id, ingredient_id).await?;
+    state
+        .inventories()
+        .delete_item(inventory_id, ingredient_id)
+        .await?;
 
-    // Log the delete action
     audit::record(
         state,
         actor,
-        foodlib_new::ops::audit::action::ENTITY_DELETED,
+        audit::action::ENTITY_DELETED,
         Some("inventory_item"),
-        Some(ingredient_id),
+        Some(ingredient_id.into()),
         None,
         None,
         None,
@@ -277,31 +265,34 @@ pub async fn remove_inventory_item(
 }
 
 // --------------------------------------------------------------- ownership
+
 pub async fn transfer_inventory_ownership(
     state: &MyAppState,
     actor: &AppCtx,
-    inventory_id: i32,
-    target_group_id: i32,
+    inventory_id: InventoryId,
+    target_group_id: GroupId,
 ) -> Result<()> {
-    let ctx = &actor.ctx;
     let current = state.inventories().get(inventory_id).await?;
 
     assert_ownership_transfer(
-        ctx,
+        &actor.ctx,
         "inventory",
         current.group_id,
         target_group_id,
         Permission::Inventory(InventoryPerm::TransferOwner),
     )?;
 
-    state.inventories().set_group(inventory_id, target_group_id).await?;
+    state
+        .inventories()
+        .set_group(inventory_id, target_group_id)
+        .await?;
 
     audit::record(
         state,
         actor,
-        foodlib_new::ops::audit::action::OWNER_TRANSFERRED,
+        audit::action::OWNER_TRANSFERRED,
         Some("inventory"),
-        Some(inventory_id),
+        Some(inventory_id.into()),
         Some(target_group_id),
         None,
         Some(json!({ "from_group_id": current.group_id })),
@@ -309,4 +300,18 @@ pub async fn transfer_inventory_ownership(
         .await;
 
     Ok(())
+}
+
+// --------------------------------------------------------------- helpers
+
+fn parse_positive_amount(raw: &str) -> Result<Amount> {
+    let amount = Amount::from_str(raw).map_err(|_| foodlib_new::Error::InvalidInput {
+        message: format!("invalid amount value: {raw}"),
+    })?;
+    if amount <= Amount::from(0) {
+        return Err(foodlib_new::Error::InvalidInput {
+            message: format!("amount must be positive: {raw}"),
+        });
+    }
+    Ok(amount)
 }

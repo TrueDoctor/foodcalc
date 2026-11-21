@@ -2,6 +2,9 @@
 //! `crate::app::audit`. Permission checks, the read-audit and the retention
 //! purge logic live in the app layer.
 
+use crate::api::respond;
+use crate::app::{audit, AppCtx};
+use crate::MyAppState;
 use axum::{
     extract::{Query, State},
     http::{header::CONTENT_DISPOSITION, header::CONTENT_TYPE, StatusCode},
@@ -9,10 +12,8 @@ use axum::{
     routing::{delete, get},
     Json, Router,
 };
-
-use crate::api::respond;
-use crate::app::{audit, AppCtx};
-use crate::MyAppState;
+use serde::Deserialize;
+use time::OffsetDateTime;
 
 // Query DTO shared with the app layer.
 pub use crate::app::audit::AuditListQuery;
@@ -56,15 +57,23 @@ async fn export_audit(
     }
 }
 
-/// `DELETE /api/audit/purge?until=<rfc3339>` — retention cleanup; guard
-/// `admin:manage_settings`.
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditPurgeQuery {
+    pub until: Option<OffsetDateTime>, // match the exact type of `AuditListQuery::until`
+}
+
+/// `DELETE /api/audit/purge` — retention cleanup; guard `admin:manage_settings`.
 async fn purge_audit(
     State(state): State<MyAppState>,
     ctx: AppCtx,
-    Query(query): Query<AuditListQuery>,
+    Query(query): Query<AuditPurgeQuery>,
 ) -> Response {
     match audit::purge(&state, &ctx, query.until).await {
         Ok(deleted) => Json(serde_json::json!({ "deleted": deleted })).into_response(),
         Err(err) => crate::api::map_api_error(err).into_response(),
     }
 }
+
+

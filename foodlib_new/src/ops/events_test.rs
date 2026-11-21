@@ -1,7 +1,9 @@
 use crate::entities::event::*;
+use crate::entities::types::ids::{EventId, GroupId, IngredientId, IngredientSourceId, StoreId, TourId};
 use crate::error::Error;
 use crate::ops::events::EventOps;
-use bigdecimal::BigDecimal;
+
+use crate::entities::types::money::Money;
 use pretty_assertions::assert_eq;
 use sqlx::PgPool;
 use std::str::FromStr;
@@ -57,7 +59,7 @@ async fn test_shopping_list_with_source_overrides(pool: PgPool) {
     println!("{:#?}", resolved);
 
     // Get shopping list for festival's first shopping tour
-    let items = ops.get_shopping_list(100).await.unwrap();
+    let items = ops.get_shopping_list(TourId(100)).await.unwrap();
 
     println!("\nShopping list items via API:");
     for item in &items {
@@ -75,12 +77,12 @@ async fn test_shopping_list_with_source_overrides(pool: PgPool) {
 
     let tomatoes = items
         .iter()
-        .find(|i| i.ingredient_id == 2)
+        .find(|i| i.ingredient_id == IngredientId(2))
         .expect("Tomatoes should be in shopping list");
 
     assert_eq!(
         *tomatoes.price.as_ref().unwrap(),
-        BigDecimal::from_str("1.99").unwrap()
+        Money::from_str("1.99").unwrap()
             * tomatoes.weight.as_ref().expect("test data has weights")
     );
 }
@@ -93,15 +95,15 @@ async fn test_prep_tasks_affect_shopping_lists(pool: PgPool) {
     // Shopping lists should reflect the prep dates rather than meal dates
 
     // Festival prep shopping (tour 100 on June 29)
-    let items = ops.get_shopping_list(100).await.unwrap();
-    let sauce_ingredients: Vec<_> = items.iter().filter(|i| i.tour_id == Some(100)).collect();
+    let items = ops.get_shopping_list(TourId(100)).await.unwrap();
+    let sauce_ingredients: Vec<_> = items.iter().filter(|i| i.tour_id == Some(TourId(100))).collect();
     assert!(!sauce_ingredients.is_empty());
 
     // Main festival shopping (tour 101 on July 1) should not include sauce ingredients
-    let items = ops.get_shopping_list(101).await.unwrap();
+    let items = ops.get_shopping_list(TourId(101)).await.unwrap();
     let sauce_ingredients: Vec<_> = items
         .iter()
-        .filter(|i| i.ingredient_id == 2) // tomatoes
+        .filter(|i| i.ingredient_id == IngredientId(2)) // tomatoes
         .collect();
     assert!(sauce_ingredients.is_empty());
 }
@@ -120,10 +122,10 @@ async fn test_prep_tasks_affect_shopping_lists(pool: PgPool) {
 async fn test_prep_applies_to_root_recipe_direct_ingredients(pool: PgPool) {
     let ops = EventOps::new(Arc::new(pool));
 
-    const FLOUR: i32 = 5;
+    const FLOUR: IngredientId = IngredientId(5);
 
     // Tour 101 (07-01, prep-window tour) must contain the coleslaw flour.
-    let early = ops.get_shopping_list(101).await.unwrap();
+    let early = ops.get_shopping_list(TourId(101)).await.unwrap();
     let flour_early = early.iter().find(|i| i.ingredient_id == FLOUR);
     assert!(
         flour_early.is_some(),
@@ -137,7 +139,7 @@ async fn test_prep_applies_to_root_recipe_direct_ingredients(pool: PgPool) {
 
     // Tour 103 (07-03, the later store-1 tour aligned with the meal date) must
     // NOT contain it — that would be the buggy, serving-time-based assignment.
-    let late = ops.get_shopping_list(103).await.unwrap();
+    let late = ops.get_shopping_list(TourId(103)).await.unwrap();
     assert!(
         late.iter().all(|i| i.ingredient_id != FLOUR),
         "coleslaw flour must not slip to tour 103 (meal date 07-04)"
@@ -155,7 +157,7 @@ async fn test_current_or_upcoming_event(pool: PgPool) {
         .get_current_or_upcoming_event(during_festival)
         .await
         .unwrap();
-    assert_eq!(event.map(|e| e.id), Some(100));
+    assert_eq!(event.map(|e| e.id), Some(EventId(100)));
 
     // 2024-07-05: festival finished (ended 07-04), prep (101) not yet started
     // (07-07) → soonest upcoming wins over the far-off December events.
@@ -164,7 +166,7 @@ async fn test_current_or_upcoming_event(pool: PgPool) {
         .get_current_or_upcoming_event(between_events)
         .await
         .unwrap();
-    assert_eq!(event.map(|e| e.id), Some(101));
+    assert_eq!(event.map(|e| e.id), Some(EventId(101)));
 
     // After every scheduled event has finished → nothing to show. (The minimal
     // fixture's December events are also in the past by this date.)
@@ -177,8 +179,8 @@ async fn test_current_or_upcoming_event(pool: PgPool) {
         .get_past_events(datetime!(2024-07-09 00:00:00 UTC))
         .await
         .unwrap();
-    assert!(past.iter().any(|e| e.id == 100));
-    assert!(past.iter().any(|e| e.id == 101));
+    assert!(past.iter().any(|e| e.id == EventId(100)));
+    assert!(past.iter().any(|e| e.id == EventId(101)));
 }
 
 #[sqlx::test(fixtures("minimal", "complex_events"))]
@@ -188,15 +190,15 @@ async fn test_event_crud_operations(pool: PgPool) {
     // Create
     let event = ops
         .create(Event {
-            id: -1,
+            id: EventId(-1),
             name: "Test Event".to_string(),
             comment: Some("Test Comment".to_string()),
-            budget: Some(BigDecimal::from(500)),
-            group_id: 1,
+            budget: Some(Money::from(500)),
+            group_id: GroupId(1),
         })
         .await
         .unwrap();
-    assert!(event.id > 0);
+    assert!(event.id > EventId(0));
 
     // Read
     let fetched = ops.get(event.id).await.unwrap();
@@ -224,15 +226,15 @@ async fn test_event_crud_operations(pool: PgPool) {
 async fn test_shopping_tour_management(pool: PgPool) {
     let ops = EventOps::new(Arc::new(pool));
 
-    let event_id = 100; // Summer Festival
+    let event_id = EventId(100); // Summer Festival
 
     // Add new tour
     let tour = ops
         .add_shopping_tour(ShoppingTour {
-            id: -1,
+            id: TourId(-1),
             event_id,
             tour_date: datetime!(2024-07-02 08:00:00 UTC),
-            store_id: 1,
+            store_id: StoreId(1),
             store_name: None,
         })
         .await
@@ -241,12 +243,12 @@ async fn test_shopping_tour_management(pool: PgPool) {
     // Update tour
     let updated = ops
         .update_shopping_tour(ShoppingTour {
-            store_id: 2, // Change to Farmers Market
+            store_id: StoreId(2), // Change to Farmers Market
             ..tour.clone()
         })
         .await
         .unwrap();
-    assert_eq!(updated.store_id, 2);
+    assert_eq!(updated.store_id, StoreId(2));
 
     // Get all tours
     let tours = ops.get_shopping_tours(event_id).await.unwrap();
@@ -263,21 +265,21 @@ async fn test_source_override_management(pool: PgPool) {
     let ops = EventOps::new(Arc::new(pool));
 
     // Add new override
-    let override_ = ops.set_source_override(101, 100).await.ok();
+    let override_ = ops.set_source_default_override(EventId(101), IngredientSourceId(100)).await.ok();
     assert_eq!(
         override_,
         Some(SourceOverride {
-            event_id: 101,
-            source_id: 100
+            event_id: EventId(101),
+            source_id: IngredientSourceId(100)
         })
     );
 
     // Get all overrides
-    let overrides = ops.get_source_overrides(101).await.unwrap();
-    assert!(overrides.iter().any(|o| o.source_id == 100));
+    let overrides = ops.get_source_overrides(EventId(101)).await.unwrap();
+    assert!(overrides.iter().any(|o| o.source_id == IngredientSourceId(100)));
 
     // Delete override
-    ops.delete_source_override(101, 100).await.unwrap();
-    let overrides = ops.get_source_overrides(101).await.unwrap();
-    assert!(!overrides.iter().any(|o| o.source_id == 100));
+    ops.delete_source_override(EventId(101), IngredientSourceId(100)).await.unwrap();
+    let overrides = ops.get_source_overrides(EventId(101)).await.unwrap();
+    assert!(!overrides.iter().any(|o| o.source_id == IngredientSourceId(100)));
 }

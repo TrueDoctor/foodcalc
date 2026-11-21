@@ -26,6 +26,7 @@ pub use foodlib_new::error::{Error, Result};
 pub use state::MyAppState;
 
 use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::entities::types::ids::GroupId;
 use foodlib_new::policy::Permission;
 
 /// Transport through which a request reached the application layer.
@@ -90,8 +91,8 @@ impl AppCtx {
 pub(crate) fn assert_ownership_transfer(
     ctx: &AuthCtx,
     what: &str,
-    current_group_id: i32,
-    target_group_id: i32,
+    current_group_id: GroupId,
+    target_group_id: GroupId,
     perm: Permission,
 ) -> Result<()> {
     if current_group_id == target_group_id {

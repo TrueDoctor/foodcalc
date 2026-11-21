@@ -15,9 +15,9 @@ use tower_sessions_sqlx_store::PostgresStore;
 use foodlib_new::auth::AuthBackend;
 mod app;
 mod api;
-// #[cfg(feature = "legacy-frontend")]
+#[cfg(feature = "legacy-frontend")]
 mod frontend;
-// #[cfg(feature = "legacy-frontend")]
+#[cfg(feature = "legacy-frontend")]
 mod htmx_middleware;
 
 pub use app::state::{FoodLib, MyAppState};
@@ -94,12 +94,12 @@ async fn main() {
     // `legacy-frontend` feature.
     let router = Router::new().nest("/api", api::api_router());
 
-    // #[cfg(feature = "legacy-frontend")]
+    #[cfg(feature = "legacy-frontend")]
     let router = router.merge(frontend::frontend_router());
 
     let app = router.with_state(state).layer(Extension(new_lib));
 
-    // #[cfg(feature = "legacy-frontend")]
+    #[cfg(feature = "legacy-frontend")]
     let app = app.layer(axum::middleware::from_fn(htmx_middleware::htmx_middleware));
 
     let app = app

@@ -9,6 +9,7 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
+use foodlib_new::entities::types::ids::{EventId, GroupId};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -115,7 +116,7 @@ async fn list_events(State(state): State<MyAppState>, ctx: AppCtx) -> Response {
 /// `GET /api/events/{id}` — event detail: frame data, planned meals, total
 /// cost and the caller's resolved permissions for the event.
 async fn get_event(State(state): State<MyAppState>, ctx: AppCtx, Path(id): Path<i32>) -> Response {
-    respond(events::get_event_details(&state, &ctx.ctx, id).await)
+    respond(events::get_event_details(&state, &ctx.ctx, EventId(id)).await)
 }
 
 /// `POST /api/events` — create an event owned by one of the user's groups.
@@ -134,7 +135,7 @@ async fn update_event(
     Path(id): Path<i32>,
     Json(payload): Json<EventUpdateInput>,
 ) -> Response {
-    respond(events::update_event(&state, &ctx, id, payload).await)
+    respond(events::update_event(&state, &ctx, EventId(id), payload).await)
 }
 
 /// `DELETE /api/events/{id}` — delete the event (cascades to meals/tours).
@@ -143,7 +144,7 @@ async fn delete_event(
     ctx: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    respond_no_content(events::delete_event(&state, &ctx, id).await)
+    respond_no_content(events::delete_event(&state, &ctx, EventId(id)).await)
 }
 
 /// `POST /api/events/{id}/clone` — duplicate the event incl. meals and source
@@ -154,7 +155,7 @@ async fn clone_event(
     Path(id): Path<i32>,
 ) -> Response {
     respond_created(
-        events::clone_created_event(&state, &ctx, id)
+        events::clone_created_event(&state, &ctx, EventId(id))
             .await
             .map(|id| json!({ "id": id })),
     )
@@ -168,5 +169,5 @@ async fn transfer_owner(
     Path(id): Path<i32>,
     Json(payload): Json<OwnerTransferInput>,
 ) -> Response {
-    respond_no_content(events::transfer_event_owner(&state, &ctx, id, payload.group_id).await)
+    respond_no_content(events::transfer_event_owner(&state, &ctx, EventId(id), GroupId(payload.group_id)).await)
 }

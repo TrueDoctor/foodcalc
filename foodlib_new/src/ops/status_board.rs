@@ -1,4 +1,3 @@
-// foodlib_new/src/ops/status_board.rs
 use std::{
     collections::HashMap,
     sync::{Arc, OnceLock, RwLock},
@@ -8,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use time::{Duration, OffsetDateTime};
 
+use crate::types::ids::{PropertyId, ReorderId};
 use crate::{
+    entities::types::ids::{EventId, MealId},
     ops::{events::EventOps, meals::MealOps},
     Error,
 };
@@ -25,8 +26,8 @@ impl StatusBoardOps {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KitchenReorderItem {
-    pub id: i32,
-    pub meal_id: i32,
+    pub id: ReorderId,
+    pub meal_id: MealId,
     pub dish_name: String,
     pub amount_label: String,
     pub station: String,
@@ -39,7 +40,7 @@ pub struct KitchenReorderItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutgoingBatchItem {
-    pub meal_id: i32,
+    pub meal_id: MealId,
     pub dish_name: String,
     #[serde(with = "time::serde::rfc3339")]
     pub serving_time: OffsetDateTime,
@@ -62,7 +63,7 @@ pub struct KitchenPrepTask {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DishPropertyTag {
-    pub id: i32,
+    pub id: PropertyId,
     pub name: String,
     pub code: Option<String>,
     pub is_allergen: bool,
@@ -70,7 +71,7 @@ pub struct DishPropertyTag {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServingDishItem {
-    pub meal_id: i32,
+    pub meal_id: MealId,
     pub dish_name: String,
     pub dish_name_en: Option<String>,
     pub description: Option<String>,
@@ -107,7 +108,7 @@ pub struct StatusBoardSnapshot {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateReorderInput {
-    pub meal_id: i32,
+    pub meal_id: MealId,
     pub amount_label: String,
     #[serde(default = "default_station")]
     pub station: String,
@@ -128,16 +129,17 @@ fn default_urgency() -> String {
 struct LiveEventState {
     next_reorder_id: i32,
     reorders: Vec<KitchenReorderItem>,
-    availability: HashMap<i32, (String, Option<i32>)>,
+    // Key: MealId, Value: (availability status, eta_minutes)
+    availability: HashMap<MealId, (String, Option<i32>)>,
 }
 
-fn live_store() -> &'static RwLock<HashMap<i32, LiveEventState>> {
-    static STORE: OnceLock<RwLock<HashMap<i32, LiveEventState>>> = OnceLock::new();
+fn live_store() -> &'static RwLock<HashMap<EventId, LiveEventState>> {
+    static STORE: OnceLock<RwLock<HashMap<EventId, LiveEventState>>> = OnceLock::new();
     STORE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
 impl StatusBoardOps {
-    pub async fn get_board(&self, event_id: i32) -> Result<StatusBoardSnapshot, Error> {
+    pub async fn get_board(&self, event_id: EventId) -> Result<StatusBoardSnapshot, Error> {
         let now = OffsetDateTime::now_utc();
 
         // Reuses EventOps::get & MealOps::get_event_meals_planner (returns clean 404 when missing)
@@ -148,33 +150,37 @@ impl StatusBoardOps {
 
         let (reorders, availability_map) = {
             let guard = live_store().read().expect("live_store lock poisoned");
-            if let Some(live) = guard.get(&event_id) {
-                let mut active: Vec<KitchenReorderItem> = live
-                    .reorders
-                    .iter()
-                    .filter(|r| r.status != "delivered")
-                    .cloned()
-                    .collect();
-                active.sort_by_key(|r| match r.urgency.as_str() {
-                    "critical" => 0,
-                    "urgent" => 1,
-                    _ => 2,
-                });
-                (active, live.availability.clone())
-            } else {
-                (Vec::new(), HashMap::new())
+            match guard.get(&event_id) {
+                Some(live) => {
+                    let mut active: Vec<KitchenReorderItem> = live
+                        .reorders
+                        .iter()
+                        .filter(|r| r.status != "delivered")
+                        .cloned()
+                        .collect();
+                    active.sort_by_key(|r| match r.urgency.as_str() {
+                        "critical" => 0,
+                        "urgent" => 1,
+                        _ => 2,
+                    });
+                    (active, live.availability.clone())
+                }
+                None => (Vec::new(), HashMap::new()),
             }
         };
+
+        let window_start = now - Duration::hours(2);
+        let window_end = now + Duration::hours(8);
+        let lead_time = Duration::minutes(15);
+        let dispatch_horizon = now + Duration::hours(3);
+        let ready_cutoff = now + Duration::minutes(20);
 
         let mut current = Vec::new();
         let mut upcoming = Vec::new();
         let mut outgoing = Vec::new();
 
         for meal in meals {
-            // Keep meals in [-2h, +8h] around now
-            if meal.end_time < now - Duration::hours(2)
-                || meal.start_time > now + Duration::hours(8)
-            {
+            if meal.end_time < window_start || meal.start_time > window_end {
                 continue;
             }
 
@@ -183,38 +189,33 @@ impl StatusBoardOps {
                 .cloned()
                 .unwrap_or_else(|| ("available".to_string(), None));
 
+            if meal.start_time >= now - lead_time && meal.start_time <= dispatch_horizon {
+                outgoing.push(OutgoingBatchItem {
+                    meal_id: meal.meal_id,
+                    dish_name: meal.name.clone(),
+                    serving_time: meal.start_time,
+                    portions: meal.servings,
+                    availability: availability.clone(),
+                    ready_for_dispatch: meal.start_time <= ready_cutoff,
+                });
+            }
+
             let dish = ServingDishItem {
                 meal_id: meal.meal_id,
-                dish_name: meal.name.clone(),
+                dish_name: meal.name,
                 dish_name_en: None,
                 description: meal.comment.filter(|c| !c.trim().is_empty()),
                 serving_start: meal.start_time,
                 serving_end: Some(meal.end_time),
-                availability: availability.clone(),
+                availability,
                 eta_minutes,
                 properties: Vec::new(),
             };
 
-            let is_current = meal.start_time <= now + Duration::minutes(15)
-                && meal.end_time >= now - Duration::minutes(15);
-
-            if is_current {
+            if meal.start_time <= now + lead_time && meal.end_time >= now - lead_time {
                 current.push(dish);
-            } else if meal.start_time > now + Duration::minutes(15) {
+            } else if meal.start_time > now + lead_time {
                 upcoming.push(dish);
-            }
-
-            if meal.start_time >= now - Duration::minutes(15)
-                && meal.start_time <= now + Duration::hours(3)
-            {
-                outgoing.push(OutgoingBatchItem {
-                    meal_id: meal.meal_id,
-                    dish_name: meal.name,
-                    serving_time: meal.start_time,
-                    portions: meal.servings,
-                    availability,
-                    ready_for_dispatch: meal.start_time <= now + Duration::minutes(20),
-                });
             }
         }
 
@@ -232,9 +233,9 @@ impl StatusBoardOps {
 
     pub async fn create_reorder(
         &self,
-        event_id: i32,
+        event_id: EventId,
         input: CreateReorderInput,
-    ) -> Result<i32, Error> {
+    ) -> Result<ReorderId, Error> {
         let meals = MealOps::new(self.pool.clone())
             .get_event_meals_planner(event_id)
             .await?;
@@ -249,7 +250,7 @@ impl StatusBoardOps {
         let mut guard = live_store().write().expect("live_store lock poisoned");
         let state = guard.entry(event_id).or_default();
         state.next_reorder_id += 1;
-        let id = state.next_reorder_id;
+        let id = ReorderId::from(state.next_reorder_id);
 
         state.reorders.push(KitchenReorderItem {
             id,
@@ -268,8 +269,8 @@ impl StatusBoardOps {
 
     pub fn update_reorder_status(
         &self,
-        event_id: i32,
-        reorder_id: i32,
+        event_id: EventId,
+        reorder_id: ReorderId,
         status: &str,
     ) -> Result<(), Error> {
         let mut guard = live_store().write().expect("live_store lock poisoned");
@@ -305,8 +306,8 @@ impl StatusBoardOps {
 
     pub fn set_meal_availability(
         &self,
-        event_id: i32,
-        meal_id: i32,
+        event_id: EventId,
+        meal_id: MealId,
         availability: &str,
         eta_minutes: Option<i32>,
     ) -> Result<(), Error> {

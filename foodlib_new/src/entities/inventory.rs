@@ -1,25 +1,27 @@
-use bigdecimal::BigDecimal;
+use crate::entities::types::ids::{GroupId, IngredientId, InventoryId};
+
+use crate::entities::types::amount::Amount;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Inventory {
-    pub id: i32,
+    pub id: InventoryId,
     pub name: String,
-    pub group_id: i32,
+    pub group_id: GroupId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InventoryItem {
-    pub inventory_id: i32,
-    pub ingredient_id: i32,
-    pub amount: BigDecimal,
+    pub inventory_id: InventoryId,
+    pub ingredient_id: IngredientId,
+    pub amount: Amount,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct InventoryItemWithName {
-    pub inventory_id: i32,
-    pub ingredient_id: i32,
-    pub amount: bigdecimal::BigDecimal,
+    pub inventory_id: InventoryId,
+    pub ingredient_id: IngredientId,
+    pub amount: Amount,
     pub name: String,
 }
 

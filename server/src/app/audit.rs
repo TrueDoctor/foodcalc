@@ -2,7 +2,7 @@
 //!
 //! Two concerns live here:
 //!
-//! 1. `record` — the audit-write helper every use-case calls, stamping the
+//! 1. the audit-write helper every use-case calls, stamping the
 //!    request [`Channel`] into the entry's `details` JSON (ISO 27001:2022
 //!    A.8.15).
 //! 2. The audit-log *read* use-cases (list, CSV export, retention purge).
@@ -13,6 +13,7 @@
 use serde::Deserialize;
 use time::OffsetDateTime;
 
+use foodlib_new::entities::types::ids::{EntityId, EventId, GroupId, UserId};
 pub(crate) use foodlib_new::ops::audit::{action, AuditFilter, AuditRecord};
 use foodlib_new::policy::GlobalPermission;
 
@@ -27,9 +28,9 @@ pub async fn record(
     actor: &AppCtx,
     action: &'static str,
     entity_type: Option<&str>,
-    entity_id: Option<i32>,
-    group_id: Option<i32>,
-    event_id: Option<i32>,
+    entity_id: Option<EntityId>,
+    group_id: Option<GroupId>,
+    event_id: Option<EventId>,
     mut details: Option<serde_json::Value>,
 ) {
     let channel = serde_json::json!(actor.channel.as_str());
@@ -71,8 +72,8 @@ pub struct AuditListQuery {
     pub actor_user_id: Option<i64>,
     /// Action namespace prefix (e.g. `access.` or `auth.`).
     pub action: Option<String>,
-    pub group_id: Option<i32>,
-    pub event_id: Option<i32>,
+    pub group_id: Option<GroupId>,
+    pub event_id: Option<EventId>,
     pub limit: Option<i32>,
     pub offset: Option<i32>,
 }
@@ -82,7 +83,7 @@ impl AuditListQuery {
         AuditFilter {
             from: self.from,
             until: self.until,
-            actor_user_id: self.actor_user_id,
+            actor_user_id: self.actor_user_id.map(UserId),
             action_prefix: self.action.as_deref(),
             group_id: self.group_id,
             event_id: self.event_id,
@@ -96,36 +97,51 @@ impl AuditListQuery {
 /// `admin:view_audit_log`; the read itself is audited (`audit.read`).
 pub async fn list(
     state: &MyAppState,
-    ctx: &AppCtx,
+    actor: &AppCtx,
     query: AuditListQuery,
 ) -> Result<serde_json::Value> {
-    ctx.ctx.assert_global(GlobalPermission::ViewAuditLog)?;
+    actor.ctx.assert_global(GlobalPermission::ViewAuditLog)?;
     let audit = state.audit();
     let filter = query.filter();
     let (entries, total) = tokio::try_join!(audit.list(filter), audit.count(filter))?;
-    if let Err(err) = audit
-        .record(AuditRecord {
-            actor_user_id: Some(ctx.ctx.user.id),
-            actor_username: &ctx.ctx.user.username,
-            action: action::AUDIT_READ,
-            details: Some(serde_json::json!({ "total": total })),
-            ..Default::default()
-        })
-        .await
-    {
-        log::error!("audit read not logged: {err}");
-    }
+
+    record(
+        state,
+        actor,
+        action::AUDIT_READ,
+        Some(&actor.ctx.user.username),
+        Some(actor.ctx.user.id.into()),
+        None,
+        None,
+        Some(serde_json::json!({ "total": total }))
+    ).await;
+
     Ok(serde_json::json!({ "entries": entries, "total": total }))
 }
 
-/// CSV of the filtered entries (ISMS evidence, max 10 000 rows). Requires
-/// `admin:view_audit_log`.
 pub async fn export_csv(state: &MyAppState, ctx: &AppCtx, query: AuditListQuery) -> Result<String> {
     ctx.ctx.assert_global(GlobalPermission::ViewAuditLog)?;
     let mut filter = query.filter();
     filter.limit = 10_000;
     filter.offset = 0;
     let entries = state.audit().list(filter).await?;
+
+    record(
+        state,
+        ctx,
+        action::AUDIT_READ,
+        Some("audit_log"),
+        None,
+        query.group_id,
+        query.event_id,
+        Some(serde_json::json!({
+            "format": "csv",
+            "returned": entries.len(),
+            "action_filter": query.action,
+            "actor_user_id": query.actor_user_id,
+        })),
+    )
+        .await;
 
     let mut csv = String::from(
         "id,created_at,actor_user_id,actor_username,action,target_user_id,entity_type,entity_id,group_id,event_id,details\n",

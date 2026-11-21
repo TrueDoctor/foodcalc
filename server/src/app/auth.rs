@@ -9,19 +9,19 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use foodlib_new::auth_context::AuthCtx;
-use foodlib_new::entities::user::{Group, GroupMembership, User};
+use foodlib_new::entities::types::ids::{GroupId, UserId};
+use foodlib_new::entities::user::{GroupMembership, User};
 use foodlib_new::ops::audit::{action, AuditRecord};
-use foodlib_new::policy::{EventPerm, GlobalPermission, Permission};
+use foodlib_new::policy::{GlobalPermission, Permission};
 
 use crate::app::{Error, MyAppState, Result};
 
 /// Group as exposed to clients (with the session user's roles in it).
 #[derive(Debug, Serialize)]
 pub struct ApiGroup {
-    pub id: i32,
+    pub id: GroupId,
     pub name: String,
     pub is_personal: bool,
-    /// `viewer` | `editor` | `manager` (personal groups: `manager`).
     pub roles: Vec<String>,
     pub permissions: Vec<Permission>,
 }
@@ -41,7 +41,7 @@ impl ApiGroup {
 /// The authenticated user together with the groups they belong to.
 #[derive(Debug, Serialize)]
 pub struct ApiUser {
-    pub id: i64,
+    pub id: UserId,
     pub username: String,
     pub email: String,
     pub is_admin: bool,
@@ -49,28 +49,67 @@ pub struct ApiUser {
     pub groups: Vec<ApiGroup>,
 }
 
-impl ApiUser {
-    /// Freshly registered profile: no groups beyond the personal one, the
-    /// global create-permission and `manager` in the personal group.
-    pub fn fresh_registration(user: User, personal_group: Group) -> Self {
-        Self {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            is_admin: user.is_admin,
-            global_permissions: vec![GlobalPermission::AllowedToCreateNewDomainObjects],
-            groups: vec![ApiGroup {
-                id: personal_group.id,
-                name: personal_group.name,
-                is_personal: personal_group.is_personal,
-                roles: vec!["manager".into()],
-                permissions: vec![Permission::Event(EventPerm::Edit)],
-            }],
+
+#[derive(Debug, Deserialize)]
+pub struct LoginInput {
+    pub username: String,
+    pub password: String,
+}
+
+/// Verifies credentials and records the authentication audit trail
+/// (`LOGIN_SUCCESS` or `LOGIN_FAILED`). Transport layers handle persisting
+/// the session cookie or issuing a token.
+pub async fn authenticate(state: &MyAppState, input: LoginInput) -> Result<User> {
+    let attempted_username = input.username.trim().to_string();
+
+    if attempted_username.is_empty() || input.password.is_empty() {
+        audit_auth(
+            state,
+            None,
+            &attempted_username,
+            action::LOGIN_FAILED,
+            serde_json::json!({}),
+        )
+            .await;
+        return Err(Error::Unauthorized("wrong credentials".into()));
+    }
+
+    let user = state
+        .users()
+        .get_user_by_string_reference(attempted_username.clone())
+        .await;
+
+    let valid_user = user.filter(|u| {
+        bcrypt::verify(&input.password, &u.password_hash).unwrap_or(false)
+    });
+
+    match valid_user {
+        Some(user) => {
+            audit_auth(
+                state,
+                Some(user.id),
+                &user.username,
+                action::LOGIN_SUCCESS,
+                serde_json::json!({}),
+            )
+                .await;
+            Ok(user)
+        }
+        None => {
+            audit_auth(
+                state,
+                None,
+                &attempted_username,
+                action::LOGIN_FAILED,
+                serde_json::json!({}),
+            )
+                .await;
+            Err(Error::Unauthorized("wrong credentials".into()))
         }
     }
 }
 
-/// `POST /auth/register` payload.
+/// Input payload for self-registration.
 #[derive(Debug, Deserialize)]
 pub struct RegisterInput {
     pub username: String,
@@ -79,9 +118,12 @@ pub struct RegisterInput {
 }
 
 /// Open self-registration: creates the user together with their personal
-/// group atomically. Returns the created user (for the transport's session
-/// login) and the profile as clients see it.
-pub async fn register(state: &MyAppState, input: RegisterInput) -> Result<(User, ApiUser)> {
+/// group and default global permissions atomically. Returns the created user
+/// (for the transport's session login) and the resolved profile.
+pub async fn register(
+    state: &MyAppState,
+    input: RegisterInput
+) -> Result<(User, ApiUser)> {
     let username = input.username.trim().to_string();
     let email = input.email.trim().to_string();
 
@@ -115,10 +157,10 @@ pub async fn register(state: &MyAppState, input: RegisterInput) -> Result<(User,
     let password_hash = bcrypt::hash(&input.password, 12)
         .map_err(|err| Error::Misc(err.to_string()))?;
 
-    let (user, personal_group) = state
+    let (user, _personal_group) = state
         .users()
         .create_user_with_personal_group(User {
-            id: 0,
+            id: UserId(0),
             username,
             email,
             password_hash,
@@ -136,7 +178,8 @@ pub async fn register(state: &MyAppState, input: RegisterInput) -> Result<(User,
     )
     .await;
 
-    let profile = ApiUser::fresh_registration(user.clone(), personal_group);
+    let ctx = AuthCtx::load(&state.db, user.clone()).await?;
+    let profile = current_user(state, &ctx).await?;
     Ok((user, profile))
 }
 
@@ -144,12 +187,16 @@ pub async fn register(state: &MyAppState, input: RegisterInput) -> Result<(User,
 /// the resolved policy; only the memberships are fetched).
 pub async fn current_user(state: &MyAppState, ctx: &AuthCtx) -> Result<ApiUser> {
     let memberships = state.users().get_user_group_memberships(ctx.user.id).await?;
+    let mut global_permissions: Vec<GlobalPermission> =
+        ctx.policy.global_permissions.iter().copied().collect();
+    global_permissions.sort_by_key(|p| p.as_str());
+
     Ok(ApiUser {
         id: ctx.user.id,
         username: ctx.user.username.clone(),
         email: ctx.user.email.clone(),
         is_admin: ctx.user.is_admin,
-        global_permissions: ctx.policy.global_permissions.iter().cloned().collect(),
+        global_permissions,
         groups: memberships
             .into_iter()
             .map(ApiGroup::from_membership)
@@ -162,7 +209,7 @@ pub async fn current_user(state: &MyAppState, ctx: &AuthCtx) -> Result<ApiUser> 
 /// registration above.
 pub(crate) async fn audit_auth(
     state: &MyAppState,
-    actor_user_id: Option<i64>,
+    actor_user_id: Option<UserId>,
     actor_username: &str,
     action: &'static str,
     details: serde_json::Value,

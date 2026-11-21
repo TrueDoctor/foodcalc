@@ -13,6 +13,7 @@ use crate::api::{respond, respond_created, respond_no_content};
 use crate::app::users;
 use crate::app::AppCtx;
 use crate::MyAppState;
+use foodlib_new::entities::types::ids::{GroupId, UserId};
 
 // DTOs shared with the app layer.
 pub use crate::app::users::{
@@ -72,7 +73,7 @@ async fn list_users(
 async fn update_user(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i64>,
+    Path(id): Path<UserId>,
     Json(payload): Json<UserUpdateInput>,
 ) -> Response {
     respond(users::update_user(&state, &actor, id, payload).await)
@@ -80,7 +81,7 @@ async fn update_user(
 
 /// `DELETE /api/users/{id}` — cascade delete; refuses when the user's
 /// personal group still owns entities.
-async fn delete_user(State(state): State<MyAppState>, actor: AppCtx, Path(id): Path<i64>) -> Response {
+async fn delete_user(State(state): State<MyAppState>, actor: AppCtx, Path(id): Path<UserId>) -> Response {
     respond_no_content(users::delete_user(&state, &actor, id).await)
 }
 
@@ -89,7 +90,7 @@ async fn delete_user(State(state): State<MyAppState>, actor: AppCtx, Path(id): P
 async fn change_password(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i64>,
+    Path(id): Path<UserId>,
     Json(payload): Json<PasswordChangeInput>,
 ) -> Response {
     respond_no_content(users::change_password(&state, &actor, id, payload).await)
@@ -100,7 +101,7 @@ async fn change_password(
 async fn set_user_global_permissions(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i64>,
+    Path(id): Path<UserId>,
     Json(payload): Json<GlobalPermissionsInput>,
 ) -> Response {
     respond_no_content(users::set_global_permissions(&state, &actor, id, payload).await)
@@ -126,13 +127,13 @@ async fn create_group(
 
 /// `DELETE /api/groups/{id}` — requires `group:delete` on the group; refuses
 /// personal and non-empty groups.
-async fn delete_group(State(state): State<MyAppState>, actor: AppCtx, Path(id): Path<i32>) -> Response {
+async fn delete_group(State(state): State<MyAppState>, actor: AppCtx, Path(id): Path<GroupId>) -> Response {
     respond_no_content(users::delete_group(&state, &actor, id).await)
 }
 
 /// `GET /api/groups/{id}/members` — members (or user admins) see member list
 /// with all assigned role slugs.
-async fn list_members(State(state): State<MyAppState>, actor: AppCtx, Path(id): Path<i32>) -> Response {
+async fn list_members(State(state): State<MyAppState>, actor: AppCtx, Path(id): Path<GroupId>) -> Response {
     respond(users::list_members(&state, &actor, id).await)
 }
 
@@ -140,7 +141,7 @@ async fn list_members(State(state): State<MyAppState>, actor: AppCtx, Path(id): 
 async fn add_member(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<GroupId>,
     Json(payload): Json<AddMemberInput>,
 ) -> Response {
     respond_created(users::add_member(&state, &actor, id, payload).await)
@@ -150,7 +151,7 @@ async fn add_member(
 async fn set_member_roles(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path((id, user_id)): Path<(i32, i64)>,
+    Path((id, user_id)): Path<(GroupId, UserId)>,
     Json(payload): Json<SetMemberRolesInput>,
 ) -> Response {
     respond_no_content(users::set_member_roles(&state, &actor, id, user_id, payload).await)
@@ -161,7 +162,7 @@ async fn set_member_roles(
 async fn remove_member(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path((id, user_id)): Path<(i32, i64)>,
+    Path((id, user_id)): Path<(GroupId, UserId)>,
 ) -> Response {
     respond_no_content(users::remove_member(&state, &actor, id, user_id).await)
 }
@@ -172,7 +173,7 @@ async fn remove_member(
 async fn get_group_default_roles(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<GroupId>,
 ) -> Response {
     respond(users::get_default_roles(&state, &actor, id).await)
 }
@@ -181,7 +182,7 @@ async fn get_group_default_roles(
 async fn put_group_default_roles(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<GroupId>,
     Json(payload): Json<GroupDefaultRolesInput>,
 ) -> Response {
     respond_no_content(users::put_default_roles(&state, &actor, id, payload).await)
@@ -192,7 +193,7 @@ async fn put_group_default_roles(
 async fn clear_group_default_roles(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<GroupId>,
 ) -> Response {
     respond_no_content(users::clear_default_roles(&state, &actor, id).await)
 }

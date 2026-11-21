@@ -8,3 +8,4 @@ pub mod recipe;
 pub mod store;
 pub mod unit;
 pub mod user;
+pub mod types;

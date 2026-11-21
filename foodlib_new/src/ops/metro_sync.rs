@@ -7,12 +7,14 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive};
 use sqlx::PgPool;
 
 use crate::error::{Error, Result};
 use crate::ops::allergens::AllergenOps;
 
+use crate::entities::types::amount::Amount;
+use crate::entities::types::money::Money;
+use bigdecimal::{FromPrimitive, ToPrimitive};
 use metro_scrape::article::{Article, Bundle};
 use metro_scrape::request::fetch_articles_from_urls;
 
@@ -26,13 +28,13 @@ pub const METRO_STORE_ID: i32 = 0;
 /// in kg) otherwise. An unrecognised net unit is treated as "no usable net" and
 /// also falls back to gross, so an unexpected uom can never store a value off by
 /// a factor of 1000.
-fn bundle_weight_kg(bundle: &Bundle) -> Option<BigDecimal> {
+fn bundle_weight_kg(bundle: &Bundle) -> Option<Amount> {
     let net_kg = bundle
         .content_data
         .net_piece_weight
         .as_ref()
         .and_then(|net| {
-            let value = BigDecimal::from_i64(net.value)?;
+            let value = Amount::from_i64(net.value)?;
             // Metro reports the unit as a full uppercase word (e.g. "GRAM"). Accept
             // the abbreviated forms too, defensively.
             match net.uom.to_ascii_uppercase().as_str() {
@@ -41,7 +43,7 @@ fn bundle_weight_kg(bundle: &Bundle) -> Option<BigDecimal> {
                 _ => None,
             }
         });
-    net_kg.or_else(|| BigDecimal::from_str(&bundle.gross_weight).ok())
+    net_kg.or_else(|| Amount::from_str(&bundle.gross_weight).ok())
 }
 
 #[derive(Debug, Clone, Default)]
@@ -300,7 +302,7 @@ impl MetroSyncOps {
                 // Primary key: unit-aware package weight in grams (reuses
                 // `bundle_weight_kg`). No usable weight sorts last (u64::MAX).
                 let net = bundle_weight_kg(b)
-                    .and_then(|kg| (kg * BigDecimal::from(1000)).to_u64())
+                    .and_then(|kg| (kg * Amount::from(1000)).to_u64())
                     .unwrap_or(u64::MAX);
                 // Tie-break on gross weight (unitless kg): a multi-piece case and
                 // a single piece share the same net *piece* weight (e.g. 9 × 275 g
@@ -361,8 +363,8 @@ impl MetroSyncOps {
         let weight = bundle_weight_kg(bundle).ok_or_else(|| {
             Error::Misc(format!("invalid gross_weight `{}`", bundle.gross_weight))
         })?;
-        let price_bd = BigDecimal::from_f64(price)
-            .ok_or_else(|| Error::Misc(format!("price {price} not representable as BigDecimal")))?;
+        let price_bd = Money::from_f64(price)
+            .ok_or_else(|| Error::Misc(format!("price {price} not representable as Money")))?;
 
         sqlx::query!(
             r#"
@@ -370,8 +372,8 @@ impl MetroSyncOps {
             SET price = $1, package_size = $2
             WHERE ingredient_source_id = $3
             "#,
-            price_bd,
-            weight,
+            price_bd.into_raw(),
+            weight.get().clone(),
             source.ingredient_source_id,
         )
         .execute(&*self.pool)

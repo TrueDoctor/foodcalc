@@ -586,10 +586,11 @@ pub fn compact_allergen_set(names: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::ids::PropertyId;
 
     fn p(name: &str) -> Property {
         Property {
-            id: 0,
+            id: PropertyId(0),
             name: name.to_string(),
         }
     }

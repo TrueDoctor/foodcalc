@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -16,6 +15,8 @@ use foodlib_new::entities::event::{
     Event, EventSummary, IngredientWithoutTour, ShoppingListItem, ShoppingTour,
 };
 use foodlib_new::entities::meal::Meal;
+use foodlib_new::entities::types::ids::{EventId, GroupId, IngredientId, StoreId, TourId};
+use foodlib_new::entities::types::money::Money;
 use foodlib_new::policy::{EventPerm, GlobalPermission, Permission};
 
 pub mod exports;
@@ -23,9 +24,10 @@ pub mod logistics;
 pub mod meals;
 pub mod members;
 pub mod shopping;
+
 // ------------------------------------------------------------------ read
 
-/// `GET /api/events` — all events of the user's groups with planner totals,
+/// all events of the user's groups with planner totals,
 /// newest activity first. The op already scopes the result to the caller's
 /// groups.
 pub async fn list_summaries(state: &MyAppState, ctx: &AuthCtx) -> Result<Vec<EventSummary>> {
@@ -40,12 +42,16 @@ pub async fn list_summaries(state: &MyAppState, ctx: &AuthCtx) -> Result<Vec<Eve
 pub struct EventDetails {
     pub event: Event,
     pub meals: Vec<Meal>,
-    pub total_cost: BigDecimal,
+    pub total_cost: Money,
     pub permissions: Vec<Permission>,
 }
 
-pub async fn get_event_details(state: &MyAppState, ctx: &AuthCtx, id: i32) -> Result<EventDetails> {
-    ctx.assert_event_action(id, EventPerm::View).await?;
+pub async fn get_event_details(
+    state: &MyAppState,
+    ctx: &AuthCtx,
+    id: EventId,
+) -> Result<EventDetails> {
+    ctx.assert_event_action(id, EventPerm::ViewEvent).await?;
     let event = state.events().get(id).await?;
     let (meals, total_cost) = {
         let meals_ops = state.meals();
@@ -67,20 +73,23 @@ pub async fn get_event_details(state: &MyAppState, ctx: &AuthCtx, id: i32) -> Re
 pub struct EventCreateInput {
     pub name: String,
     pub comment: Option<String>,
-    /// Budget as a decimal string (BigDecimal over the wire).
+    /// Budget as a decimal string (Amount over the wire).
     pub budget: Option<String>,
-    pub group_id: i32,
+    pub group_id: GroupId,
 }
 
-/// `POST /api/events` — create an event owned by one of the user's groups.
-pub async fn create_new_event(state: &MyAppState, actor: &AppCtx, input: EventCreateInput) -> Result<Event> {
+pub async fn create_new_event(
+    state: &MyAppState,
+    actor: &AppCtx,
+    input: EventCreateInput,
+) -> Result<Event> {
     let ctx = &actor.ctx;
-    ctx.assert_global(GlobalPermission::AllowedToCreateNewDomainObjects)?;
-    ctx.assert_group_perm(input.group_id, Permission::Event(EventPerm::Create))?;
+    ctx.assert_global(GlobalPermission::CreateResources)?;
+    ctx.assert_group_perm(input.group_id, Permission::Event(EventPerm::CreateEvent))?;
     let budget = parse_budget(input.budget)?;
 
     let event = Event {
-        id: 0,
+        id: EventId::default(),
         name: input.name,
         comment: input.comment,
         budget,
@@ -92,12 +101,12 @@ pub async fn create_new_event(state: &MyAppState, actor: &AppCtx, input: EventCr
         actor,
         audit::action::ENTITY_CREATED,
         Some("event"),
-        Some(created.id),
+        Some(created.id.into()),
         Some(created.group_id),
-        None,
+        Some(created.id),
         Some(json!({ "name": created.name })),
     )
-    .await;
+        .await;
     Ok(created)
 }
 
@@ -109,18 +118,19 @@ pub struct EventUpdateInput {
     pub budget: Option<String>,
 }
 
-/// `PUT /api/events/{id}` — update the event's frame data. Provided fields
-/// win; omitted fields keep the current values.
 pub async fn update_event(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
+    id: EventId,
     input: EventUpdateInput,
 ) -> Result<Event> {
-    let ctx = &actor.ctx;
-    ctx.assert_event_action(id, EventPerm::Edit).await?;
+    actor.ctx.assert_event_action(id, EventPerm::EditEvent).await?;
     let current = state.events().get(id).await?;
-    let budget = parse_budget(input.budget)?.or(current.budget);
+    let budget = match input.budget {
+        Some(raw) if raw.trim().is_empty() => None,
+        Some(raw) => parse_budget(Some(raw))?,
+        None => current.budget,
+    };
     let comment = match input.comment {
         Some(comment) if comment.is_empty() => None,
         Some(comment) => Some(comment),
@@ -137,59 +147,55 @@ pub async fn update_event(
     state.events().update(updated).await
 }
 
-/// `DELETE /api/events/{id}` — delete the event (cascades to meals/tours).
-pub async fn delete_event(state: &MyAppState, actor: &AppCtx, id: i32) -> Result<()> {
-    actor.ctx.assert_event_action(id, EventPerm::Delete).await?;
+/// delete the event (cascades to meals/tours).
+pub async fn delete_event(state: &MyAppState, actor: &AppCtx, id: EventId) -> Result<()> {
+    actor.ctx.assert_event_action(id, EventPerm::DeleteEvent).await?;
     state.events().delete(id).await?;
     audit::record(
         state,
         actor,
         audit::action::ENTITY_DELETED,
         Some("event"),
-        Some(id),
+        Some(id.into()),
         None,
         Some(id),
         None,
     )
-    .await;
+        .await;
     Ok(())
 }
 
-/// `POST /api/events/{id}/clone` — duplicate the event incl. meals and source
-/// overrides. Returns the new event id.
-pub async fn clone_created_event(state: &MyAppState, actor: &AppCtx, id: i32) -> Result<i32> {
-    let ctx = &actor.ctx;
-    ctx.assert_event_action(id, EventPerm::Clone).await?;
+pub async fn clone_created_event(state: &MyAppState, actor: &AppCtx, id: EventId) -> Result<EventId> {
+    actor.ctx.assert_event_action(id, EventPerm::CloneEvent).await?;
     let event = state.events().get(id).await?;
-    let new_id = state.events().duplicate(id, event.group_id).await?;
+    let cloned = state.events().duplicate(id, event.group_id).await?;
     audit::record(
         state,
         actor,
         audit::action::ENTITY_CREATED,
         Some("event"),
-        Some(new_id),
+        Some(cloned.into()),
         Some(event.group_id),
-        Some(id),
+        Some(cloned),
         Some(json!({ "cloned_from": id })),
     )
-    .await;
-    Ok(new_id)
+        .await;
+    Ok(cloned)
 }
 
-/// `PUT /api/events/{id}/owner` — explicit Besitz-Übertragung: erlaubt für
+/// explicit Besitz-Übertragung: erlaubt für
 /// den Besitzer (persönliche Gruppe) oder Manager der besitzenden Gruppe;
 /// die Zielgruppe muss für den Aufrufer zugänglich sein (Admin oder
 /// Mitgliedschaft). Danach regelt die Manager-Rolle der neuen Gruppe.
 pub async fn transfer_event_owner(
     state: &MyAppState,
     actor: &AppCtx,
-    id: i32,
-    target_group_id: i32,
+    id: EventId,
+    target_group_id: GroupId,
 ) -> Result<()> {
-    let ctx = &actor.ctx;
     let current = state.events().get(id).await?;
     assert_ownership_transfer(
-        ctx,
+        &actor.ctx,
         "event",
         current.group_id,
         target_group_id,
@@ -201,20 +207,20 @@ pub async fn transfer_event_owner(
         actor,
         audit::action::OWNER_TRANSFERRED,
         Some("event"),
-        Some(id),
+        Some(id.into()),
         Some(target_group_id),
         Some(id),
         Some(json!({ "from_group_id": current.group_id })),
     )
-    .await;
+        .await;
     Ok(())
 }
 
 /// Parses a budget decimal string; an empty string clears the budget.
-fn parse_budget(budget: Option<String>) -> Result<Option<BigDecimal>> {
+fn parse_budget(budget: Option<String>) -> Result<Option<Money>> {
     match budget.as_deref() {
         None | Some("") => Ok(None),
-        Some(value) => BigDecimal::from_str(value)
+        Some(value) => Money::from_str(value)
             .map(Some)
             .map_err(|_| Error::Validation {
                 message: format!("invalid budget: {value}"),
@@ -239,7 +245,7 @@ pub struct TourWithItems {
     pub tour: ShoppingTour,
     pub items: Vec<ShoppingListItem>,
     /// Sum of the item prices; `None` when any item has no priced source.
-    pub total_price: Option<BigDecimal>,
+    pub total_price: Option<Money>,
     /// Completed tours are locked: no edits, no item changes (reopen first).
     pub completed: bool,
 }
@@ -253,13 +259,23 @@ pub struct TourSummaryDto {
     pub completed: bool,
 }
 
-/// `GET /api/events/{id}/shopping-list` — tours with their items plus
-/// ingredients that are not covered by any tour yet. Manually pinned items
-/// (`shopping_tour_items`) override the view-derived assignment: their
-/// ingredient is forced onto its tour and never appears as "without tour".
-pub async fn get_shopping_list(state: &MyAppState, ctx: &AuthCtx, id: i32) -> Result<ShoppingListDto> {
-    // Check Permissions
-    ctx.assert_event_action(id, EventPerm::View).await?;
+/// List all shopping tours of an event, with their items and the lifecycle flag.
+/// Requires `ViewEvent` permission. Ingredients without a tour are listed separately.
+pub async fn get_shopping_list(
+    state: &MyAppState,
+    actor: &AppCtx,
+    id: EventId,
+) -> Result<ShoppingListDto> {
+    // Permission check: the caller must be able to view the event to see its shopping list.
+    actor.ctx.assert_event_action(id, EventPerm::ViewEvent).await?;
+
+    // Action
+    let event = state.events().get(id).await?;
+    let can_view_prices = actor.ctx.has_event_permission(
+        id,
+        event.group_id,
+        Permission::Event(EventPerm::ViewCalculation),
+    );
 
     let tours = state.events().get_shopping_tours(id).await?;
     let items = state.events().get_event_shopping_list(id).await?;
@@ -275,15 +291,18 @@ pub async fn get_shopping_list(state: &MyAppState, ctx: &AuthCtx, id: i32) -> Re
         .await
         .unwrap_or_default();
 
-    // Manual pins: ingredient → tour. A pinned ingredient is routed to its
+    // Manual pins: ingredient -> tour. A pinned ingredient is routed to its
     // tour regardless of what the view derived.
-    let mut pinned_tour: HashMap<i32, i32> = HashMap::new();
-    for pin in &pins {
-        pinned_tour.insert(pin.ingredient_id, pin.tour_id);
-    }
+    let pinned_tour: HashMap<IngredientId, TourId> = pins
+        .iter()
+        .map(|pin| (pin.ingredient_id, pin.tour_id))
+        .collect();
 
-    let mut grouped: HashMap<i32, Vec<ShoppingListItem>> = HashMap::new();
-    for item in items {
+    let mut grouped: HashMap<TourId, Vec<ShoppingListItem>> = HashMap::new();
+    for mut item in items {
+        if !can_view_prices {
+            item.price = None;
+        }
         // Pin wins over the view-derived tour_id (which may be `None`).
         let target_tour = pinned_tour
             .get(&item.ingredient_id)
@@ -298,14 +317,18 @@ pub async fn get_shopping_list(state: &MyAppState, ctx: &AuthCtx, id: i32) -> Re
         .into_iter()
         .map(|tour| {
             let items = grouped.remove(&tour.id).unwrap_or_default();
-            let total_price = items.iter().try_fold(
-                BigDecimal::from(0),
-                |sum, item| match &item.price {
-                    Some(price) => Some(sum + price),
-                    // Missing price on any item → no reliable tour total.
-                    None => None,
-                },
-            );
+            let total_price = if can_view_prices {
+                items.iter().try_fold(
+                    Money::from(0),
+                    |sum: Money, item| match &item.price {
+                        Some(price) => Some(sum + price),
+                        // Missing price on any item -> no reliable tour total.
+                        None => None,
+                    },
+                )
+            } else {
+                None
+            };
             TourWithItems {
                 completed: completed_ids.contains(&tour.id),
                 tour,
@@ -327,20 +350,24 @@ pub async fn get_shopping_list(state: &MyAppState, ctx: &AuthCtx, id: i32) -> Re
     })
 }
 
-/// `GET /api/events/{id}/tours` — all shopping tours of the event with
-/// their lifecycle flag.
+/// List all shopping tours of an event, with the lifecycle flag.
+/// Requires `ViewEvent` permission.
 pub async fn list_shopping_tours_for_event(
     state: &MyAppState,
     ctx: &AuthCtx,
-    event_id: i32
+    event_id: EventId,
 ) -> Result<Vec<TourSummaryDto>> {
-    ctx.assert_event_action(event_id, EventPerm::View).await?;
+    // Permission check
+    ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
+
+    // Action
     let tours = state.events().get_shopping_tours(event_id).await?;
     let completed_ids = state
         .events()
         .get_completed_tour_ids(event_id)
         .await
         .unwrap_or_default();
+
     Ok(tours
         .into_iter()
         .map(|tour| TourSummaryDto {
@@ -356,26 +383,21 @@ pub async fn list_shopping_tours_for_event(
 pub struct TourInput {
     /// RFC 3339 timestamp of the tour date.
     pub tour_date: String,
-    pub store_id: i32,
+    pub store_id: StoreId,
 }
 
-/// `POST /api/events/{id}/tours` — schedule a shopping tour for a store.
-/// Ingredients sourced from that store whose `buy_by` falls into this tour's
-/// date window are assigned automatically by the `shopping_tour_ingredients`
-/// view — no per-item assignment needed. Extra/manual items can be pinned
-/// afterwards (`add_tour_item`).
+/// Add a new shopping tour to an event.
+/// Requires `ShoppingAddTour` permission. The tour is initially empty (no items).
 pub async fn add_tour(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
+    event_id: EventId,
     input: TourInput,
 ) -> Result<ShoppingTour> {
-    // Check permissions
-    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingAddTour).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingTourCreate).await?;
 
-    // Create the tour
     let tour = ShoppingTour {
-        id: 0,
+        id: TourId::default(),
         event_id,
         tour_date: parse_time(&input.tour_date)?,
         store_id: input.store_id,
@@ -383,49 +405,37 @@ pub async fn add_tour(
     };
     let created = state.events().add_shopping_tour(tour).await?;
 
-    // Logging
     audit::record(
         state,
         actor,
         "event.tour.added",
         Some("shopping_tour"),
-        Some(created.id),
+        Some(created.id.into()),
         None,
         Some(event_id),
         Some(json!({ "store_id": created.store_id })),
     )
-    .await;
+        .await;
 
-    // Response
     Ok(created)
 }
 
-/// `PUT /api/events/{id}/tours/{tour_id}` — reschedule or move a tour.
-/// Rejected for completed tours (reopen first).
+/// Allows to reschedule or change the store of a shopping tour.
+/// Rejected for completed tours. Requires `ShoppingEditTour` permission.
 pub async fn update_tour(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    tour_id: i32,
+    event_id: EventId,
+    tour_id: TourId,
     input: TourInput,
 ) -> Result<ShoppingTour> {
-    // Check permissions
-    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingEditTour).await?;
+    // Permission check
+    // actor.ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingTourEdit).await?;
 
-    // Check lifecycle
-    if tour_is_completed(state, actor, tour_id).await {
-        return Err(Error::Validation {
-            message: "tour is completed — reopen it first".into(),
-        });
-    }
-    let current = state.events().get_shopping_tour(tour_id).await?;
-    if current.event_id != event_id {
-        return Err(Error::Validation {
-            message: "tour does not belong to this event".into(),
-        });
-    }
+    let current = get_editable_tour(state, actor, event_id, tour_id).await?;
 
-    // Update the tour
+    // Action
     let tour = ShoppingTour {
         id: tour_id,
         event_id: current.event_id,
@@ -441,29 +451,36 @@ pub async fn update_tour(
         actor,
         "event.tour.updated",
         Some("shopping_tour"),
-        Some(tour_id),
+        Some(tour_id.into()),
         None,
         Some(event_id),
         None,
     )
-    .await;
+        .await;
     Ok(updated)
 }
 
-/// `DELETE /api/events/{id}/tours/{tour_id}` — remove the tour. Its items
-/// fall back to "without tour". Rejected for completed tours.
-pub async fn delete_tour(state: &MyAppState, actor: &AppCtx, event_id: i32, tour_id: i32) -> Result<()> {
-    // Check permissions
-    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingEditTour).await?;
-
-    // Check lifecycle
-    if tour_is_completed(state, actor, tour_id).await {
+/// Remove a shopping tour from an event.
+/// Rejected for completed tours. Requires `EditShoppingTour` permission.
+pub async fn delete_tour(
+    state: &MyAppState,
+    actor: &AppCtx,
+    event_id: EventId,
+    tour_id: TourId,
+) -> Result<()> {
+    // Permission & semantic checks
+    // actor.ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingTourEdit).await?;
+    // completing a completed tour is an error
+    let tour = get_editable_tour(state, actor, event_id, tour_id).await?;
+    // sanity check: the tour must belong to this event
+    if tour.id != tour_id {
         return Err(Error::Validation {
-            message: "tour is completed — reopen it first".into(),
+            message: "tour does not belong to this event".into(),
         });
     }
 
-    // Delete the tour
+    // Action
     state.events().delete_shopping_tour(tour_id).await?;
 
     // Logging
@@ -472,28 +489,40 @@ pub async fn delete_tour(state: &MyAppState, actor: &AppCtx, event_id: i32, tour
         actor,
         "event.tour.deleted",
         Some("shopping_tour"),
-        Some(tour_id),
+        Some(tour_id.into()),
         None,
         Some(event_id),
         None,
     )
-    .await;
+        .await;
     Ok(())
 }
 
-/// `PUT /api/events/{id}/tours/{tour_id}/completed` — mark the tour done
-/// (locked) or reopen it.
+/// Mark a tour as completed (locked) or reopen it. Completed tours are read-only: no edits, no item changes.
+/// completed tours can be reopened. Completing a completed tour is an error.
+/// Requires `CompleteShoppingTour` permission.
 pub async fn set_tour_completed(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    tour_id: i32,
+    event_id: EventId,
+    tour_id: TourId,
     completed: bool,
 ) -> Result<()> {
-    // Check permissions
-    actor.ctx.assert_event_action(event_id, EventPerm::ManageShopping).await?;
+    // Permission & semantic checks
+    // actor.ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
+    actor.ctx.assert_event_actions(event_id, [
+        EventPerm::ShoppingTourComplete
+    ]).await?;
+    // completing a completed tour is an error
+    let tour = get_editable_tour(state, actor, event_id, tour_id).await?;
+    // sanity check: the tour must belong to this event
+    if tour.id != tour_id {
+        return Err(Error::Validation {
+            message: "tour does not belong to this event".into(),
+        });
+    }
 
-    // Update the lifecycle flag
+    // Action
     state.events().set_shopping_tour_completed(tour_id, completed).await?;
 
     // Logging
@@ -502,36 +531,37 @@ pub async fn set_tour_completed(
         actor,
         "event.tour.completed_changed",
         Some("shopping_tour"),
-        Some(tour_id),
+        Some(tour_id.into()),
         None,
         Some(event_id),
         Some(json!({ "completed": completed })),
     )
-    .await;
+        .await;
     Ok(())
 }
 
-/// `POST /api/events/{id}/tours/{tour_id}/items` — pin an ingredient onto
-/// this tour, overriding the automatic store/window assignment. Rejected for
-/// completed tours.
+/// Add one ingredient to a tour (manual pin). Rejected for completed tours.
+/// Requires `ShoppingEditTour` permission.
 pub async fn add_tour_item(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    tour_id: i32,
-    ingredient_id: i32,
+    event_id: EventId,
+    tour_id: TourId,
+    ingredient_id: IngredientId,
 ) -> Result<()> {
-    // Check permissions
-    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingEditTour).await?;
-
-    // Check lifecycle
-    if tour_is_completed(state, actor, tour_id).await {
+    // Permission & semantic checks
+    actor.ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingTourEdit).await?;
+    // completing a completed tour is an error
+    let tour = get_editable_tour(state, actor, event_id, tour_id).await?;
+    // sanity check: the tour must belong to this event
+    if tour.id != tour_id {
         return Err(Error::Validation {
-            message: "tour is completed — reopen it first".into(),
+            message: "tour does not belong to this event".into(),
         });
     }
 
-    // Add the item
+    // Action
     state.events().add_shopping_tour_item(tour_id, ingredient_id).await?;
 
     // Logging
@@ -540,36 +570,37 @@ pub async fn add_tour_item(
         actor,
         "event.tour_item.added",
         Some("shopping_tour_item"),
-        Some(tour_id),
+        Some(tour_id.into()),
         None,
         Some(event_id),
         Some(json!({ "ingredient_id": ingredient_id })),
     )
-    .await;
+        .await;
     Ok(())
 }
 
-/// `DELETE /api/events/{id}/tours/{tour_id}/items/{ingredient_id}` — unpin a
-/// manually assigned ingredient (falls back to the automatic assignment).
-/// Rejected for completed tours.
+/// Remove one ingredient from a tour (manual unpin). Rejected for completed tours.
+/// Requires `ShoppingEditTour` permission.
 pub async fn remove_tour_item(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    tour_id: i32,
-    ingredient_id: i32,
+    event_id: EventId,
+    tour_id: TourId,
+    ingredient_id: IngredientId,
 ) -> Result<()> {
-    // Check permissions
-    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingEditTour).await?;
-
-    // Check lifecycle
-    if tour_is_completed(state, actor, tour_id).await {
+    // Permission & semantic checks
+    actor.ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::ShoppingTourEdit).await?;
+    // completing a completed tour is an error
+    let tour = get_editable_tour(state, actor, event_id, tour_id).await?;
+    // sanity check: the tour must belong to this event
+    if tour.id != tour_id {
         return Err(Error::Validation {
-            message: "tour is completed — reopen it first".into(),
+            message: "tour does not belong to this event".into(),
         });
     }
 
-    // Remove the item
+    // Action
     state.events().remove_shopping_tour_item(tour_id, ingredient_id).await?;
 
     // Logging
@@ -578,28 +609,59 @@ pub async fn remove_tour_item(
         actor,
         "event.tour_item.removed",
         Some("shopping_tour_item"),
-        Some(tour_id),
+        Some(tour_id.into()),
         None,
         Some(event_id),
         Some(json!({ "ingredient_id": ingredient_id })),
     )
-    .await;
+        .await;
     Ok(())
 }
 
-/// Whether the tour is completed (locked) — `false` when the status row is
-/// missing or unreadable (a locked tour must never become editable by
-/// accident, but a broken status table should not lock everything either).
-async fn tour_is_completed(
+/// Fetches a tour for an event.
+/// Ensures the tour belongs to `event_id` and checks `ViewEvent` permission.
+async fn get_event_tour(
     state: &MyAppState,
     actor: &AppCtx,
-    tour_id: i32
-) -> bool {
-    // Check permissions
-    actor.ctx.assert_event_action(tour_id, EventPerm::View).await.ok();
+    event_id: EventId,
+    tour_id: TourId,
+) -> Result<ShoppingTour> {
+    // Permission & semantic checks
+    actor.ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
 
-    // Resolve and respond
-    state.events().is_shopping_tour_completed(tour_id).await
-        .unwrap_or(false)
+    // Action - fetch the tour regardless of its final state (completed or not)
+    let tour = state.events().get_shopping_tour(tour_id).await?;
+
+    // sanity check: the tour must belong to this event
+    if tour.id != tour_id {
+        return Err(Error::Validation {
+            message: "tour does not belong to this event".into(),
+        });
+    }
+
+    Ok(tour)
 }
 
+/// Fetches a tour which is currently not completed.
+/// Returns an error if the tour is already completed.
+/// Checks that the tour belongs to `event_id` and checks `ViewEvent` permission.
+async fn get_editable_tour(
+    state: &MyAppState,
+    app_ctx: &AppCtx,
+    event_id: EventId,
+    tour_id: TourId,
+) -> Result<ShoppingTour> {
+
+    let tour = get_event_tour(state, &app_ctx, event_id, tour_id).await?;
+    if state
+        .events()
+        .is_shopping_tour_completed(tour_id)
+        .await
+        .unwrap_or(false)
+    {
+        return Err(Error::Validation {
+            message: "tour is completed — reopen it first".into(),
+        });
+    }
+    Ok(tour)
+}

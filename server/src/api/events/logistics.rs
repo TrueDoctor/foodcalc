@@ -9,6 +9,8 @@ use axum::{
     Router,
 };
 
+use foodlib_new::entities::types::ids::{EventId, InventoryId};
+
 use crate::api::{respond, respond_created, respond_no_content};
 use crate::app::events::logistics;
 use crate::app::AppCtx;
@@ -32,7 +34,7 @@ async fn list_preps(
     ctx: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    respond(logistics::list_food_preps(&state, &ctx.ctx, id).await)
+    respond(logistics::list_food_preps(&state, &ctx.ctx, EventId(id)).await)
 }
 
 /// `GET /api/events/{id}/inventories` — the event's linked inventories.
@@ -41,7 +43,7 @@ async fn list_event_inventories(
     ctx: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    respond(logistics::list_event_inventories(&state, &ctx.ctx, id).await)
+    respond(logistics::list_event_inventories(&state, &ctx.ctx, EventId(id)).await)
 }
 
 /// `POST /api/events/{id}/inventories/{inventory_id}` — link an inventory to
@@ -51,7 +53,7 @@ async fn add_event_inventory(
     ctx: AppCtx,
     Path((id, inventory_id)): Path<(i32, i32)>,
 ) -> Response {
-    respond_created(logistics::link_inventory(&state, &ctx, id, inventory_id).await)
+    respond_created(logistics::link_inventory(&state, &ctx, EventId(id), InventoryId(inventory_id)).await)
 }
 
 /// `DELETE /api/events/{id}/inventories/{inventory_id}` — unlink.
@@ -60,7 +62,7 @@ async fn remove_event_inventory(
     ctx: AppCtx,
     Path((id, inventory_id)): Path<(i32, i32)>,
 ) -> Response {
-    respond_no_content(logistics::unlink_inventory(&state, &ctx, id, inventory_id).await)
+    respond_no_content(logistics::unlink_inventory(&state, &ctx, EventId(id), InventoryId(inventory_id)).await)
 }
 
 /// `GET /api/events/{id}/inventory-coverage` — per-ingredient demand vs. the
@@ -70,5 +72,5 @@ async fn inventory_coverage(
     ctx: AppCtx,
     Path(id): Path<i32>,
 ) -> Response {
-    respond(logistics::inventory_coverage(&state, &ctx.ctx, id).await)
+    respond(logistics::inventory_coverage(&state, &ctx.ctx, EventId(id)).await)
 }

@@ -1,5 +1,5 @@
 //! Status board endpoints — thin handlers over `crate::app::status_board`.
-//! The status/urgency/availability validation lives in the app layer.
+//! The status/urgency/availability validation and RBAC checks live in the app layer.
 
 use axum::{
     extract::{Path, State},
@@ -10,21 +10,16 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 
-use foodlib_new::ops::status_board::CreateReorderInput;
-
 use crate::api::{respond, respond_created, respond_no_content};
-use crate::app::status_board;
+use crate::app::status_board::{self, SetAvailabilityInput};
+use crate::app::AppCtx;
 use crate::MyAppState;
+use foodlib_new::entities::types::ids::{EventId, MealId, ReorderId};
+use foodlib_new::ops::status_board::CreateReorderInput;
 
 #[derive(Debug, Deserialize)]
 pub struct ReorderStatusBody {
     pub status: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AvailabilityBody {
-    pub availability: String,
-    pub eta_minutes: Option<i32>,
 }
 
 pub fn status_board_router() -> Router<MyAppState> {
@@ -35,17 +30,22 @@ pub fn status_board_router() -> Router<MyAppState> {
         .route("/{id}/meals/{meal_id}/availability", put(put_availability))
 }
 
-async fn get_board(State(state): State<MyAppState>, Path(id): Path<i32>) -> Response {
-    respond(status_board::get_board(&state, id).await)
+async fn get_board(
+    State(state): State<MyAppState>,
+    actor: AppCtx,
+    Path(id): Path<EventId>,
+) -> Response {
+    respond(status_board::get_board(&state, &actor, id).await)
 }
 
 async fn post_reorder(
     State(state): State<MyAppState>,
-    Path(id): Path<i32>,
+    actor: AppCtx,
+    Path(id): Path<EventId>,
     Json(payload): Json<CreateReorderInput>,
 ) -> Response {
     respond_created(
-        status_board::create_reorder(&state, id, payload)
+        status_board::create_reorder(&state, &actor, id, payload)
             .await
             .map(|reorder_id| json!({ "id": reorder_id })),
     )
@@ -53,27 +53,22 @@ async fn post_reorder(
 
 async fn put_reorder_status(
     State(state): State<MyAppState>,
-    Path((id, reorder_id)): Path<(i32, i32)>,
+    actor: AppCtx,
+    Path((id, reorder_id)): Path<(EventId, ReorderId)>,
     Json(payload): Json<ReorderStatusBody>,
 ) -> Response {
     respond_no_content(
-        status_board::update_reorder_status(&state, id, reorder_id, &payload.status).await,
+        status_board::update_reorder_status(&state, &actor, id, reorder_id, &payload.status).await,
     )
 }
 
 async fn put_availability(
     State(state): State<MyAppState>,
-    Path((id, meal_id)): Path<(i32, i32)>,
-    Json(payload): Json<AvailabilityBody>,
+    actor: AppCtx,
+    Path((id, meal_id)): Path<(EventId, MealId)>,
+    Json(payload): Json<SetAvailabilityInput>,
 ) -> Response {
     respond_no_content(
-        status_board::set_meal_availability(
-            &state,
-            id,
-            meal_id,
-            &payload.availability,
-            payload.eta_minutes,
-        )
-        .await,
+        status_board::set_meal_availability(&state, &actor, id, meal_id, payload).await,
     )
 }

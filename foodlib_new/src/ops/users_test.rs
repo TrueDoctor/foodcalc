@@ -1,6 +1,6 @@
 // users_test.rs
 
-use crate::{entities::user::*, error::Error, ops::users::UserOps};
+use crate::{entities::user::*, error::Error, entities::types::ids::UserId, ops::users::UserOps};
 use pretty_assertions::assert_eq;
 use time::OffsetDateTime;
 
@@ -9,7 +9,7 @@ async fn test_create_user(pool: sqlx::PgPool) {
     let ops = UserOps::new(pool.into());
 
     let user = User {
-        id: -1,
+        id: UserId(-1),
         username: "testuser".to_string(),
         email: "test@example.com".to_string(),
         password_hash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG".to_string(),
@@ -21,7 +21,7 @@ async fn test_create_user(pool: sqlx::PgPool) {
     assert_eq!(created.username, user.username);
     assert_eq!(created.email, user.email);
     assert_eq!(created.is_admin, user.is_admin);
-    assert!(created.id > 0);
+    assert!(created.id > UserId(0));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -31,7 +31,7 @@ async fn test_update_user(pool: sqlx::PgPool) {
     // Create a test user to update
     let user = ops
         .create_user(User {
-            id: -1,
+            id: UserId(-1),
             username: "testuser".to_string(),
             email: "test@example.com".to_string(),
             password_hash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG"
@@ -67,7 +67,7 @@ async fn test_delete_user(pool: sqlx::PgPool) {
     // Create temporary user to delete
     let user = ops
         .create_user(User {
-            id: -1,
+            id: UserId(-1),
             username: "todelete".to_string(),
             email: "todelete@example.com".to_string(),
             password_hash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG"
@@ -106,7 +106,7 @@ async fn test_user_groups(pool: sqlx::PgPool) {
     // Create a new user
     let user = ops
         .create_user(User {
-            id: -1,
+            id: UserId(-1),
             username: "testuser".to_string(),
             email: "test@example.com".to_string(),
             password_hash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG"

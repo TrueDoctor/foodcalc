@@ -4,10 +4,11 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::app::audit;
-use crate::app::lib::{get_default_places_for_event, parse_decimal, parse_time};
+use crate::app::lib::{get_default_place_for_event, parse_decimal, parse_time};
 use crate::app::{AppCtx, Error, MyAppState, Result};
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::meal::PlannerMeal;
+use foodlib_new::entities::types::ids::{EventId, MealId, PlaceId, RecipeId};
 use foodlib_new::policy::EventPerm;
 
 // ------------------------------------------------------------------ input
@@ -40,24 +41,24 @@ pub struct MealUpdateInput {
 
 // ----------------------------------------------------------------- usecases
 
-/// `GET /api/events/{id}/meals` — planned meals with scaled weight, energy
-/// density (kJ/g) and price, ordered by start time.
-pub async fn list(state: &MyAppState, ctx: &AuthCtx, event_id: i32) -> Result<Vec<PlannerMeal>> {
-    ctx.assert_event_action(event_id, EventPerm::View).await?;
+/// list all planned meals for an event.
+/// Requires `ViewEvent`.
+pub async fn list(state: &MyAppState, ctx: &AuthCtx, event_id: EventId) -> Result<Vec<PlannerMeal>> {
+    ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
     state.meals().get_event_meals_planner(event_id).await
 }
 
-/// `POST /api/events/{id}/meals` — plan a recipe as a meal. Energy scaling:
+/// plan a recipe as a meal. Energy scaling:
 /// the total weight is derived from `energy_per_serving × servings` against
 /// the recipe's energy. Returns the new meal id.
 pub async fn add_meal_to_event(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
+    event_id: EventId,
     input: MealAddInput,
 ) -> Result<i32> {
     // actor.ctx.assert_global(foodlib_new::policy::GlobalPermission::AllowedToCreateNewDomainObjects).await?;
-    actor.ctx.assert_event_action(event_id, EventPerm::Edit).await?;
+    actor.ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
 
     let start_time = parse_time(&input.start_time)?;
     let end_time = match input.end_time.as_deref() {
@@ -66,15 +67,15 @@ pub async fn add_meal_to_event(
     };
     let energy = parse_decimal(&input.energy_per_serving, "energy_per_serving")?;
     let place_id = match input.place_id {
-        Some(place_id) => place_id,
-        None => get_default_places_for_event(state).await?,
+        Some(place_id) => PlaceId(place_id),
+        None => get_default_place_for_event(state).await?,
     };
 
     let meal_id = state
         .meals()
         .add_meal(
             event_id,
-            input.recipe_id,
+            RecipeId(input.recipe_id),
             place_id,
             start_time,
             end_time,
@@ -88,27 +89,27 @@ pub async fn add_meal_to_event(
         actor,
         "event.meal.added",
         Some("meal"),
-        Some(meal_id),
+        Some(meal_id.into()),
         None,
         Some(event_id),
         Some(json!({ "recipe_id": input.recipe_id, "servings": input.servings })),
     )
     .await;
-    Ok(meal_id)
+    Ok(meal_id.get())
 }
 
-/// `PUT /api/events/{id}/meals/{meal_id}` — update a planned meal. Provided
-/// fields win; omitted fields keep the current values.
+/// Update the meal
+/// Requires `EditEvent` and checks event_id matches the meal's event_id.
 pub async fn update_meal_of_event(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    meal_id: i32,
+    event_id: EventId,
+    meal_id: MealId,
     input: MealUpdateInput,
 ) -> Result<()> {
     actor
         .ctx
-        .assert_event_action(event_id, EventPerm::Edit)
+        .assert_event_action(event_id, EventPerm::EditEvent)
         .await?;
     let current = state.meals().get_meal(meal_id).await?;
     // Guard against moving a meal to another event via its path.
@@ -135,8 +136,8 @@ pub async fn update_meal_of_event(
         Some(comment) => Some(comment),
         None => current.comment,
     };
-    let place_id = input.place_id.unwrap_or(current.place_id);
-    let recipe_id = input.recipe_id.unwrap_or(current.recipe_id);
+    let place_id = PlaceId(input.place_id.unwrap_or(current.place_id.get()));
+    let recipe_id = RecipeId(input.recipe_id.unwrap_or(current.recipe_id.get()));
     let servings = input.servings.unwrap_or(current.servings);
 
     state
@@ -157,7 +158,7 @@ pub async fn update_meal_of_event(
         actor,
         "event.meal.updated",
         Some("meal"),
-        Some(meal_id),
+        Some(meal_id.into()),
         None,
         Some(event_id),
         None,
@@ -166,19 +167,29 @@ pub async fn update_meal_of_event(
     Ok(())
 }
 
-/// `DELETE /api/events/{id}/meals/{meal_id}` — unplan the meal.
-pub async fn remove_meal_from_event(state: &MyAppState, actor: &AppCtx, event_id: i32, meal_id: i32) -> Result<()> {
+/// unplan the meal.
+pub async fn remove_meal_from_event(state: &MyAppState, actor: &AppCtx, event_id: EventId, meal_id: MealId) -> Result<()> {
+    // Permission check
     actor
         .ctx
-        .assert_event_action(event_id, EventPerm::Edit)
+        .assert_event_action(event_id, EventPerm::EditEvent)
         .await?;
+    let meal = state.meals().get_meal(meal_id).await?; // ensure meal exists
+    if meal.event_id != event_id {
+        return Err(Error::Validation {
+            message: "meal does not belong to this event".into(),
+        });
+    }
+
+    // Act
     state.meals().remove_meal(meal_id).await?;
+    // Logging
     audit::record(
         state,
         actor,
         "event.meal.removed",
         Some("meal"),
-        Some(meal_id),
+        Some(meal_id.into()),
         None,
         Some(event_id),
         None,
@@ -187,30 +198,39 @@ pub async fn remove_meal_from_event(state: &MyAppState, actor: &AppCtx, event_id
     Ok(())
 }
 
-/// `POST /api/events/{id}/meals/{meal_id}/duplicate` — copy the meal within
+/// copy the meal within
 /// the event. Returns the new meal id.
 pub async fn duplicate_meal_within_event(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    meal_id: i32,
+    event_id: EventId,
+    meal_id: MealId,
 ) -> Result<i32> {
     actor
         .ctx
-        .assert_event_action(event_id, EventPerm::Edit)
+        .assert_event_action(event_id, EventPerm::EditEvent)
         .await?;
+    // check existence and event_id match
+    let meal = state.meals().get_meal(meal_id).await?;
+    if meal.event_id != event_id {
+        return Err(Error::Validation {
+            message: "meal does not belong to this event".into(),
+        });
+    }
+
+    // act
     let new_id = state.meals().duplicate_meal(meal_id).await?;
     audit::record(
         state,
         actor,
         "event.meal.duplicated",
         Some("meal"),
-        Some(new_id),
+        Some(new_id.into()),
         None,
         Some(event_id),
-        Some(json!({ "duplicated_from": meal_id })),
+        Some(json!({ "duplicated_from": meal_id.get() })),
     )
     .await;
-    Ok(new_id)
+    Ok(new_id.get())
 }
 

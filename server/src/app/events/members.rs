@@ -11,12 +11,14 @@ use serde_json::json;
 
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::event::Event;
+use foodlib_new::entities::types::ids::{EventId, UserId as DbUserId};
 use foodlib_new::entities::user::User;
 use foodlib_new::ops::audit::action;
 use foodlib_new::policy::{EventPerm, GroupPerm, Permission};
 
-use crate::app::audit;
+use crate::app::{audit, lib};
 use crate::app::{AppCtx, Error, MyAppState, Result};
+use foodlib_new::entities::types::ids::UserId;
 
 /// Direct collaborator of an event with their event-level role slugs.
 #[derive(Debug, Serialize)]
@@ -51,8 +53,8 @@ pub struct AddedEventMember {
 /// Resolves the event and verifies the caller may manage its collaborators:
 /// `group:manage_members` on the owning group OR `events:transfer_owner`
 /// resolved for this event (group baseline or direct override).
-async fn ensure_can_manage(state: &MyAppState, ctx: &AuthCtx, event_id: i32) -> Result<Event> {
-    let event = state.events().get(event_id).await?;
+async fn ensure_can_manage(state: &MyAppState, ctx: &AuthCtx, event_id: EventId) -> Result<Event> {
+    let event = state.events().get(EventId(event_id.get())).await?;
     let via_group = ctx
         .has_group_permission(event.group_id, Permission::Group(GroupPerm::ManageMembers));
     let via_event = ctx.has_event_permission(
@@ -68,26 +70,14 @@ async fn ensure_can_manage(state: &MyAppState, ctx: &AuthCtx, event_id: i32) -> 
     Ok(event)
 }
 
-/// Trims, drops empties, dedups and sorts role slugs.
-fn normalize_roles(roles: Vec<String>) -> Vec<String> {
-    let mut roles: Vec<String> = roles
-        .into_iter()
-        .map(|r| r.trim().to_string())
-        .filter(|r| !r.is_empty())
-        .collect();
-    roles.sort();
-    roles.dedup();
-    roles
-}
-
-/// `GET /api/events/{id}/members` — direct collaborators. Guard `events:view`.
-pub async fn list(state: &MyAppState, ctx: &AuthCtx, event_id: i32) -> Result<Vec<EventMember>> {
-    ctx.assert_event_action(event_id, EventPerm::View).await?;
+/// direct collaborators. Guard `events:view`.
+pub async fn list(state: &MyAppState, ctx: &AuthCtx, event_id: EventId) -> Result<Vec<EventMember>> {
+    ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
     let members = state.events().list_event_members(event_id).await?;
     Ok(members
         .into_iter()
         .map(|(user, roles)| EventMember {
-            user_id: user.id,
+            user_id: user.id.get(),
             username: user.username,
             email: user.email,
             roles,
@@ -95,11 +85,11 @@ pub async fn list(state: &MyAppState, ctx: &AuthCtx, event_id: i32) -> Result<Ve
         .collect())
 }
 
-/// `POST /api/events/{id}/members` — grant a user event-level roles.
+/// Add a direct collaborator to an event with the given roles
 pub async fn add(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
+    event_id: EventId,
     input: AddEventMemberInput,
 ) -> Result<AddedEventMember> {
     let ctx = &actor.ctx;
@@ -113,7 +103,7 @@ pub async fn add(
             message: format!("unknown user: {}", input.user),
         })?;
 
-    let roles = normalize_roles(input.roles);
+    let roles = lib::normalize_roles(input.roles);
     if roles.is_empty() {
         return Err(Error::Validation {
             message: "at least one role is required".into(),
@@ -133,30 +123,29 @@ pub async fn add(
         None,
         None,
         None,
-        Some(event_id),
-        Some(json!({ "target_user_id": user.id, "roles": roles })),
+        Some(EventId(event_id.get())),
+        Some(json!({ "target_user_id": user.id.get(), "roles": roles })),
     )
     .await;
     Ok(AddedEventMember {
-        user_id: user.id,
+        user_id: user.id.get(),
         username: user.username,
         roles,
     })
 }
 
-/// `PUT /api/events/{id}/members/{user_id}` — replaces the collaborator's
-/// event-level role set.
+/// sets the event-level roles for a direct collaborator.
 pub async fn set_roles(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    user_id: i64,
+    event_id: EventId,
+    user_id: DbUserId,
     input: EventMemberRolesInput,
 ) -> Result<()> {
     let ctx = &actor.ctx;
     ensure_can_manage(state, ctx, event_id).await?;
 
-    let roles = normalize_roles(input.roles);
+    let roles = lib::normalize_roles(input.roles);
     if roles.is_empty() {
         return Err(Error::Validation {
             message: "use DELETE to revoke event-level access".into(),
@@ -168,7 +157,7 @@ pub async fn set_roles(
         });
     }
 
-    state.events().set_event_member_roles(user_id, event_id, &roles).await?;
+    state.events().set_event_member_roles(UserId(user_id.get()), event_id, &roles).await?;
     audit::record(
         state,
         actor,
@@ -176,23 +165,23 @@ pub async fn set_roles(
         None,
         None,
         None,
-        Some(event_id),
-        Some(json!({ "target_user_id": user_id, "roles": roles })),
+        Some(EventId(event_id.get())),
+        Some(json!({ "target_user_id": user_id.get(), "roles": roles })),
     )
     .await;
     Ok(())
 }
 
-/// `DELETE /api/events/{id}/members/{user_id}` — revokes all event-level
+///revokes all event-level
 /// overrides for that user (group access is unaffected).
 pub async fn remove(
     state: &MyAppState,
     actor: &AppCtx,
-    event_id: i32,
-    user_id: i64,
+    event_id: EventId,
+    user_id: DbUserId,
 ) -> Result<()> {
     ensure_can_manage(state, &actor.ctx, event_id).await?;
-    state.events().remove_event_member(user_id, event_id).await?;
+    state.events().remove_event_member(UserId(user_id.get()), event_id).await?;
     audit::record(
         state,
         actor,
@@ -200,8 +189,8 @@ pub async fn remove(
         None,
         None,
         None,
-        Some(event_id),
-        Some(json!({ "target_user_id": user_id })),
+        Some(EventId(event_id.get())),
+        Some(json!({ "target_user_id": user_id.get() })),
     )
     .await;
     Ok(())

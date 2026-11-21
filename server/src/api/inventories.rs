@@ -1,20 +1,20 @@
 //! Inventory endpoints: group-scoped list, CRUD and stock item management.
 //! Handlers are thin: extraction + delegation to `crate::app::inventories`.
 
-use axum::{
-    extract::{Path, State},
-    response::Response,
-    routing::{get, put},
-    Json, Router,
-};
-use serde::Deserialize;
-
 use crate::api::{respond, respond_created, respond_no_content};
 use crate::app::inventories::{
     InventoryCreateInput, InventoryItemAddInput, InventoryItemUpdateInput, InventoryUpdateInput,
 };
 use crate::app::{inventories, AppCtx};
 use crate::MyAppState;
+use axum::{
+    extract::{Path, State},
+    response::Response,
+    routing::{get, put},
+    Json, Router,
+};
+use foodlib_new::types::ids::{GroupId, IngredientId, InventoryId};
+use serde::Deserialize;
 
 pub fn inventories_router() -> Router<MyAppState> {
     Router::new()
@@ -53,7 +53,7 @@ async fn create_inventory(
 async fn get_inventory(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
 ) -> Response {
     respond(inventories::get_inventory(&state, &actor, id).await)
 }
@@ -62,7 +62,7 @@ async fn get_inventory(
 async fn update_inventory(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
     Json(payload): Json<InventoryUpdateInput>,
 ) -> Response {
     respond(inventories::update_inventory(&state, &actor, id, payload).await)
@@ -72,7 +72,7 @@ async fn update_inventory(
 async fn delete_inventory(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
 ) -> Response {
     respond_no_content(inventories::delete_inventory(&state, &actor, id).await)
 }
@@ -81,7 +81,7 @@ async fn delete_inventory(
 async fn list_items(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
 ) -> Response {
     respond(inventories::list_inventory_items(&state, &actor, id).await)
 }
@@ -90,7 +90,7 @@ async fn list_items(
 async fn add_item(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
     Json(payload): Json<InventoryItemAddInput>,
 ) -> Response {
     respond_created(inventories::add_inventory_item(&state, &actor, id, payload).await)
@@ -100,7 +100,7 @@ async fn add_item(
 async fn update_item(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path((id, ingredient_id)): Path<(i32, i32)>,
+    Path((id, ingredient_id)): Path<(InventoryId, IngredientId)>,
     Json(payload): Json<InventoryItemUpdateInput>,
 ) -> Response {
     respond(inventories::update_inventory_item(&state, &actor, id, ingredient_id, payload).await)
@@ -110,7 +110,7 @@ async fn update_item(
 async fn remove_item(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path((id, ingredient_id)): Path<(i32, i32)>,
+    Path((id, ingredient_id)): Path<(InventoryId, IngredientId)>,
 ) -> Response {
     respond_no_content(inventories::remove_inventory_item(&state, &actor, id, ingredient_id).await)
 }
@@ -127,10 +127,11 @@ pub struct OwnerTransferInput {
 async fn transfer_owner(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
     Json(payload): Json<OwnerTransferInput>,
 ) -> Response {
+    let group_id = GroupId(payload.group_id);
     respond_no_content(
-        inventories::transfer_inventory_ownership(&state, &actor, id, payload.group_id).await,
+        inventories::transfer_inventory_ownership(&state, &actor, id, group_id).await,
     )
 }
