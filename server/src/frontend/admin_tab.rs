@@ -18,6 +18,7 @@ use crate::{FoodLib, MyAppState};
 
 use super::MResponse;
 
+pub(crate) mod permissions;
 pub(crate) mod users;
 
 pub(crate) fn admin_router() -> axum::Router<MyAppState> {
@@ -33,6 +34,7 @@ pub(crate) fn admin_router() -> axum::Router<MyAppState> {
         )
         .route("/metro-sync", get(metro_sync_view))
         .route("/metro-sync", post(metro_sync_run))
+        .route("/permissions", get(permissions::permissions_view))
         .nest("/users", users::users_router())
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
 }

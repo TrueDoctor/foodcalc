@@ -113,6 +113,8 @@ fn user_menu(user: Option<&User>) -> Markup {
                         a hx-get="/admin/groups" hx-target="#content" hx-push-url="true"
                             class="block px-4 py-3 cursor-pointer hover:bg-blue-800" { "Groups" }
                         @if u.is_admin {
+                            a hx-get="/admin/permissions" hx-target="#content" hx-push-url="true"
+                                class="block px-4 py-3 cursor-pointer hover:bg-blue-800" { "Rollen" }
                             a hx-get="/admin/users" hx-target="#content" hx-push-url="true"
                                 class="block px-4 py-3 cursor-pointer hover:bg-blue-800" { "Users" }
                             a hx-get="/admin/metro-sync" hx-target="#content" hx-push-url="true"
