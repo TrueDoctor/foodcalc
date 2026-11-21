@@ -7,8 +7,10 @@ use axum::{
     http::StatusCode,
     routing::{delete, get, post},
 };
-use bigdecimal::BigDecimal;
 use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::entities::types::amount::Amount;
+use foodlib_new::entities::types::ids::{EventId, MealId, PlaceId, RecipeId};
+use foodlib_new::policy::EventPerm;
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
@@ -26,8 +28,8 @@ pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
         )
 }
 
-async fn meal_price_cell(foodlib: FoodLib, ctx: AuthCtx, Path(meal_id): Path<i32>) -> MResponse {
-    ctx.assert_can_edit_meal(meal_id).await?;
+async fn meal_price_cell(foodlib: FoodLib, ctx: AuthCtx, Path(meal_id): Path<MealId>) -> MResponse {
+    ctx.assert_meal_action(meal_id, EventPerm::EditEvent).await?;
     let price = foodlib.meals().get_meal_price(meal_id).await?;
     Ok(html! { (price.round(2).to_string()) "€" })
 }
@@ -35,10 +37,10 @@ async fn meal_price_cell(foodlib: FoodLib, ctx: AuthCtx, Path(meal_id): Path<i32
 async fn meal_price_per_serving_cell(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(meal_id): Path<i32>,
+    Path(meal_id): Path<MealId>,
 ) -> MResponse {
     use bigdecimal::ToPrimitive;
-    ctx.assert_can_edit_meal(meal_id).await?;
+    ctx.assert_meal_action(meal_id, EventPerm::EditEvent).await?;
     let meal = foodlib.meals().get_meal(meal_id).await?;
     let price = foodlib.meals().get_meal_price(meal_id).await?;
     let per_serving = price.to_f64().unwrap_or_default() / meal.servings as f64;
@@ -47,11 +49,11 @@ async fn meal_price_per_serving_cell(
 
 #[derive(Clone, PartialEq, Deserialize)]
 pub struct MealForm {
-    pub recipe_id: i32,
-    pub place_id: Option<i32>,
+    pub recipe_id: RecipeId,
+    pub place_id: Option<PlaceId>,
     pub start_time: String,
     pub end_time: String,
-    pub energy: BigDecimal,
+    pub energy: Amount,
     pub servings: i32,
     pub comment: Option<String>,
 }
@@ -59,10 +61,10 @@ pub struct MealForm {
 pub async fn delete_meal(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((event_id, meal_id)): Path<(i32, i32)>,
+    Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    ctx.assert_can_edit_meal(meal_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    ctx.assert_meal_action(meal_id, EventPerm::EditEvent).await?;
     foodlib.meals().remove_meal(meal_id).await?;
     event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
 }
@@ -70,10 +72,10 @@ pub async fn delete_meal(
 pub async fn duplicate_meal(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((event_id, meal_id)): Path<(i32, i32)>,
+    Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    ctx.assert_can_edit_meal(meal_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    ctx.assert_meal_action(meal_id, EventPerm::EditEvent).await?;
     foodlib.meals().duplicate_meal(meal_id).await?;
     event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
 }
@@ -82,12 +84,12 @@ pub async fn update_meal(
     foodlib: FoodLib,
     ctx: AuthCtx,
     state: State<MyAppState>,
-    Path((event_id, meal_id)): Path<(i32, i32)>,
+    Path((event_id, meal_id)): Path<(EventId, MealId)>,
     Form(meal): Form<MealForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    if meal_id != -1 {
-        ctx.assert_can_edit_meal(meal_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    if meal_id.get() != -1 {
+        ctx.assert_meal_action(meal_id, EventPerm::EditEvent).await?;
     }
     let append_start = format!("{}:00-00:00", meal.start_time);
     let start_time = OffsetDateTime::parse(
@@ -103,12 +105,12 @@ pub async fn update_meal(
             .map_err(|_| StatusCode::BAD_REQUEST)?;
     let place_id =
         meal.place_id
-            .filter(|&id| id >= 0)
+            .filter(|&id| id.get() >= 0)
             .ok_or_else(|| foodlib_new::Error::Validation {
                 message: "Please select a place for the meal.".into(),
             })?;
 
-    let result = if meal_id != -1 {
+    let result = if meal_id.get() != -1 {
         state
             .meals()
             .update_meal(
@@ -139,14 +141,16 @@ pub async fn update_meal(
             .map(|_| ())
     };
     match result {
-        Ok(_) => event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await,
+        Ok(_) => {
+                    event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
+        }
         Err(e) => Err(e.into()),
     }
 }
 
 #[derive(Deserialize, Default)]
 pub struct MealPrefill {
-    recipe_id: Option<i32>,
+    recipe_id: Option<RecipeId>,
     start_time: Option<String>,
     servings: Option<i32>,
 }
@@ -154,14 +158,14 @@ pub struct MealPrefill {
 async fn meal_form(
     state: State<MyAppState>,
     ctx: AuthCtx,
-    Path((event_id, meal_id)): Path<(i32, i32)>,
+    Path((event_id, meal_id)): Path<(EventId, MealId)>,
     Query(prefill): Query<MealPrefill>,
 ) -> Result<Markup, Markup> {
-    ctx.assert_can_edit_event(event_id)
+    ctx.assert_event_action(event_id, EventPerm::EditEvent)
         .await
         .map_err(|e| html_error(&format!("{e}"), "/events"))?;
-    if meal_id != -1 {
-        ctx.assert_can_edit_meal(meal_id)
+    if meal_id.get() != -1 {
+        ctx.assert_meal_action(meal_id, EventPerm::EditEvent)
             .await
             .map_err(|e| html_error(&format!("{e}"), "/events"))?;
     }
@@ -170,7 +174,7 @@ async fn meal_form(
         place: "Select Place".to_string(),
         ..Default::default()
     };
-    if meal_id != -1 {
+    if meal_id.get() != -1 {
         meal = state
             .meals()
             .get_meal(meal_id)
@@ -262,7 +266,7 @@ async fn meal_form(
                 }
                 tr {
                     td { "Price" }
-                    @if meal_id != -1 {
+                    @if meal_id.get() != -1 {
                         td hx-get=(format!("/events/edit/event_edit_meal/{}/price", meal_id)) hx-trigger="load" hx-swap="innerHTML" { "…" }
                     } @else {
                         td { "—" }

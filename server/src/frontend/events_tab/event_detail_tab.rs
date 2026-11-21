@@ -6,9 +6,15 @@ use axum::{
 use bigdecimal::ToPrimitive;
 use foodlib_new::{
     auth_context::AuthCtx,
+    entities::types::amount::Amount,
+    entities::types::ids::{
+        EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, MealId, StoreId,
+    },
+    entities::types::money::Money,
     error::{Error, Result},
     event::{Event, SourceOverrideView},
     meal::Meal,
+    policy::EventPerm,
 };
 use maud::{html, Markup};
 use num::FromPrimitive;
@@ -68,10 +74,10 @@ struct ShiftTimesForm {
 async fn handle_shift_times(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
     Form(form): Form<ShiftTimesForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let target = shopping_tours::parse_datetime_local(&form.new_first_meal_start)?;
     foodlib.events().shift_event_times(event_id, target).await?;
     event_form(foodlib, ctx, Path(event_id)).await
@@ -80,15 +86,15 @@ async fn handle_shift_times(
 async fn render_meal_prices(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
 ) -> MResponse {
     use bigdecimal::ToPrimitive;
     use std::collections::HashMap;
 
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let meals = foodlib.meals().get_event_meals(event_id).await?;
     let prices = foodlib.meals().get_event_meal_prices(event_id).await?;
-    let price_by_meal: HashMap<i32, f64> = prices
+    let price_by_meal: HashMap<MealId, f64> = prices
         .into_iter()
         .map(|(id, p)| (id, p.to_f64().unwrap_or_default()))
         .collect();
@@ -151,9 +157,9 @@ async fn render_meal_prices(
 pub async fn delete_override_dialog(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((event_id, source_id)): Path<(i32, i32)>,
+    Path((event_id, source_id)): Path<(EventId, IngredientSourceId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let overrides = foodlib.events().get_source_overrides(event_id).await?;
     let source = overrides
         .iter()
@@ -177,9 +183,9 @@ pub async fn delete_override_dialog(
 pub async fn delete_override(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((event_id, source_id)): Path<(i32, i32)>,
+    Path((event_id, source_id)): Path<(EventId, IngredientSourceId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     foodlib
         .events()
         .delete_source_override(event_id, source_id)
@@ -190,9 +196,9 @@ pub async fn delete_override(
 pub async fn delete_meal_dialog(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((event_id, meal_id)): Path<(i32, i32)>,
+    Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let meal = foodlib.meals().get_meal(meal_id).await?;
 
     Ok(html! {
@@ -208,7 +214,7 @@ pub async fn delete_meal_dialog(
 
 pub async fn export_recipe_pdf(
     State(state): State<MyAppState>,
-    Path(meal_id): Path<i32>,
+    Path(meal_id): Path<MealId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
     let recipe_info = state.export().fetch_meal_recipe(meal_id).await?;
     let title = recipe_info.name.to_owned();
@@ -235,7 +241,7 @@ pub async fn export_recipe_pdf(
 
 pub async fn export_food_prep_pdf(
     State(state): State<MyAppState>,
-    Path(prep_id): Path<i32>,
+    Path(prep_id): Path<FoodPrepId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
     let recipe_info = state.export().fetch_food_prep_recipe(prep_id).await?;
     let title = format!("{}_prep", recipe_info.name);
@@ -263,15 +269,15 @@ pub async fn export_food_prep_pdf(
 pub async fn export_dish_labels_tent(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     dish_labels_response(&state, event_id).await
 }
 
 async fn dish_labels_response(
     state: &MyAppState,
-    event_id: i32,
+    event_id: EventId,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
     let info = state.export().fetch_event_allergens(event_id).await?;
     let filename = format!("{}_dish_labels_tent", sanitize_filename(&info.event_name));
@@ -303,9 +309,9 @@ async fn dish_labels_response(
 pub async fn export_event_allergens(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let info = state.export().fetch_event_allergens(event_id).await?;
     let filename = format!("{}_allergene", sanitize_filename(&info.event_name));
 
@@ -338,9 +344,9 @@ pub async fn export_event_allergens(
 pub async fn export_all_pdf(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let event = state.events().get(event_id).await?;
     let filename = format!("{}_alle_rezepte", sanitize_filename(&event.name));
 
@@ -385,8 +391,8 @@ fn sanitize_filename(s: &str) -> String {
         .collect()
 }
 
-pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let stores = foodlib.stores().list().await?;
     let overrides = foodlib.events().get_source_overrides(event_id).await?;
     let ingredients = foodlib.ingredients().list().await?;
@@ -417,10 +423,10 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
     // Create a dummy source for the "add new" row
     let dummy_source = SourceOverrideView {
         event_id,
-        ingredient_id: -1,
-        source_id: -1,
+        ingredient_id: IngredientId(-1),
+        source_id: IngredientSourceId(-1),
         ingredient_name: String::new(),
-        store_id: -1,
+        store_id: StoreId(-1),
         store_name: String::new(),
     };
 
@@ -508,7 +514,7 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32
     })
 }
 
-async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<i32>) -> MResponse {
+async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<MealId>) -> MResponse {
     let event_meal_ingredients = foodlib.meals().get_meal_ingredients(meal_id.0).await?;
     let meal = foodlib.meals().get_meal(meal_id.0).await?;
 
@@ -529,7 +535,6 @@ async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<i32>) -> MRespo
     })
 }
 
-use bigdecimal::BigDecimal;
 use std::collections::HashMap;
 #[cfg(feature = "typst")]
 use pdf_export::renderer::DishLabelLayout;
@@ -537,15 +542,15 @@ use pdf_export::renderer::DishLabelLayout;
 async fn render_ingredients_without_tours(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let mut uncovered_ingredients = foodlib
         .events()
         .get_ingredients_without_tour(event_id)
         .await?;
     // Remove water from ingredient list
-    uncovered_ingredients.retain(|i| i.ingredient_id != 4);
+    uncovered_ingredients.retain(|i| i.ingredient_id.get() != 4);
 
     if uncovered_ingredients.is_empty() {
         return Ok(html! {});
@@ -553,7 +558,7 @@ async fn render_ingredients_without_tours(
 
     // Group by store (when available)
     let mut by_store: HashMap<String, Vec<String>> = HashMap::new();
-    let mut total_weight = BigDecimal::from(0);
+    let mut total_weight = Amount::default();
 
     for ingredient in &uncovered_ingredients {
         let store_name = ingredient.store_name.clone();
@@ -563,10 +568,10 @@ async fn render_ingredients_without_tours(
             ingredient
                 .weight
                 .clone()
-                .unwrap_or(BigDecimal::from_f64(-1.).unwrap())
+                .unwrap_or(Amount::from_f64(-1.).unwrap())
         ));
 
-        total_weight += &ingredient.weight.clone().unwrap_or_default();
+        total_weight += ingredient.weight.clone().unwrap_or_default();
     }
 
     // Sort stores alphabetically for consistent display
@@ -605,7 +610,7 @@ async fn render_ingredients_without_tours(
 
 pub async fn render_shopping_tours(
     foodlib: &FoodLib,
-    event_id: i32,
+    event_id: EventId,
     stores: &[foodlib_new::store::Store],
     default_date: time::OffsetDateTime,
 ) -> MResponse {
@@ -653,7 +658,7 @@ pub async fn render_shopping_tours(
 /// directly — no detail-page round-trip. Editing an existing tour still goes
 /// through the detail page (it carries the shopping-list + inventory UI).
 fn tour_add_row(
-    event_id: i32,
+    event_id: EventId,
     stores: &[foodlib_new::store::Store],
     default_date: time::OffsetDateTime,
 ) -> Markup {
@@ -705,28 +710,31 @@ struct EventForm {
     name: String,
     comment: String,
     budget: Option<f64>,
-    group_id: i32,
+    group_id: GroupId,
 }
 
 async fn update_event(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    event_id: Path<i32>,
+    event_id: Path<EventId>,
     event_data: Form<EventForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id.0).await?;
+    ctx.assert_event_action(event_id.0, EventPerm::EditEvent).await?;
     let current = foodlib.events().get(event_id.0).await?;
     if current.group_id != event_data.group_id {
         move_group::assert_can_move_to(&ctx, event_data.group_id)?;
     }
-    let budget = event_data.budget.and_then(bigdecimal::BigDecimal::from_f64);
+    let budget = event_data
+        .budget
+        .and_then(bigdecimal::BigDecimal::from_f64)
+        .map(Money::from);
 
     let event = Event {
         id: event_id.0,
         name: event_data.name.clone(),
         comment: (!event_data.comment.is_empty()).then(|| event_data.comment.clone()),
         budget,
-        group_id: 0, // Placeholder; ops-level update ignores group_id
+        group_id: GroupId(0), // Placeholder; ops-level update ignores group_id
     };
 
     foodlib.events().update(event).await?;
@@ -744,16 +752,16 @@ async fn update_event(
 #[derive(Deserialize, Debug)]
 struct SourceData {
     ingredient: String,
-    store_id: i32,
+    store_id: StoreId,
 }
 
 async fn update_override(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((event_id, ingredient_id)): Path<(i32, i32)>,
+    Path((event_id, ingredient_id)): Path<(EventId, IngredientId)>,
     Form(source): Form<SourceData>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let ingredient = foodlib
         .ingredients()
         .get_by_name(&source.ingredient)
@@ -765,13 +773,13 @@ async fn update_override(
         .ok_or(Error::Misc("This Source is not defined for this ingredient! \n Add this source to the ingredient in the ingredients tab.".to_string()))?;
     foodlib
         .events()
-        .set_source_override(event_id, source.id)
+        .set_source_default_override(event_id, source.id)
         .await?;
 
     // Adding a brand-new override (id -1 from the Add row) must re-render the
     // form so the new row appears. Editing an existing override only changes
     // prices, so refresh just the price cells via the OOB swaps.
-    if ingredient_id == -1 {
+    if ingredient_id.get() == -1 {
         event_form(foodlib, ctx, Path(event_id)).await
     } else {
         render_meal_prices(foodlib, ctx, Path(event_id)).await
@@ -798,7 +806,7 @@ fn format_event_source_override(
         },
     };
 
-    let is_new = source_override.ingredient_id == -1;
+    let is_new = source_override.ingredient_id.get() == -1;
     let post_url = format!(
         "/events/edit/{}/overrides/{}",
         source_override.event_id, source_override.ingredient_id
@@ -851,7 +859,7 @@ fn format_event_source_override(
 /// prepopulated via querystring, so the user can fill the remaining required
 /// fields (place, end_time, energy, comment) before saving.
 fn meal_add_row(
-    event_id: i32,
+    event_id: EventId,
     recipes: &[foodlib_new::recipe::Recipe],
     default_start: time::OffsetDateTime,
 ) -> Markup {
@@ -888,7 +896,7 @@ fn meal_add_row(
 /// Render meals grouped by `start_time`. `meals` is start_time-ordered, so
 /// each contiguous run sharing a start time is one group, preceded by a header
 /// row with the group's date/time and subtotal that also draws the divider.
-fn format_event_meal_groups(event_id: i32, meals: &[Meal]) -> Markup {
+fn format_event_meal_groups(event_id: EventId, meals: &[Meal]) -> Markup {
     html! {
         @for group in meals.chunk_by(|a, b| a.start_time == b.start_time) {
             (meal_group_header_row(group[0].start_time, group))
@@ -971,7 +979,7 @@ fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Ma
     }
 }
 
-fn format_event_meal(event_id: i32, event_meal: &Meal) -> Markup {
+fn format_event_meal(event_id: EventId, event_meal: &Meal) -> Markup {
     let format = |label: &'static str, x, unit| html! { td data-label=(label) { (&format!("{:.3}{}", x, unit)) } };
     let comment = event_meal
         .comment

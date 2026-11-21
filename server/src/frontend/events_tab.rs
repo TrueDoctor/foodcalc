@@ -2,6 +2,9 @@ use crate::FoodLib;
 use axum::extract::{Form, Path};
 use bigdecimal::FromPrimitive;
 use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::entities::types::ids::{EventId, GroupId};
+use foodlib_new::entities::types::money::Money;
+use foodlib_new::policy::EventPerm;
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
@@ -41,10 +44,10 @@ pub struct AddEventForm {
 pub async fn add(foodlib: FoodLib, user: User, Form(form): Form<AddEventForm>) -> MResponse {
     let group = foodlib.users().get_personal_group(user.id).await?;
     let event = foodlib_new::event::Event {
-        id: -1,
+        id: EventId(-1),
         name: form.name,
         comment: form.comment.filter(|s| !s.is_empty()),
-        budget: form.budget.and_then(bigdecimal::BigDecimal::from_f64),
+        budget: form.budget.and_then(bigdecimal::BigDecimal::from_f64).map(Money::from),
         group_id: group.id,
     };
     foodlib.events().create(event).await?;
@@ -78,15 +81,15 @@ fn event_add_row(is_admin: bool) -> Markup {
     }
 }
 
-pub async fn duplicate(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+pub async fn duplicate(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let group = foodlib.users().get_personal_group(ctx.user.id).await?;
     let id = foodlib.events().duplicate(event_id, group.id).await?;
     event_detail_tab::event_form(foodlib, ctx, Path(id)).await
 }
 
-pub async fn delete_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+pub async fn delete_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let event = foodlib.events().get(event_id).await?;
     Ok(html! {
         div class="flex flex-col gap-2" {
@@ -104,15 +107,16 @@ pub async fn delete_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<
     })
 }
 
-pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
+    // Kept as EditEvent to preserve the old assert_can_edit_event behavior.
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     foodlib.events().delete(event_id).await?;
     Ok(event_list(foodlib, ctx.user).await)
 }
 
 pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
     let events = foodlib.events().list().await.unwrap_or_default();
-    let user_group_ids: Vec<i32> = foodlib
+    let user_group_ids: Vec<GroupId> = foodlib
         .users()
         .get_user_groups(user.id)
         .await
@@ -171,7 +175,7 @@ pub async fn search(foodlib: FoodLib, user: User, query: Form<SearchParameters>)
     let query_str = query.search.to_lowercase();
     let mine_only = query.mine_only.is_some();
     let events = foodlib.events().list().await.unwrap_or_default();
-    let user_group_ids: Vec<i32> = foodlib
+    let user_group_ids: Vec<GroupId> = foodlib
         .users()
         .get_user_groups(user.id)
         .await

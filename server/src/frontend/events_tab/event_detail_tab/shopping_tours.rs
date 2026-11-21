@@ -3,14 +3,20 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use bigdecimal::BigDecimal;
-use foodlib_new::{auth_context::AuthCtx, error::Result, inventory::InventoryItemWithName};
+use bigdecimal::ToPrimitive;
+use foodlib_new::{
+    auth_context::AuthCtx,
+    entities::types::amount::Amount,
+    entities::types::ids::{EventId, IngredientId, InventoryId, StoreId, TourId},
+    error::Result,
+    inventory::InventoryItemWithName,
+    policy::EventPerm,
+};
 use foodlib_new::{
     event::{ShoppingListItem, ShoppingTour},
     inventory::InventoryItem,
 };
 use maud::{html, Markup};
-use num::{ToPrimitive, Zero};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
@@ -38,44 +44,44 @@ pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
 
 #[derive(Deserialize)]
 struct TourForm {
-    event_id: i32,
-    tour_id: Option<i32>,
-    store_id: i32,
+    event_id: EventId,
+    tour_id: Option<TourId>,
+    store_id: StoreId,
     date: String,
 }
 
 #[derive(Deserialize)]
 struct ToggleForm {
     checked: bool,
-    tour_id: i32,
+    tour_id: TourId,
 }
 
 async fn add_shopping_tour(
     state: State<MyAppState>,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    shopping_tour_form(state, ctx, Path((event_id, -1))).await
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    shopping_tour_form(state, ctx, Path((event_id, TourId(-1)))).await
 }
 #[derive(Deserialize)]
 struct InlineTourForm {
-    store_id: i32,
+    store_id: StoreId,
     date: String,
 }
 
 async fn create_inline(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
     Form(form): Form<InlineTourForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     let tour_date = parse_datetime_local(&form.date)?;
     foodlib
         .events()
         .add_shopping_tour(ShoppingTour {
-            id: -1,
+            id: TourId(-1),
             event_id,
             tour_date,
             store_id: form.store_id,
@@ -106,9 +112,9 @@ pub(crate) fn parse_datetime_local(s: &str) -> Result<OffsetDateTime> {
 async fn delete_shopping_tour(
     state: State<MyAppState>,
     ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
+    Path(tour_id): Path<TourId>,
 ) -> MResponse {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
     state.events().delete_shopping_tour(tour_id).await?;
     Ok(html! {})
 }
@@ -116,30 +122,30 @@ async fn delete_shopping_tour(
 async fn shopping_tour_form(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path((event_id, tour_id)): Path<(i32, i32)>,
+    Path((event_id, tour_id)): Path<(EventId, TourId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    if tour_id > 0 {
-        ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    if tour_id.get() > 0 {
+        ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
     }
     let stores = state.stores().list().await?;
     let inventories = state.inventories().list().await?;
 
     let mut default_tour = ShoppingTour {
         event_id,
-        id: -1,
+        id: TourId(-1),
         tour_date: OffsetDateTime::now_utc(),
-        store_id: 0,
+        store_id: StoreId(0),
         store_name: None,
     };
 
-    if tour_id != -1 {
+    if tour_id.get() != -1 {
         default_tour = state.events().get_shopping_tour(tour_id).await?;
     }
 
     // If tour_id is provided, get existing tour data. `default_tour` was already
     // loaded by `get_shopping_tour(tour_id)` above, so reuse it directly.
-    let (tour, event_inventories, shopping_list) = if tour_id > 0 {
+    let (tour, event_inventories, shopping_list) = if tour_id.get() > 0 {
         (
             default_tour,
             state.events().get_inventories(event_id).await?,
@@ -148,7 +154,7 @@ async fn shopping_tour_form(
     } else {
         (default_tour, vec![], vec![])
     };
-    let tour_id = if tour_id < 0 { None } else { Some(tour_id) };
+    let tour_id = if tour_id.get() < 0 { None } else { Some(tour_id) };
 
     let inventory_items = inventory_items(tour_id, &event_inventories, &state).await;
 
@@ -167,7 +173,7 @@ async fn shopping_tour_form(
                 // Form section - takes full width on mobile, half on desktop
                 form class="w-full lg:w-1/2 space-y-4" hx-post="/events/edit/shopping_tours/save" hx-target="#content" {
                     input type="hidden" name="event_id" value=(event_id);
-                    input type="hidden" name="tour_id" value=(tour_id.unwrap_or(-1));
+                    input type="hidden" name="tour_id" value=(tour_id.unwrap_or(TourId(-1)));
 
                     div class="flex flex-col space-y-2" {
                         label for="store_id" { "Store" }
@@ -291,7 +297,7 @@ async fn shopping_tour_form(
 }
 
 async fn inventory_items(
-    tour_id: Option<i32>,
+    tour_id: Option<TourId>,
     event_inventories: &Vec<foodlib_new::event::EventInventory>,
     lib: &foodlib_new::FoodLib,
 ) -> Vec<InventoryItemWithName> {
@@ -311,10 +317,10 @@ async fn inventory_items(
 }
 
 async fn save_tour(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<TourForm>) -> MResponse {
-    ctx.assert_can_edit_event(form.event_id).await?;
+    ctx.assert_event_action(form.event_id, EventPerm::EditEvent).await?;
     if let Some(tour_id) = form.tour_id {
-        if tour_id > 0 {
-            ctx.assert_can_edit_shopping_tour(tour_id).await?;
+        if tour_id.get() > 0 {
+            ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
         }
     }
     // Parse the date
@@ -327,7 +333,7 @@ async fn save_tour(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<TourForm>) -
 
     // Create or update tour
     let result = match form.tour_id {
-        Some(tour_id) if tour_id > 0 => {
+        Some(tour_id) if tour_id.get() > 0 => {
             foodlib
                 .events()
                 .update_shopping_tour(foodlib_new::event::ShoppingTour {
@@ -343,7 +349,7 @@ async fn save_tour(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<TourForm>) -
             foodlib
                 .events()
                 .add_shopping_tour(foodlib_new::event::ShoppingTour {
-                    id: -1,
+                    id: TourId(-1),
                     event_id: form.event_id,
                     tour_date,
                     store_id: form.store_id,
@@ -377,7 +383,7 @@ fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -
 
     if covered {
         "bg-green-100 dark:bg-green-900"
-    } else if inv_amount > BigDecimal::from(0) {
+    } else if inv_amount > Amount::default() {
         "bg-red-100 dark:bg-red-900"
     } else {
         ""
@@ -386,19 +392,19 @@ fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -
 fn get_inventory_amount(
     item: &ShoppingListItem,
     inventory: &[InventoryItemWithName],
-) -> BigDecimal {
+) -> Amount {
     get_inventory_amount_by_id(item.ingredient_id, inventory)
 }
 
 fn get_inventory_amount_by_id(
-    ingredient_id: i32,
+    ingredient_id: IngredientId,
     inventory: &[InventoryItemWithName],
-) -> BigDecimal {
+) -> Amount {
     inventory
         .iter()
         .filter(|i| i.ingredient_id == ingredient_id)
         .map(|i| i.amount.clone())
-        .sum::<BigDecimal>()
+        .sum::<Amount>()
 }
 
 fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> String {
@@ -406,7 +412,7 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithN
 
     match item.weight.as_ref() {
         Some(weight) if inv_amount >= *weight => "Available".to_string(),
-        Some(_) if inv_amount > BigDecimal::from(0) => {
+        Some(_) if inv_amount > Amount::default() => {
             format!("Insufficient ({:.2} kg available)", inv_amount)
         }
         Some(_) => "Not in inventory".to_string(),
@@ -417,9 +423,9 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithN
 async fn export_plain(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
+    Path(tour_id): Path<TourId>,
 ) -> IResponse {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
     // Single query: tour shopping list + per-recipe usage breakdown.
     let shopping_list = state
         .events()
@@ -448,14 +454,20 @@ async fn export_plain(
         let (status, to_buy, weight_text, new_price) = match &item.weight {
             Some(weight) => {
                 let status = if inv_amount > *weight { "x" } else { " " };
-                let to_buy = (weight.clone() - &inv_amount).max(BigDecimal::zero());
+                // Clamp at zero: Amount has no `Ord`, so `max` isn't available.
+                let diff = weight.clone() - inv_amount.clone();
+                let to_buy = if diff < Amount::default() {
+                    Amount::default()
+                } else {
+                    diff
+                };
                 let new_price = item
                     .price
                     .as_ref()
-                    .map(|p| (p / weight) * &to_buy);
+                    .map(|p| p.clone() / weight * &to_buy);
                 (status, to_buy, format!("{:.2} kg", weight), new_price)
             }
-            None => ("?", BigDecimal::zero(), "? kg".to_string(), None),
+            None => ("?", Amount::default(), "? kg".to_string(), None),
         };
 
         output.push_str(&format!(
@@ -495,7 +507,7 @@ async fn export_plain(
 /// Format a per-recipe usage breakdown as "3.00kg Recipe 2.00kg Other".
 /// `usages` is the `[(recipe, kg)]` list from `tour_shopping_list_with_usage`.
 /// Returns an empty string when there are no usages.
-fn format_recipe_usage(usages: &[(String, Option<BigDecimal>)]) -> String {
+fn format_recipe_usage(usages: &[(String, Option<Amount>)]) -> String {
     usages
         .iter()
         .map(|(recipe, kg)| match kg {
@@ -509,9 +521,9 @@ fn format_recipe_usage(usages: &[(String, Option<BigDecimal>)]) -> String {
 async fn export_metro(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
+    Path(tour_id): Path<TourId>,
 ) -> IResponse {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
     // Single query: tour shopping list + per-recipe usage breakdown.
     let shopping_list = state
         .events()
@@ -544,7 +556,7 @@ async fn export_metro(
         if inv_amount > item_weight {
             continue;
         }
-        let weight = &item_weight - inv_amount;
+        let weight = item_weight.clone() - inv_amount;
 
         // Find source with matching ingredient_id
         let Some(source) = sources
@@ -610,7 +622,7 @@ async fn export_metro(
 }
 
 /// Calculates how much to subtract from a specific inventory for a given ingredient
-fn calculate_subtraction(available: &BigDecimal, remaining: &BigDecimal) -> BigDecimal {
+fn calculate_subtraction(available: &Amount, remaining: &Amount) -> Amount {
     if available >= remaining {
         remaining.clone()
     } else {
@@ -621,10 +633,10 @@ fn calculate_subtraction(available: &BigDecimal, remaining: &BigDecimal) -> BigD
 async fn toggle_inventory(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path((event_id, inventory_id)): Path<(i32, i32)>,
+    Path((event_id, inventory_id)): Path<(EventId, InventoryId)>,
     Form(form): Form<ToggleForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     if form.checked {
         state.events().add_inventory(event_id, inventory_id).await?;
     } else {
@@ -637,8 +649,8 @@ async fn toggle_inventory(
     shopping_tour_form(State(state), ctx, Path((event_id, form.tour_id))).await
 }
 
-async fn update_inventory(foodlib: FoodLib, ctx: AuthCtx, Path(tour_id): Path<i32>) -> MResponse {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
+async fn update_inventory(foodlib: FoodLib, ctx: AuthCtx, Path(tour_id): Path<TourId>) -> MResponse {
+    ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
     let changes = calculate_inventory_changes(&foodlib.0, tour_id).await?;
     let tour = foodlib.events().get_shopping_tour(tour_id).await?;
 
@@ -660,8 +672,8 @@ async fn update_inventory(foodlib: FoodLib, ctx: AuthCtx, Path(tour_id): Path<i3
 /// Calculate inventory changes showing what will be deducted from each inventory
 async fn calculate_inventory_changes(
     lib: &foodlib_new::FoodLib,
-    tour_id: i32,
-) -> Result<Vec<(String, i32, String, i32, BigDecimal, BigDecimal, BigDecimal)>> {
+    tour_id: TourId,
+) -> Result<Vec<(String, InventoryId, String, IngredientId, Amount, Amount, Amount)>> {
     let tour = lib.events().get_shopping_tour(tour_id).await?;
     let inventory_ops = lib.inventories();
 
@@ -686,7 +698,7 @@ async fn calculate_inventory_changes(
         // Try to satisfy from each inventory in order
         for inv in &inventories {
             let inv = inv.as_ref().unwrap().clone();
-            if remaining <= BigDecimal::from(0) {
+            if remaining <= Amount::default() {
                 break;
             }
 
@@ -696,7 +708,7 @@ async fn calculate_inventory_changes(
                 {
                     let to_subtract = calculate_subtraction(&current_item.amount, &remaining);
 
-                    if to_subtract > BigDecimal::from(0) {
+                    if to_subtract > Amount::default() {
                         let new_amount = current_item.amount.clone() - to_subtract.clone();
                         changes.push((
                             inv.name.clone(),
@@ -720,9 +732,9 @@ async fn calculate_inventory_changes(
 async fn confirm_update(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
+    Path(tour_id): Path<TourId>,
 ) -> Result<Markup> {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
     let lib = &state.db;
 
     // Calculate expected changes

@@ -6,6 +6,7 @@ use axum_login::login_required;
 use foodlib_new::{
     auth::AuthBackend,
     auth_context::AuthCtx,
+    entities::types::ids::{GroupId, UserId},
     error::{Error, Result},
     user::{Group, User},
 };
@@ -41,7 +42,7 @@ pub(crate) fn admin_router() -> axum::Router<MyAppState> {
 async fn assert_can_manage_group(
     foodlib: &foodlib_new::FoodLib,
     ctx: &AuthCtx,
-    group_id: i32,
+    group_id: GroupId,
 ) -> Result<Group> {
     let group = foodlib.users().get_group(group_id).await?;
     if group.is_personal {
@@ -61,7 +62,7 @@ async fn groups_view(foodlib: FoodLib, ctx: AuthCtx) -> MResponse {
     let groups = foodlib.users().get_all_groups().await?;
     let visible: Vec<Group> = groups
         .into_iter()
-        .filter(|g| !g.is_personal && (ctx.user.is_admin || ctx.group_ids.contains(&g.id)))
+        .filter(|g| !g.is_personal && (ctx.user.is_admin || super::user_group_ids(&ctx).contains(&g.id)))
         .collect();
 
     Ok(html! {
@@ -146,7 +147,7 @@ async fn create_group(
         .users()
         .add_user_to_group_with_roles(ctx.user.id, group.id, &["manager".into()])
         .await?;
-    let mut group_ids = ctx.group_ids.clone();
+    let mut group_ids = super::user_group_ids(&ctx);
     group_ids.push(group.id);
     let groups = foodlib.users().get_all_groups().await?;
     let visible: Vec<Group> = groups
@@ -160,7 +161,7 @@ async fn create_group(
     })
 }
 
-async fn delete_group(foodlib: FoodLib, ctx: AuthCtx, Path(group_id): Path<i32>) -> MResponse {
+async fn delete_group(foodlib: FoodLib, ctx: AuthCtx, Path(group_id): Path<GroupId>) -> MResponse {
     assert_can_manage_group(&foodlib, &ctx, group_id).await?;
     foodlib.users().delete_group(group_id).await?;
     Ok(html! {})
@@ -169,7 +170,7 @@ async fn delete_group(foodlib: FoodLib, ctx: AuthCtx, Path(group_id): Path<i32>)
 async fn group_members_view(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(group_id): Path<i32>,
+    Path(group_id): Path<GroupId>,
 ) -> MResponse {
     let group = assert_can_manage_group(&foodlib, &ctx, group_id).await?;
     render_group_detail(&foodlib, group).await
@@ -178,7 +179,7 @@ async fn group_members_view(
 async fn render_group_detail(foodlib: &foodlib_new::FoodLib, group: Group) -> MResponse {
     let members = members_of_group(foodlib, group.id).await?;
     let all_users = foodlib.users().get_all_users().await?;
-    let member_ids: std::collections::HashSet<i64> = members.iter().map(|u| u.id).collect();
+    let member_ids: std::collections::HashSet<UserId> = members.iter().map(|u| u.id).collect();
     let candidates: Vec<&User> = all_users
         .iter()
         .filter(|u| !member_ids.contains(&u.id))
@@ -221,7 +222,7 @@ async fn render_group_detail(foodlib: &foodlib_new::FoodLib, group: Group) -> MR
     })
 }
 
-async fn members_of_group(foodlib: &foodlib_new::FoodLib, group_id: i32) -> Result<Vec<User>> {
+async fn members_of_group(foodlib: &foodlib_new::FoodLib, group_id: GroupId) -> Result<Vec<User>> {
     let pool = foodlib.pool_arc();
     let rows = sqlx::query_as!(
         User,
@@ -232,7 +233,7 @@ async fn members_of_group(foodlib: &foodlib_new::FoodLib, group_id: i32) -> Resu
         WHERE ug.group_id = $1
         ORDER BY u.username
         "#,
-        group_id
+        group_id.get()
     )
     .fetch_all(&*pool)
     .await?;
@@ -241,13 +242,13 @@ async fn members_of_group(foodlib: &foodlib_new::FoodLib, group_id: i32) -> Resu
 
 #[derive(Deserialize)]
 struct AddMemberForm {
-    user_id: i64,
+    user_id: UserId,
 }
 
 async fn add_member(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(group_id): Path<i32>,
+    Path(group_id): Path<GroupId>,
     Form(form): Form<AddMemberForm>,
 ) -> MResponse {
     let group = assert_can_manage_group(&foodlib, &ctx, group_id).await?;
@@ -261,7 +262,7 @@ async fn add_member(
 async fn remove_member(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((group_id, user_id)): Path<(i32, i64)>,
+    Path((group_id, user_id)): Path<(GroupId, UserId)>,
 ) -> MResponse {
     assert_can_manage_group(&foodlib, &ctx, group_id).await?;
     foodlib

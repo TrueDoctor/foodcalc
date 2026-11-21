@@ -28,6 +28,8 @@ use axum::{
     routing::{get, post},
 };
 use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::entities::types::ids::{EventId, FoodPrepId, MealId, RecipeId, TourId};
+use foodlib_new::policy::EventPerm;
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, Date, Duration, OffsetDateTime, PrimitiveDateTime, Time};
@@ -159,12 +161,12 @@ impl ItemKind {
 ///
 /// Food-prep rows only carry a `recipe_id`, so recipe names are resolved once
 /// via a single `recipes().list()` into a lookup map (avoids N queries).
-async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<Vec<TimelineItem>> {
+async fn collect_items(foodlib: &FoodLib, event_id: EventId) -> foodlib_new::Result<Vec<TimelineItem>> {
     let meals = foodlib.meals().get_event_meals(event_id).await?;
     let tours = foodlib.events().get_shopping_tours(event_id).await?;
     let preps = foodlib.events().get_food_prep_tasks(event_id).await?;
 
-    let recipe_names: HashMap<i32, String> = foodlib
+    let recipe_names: HashMap<RecipeId, String> = foodlib
         .recipes()
         .list()
         .await?
@@ -177,7 +179,10 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
     for m in meals {
         items.push(TimelineItem {
             kind: ItemKind::Meal,
-            id: Some(m.meal_id),
+            // TimelineItem.id is deliberately a raw i32: it is polymorphic
+            // across meals, tours and preps and only round-trips through the
+            // client JS; each update endpoint re-wraps it into the typed id.
+            id: Some(m.meal_id.get()),
             label: m.name,
             detail: Some(format!("{} · {} Port.", m.place, m.servings)),
             start: m.start_time,
@@ -192,7 +197,7 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
         let start = t.tour_date;
         items.push(TimelineItem {
             kind: ItemKind::ShoppingTour,
-            id: Some(t.id),
+            id: Some(t.id.get()),
             label: t.store_name.unwrap_or_else(|| "Einkauf".to_string()),
             detail: None,
             start,
@@ -212,7 +217,7 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
             .unwrap_or_else(|| format!("Rezept #{}", p.recipe_id));
         items.push(TimelineItem {
             kind: ItemKind::FoodPrep,
-            id: Some(p.id),
+            id: Some(p.id.get()),
             label,
             detail: None,
             start: p.prep_date,
@@ -569,7 +574,7 @@ fn render_gridlines(bounds: WindowBounds) -> Markup {
 /// `event_id` and `day` (the bar's logical date) are emitted as `data-*` so the
 /// drag/resize JS can reconstruct the wall-clock timestamp and POST an update.
 /// Meal/tour/prep bars are made draggable; helper bars stay static.
-fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: i32, day: Date) -> Markup {
+fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: EventId, day: Date) -> Markup {
     let left = pct(hour_pos(item.start), bounds);
     let right = pct(end_hour_pos(item), bounds);
     let width = (right - left).max(1.5);
@@ -661,7 +666,7 @@ fn resize_handle(edge: &str) -> Markup {
 
 /// Render one lane (grid row): a relative track holding the gridlines plus the
 /// absolutely-positioned bars assigned to this lane.
-fn render_lane(lane: &[TimelineItem], bounds: WindowBounds, event_id: i32, day: Date) -> Markup {
+fn render_lane(lane: &[TimelineItem], bounds: WindowBounds, event_id: EventId, day: Date) -> Markup {
     html! {
         div class="relative h-7 w-full" {
             (render_gridlines(bounds))
@@ -673,8 +678,8 @@ fn render_lane(lane: &[TimelineItem], bounds: WindowBounds, event_id: i32, day: 
 }
 
 /// Render the whole timeline for one event.
-pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
 
     let event = foodlib.events().get(event_id).await?;
     let items = collect_items(&foodlib, event_id).await?;
@@ -843,10 +848,10 @@ fn to_stored(day: Date, minutes_since_day_start: i64) -> Option<OffsetDateTime> 
 async fn handle_move(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
     Form(form): Form<MoveForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
 
     log::info!(
         "timeline move: kind={} id={} day={} start_min={} end_min={:?}",
@@ -864,7 +869,7 @@ async fn handle_move(
 
     match form.kind.as_str() {
         "meal" => {
-            let m = foodlib.meals().get_meal(form.id).await?;
+            let m = foodlib.meals().get_meal(MealId(form.id)).await?;
             // Preserve the meal's duration on a plain move; honor end_min on a
             // resize. Guard against a non-positive span by falling back to the
             // original duration.
@@ -889,12 +894,12 @@ async fn handle_move(
                 .await?;
         }
         "tour" => {
-            let mut tour = foodlib.events().get_shopping_tour(form.id).await?;
+            let mut tour = foodlib.events().get_shopping_tour(TourId(form.id)).await?;
             tour.tour_date = new_start;
             foodlib.events().update_shopping_tour(tour).await?;
         }
         "prep" => {
-            let mut prep = foodlib.events().get_food_prep(form.id).await?;
+            let mut prep = foodlib.events().get_food_prep(FoodPrepId(form.id)).await?;
             // Keep the use window's length relative to the (possibly changed)
             // prep time so a moved prep still "uses until" the same offset.
             let delta = new_start - prep.prep_date;

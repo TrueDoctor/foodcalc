@@ -4,6 +4,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
+use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::entities::types::ids::GroupId;
 use maud::Markup;
 
 use crate::MyAppState;
@@ -88,3 +90,13 @@ pub type MResponse = foodlib_new::Result<Markup>;
 pub type IResponse = foodlib_new::Result<Response>;
 
 pub use foodlib_new::error::redirect_html_error as html_error;
+
+/// Group ids the user holds any membership in.
+///
+/// Presentation-only helper for filtering which groups the UI *offers*;
+/// authoritative access checks stay in `AuthCtx` (`can_access_group` /
+/// `assert_group_perm`). Replaces the pre-typed-ids `AuthCtx::group_ids`
+/// field: membership now lives in the resolved `UserPolicy`.
+pub(crate) fn user_group_ids(ctx: &AuthCtx) -> Vec<GroupId> {
+    ctx.policy.group_permissions.keys().copied().collect()
+}

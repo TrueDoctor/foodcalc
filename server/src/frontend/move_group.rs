@@ -1,5 +1,6 @@
 use foodlib_new::{
     auth_context::AuthCtx,
+    entities::types::ids::GroupId,
     error::{Error, Result},
     user::Group,
 };
@@ -11,7 +12,7 @@ use maud::{html, Markup};
 async fn candidate_groups(
     foodlib: &foodlib_new::FoodLib,
     ctx: &AuthCtx,
-    current_group_id: i32,
+    current_group_id: GroupId,
 ) -> Result<Vec<Group>> {
     let groups = if ctx.user.is_admin {
         foodlib.users().get_all_groups().await?
@@ -31,7 +32,7 @@ async fn candidate_groups(
 pub async fn owner_select(
     foodlib: &foodlib_new::FoodLib,
     ctx: &AuthCtx,
-    current_group_id: i32,
+    current_group_id: GroupId,
 ) -> Result<Markup> {
     let candidates = candidate_groups(foodlib, ctx, current_group_id).await?;
     let current = foodlib.users().get_group(current_group_id).await.ok();
@@ -69,8 +70,8 @@ pub async fn owner_select(
 /// group (caller should have asserted this) and must be allowed to move into
 /// the target group. Admins may move anywhere; non-admins may only move into
 /// groups they belong to.
-pub fn assert_can_move_to(ctx: &AuthCtx, target_group_id: i32) -> Result<()> {
-    if ctx.user.is_admin || ctx.group_ids.contains(&target_group_id) {
+pub fn assert_can_move_to(ctx: &AuthCtx, target_group_id: GroupId) -> Result<()> {
+    if ctx.user.is_admin || ctx.can_access_group(target_group_id) {
         Ok(())
     } else {
         Err(Error::Forbidden(
