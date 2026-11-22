@@ -82,7 +82,7 @@ impl MealOps {
                 em.servings,
                 em.energy_per_serving as "energy_per_serving!",
                 COALESCE(round(rs.weight * em.energy_per_serving * em.servings / NULLIF(rs.energy, 0), 2), 0) as "weight!",
-                CASE WHEN rs.weight > 0 THEN (rs.energy / NULLIF(rs.weight * 1000, 0))::float8 END::numeric as "energy_kj_per_g: Amount",
+                CASE WHEN rs.weight > 0 THEN (rs.energy / NULLIF(rs.weight * 1000, 0))::float8 END as "energy_kj_per_g: f64",
                 (SELECT COALESCE(SUM(ei.price), 0)
                     FROM event_ingredients_before_prep_time_resolve ei
                     WHERE ei.meal_id = em.meal_id) as "price!: Amount"

@@ -49,8 +49,9 @@ pub struct PlannerMeal {
     /// Total cooked weight (kg) implied by `energy_per_serving × servings`.
     pub weight: Amount,
     /// Recipe energy density in kJ/g; `None` if the recipe has no resolvable
-    /// ingredients (nothing to scale against).
-    pub energy_kj_per_g: Option<Amount>,
+    /// ingredients (nothing to scale against). A plain number (not the
+    /// string-serialized `Amount`) so REST clients can parse it directly.
+    pub energy_kj_per_g: Option<f64>,
     /// Total ingredient cost under the event's source overrides.
     pub price: Amount,
 }
