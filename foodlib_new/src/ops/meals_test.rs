@@ -58,7 +58,7 @@ async fn test_update_meal(pool: PgPool) {
 
     ops.update_meal(
         MealId(1),
-        RecipeId(1),
+        RecipeId(2),
         PlaceId(1),
         start_time,
         end_time,
