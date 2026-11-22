@@ -4,7 +4,7 @@ Foodcalc is a self-hosted catering planning and management system for large-scal
 
 ## Core Concept: Energy-Based Scaling
 
-Recipes do not scale linearly from 4 servings to 300. Foodcalc scales production quantities based on nutritional energy:
+An explicit energy target replaces ambiguous portion sizes as the scaling unit. Foodcalc scales production quantities linearly from nutritional energy:
 
 - Every ingredient carries an **energy density (kJ/g)**, from which the recipe's overall energy density is calculated.
 - Each meal defines a **target energy per person** and headcount — Foodcalc calculates the required **cooking weight (kg)** so attendees' energy needs are met.
@@ -17,7 +17,7 @@ Recipes do not scale linearly from 4 servings to 300. Foodcalc scales production
 - **Ingredients** — Energy density, multi-tag properties (spices, vegan, allergens — powering filters and allergen matrices), unit weights for conversions, suppliers, and pricing (including automated Metro price synchronization).
 - **Inventories** — Group-level stock tracking with reconciliation, event-scoped inventories, and auditable stock bookings.
 - **Shopping Planning** — Supplier-grouped shopping lists (tours), automatic stock deduction with manual per-item split overrides, tour locking, and printable/exportable shopping lists.
-- **Exports** — Scaled cooking sheets (per dish or full event), allergen lists, shopping lists, and event overviews rendered via Typst.
+- **Exports** — Scaled cooking sheets (per dish or full event), allergen lists and dish labels rendered as Typst PDFs; shopping lists as plain text (optionally Metro CSV). Event-overview PDFs are not yet implemented.
 - **Access Control & Auditing** — Group-scoped RBAC (`viewer` / `editor` / `manager`), transferable ownership (user ↔ group), per-event role overrides, and an append-only security audit log.
 
 ## Interfaces & Integrations
@@ -36,14 +36,14 @@ It is available at `/`.
 - **OAuth2 / OIDC Login** *(planned on a dedicated branch)* — Optional single sign-on alongside local password authentication.
 - **Single Page Application (SPA)** *(planned on a dedicated branch)* — React + TypeScript + Vite frontend with full REST API coverage, including event planning, recipe management, and inventory tracking.
 - **External Food Database Integration (USDA FDC)** *(planned on a dedicated branch)* — Automated ingredient nutrition and allergen lookup.
-- **SPA Feature Parity & Enhancements** — Piece-based targets for non-energy-scalable items, cost calculation tab (cost per meal/portion/tour vs. budget), standalone allergen PDFs, global document management, and reorder/availability tracking (see [`REQUIREMENTS.md`](./REQUIREMENTS.md)).
+- **SPA Feature Parity & Enhancements** — Piece-based targets for non-energy-scalable items, cost calculation tab (cost per meal/portion/tour vs. budget), standalone allergen PDFs, global document management, and reorder/availability tracking.
 
 ## Architecture
 
 ```text
 foodcalc/
-├── server/                 # Axum web server: JSON REST API (/api/*), MCP server (/mcp),
-│                           # and legacy server-rendered UI (maud)
+├── server/                 # Axum web server: JSON REST API (/api/*) and
+│                           # legacy server-rendered UI (maud)
 ├── pdf_export/             # Typst templating and PDF rendering engine
 ├── foodlib_new/            # Core domain library: ops, entities, RBAC policy, SQLx migrations
 ├── metro-scrape/           # Metro supplier catalog & price synchronization
@@ -70,10 +70,10 @@ cargo run -p server
 
 ```
 
-To build the server without PDF/Typst support:
+Typst PDF export is optional and kept out of default builds. Enable it with the `typst` feature:
 
 ```sh
-cargo build -p server --no-default-features
+cargo build -p server --features typst
 
 ```
 
@@ -87,5 +87,4 @@ cargo test -p foodlib_new
 
 ## Documentation
 
-* [`REQUIREMENTS.md`](./REQUIREMENTS.md) — MoSCoW requirements and user stories with implementation status
 * [`server/foodcalc_rest_specification.yaml`](./server/foodcalc_rest_specification.yaml) — OpenAPI REST specification
