@@ -253,7 +253,7 @@ impl IngredientOps {
     }
 
     #[deprecated(
-        note = "Use `list_with_sources_filtered` instead"
+        note = "Use `list_filtered_with_sources` instead"
     )]
     pub async fn list_with_sources(&self) -> Result<Vec<IngredientWithSource>> {
         let rows = sqlx::query_as!(
@@ -405,6 +405,24 @@ impl IngredientOps {
         .await?;
 
         Ok(row)
+    }
+
+    /// Fetches a single source by id (ownership checks in the use-cases).
+    pub async fn get_source(&self, id: IngredientSourceId) -> Result<IngredientSource> {
+        sqlx::query_as!(
+            IngredientSource,
+            r#"
+            SELECT ingredient_source_id as "id: IngredientSourceId", ingredient_id as "ingredient_id: IngredientId", store_id as "store_id: StoreId", package_size, unit_id as "unit_id: UnitId", price, url, comment
+            FROM ingredient_sources WHERE ingredient_source_id = $1
+            "#,
+            id.get()
+        )
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or_else(|| crate::error::Error::NotFound {
+            entity: "IngredientSource",
+            id: id.to_string(),
+        })
     }
 
     pub async fn delete_source(&self, id: IngredientSourceId) -> Result<()> {
@@ -627,6 +645,28 @@ impl IngredientOps {
             .fetch_all(&*self.pool)
             .await?,
         };
+        Ok(rows)
+    }
+
+    /// Sources for a set of ingredients — used by export use-cases so a
+    /// Metro CSV request does not have to load the whole source table.
+    pub async fn list_sources_for_ingredients(
+        &self,
+        ingredient_ids: &[IngredientId],
+    ) -> Result<Vec<IngredientSource>> {
+        if ingredient_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = sqlx::query_as!(
+            IngredientSource,
+            r#"
+            SELECT ingredient_source_id as "id: IngredientSourceId", ingredient_id as "ingredient_id: IngredientId", store_id as "store_id: StoreId", package_size, unit_id as "unit_id: UnitId", price, url, comment
+            FROM ingredient_sources WHERE ingredient_id = ANY($1) ORDER BY ingredient_source_id
+            "#,
+            ingredient_ids as &[IngredientId]
+        )
+        .fetch_all(&*self.pool)
+        .await?;
         Ok(rows)
     }
 }
