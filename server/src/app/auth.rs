@@ -56,9 +56,10 @@ pub struct LoginInput {
     pub password: String,
 }
 
-/// Verifies credentials and records the authentication audit trail
-/// (`LOGIN_SUCCESS` or `LOGIN_FAILED`). Transport layers handle persisting
-/// the session cookie or issuing a token.
+/// Verifies credentials and records the `LOGIN_FAILED` audit entry on
+/// failure. `LOGIN_SUCCESS` is recorded by the transport only after the
+/// session (cookie/token) was persisted successfully, so a session-store
+/// failure never leaves a misleading success entry in the audit log.
 pub async fn authenticate(state: &MyAppState, input: LoginInput) -> Result<User> {
     let attempted_username = input.username.trim().to_string();
 
@@ -85,14 +86,6 @@ pub async fn authenticate(state: &MyAppState, input: LoginInput) -> Result<User>
 
     match valid_user {
         Some(user) => {
-            audit_auth(
-                state,
-                Some(user.id),
-                &user.username,
-                action::LOGIN_SUCCESS,
-                serde_json::json!({}),
-            )
-                .await;
             Ok(user)
         }
         None => {

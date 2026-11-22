@@ -88,6 +88,7 @@ async fn health() -> impl IntoResponse {
 pub fn map_api_error(err: foodlib_new::Error) -> (StatusCode, Json<serde_json::Value>) {
     let (status, message) = match &err {
         foodlib_new::Error::NotFound { .. } => (StatusCode::NOT_FOUND, err.to_string()),
+        foodlib_new::Error::UserNotFound { .. } => (StatusCode::NOT_FOUND, err.to_string()),
         foodlib_new::Error::Unauthorized(_) => (
             StatusCode::UNAUTHORIZED,
             "Authentication required".to_string(),
@@ -97,14 +98,14 @@ pub fn map_api_error(err: foodlib_new::Error) -> (StatusCode, Json<serde_json::V
         | foodlib_new::Error::Conflict { .. }
         | foodlib_new::Error::InvalidInput { .. } => (StatusCode::BAD_REQUEST, err.to_string()),
         foodlib_new::Error::Database(_) => {
-            tracing::error!(error = ?err, "Database error in API handler");
+            log::error!("Database error in API handler: {err:?}");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "An internal database error occurred".to_string(),
             )
         }
         _ => {
-            tracing::error!(error = ?err, "Unhandled internal error in API handler");
+            log::error!("Unhandled internal error in API handler: {err:?}");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "An internal error occurred".to_string(),

@@ -40,12 +40,24 @@ pub async fn login(
 ) -> Response {
     let user = match auth::authenticate(&state, payload).await {
         Ok(user) => user,
+        Err(foodlib_new::Error::Unauthorized(message)) => {
+            return unauthorized(&message).into_response()
+        }
         Err(err) => return map_api_error(err).into_response(),
     };
 
     if let Err(err) = auth_session.login(&user).await {
         return map_api_error(err.into()).into_response();
     }
+    // Success is only audited once the session really persisted.
+    auth::audit_auth(
+        &state,
+        Some(user.id),
+        &user.username,
+        action::LOGIN_SUCCESS,
+        serde_json::json!({}),
+    )
+    .await;
 
     StatusCode::NO_CONTENT.into_response()
 }
