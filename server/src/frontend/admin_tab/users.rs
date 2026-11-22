@@ -1,10 +1,11 @@
 use axum::{
-    extract::{Form, Path},
+    extract::{Form, Path, State},
     routing::{delete, get, post},
 };
 use foodlib_new::{
     entities::types::ids::{GroupId, UserId},
     error::{Error, Result},
+    policy::GlobalPermission,
     user::{Group, User},
 };
 use maud::{html, Markup};
@@ -13,6 +14,9 @@ use time::OffsetDateTime;
 
 use crate::{FoodLib, MyAppState};
 use foodlib_new::auth_context::AuthCtx;
+
+use crate::app;
+use crate::frontend::ctx::WebCtx;
 
 use crate::frontend::MResponse;
 
@@ -26,6 +30,10 @@ pub(crate) fn users_router() -> axum::Router<MyAppState> {
         .route("/{user_id}/admin", post(toggle_admin))
         .route("/{user_id}/password", post(set_password))
         .route("/{user_id}/groups", post(add_to_group))
+        .route(
+            "/{user_id}/global-permissions",
+            post(set_global_permissions),
+        )
         .route("/{user_id}/groups/{group_id}", delete(remove_from_group))
 }
 
@@ -158,15 +166,24 @@ async fn create_user(
     })
 }
 
-async fn user_detail_view(foodlib: FoodLib, ctx: AuthCtx, Path(user_id): Path<UserId>) -> MResponse {
-    assert_admin(&ctx)?;
-    render_user_detail(&foodlib, user_id).await
+async fn user_detail_view(
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
+    Path(user_id): Path<UserId>,
+) -> MResponse {
+    assert_admin(&ctx.ctx)?;
+    render_user_detail(&state, &ctx, user_id).await
 }
 
-async fn render_user_detail(foodlib: &foodlib_new::FoodLib, user_id: UserId) -> MResponse {
-    let user = foodlib.users().get_user(user_id).await?;
-    let user_groups = foodlib.users().get_user_groups(user_id).await?;
-    let all_groups = foodlib.users().get_all_groups().await?;
+async fn render_user_detail(
+    state: &MyAppState,
+    ctx: &WebCtx,
+    user_id: UserId,
+) -> MResponse {
+    let user = state.db.users().get_user(user_id).await?;
+    let user_groups = state.db.users().get_user_groups(user_id).await?;
+    let all_groups = state.db.users().get_all_groups().await?;
+    let policy = state.db.users().get_user_policy(user_id).await?;
     let member_ids: std::collections::HashSet<GroupId> = user_groups.iter().map(|g| g.id).collect();
     let candidate_groups: Vec<&Group> = all_groups
         .iter()
@@ -206,6 +223,27 @@ async fn render_user_detail(foodlib: &foodlib_new::FoodLib, user_id: UserId) -> 
                 hx-swap="outerHTML" {
                 input class="text grow" type="password" name="password" placeholder="New password" required="required";
                 button class="btn btn-primary" type="submit" { "Set password" }
+            }
+
+            // Global permissions (admin:manage_users guard is enforced by the
+            // app use-case; the self-lockout protection lives there too).
+            details class="border rounded-lg p-3 mb-4" {
+                summary class="cursor-pointer font-semibold" { "Globale Berechtigungen" }
+                form class="flex flex-col gap-2 mt-2"
+                    hx-post=(format!("/admin/users/{}/global-permissions", user.id))
+                    hx-target="#user-detail"
+                    hx-swap="outerHTML" {
+                    div class="flex flex-wrap gap-3" {
+                        @for p in GlobalPermission::ALL {
+                            label class="flex items-center gap-1 text-sm" {
+                                input type="checkbox" name="permissions" value=(p.as_str())
+                                    checked[policy.global_permissions.contains(&p)];
+                                code class="text-xs" { (p.as_str()) }
+                            }
+                        }
+                    }
+                    button class="btn btn-primary self-start" type="submit" { "Speichern" }
+                }
             }
 
             div class="mb-4" {
@@ -268,30 +306,34 @@ struct UpdateUserForm {
 }
 
 async fn update_user(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
     Path(user_id): Path<UserId>,
     Form(form): Form<UpdateUserForm>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    let mut user = foodlib.users().get_user(user_id).await?;
+    assert_admin(&ctx.ctx)?;
+    let mut user = state.db.users().get_user(user_id).await?;
     user.username = form.username.trim().to_string();
     user.email = form.email.trim().to_string();
-    foodlib.users().update_user(user).await?;
-    render_user_detail(&foodlib, user_id).await
+    state.db.users().update_user(user).await?;
+    render_user_detail(&state, &ctx, user_id).await
 }
 
-async fn toggle_admin(foodlib: FoodLib, ctx: AuthCtx, Path(user_id): Path<UserId>) -> MResponse {
-    assert_admin(&ctx)?;
-    if user_id == ctx.user.id {
+async fn toggle_admin(
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
+    Path(user_id): Path<UserId>,
+) -> MResponse {
+    assert_admin(&ctx.ctx)?;
+    if user_id == ctx.ctx.user.id {
         return Err(Error::Forbidden(
             "You cannot change your own admin status".into(),
         ));
     }
-    let mut user = foodlib.users().get_user(user_id).await?;
+    let mut user = state.db.users().get_user(user_id).await?;
     user.is_admin = !user.is_admin;
-    foodlib.users().update_user(user).await?;
-    render_user_detail(&foodlib, user_id).await
+    state.db.users().update_user(user).await?;
+    render_user_detail(&state, &ctx, user_id).await
 }
 
 #[derive(Deserialize)]
@@ -300,22 +342,19 @@ struct PasswordForm {
 }
 
 async fn set_password(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
     Path(user_id): Path<UserId>,
     Form(form): Form<PasswordForm>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
+    assert_admin(&ctx.ctx)?;
     if form.password.is_empty() {
         return Err(Error::Validation {
             message: "Password cannot be empty".into(),
         });
     }
-    foodlib
-        .users()
-        .update_password(user_id, form.password)
-        .await?;
-    render_user_detail(&foodlib, user_id).await
+    state.db.users().update_password(user_id, form.password).await?;
+    render_user_detail(&state, &ctx, user_id).await
 }
 
 async fn delete_user(foodlib: FoodLib, ctx: AuthCtx, Path(user_id): Path<UserId>) -> MResponse {
@@ -329,23 +368,45 @@ async fn delete_user(foodlib: FoodLib, ctx: AuthCtx, Path(user_id): Path<UserId>
     })
 }
 
+/// `POST …/global-permissions` — replace the user's global permission set
+/// via the app use-case (guard `admin:manage_users`, self-lockout protection
+/// and audit live there). Unchecked boxes are simply absent → full replace.
+#[derive(Deserialize)]
+struct GlobalPermissionsForm {
+    #[serde(default)]
+    permissions: Vec<GlobalPermission>,
+}
+
+async fn set_global_permissions(
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
+    Path(user_id): Path<UserId>,
+    Form(form): Form<GlobalPermissionsForm>,
+) -> MResponse {
+    let payload = app::users::GlobalPermissionsInput {
+        permissions: form.permissions,
+    };
+    app::users::set_global_permissions(&state, &ctx, user_id, payload).await?;
+    render_user_detail(&state, &ctx, user_id).await
+}
+
 #[derive(Deserialize)]
 struct AddGroupForm {
     group_id: GroupId,
 }
 
 async fn add_to_group(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    ctx: WebCtx,
     Path(user_id): Path<UserId>,
     Form(form): Form<AddGroupForm>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    foodlib
+    assert_admin(&ctx.ctx)?;
+    state.db
         .users()
         .add_user_to_group_with_roles(user_id, form.group_id, &["manager".parse().unwrap()])
         .await?;
-    render_user_detail(&foodlib, user_id).await
+    render_user_detail(&state, &ctx, user_id).await
 }
 
 async fn remove_from_group(
