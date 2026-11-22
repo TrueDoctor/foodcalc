@@ -57,7 +57,7 @@ pub enum RecipePerm {
     /// Reassign the owning group of a recipe.
     TransferOwner,
     /// Export recipe sheets (e.g. Typst PDF).
-    Export
+    Export,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -158,7 +158,7 @@ impl FromStr for Permission {
             "events:clone" => Ok(Self::Event(EventPerm::CloneEvent)),
             "events:transfer_owner" => Ok(Self::Event(EventPerm::TransferOwner)),
             "events:manage_meals" => Ok(Self::Event(EventPerm::ManageMeals)),
-            "events:manage_shopping" => Ok(Self::Event(EventPerm::ShoppingTourEdit)), // Duplicate
+            "events:manage_shopping" => Ok(Self::Event(EventPerm::ShoppingTourEdit)), // Legacy alias
             "events:view_calculation" => Ok(Self::Event(EventPerm::ViewCalculation)),
             "events:shopping:add_tour" => Ok(Self::Event(EventPerm::ShoppingTourCreate)),
             "events:shopping:edit_tour" => Ok(Self::Event(EventPerm::ShoppingTourEdit)),
@@ -182,6 +182,7 @@ impl FromStr for Permission {
             "inventories:view" => Ok(Self::Inventory(InventoryPerm::View)),
             "inventories:create" => Ok(Self::Inventory(InventoryPerm::Create)),
             "inventories:edit" => Ok(Self::Inventory(InventoryPerm::EditMetadata)),
+            "inventories:edit_stock" => Ok(Self::Inventory(InventoryPerm::EditStock)),
             "inventories:delete" => Ok(Self::Inventory(InventoryPerm::Delete)),
             "inventories:transfer_owner" => Ok(Self::Inventory(InventoryPerm::TransferOwner)),
             // Group
@@ -201,3 +202,51 @@ impl FromStr for Permission {
 
 impl_str_serde!(Permission);
 impl_str_serde!(GlobalPermission);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn permission_str_roundtrip() {
+        let all = [
+            Permission::Event(EventPerm::ViewEvent),
+            Permission::Event(EventPerm::CreateEvent),
+            Permission::Event(EventPerm::EditEvent),
+            Permission::Event(EventPerm::DeleteEvent),
+            Permission::Event(EventPerm::CloneEvent),
+            Permission::Event(EventPerm::TransferOwner),
+            Permission::Event(EventPerm::ViewCalculation),
+            Permission::Event(EventPerm::ManageMeals),
+            Permission::Event(EventPerm::ShoppingTourCreate),
+            Permission::Event(EventPerm::ShoppingTourEdit),
+            Permission::Event(EventPerm::ShoppingTourComplete),
+            Permission::Event(EventPerm::StatusBoardOperate),
+            Permission::Event(EventPerm::ExportMealPlan),
+            Permission::Recipe(RecipePerm::View),
+            Permission::Recipe(RecipePerm::Create),
+            Permission::Recipe(RecipePerm::Edit),
+            Permission::Recipe(RecipePerm::Delete),
+            Permission::Recipe(RecipePerm::TransferOwner),
+            Permission::Recipe(RecipePerm::Export),
+            Permission::Ingredient(IngredientPerm::View),
+            Permission::Ingredient(IngredientPerm::Create),
+            Permission::Ingredient(IngredientPerm::Edit),
+            Permission::Ingredient(IngredientPerm::Delete),
+            Permission::Ingredient(IngredientPerm::TransferOwner),
+            Permission::Inventory(InventoryPerm::View),
+            Permission::Inventory(InventoryPerm::Create),
+            Permission::Inventory(InventoryPerm::EditMetadata),
+            Permission::Inventory(InventoryPerm::EditStock),
+            Permission::Inventory(InventoryPerm::Delete),
+            Permission::Inventory(InventoryPerm::TransferOwner),
+            Permission::Group(GroupPerm::ManageMembers),
+            Permission::Group(GroupPerm::ManageSettings),
+            Permission::Group(GroupPerm::Delete),
+        ];
+
+        for perm in all {
+            assert_eq!(Permission::from_str(perm.as_str()), Ok(perm));
+        }
+    }
+}

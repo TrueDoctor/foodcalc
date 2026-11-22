@@ -26,6 +26,17 @@ impl GlobalPermission {
         Self::ViewUsers,
     ];
 
+    /// Every global permission, in display order. Used by permission-editing
+    /// UIs so checkboxes never need a hand-maintained list.
+    pub const ALL: &'static [Self] = &[
+        Self::CreateResources,
+        Self::ViewUsers,
+        Self::ManageUsers,
+        Self::ManageMasterData,
+        Self::ManageSettings,
+        Self::ViewAuditLog,
+    ];
+
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::CreateResources => "user:create_resources",

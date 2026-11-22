@@ -1,20 +1,22 @@
 use super::permissions::{
     EventPerm, GroupPerm, IngredientPerm, InventoryPerm, Permission, RecipePerm,
 };
-use serde::{Deserializer, Serialize, Serializer};
+use serde::Serialize;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltInRole {
-    /// Leser — read-only baseline.
+    /// Leser — read-only baseline without financial totals.
     Viewer,
-    /// Koch — meals, recipes, ingredients, inventory bookings, status board.
+    /// Finanzen — read-only access including budgets, cost calculations, and financial exports.
+    Finance,
+    /// Koch — meals, recipes, ingredients, stock consumption bookings, status board.
     Cook,
-    /// Einkauf — shopping tours and related inventory bookings.
+    /// Einkauf — shopping tours and incoming purchase stock bookings.
     Shopper,
-    /// Lager — inventory administration.
+    /// Lager — inventory administration and stock management.
     Stocker,
-    /// Ausgabe — serving counter / status board operation.
+    /// Ausgabe — serving counter / status board operation and allergen/label exports.
     Serving,
     /// Teammitglied — composite allrounder without destructive rights.
     Team,
@@ -27,6 +29,7 @@ impl BuiltInRole {
     pub fn from_slug(slug: &str) -> Option<Self> {
         match slug {
             "viewer" => Some(Self::Viewer),
+            "finance" => Some(Self::Finance),
             "cook" => Some(Self::Cook),
             "shopper" => Some(Self::Shopper),
             "stocker" => Some(Self::Stocker),
@@ -40,6 +43,7 @@ impl BuiltInRole {
     pub const fn slug(self) -> &'static str {
         match self {
             Self::Viewer => "viewer",
+            Self::Finance => "finance",
             Self::Cook => "cook",
             Self::Shopper => "shopper",
             Self::Stocker => "stocker",
@@ -58,6 +62,14 @@ impl BuiltInRole {
         match self {
             Self::Viewer => &[
                 Permission::Event(Ev::ViewEvent),
+                Permission::Event(Ev::ExportMealPlan),
+                Permission::Recipe(Rec::View),
+                Permission::Recipe(Rec::Export),
+                Permission::Ingredient(Ing::View),
+                Permission::Inventory(Inv::View),
+            ],
+            Self::Finance => &[
+                Permission::Event(Ev::ViewEvent),
                 Permission::Event(Ev::ViewCalculation),
                 Permission::Event(Ev::ExportMealPlan),
                 Permission::Recipe(Rec::View),
@@ -69,7 +81,6 @@ impl BuiltInRole {
                 Permission::Event(Ev::ViewEvent),
                 Permission::Event(Ev::ViewCalculation),
                 Permission::Event(Ev::ExportMealPlan),
-                Permission::Event(Ev::EditEvent),
                 Permission::Event(Ev::ManageMeals),
                 Permission::Event(Ev::StatusBoardOperate),
                 Permission::Recipe(Rec::View),
@@ -80,7 +91,7 @@ impl BuiltInRole {
                 Permission::Ingredient(Ing::Create),
                 Permission::Ingredient(Ing::Edit),
                 Permission::Inventory(Inv::View),
-                Permission::Inventory(Inv::EditMetadata),
+                Permission::Inventory(Inv::EditStock),
             ],
             Self::Shopper => &[
                 Permission::Event(Ev::ViewEvent),
@@ -92,7 +103,7 @@ impl BuiltInRole {
                 Permission::Recipe(Rec::View),
                 Permission::Ingredient(Ing::View),
                 Permission::Inventory(Inv::View),
-                Permission::Inventory(Inv::EditMetadata),
+                Permission::Inventory(Inv::EditStock),
             ],
             Self::Stocker => &[
                 Permission::Event(Ev::ViewEvent),
@@ -104,11 +115,14 @@ impl BuiltInRole {
                 Permission::Inventory(Inv::View),
                 Permission::Inventory(Inv::Create),
                 Permission::Inventory(Inv::EditMetadata),
+                Permission::Inventory(Inv::EditStock),
             ],
             Self::Serving => &[
                 Permission::Event(Ev::ViewEvent),
+                Permission::Event(Ev::ExportMealPlan),
                 Permission::Event(Ev::StatusBoardOperate),
                 Permission::Recipe(Rec::View),
+                Permission::Recipe(Rec::Export),
                 Permission::Ingredient(Ing::View),
                 Permission::Inventory(Inv::View),
             ],
@@ -134,6 +148,7 @@ impl BuiltInRole {
                 Permission::Inventory(Inv::View),
                 Permission::Inventory(Inv::Create),
                 Permission::Inventory(Inv::EditMetadata),
+                Permission::Inventory(Inv::EditStock),
             ],
             Self::Manager => &[
                 Permission::Event(Ev::ViewEvent),
@@ -163,6 +178,7 @@ impl BuiltInRole {
                 Permission::Inventory(Inv::View),
                 Permission::Inventory(Inv::Create),
                 Permission::Inventory(Inv::EditMetadata),
+                Permission::Inventory(Inv::EditStock),
                 Permission::Inventory(Inv::Delete),
                 Permission::Inventory(Inv::TransferOwner),
                 Permission::Group(GroupPerm::ManageMembers),
@@ -175,6 +191,7 @@ impl BuiltInRole {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Viewer => "Leser",
+            Self::Finance => "Finanzen",
             Self::Cook => "Koch",
             Self::Shopper => "Einkauf",
             Self::Stocker => "Lager",
@@ -186,11 +203,12 @@ impl BuiltInRole {
 
     pub const fn description(self) -> &'static str {
         match self {
-            Self::Viewer => "Darf Veranstaltungen, Rezepte, Zutaten und Inventare ansehen und Exporte herunterladen.",
+            Self::Viewer => "Darf Veranstaltungen, Rezepte, Zutaten und Inventare ansehen und Exporte ohne Kalkulationsdaten herunterladen.",
+            Self::Finance => "Lesender Zugriff inklusive Budgets, Kostenkalkulationen und Übersichts-Exporten.",
             Self::Cook => "Plant Mahlzeiten, pflegt Rezepte und Zutaten und bucht verbrauchte Mengen aus Inventaren ab.",
             Self::Shopper => "Plant und bearbeitet Einkaufstouren und bucht eingekaufte Mengen in Inventare.",
             Self::Stocker => "Verwaltet Inventare und deren Bestände sowie Zutatenstammdaten.",
-            Self::Serving => "Bedient das Statusboard (Küche/Ausgabe) während der Veranstaltung.",
+            Self::Serving => "Bedient das Statusboard (Küche/Ausgabe) und druckt Allergenlisten sowie Speisenschilder.",
             Self::Team => "Allrounder ohne Destruktives: kann planen und bearbeiten, aber nichts löschen, übertragen oder Mitglieder verwalten.",
             Self::Manager => "Volle Kontrolle: inklusive Löschen, Eigentumsübertragung und Mitgliederverwaltung der Gruppe.",
         }
@@ -199,13 +217,16 @@ impl BuiltInRole {
     pub const fn category(self) -> RoleCategory {
         match self {
             Self::Viewer | Self::Team | Self::Manager => RoleCategory::Basic,
-            Self::Cook | Self::Shopper | Self::Stocker | Self::Serving => RoleCategory::Domain,
+            Self::Finance | Self::Cook | Self::Shopper | Self::Stocker | Self::Serving => {
+                RoleCategory::Domain
+            }
         }
     }
 
-    pub const fn all() -> [BuiltInRole; 7] {
+    pub const fn all() -> [BuiltInRole; 8] {
         [
             Self::Viewer,
+            Self::Finance,
             Self::Cook,
             Self::Shopper,
             Self::Stocker,
@@ -233,7 +254,7 @@ impl BuiltInRole {
 pub enum RoleCategory {
     /// General membership presets (Leser, Teammitglied, Leitung).
     Basic,
-    /// Domain roles for departments (Küche, Einkauf, Lager, Ausgabe).
+    /// Domain roles for departments (Finanzen, Küche, Einkauf, Lager, Ausgabe).
     Domain,
 }
 
