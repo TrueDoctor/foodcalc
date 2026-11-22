@@ -55,6 +55,11 @@ impl UserPolicy {
             combined.extend(overrides.iter().copied());
         }
 
-        combined.into_iter().collect()
+        // Deterministic order: HashSet-backed sources otherwise make the
+        // serialized `permissions` array unstable between requests.
+        let mut perms: Vec<Permission> = combined.into_iter().collect();
+        perms.sort();
+        perms.dedup();
+        perms
     }
 }

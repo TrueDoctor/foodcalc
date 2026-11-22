@@ -1,8 +1,7 @@
 use crate::policy::{GlobalPermission, UnknownPermissionError};
-use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Permission {
     Event(EventPerm),
     Recipe(RecipePerm),
@@ -11,7 +10,7 @@ pub enum Permission {
     Group(GroupPerm),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum EventPerm {
     // --- Lifecycle & Frame Data ---
     /// View event overview, schedule, meals, and basic shopping lists.
@@ -44,7 +43,7 @@ pub enum EventPerm {
     ExportMealPlan,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RecipePerm {
     /// View recipe steps, ingredients, and energy/nutrition calculations.
     View,
@@ -60,7 +59,7 @@ pub enum RecipePerm {
     Export,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IngredientPerm {
     /// View ingredient details, units, prices, and allergen/property metadata.
     View,
@@ -74,7 +73,7 @@ pub enum IngredientPerm {
     TransferOwner,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum InventoryPerm {
     /// View inventory locations and current stock levels.
     View,
@@ -90,7 +89,7 @@ pub enum InventoryPerm {
     TransferOwner,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GroupPerm {
     /// Add/remove group members and assign or change their group roles.
     ManageMembers,

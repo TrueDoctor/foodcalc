@@ -64,3 +64,20 @@ impl FromStr for GlobalPermission {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    /// `ALL` is consumed by the admin checkbox editor: a variant missing from
+    /// it would silently disappear from the UI, and a typo in a slug would
+    /// round-trip into an unparseable DB value.
+    #[test]
+    fn all_covers_every_variant_and_round_trips() {
+        for perm in GlobalPermission::ALL {
+            assert_eq!(GlobalPermission::from_str(perm.as_str()).unwrap(), *perm);
+        }
+        assert_eq!(GlobalPermission::ALL.len(), 6);
+    }
+}
