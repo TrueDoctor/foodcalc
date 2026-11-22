@@ -145,8 +145,21 @@ pub fn role_catalog() -> Vec<foodlib_new::policy::RoleDefinition> {
 // --------------------------------------------------------------- helpers
 
 /// Validates the role slugs against the DB `roles` table.
-fn validate_roles(state: &MyAppState, roles: &[String]) -> Result<()> {
-    if !state.users().validate_role_slugs(roles) {
+/// Validates the role slugs against the DB `roles` table (the source of
+/// truth since the role matrix became editable; falls back to the built-in
+/// catalog for legacy aliases like `editor`).
+async fn validate_roles(state: &MyAppState, roles: &[String]) -> Result<()> {
+    let known: std::collections::HashSet<String> = state
+        .users()
+        .list_roles()
+        .await?
+        .into_iter()
+        .map(|r| r.slug)
+        .collect();
+    if !roles
+        .iter()
+        .all(|slug| known.contains(slug) || foodlib_new::policy::BuiltInRole::from_slug(slug).is_some())
+    {
         return Err(Error::Validation {
             message: "one or more unknown role slugs provided".into(),
         });
@@ -154,6 +167,118 @@ fn validate_roles(state: &MyAppState, roles: &[String]) -> Result<()> {
     Ok(())
 }
 
+// ----------------------------------------------------------- role matrix
+
+/// All roles with their DB-backed permission sets — the columns of the
+/// legacy permission matrix. Public read: the role catalog is not secret.
+pub async fn list_roles(
+    state: &MyAppState,
+) -> Result<Vec<foodlib_new::ops::users::DbRole>> {
+    state.users().list_roles().await
+}
+
+/// Replaces one role's permission set (matrix column save).
+/// Guard `admin:manage_settings`.
+///
+/// Safety: system roles must keep `group:manage_members` — otherwise editing
+/// the `manager` column could lock every group out of member management.
+pub async fn set_role_permissions(
+    state: &MyAppState,
+    actor: &AppCtx,
+    slug: &str,
+    permissions: Vec<Permission>,
+) -> Result<()> {
+    actor.ctx.assert_global(GlobalPermission::ManageSettings)?;
+
+    let role = state
+        .users()
+        .list_roles()
+        .await?
+        .into_iter()
+        .find(|r| r.slug == slug)
+        .ok_or(Error::NotFound {
+            entity: "Role",
+            id: slug.to_string(),
+        })?;
+    if role.is_system
+        && !permissions.contains(&Permission::Group(GroupPerm::ManageMembers))
+    {
+        return Err(Error::Validation {
+            message: "system roles must keep group:manage_members".into(),
+        });
+    }
+
+    state
+        .users()
+        .set_role_permissions(slug, &permissions)
+        .await?;
+    audit::record(
+        state,
+        actor,
+        action::ROLE_PERMISSIONS_CHANGED,
+        Some("role"),
+        None,
+        None,
+        None,
+        Some(json!({
+            "slug": slug,
+            "permissions": permissions
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+        })),
+    )
+        .await;
+    Ok(())
+}
+
+/// Creates a custom (non-system) role. Guard `admin:manage_settings`.
+pub async fn create_role(
+    state: &MyAppState,
+    actor: &AppCtx,
+    slug: &str,
+    name: &str,
+) -> Result<()> {
+    actor.ctx.assert_global(GlobalPermission::ManageSettings)?;
+    let slug = slug.trim();
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(Error::Validation {
+            message: "role name must not be empty".into(),
+        });
+    }
+    state.users().create_role(slug, name).await?;
+    audit::record(
+        state,
+        actor,
+        action::ROLE_CREATED,
+        Some("role"),
+        None,
+        None,
+        None,
+        Some(json!({ "slug": slug, "name": name })),
+    )
+        .await;
+    Ok(())
+}
+
+/// Deletes a custom, unused role. Guard `admin:manage_settings`.
+pub async fn delete_role(state: &MyAppState, actor: &AppCtx, slug: &str) -> Result<()> {
+    actor.ctx.assert_global(GlobalPermission::ManageSettings)?;
+    state.users().delete_role(slug).await?;
+    audit::record(
+        state,
+        actor,
+        action::ROLE_DELETED,
+        Some("role"),
+        None,
+        None,
+        None,
+        Some(json!({ "slug": slug })),
+    )
+        .await;
+    Ok(())
+}
 /// Ensures the group exists, is NOT a personal workspace, and the caller
 /// holds `group:manage_members` in that group.
 pub async fn assert_group_member_manager(
@@ -497,7 +622,7 @@ pub async fn add_member(
         Some(roles) => roles,
         None => state.users().resolve_member_default_roles(group_id).await?,
     };
-    validate_roles(state, &roles)?;
+    validate_roles(state, &roles).await?;
 
     state
         .users()
@@ -538,7 +663,7 @@ pub async fn set_member_roles(
             message: "a group member must have at least one role".into(),
         });
     }
-    validate_roles(state, &roles)?;
+    validate_roles(state, &roles).await?;
 
     // Ensure at least one member in the group retains `group:manage_members`
     if state
@@ -653,7 +778,7 @@ pub async fn put_default_roles(
             message: "use DELETE to inherit the global default".into(),
         });
     }
-    validate_roles(state, &roles)?;
+    validate_roles(state, &roles).await?;
     state
         .users()
         .set_group_default_roles(group_id, &roles)
@@ -727,7 +852,7 @@ pub async fn set_member_defaults(
             message: "at least one default role is required".into(),
         });
     }
-    validate_roles(state, &roles)?;
+    validate_roles(state, &roles).await?;
     state.users().set_global_member_default_roles(&roles).await?;
     audit::record(
         state,
@@ -766,7 +891,7 @@ pub async fn admin_self_grant(
             message: "at least one role is required".into(),
         });
     }
-    validate_roles(state, &roles)?;
+    validate_roles(state, &roles).await?;
 
     for role in &roles {
         state
