@@ -114,7 +114,9 @@ async fn delete_shopping_tour(
     ctx: AuthCtx,
     Path(tour_id): Path<TourId>,
 ) -> MResponse {
-    ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
+    // Completed tours are locked: deleting one requires the shopping-tour
+    // edit permission (which the completed-tour guard refuses).
+    ctx.assert_shopping_tour_action(tour_id, EventPerm::ShoppingTourEdit).await?;
     state.events().delete_shopping_tour(tour_id).await?;
     Ok(html! {})
 }
@@ -124,9 +126,10 @@ async fn shopping_tour_form(
     ctx: AuthCtx,
     Path((event_id, tour_id)): Path<(EventId, TourId)>,
 ) -> MResponse {
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
     if tour_id.get() > 0 {
-        ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
+        ctx.assert_shopping_tour_action(tour_id, EventPerm::ShoppingTourEdit).await?;
+    } else {
+        ctx.assert_event_action(event_id, EventPerm::ShoppingTourCreate).await?;
     }
     let stores = state.stores().list().await?;
     let inventories = state.inventories().list().await?;
@@ -317,10 +320,14 @@ async fn inventory_items(
 }
 
 async fn save_tour(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<TourForm>) -> MResponse {
-    ctx.assert_event_action(form.event_id, EventPerm::EditEvent).await?;
-    if let Some(tour_id) = form.tour_id {
-        if tour_id.get() > 0 {
-            ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
+    // Creation and update carry distinct permissions: the Shopper role can
+    // save tours without holding the broad `events:edit`.
+    match form.tour_id {
+        Some(tour_id) if tour_id.get() > 0 => {
+            ctx.assert_shopping_tour_action(tour_id, EventPerm::ShoppingTourEdit).await?;
+        }
+        _ => {
+            ctx.assert_event_action(form.event_id, EventPerm::ShoppingTourCreate).await?;
         }
     }
     // Parse the date
@@ -420,204 +427,66 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithN
     }
 }
 
+/// HTMX plain-text shopping-list export. Delegates to the same app-layer
+/// use-case as the REST `/api/events/{id}/exports/tour` endpoint so both
+/// transports render identically and cannot drift apart.
 async fn export_plain(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(tour_id): Path<TourId>,
 ) -> IResponse {
-    ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
-    // Single query: tour shopping list + per-recipe usage breakdown.
-    let shopping_list = state
-        .events()
-        .tour_shopping_list_with_usage(tour_id)
-        .await?;
-    let tour = state.events().get_shopping_tour(tour_id).await?;
-
-    let event_inventories = state.events().get_inventories(tour.event_id).await?;
-    let inventory_items = inventory_items(Some(tour_id), &event_inventories, &state).await;
-
-    let mut output = String::new();
-    let mut current_category = String::new();
-
-    for item in shopping_list {
-        let category = item.category.clone().unwrap_or_default();
-        if category != current_category {
-            if !current_category.is_empty() {
-                output.push('\n');
-            }
-            output.push_str(&format!("=== {} ===\n", category));
-            current_category = category;
-        }
-        let inv_amount = get_inventory_amount_by_id(item.ingredient_id, &inventory_items);
-        // Unknown weight → the buy amount can't be resolved; keep the row
-        // visible with a "?" placeholder instead of inventing numbers.
-        let (status, to_buy, weight_text, new_price) = match &item.weight {
-            Some(weight) => {
-                let status = if inv_amount > *weight { "x" } else { " " };
-                // Clamp at zero: Amount has no `Ord`, so `max` isn't available.
-                let diff = weight.clone() - inv_amount.clone();
-                let to_buy = if diff < Amount::default() {
-                    Amount::default()
-                } else {
-                    diff
-                };
-                let new_price = item
-                    .price
-                    .as_ref()
-                    .map(|p| p.clone() / weight * &to_buy);
-                (status, to_buy, format!("{:.2} kg", weight), new_price)
-            }
-            None => ("?", Amount::default(), "? kg".to_string(), None),
-        };
-
-        output.push_str(&format!(
-            "[{}] {} - {} {} -> {}",
-            status,
-            item.ingredient_name,
-            to_buy,
-            if let Some(price) = new_price {
-                format!(" (€{:.2})", price)
-            } else {
-                String::new()
-            },
-            weight_text
-        ));
-        // Usage breakdown without the ingredient-name prefix the Metro export uses.
-        let usage = format_recipe_usage(&item.recipe_usage);
-        if !usage.is_empty() {
-            output.push_str(&format!("  [{}]", usage));
-        }
-        output.push('\n');
-    }
-    Ok(IntoResponse::into_response((
-        [
-            (
-                axum::http::header::CONTENT_TYPE,
-                "text/plain; charset=utf-8".to_string(),
-            ),
-            (
-                axum::http::header::CONTENT_DISPOSITION,
-                format!("inline; filename=\"shopping_list_{}.txt\"", tour_id),
-            ),
-        ],
-        output,
-    )))
+    export_tour_via_app(state, ctx, tour_id, crate::app::exports::ExportFormat::Txt).await
 }
 
-/// Format a per-recipe usage breakdown as "3.00kg Recipe 2.00kg Other".
-/// `usages` is the `[(recipe, kg)]` list from `tour_shopping_list_with_usage`.
-/// Returns an empty string when there are no usages.
-fn format_recipe_usage(usages: &[(String, Option<Amount>)]) -> String {
-    usages
-        .iter()
-        .map(|(recipe, kg)| match kg {
-            Some(kg) => format!("{:.2}kg {}", kg.to_f64().unwrap_or_default(), recipe),
-            None => format!("?kg {}", recipe),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
+/// HTMX Metro CSV export. Delegates to the app-layer use-case (inventory
+/// deduction, Metro-store source lookup, article-number resolution, CSV
+/// quoting) instead of running its own copy of the renderer.
 async fn export_metro(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(tour_id): Path<TourId>,
 ) -> IResponse {
-    ctx.assert_shopping_tour_action(tour_id, EventPerm::EditEvent).await?;
-    // Single query: tour shopping list + per-recipe usage breakdown.
-    let shopping_list = state
-        .events()
-        .tour_shopping_list_with_usage(tour_id)
-        .await?;
-    let sources = state.ingredients().list_sources(None).await?;
+    export_tour_via_app(state, ctx, tour_id, crate::app::exports::ExportFormat::Csv).await
+}
+
+/// Shared export path: permission-checked in the app use-case
+/// (`EventPerm::ExportMealPlan`), rendering via `app::exports`.
+async fn export_tour_via_app(
+    state: MyAppState,
+    ctx: AuthCtx,
+    tour_id: TourId,
+    format: crate::app::exports::ExportFormat,
+) -> IResponse {
+    use crate::app::events::exports::{export_shopping_tour_list, TourExportQuery};
 
     let tour = state.events().get_shopping_tour(tour_id).await?;
-    let event_inventories = state.events().get_inventories(tour.event_id).await?;
-    let inventory_items = inventory_items(Some(tour_id), &event_inventories, &state).await;
+    let actor = crate::app::AppCtx::new(ctx, crate::app::Channel::WebUi);
+    let file = export_shopping_tour_list(
+        &state,
+        &actor,
+        tour.event_id,
+        tour_id,
+        TourExportQuery {
+            format,
+            deduct_inventory: Some(true),
+        },
+    )
+    .await?;
 
-    // ingredient_id -> Metro article number (e.g. "208486"), resolved from the
-    // sync cache. Ingredients that can't be resolved are absent here and get
-    // their name in column 1 + sorted to the bottom of the CSV.
-    let article_numbers = state
-        .events()
-        .resolve_metro_article_numbers(tour_id)
-        .await?;
-
-    // CSV rows: (article_number_or_name, amount, comment, resolved?). Resolved
-    // rows are emitted first; unresolved (no Metro article number) sink below.
-    let mut rows: Vec<(String, f64, String, bool)> = Vec::new();
-
-    for item in shopping_list {
-        // Unresolvable weight (unknown unit weight) → not orderable via Metro.
-        let Some(item_weight) = item.weight else {
-            continue;
-        };
-        let inv_amount = get_inventory_amount_by_id(item.ingredient_id, &inventory_items);
-        if inv_amount > item_weight {
-            continue;
-        }
-        let weight = item_weight.clone() - inv_amount;
-
-        // Find source with matching ingredient_id
-        let Some(source) = sources
-            .iter()
-            .find(|s| s.ingredient_id == item.ingredient_id)
-        else {
-            continue;
-        };
-
-        // Round up to whole packages; column 2 is the package count Metro orders.
-        let package_size = source.package_size.to_f64().unwrap();
-        let packages = (weight.to_f64().unwrap() / package_size).ceil();
-        let total_kg = packages * package_size;
-
-        // Comment: "<name>(<count> * <size>kg = <total>kg): <usage breakdown>".
-        // The prefix explains how the package count maps to kg; the usage list
-        // is the per-recipe breakdown for this tour.
-        let mut comment = format!(
-            "{}({} * {:.2}kg = {:.2}kg)",
-            item.ingredient_name, packages as i64, package_size, total_kg
-        );
-        let usage = format_recipe_usage(&item.recipe_usage);
-        if !usage.is_empty() {
-            comment.push_str(&format!(": {usage}"));
-        }
-
-        match article_numbers.get(&item.ingredient_id) {
-            Some(article) => rows.push((article.clone(), packages, comment, true)),
-            // Unresolved: fall back to the ingredient name and sink to the bottom.
-            None => rows.push((item.ingredient_name.clone(), packages, comment, false)),
-        }
-    }
-
-    // Resolved rows first (stable within each group preserves the shopping-list
-    // category/name ordering).
-    rows.sort_by_key(|(_, _, _, resolved)| !*resolved);
-
-    let mut output = String::new();
-    for (col1, packages, comment, _) in rows {
-        // Quote the comment (may contain commas); CSV-escape embedded quotes.
-        let comment_field = if comment.is_empty() {
-            String::new()
-        } else {
-            format!("\"{}\"", comment.replace('"', "\"\""))
-        };
-        // Column 2 is a whole package count.
-        output.push_str(&format!("{},{},{}\n", col1, packages as i64, comment_field));
-    }
-
+    let extension = match format {
+        crate::app::exports::ExportFormat::Txt => "txt",
+        crate::app::exports::ExportFormat::Csv => "csv",
+        crate::app::exports::ExportFormat::Pdf => "pdf",
+    };
     Ok(IntoResponse::into_response((
         [
-            (
-                axum::http::header::CONTENT_TYPE,
-                "text/csv; charset=utf-8".to_string(),
-            ),
+            (axum::http::header::CONTENT_TYPE, file.mime.to_string()),
             (
                 axum::http::header::CONTENT_DISPOSITION,
-                "inline; filename=\"metro_list.csv\"".to_string(),
+                format!("inline; filename=\"{}.{}\"", file.filename, extension),
             ),
         ],
-        output,
+        file.bytes,
     )))
 }
 
