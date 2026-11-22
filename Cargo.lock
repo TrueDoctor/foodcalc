@@ -3805,7 +3805,6 @@ dependencies = [
  "tower-http 0.6.11",
  "tower-sessions",
  "tower-sessions-sqlx-store",
- "tracing",
  "urlencoding",
 ]
 

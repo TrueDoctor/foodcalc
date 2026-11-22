@@ -8,13 +8,13 @@ edition = "2021"
 
 [features]
 default = ["legacy-frontend"]
-legacy-frontend = []
+legacy-frontend = ["foodlib_new/legacy-frontend"]
 typst = ["dep:pdf_export"]
 
 [dependencies]
 axum.workspace = true
 bcrypt = "0.16.0"
-foodlib_new = { path = "../foodlib_new", features = ["axum"] }
+foodlib_new = { path = "../foodlib_new", default-features = false, features = ["axum"] }
 pdf_export = { path = "../pdf_export", optional = true }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 fern = { version = "0.6", features = ["colored"] }
@@ -36,7 +36,6 @@ tower-sessions = { version = "0.14.0", features = ["signed"] }
 tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
 urlencoding = "2"
 eyre = "0.6.14"
-tracing = "0.1.41"
 serde_html_form.workspace = true
 
 [dev-dependencies]
