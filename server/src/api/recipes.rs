@@ -36,11 +36,11 @@ pub fn recipes_router() -> Router<MyAppState> {
         .route("/{id}/owner", put(transfer_owner))
         .route(
             "/{id}/ingredients",
-            post(add_ingredient).put(update_ingredient),
+            post(add_ingredient),
         )
         .route(
             "/{id}/ingredients/{ingredient_id}",
-            delete(remove_ingredient),
+            put(update_ingredient).delete(remove_ingredient),
         )
         .route("/{id}/steps", post(add_step))
         .route(
@@ -176,10 +176,13 @@ async fn add_ingredient(
 async fn update_ingredient(
     State(state): State<MyAppState>,
     actor: AppCtx,
-    Path(id): Path<RecipeId>,
+    Path((id, ingredient_id)): Path<(RecipeId, IngredientId)>,
     Json(payload): Json<RecipeIngredientInput>,
 ) -> Response {
-    respond(recipes::update_ingredient(&state, &actor, id, payload).await)
+    respond(
+        recipes::update_ingredient(&state, &actor, id, ingredient_id, payload)
+            .await,
+    )
 }
 
 async fn remove_ingredient(
