@@ -33,6 +33,9 @@ pub mod action {
     pub const GROUP_DEFAULTS_CHANGED: &str = "access.group.defaults_changed";
     pub const SETTINGS_MEMBER_DEFAULTS_CHANGED: &str = "access.settings.member_defaults_changed";
     pub const ADMIN_SELF_GRANT: &str = "access.admin.self_grant";
+    pub const ROLE_PERMISSIONS_CHANGED: &str = "access.role.permissions_changed";
+    pub const ROLE_CREATED: &str = "access.role.created";
+    pub const ROLE_DELETED: &str = "access.role.deleted";
 
     pub const OWNER_TRANSFERRED: &str = "ownership.owner.transferred";
     pub const ENTITY_CREATED: &str = "ownership.entity.created";

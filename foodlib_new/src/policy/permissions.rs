@@ -145,6 +145,60 @@ impl Permission {
     }
 }
 
+impl Permission {
+    /// Every permission, grouped by domain. Used by permission-editing UIs
+    /// (the legacy role×permission matrix) so rows never need a
+    /// hand-maintained list; keep in sync with the enums above.
+    pub fn all() -> Vec<Self> {
+        use EventPerm as Ev;
+        use GroupPerm as Gr;
+        use IngredientPerm as Ing;
+        use InventoryPerm as Inv;
+        use RecipePerm as Rec;
+
+        vec![
+            // Events
+            Self::Event(Ev::ViewEvent),
+            Self::Event(Ev::CreateEvent),
+            Self::Event(Ev::EditEvent),
+            Self::Event(Ev::DeleteEvent),
+            Self::Event(Ev::CloneEvent),
+            Self::Event(Ev::TransferOwner),
+            Self::Event(Ev::ViewCalculation),
+            Self::Event(Ev::ManageMeals),
+            Self::Event(Ev::ShoppingTourCreate),
+            Self::Event(Ev::ShoppingTourEdit),
+            Self::Event(Ev::ShoppingTourComplete),
+            Self::Event(Ev::StatusBoardOperate),
+            Self::Event(Ev::ExportMealPlan),
+            // Recipes
+            Self::Recipe(Rec::View),
+            Self::Recipe(Rec::Create),
+            Self::Recipe(Rec::Edit),
+            Self::Recipe(Rec::Delete),
+            Self::Recipe(Rec::TransferOwner),
+            Self::Recipe(Rec::Export),
+            // Ingredients
+            Self::Ingredient(Ing::View),
+            Self::Ingredient(Ing::Create),
+            Self::Ingredient(Ing::Edit),
+            Self::Ingredient(Ing::Delete),
+            Self::Ingredient(Ing::TransferOwner),
+            // Inventories
+            Self::Inventory(Inv::View),
+            Self::Inventory(Inv::Create),
+            Self::Inventory(Inv::EditMetadata),
+            Self::Inventory(Inv::EditStock),
+            Self::Inventory(Inv::Delete),
+            Self::Inventory(Inv::TransferOwner),
+            // Group
+            Self::Group(Gr::ManageMembers),
+            Self::Group(Gr::ManageSettings),
+            Self::Group(Gr::Delete),
+        ]
+    }
+}
+
 impl FromStr for Permission {
     type Err = UnknownPermissionError;
 
