@@ -4,7 +4,7 @@ use bigdecimal::FromPrimitive;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::types::ids::{EventId, GroupId};
 use foodlib_new::entities::types::money::Money;
-use foodlib_new::policy::EventPerm;
+use foodlib_new::policy::{EventPerm, GlobalPermission};
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
@@ -41,8 +41,14 @@ pub struct AddEventForm {
     comment: Option<String>,
 }
 
-pub async fn add(foodlib: FoodLib, user: User, Form(form): Form<AddEventForm>) -> MResponse {
-    let group = foodlib.users().get_personal_group(user.id).await?;
+pub async fn add(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<AddEventForm>) -> MResponse {
+    // Same guards as the REST create (`app::events::create_new_event`).
+    ctx.assert_global(GlobalPermission::CreateResources)?;
+    let group = foodlib.users().get_personal_group(ctx.user.id).await?;
+    ctx.assert_group_perm(
+        group.id,
+        foodlib_new::policy::Permission::Event(EventPerm::CreateEvent),
+    )?;
     let event = foodlib_new::event::Event {
         id: EventId(-1),
         name: form.name,
@@ -51,7 +57,7 @@ pub async fn add(foodlib: FoodLib, user: User, Form(form): Form<AddEventForm>) -
         group_id: group.id,
     };
     foodlib.events().create(event).await?;
-    Ok(event_list(foodlib, user).await)
+    Ok(event_list(foodlib, ctx.user).await)
 }
 
 /// Inline add-row for events. Visible columns mirror the table (name +
@@ -82,14 +88,14 @@ fn event_add_row(is_admin: bool) -> Markup {
 }
 
 pub async fn duplicate(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    ctx.assert_event_action(event_id, EventPerm::CloneEvent).await?;
     let group = foodlib.users().get_personal_group(ctx.user.id).await?;
     let id = foodlib.events().duplicate(event_id, group.id).await?;
     event_detail_tab::event_form(foodlib, ctx, Path(id)).await
 }
 
 pub async fn delete_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    ctx.assert_event_action(event_id, EventPerm::DeleteEvent).await?;
     let event = foodlib.events().get(event_id).await?;
     Ok(html! {
         div class="flex flex-col gap-2" {
@@ -108,8 +114,7 @@ pub async fn delete_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<
 }
 
 pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
-    // Kept as EditEvent to preserve the old assert_can_edit_event behavior.
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    ctx.assert_event_action(event_id, EventPerm::DeleteEvent).await?;
     foodlib.events().delete(event_id).await?;
     Ok(event_list(foodlib, ctx.user).await)
 }

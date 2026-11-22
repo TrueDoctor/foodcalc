@@ -263,16 +263,19 @@ fn render_row_markup(inv: &Inventory, open: bool, filter: &str) -> Markup {
     }
 }
 
-async fn render_row(foodlib: FoodLib, Path(id): Path<InventoryId>) -> MResponse {
+async fn render_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<InventoryId>) -> MResponse {
+    ctx.assert_inventory_perm(id, InventoryPerm::View).await?;
     let inv = foodlib.inventories().get(id).await?;
     Ok(render_row_markup(&inv, false, ""))
 }
 
 async fn contents_view(
     foodlib: FoodLib,
+    ctx: AuthCtx,
     Path(id): Path<InventoryId>,
     Query(filters): Query<ContentsFilters>,
 ) -> MResponse {
+    ctx.assert_inventory_perm(id, InventoryPerm::View).await?;
     render_contents(&foodlib, id, filters.filter.as_deref().unwrap_or("")).await
 }
 
@@ -467,10 +470,9 @@ async fn edit_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<InventoryId>) -
 }
 
 async fn delete_inventory(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<InventoryId>) -> MResponse {
-    // TODO(policy): the old assert_can_edit_inventory collapsed metadata/stock/
-    // delete rights into one "Edit" permission; deleting should require
-    // InventoryPerm::Delete once roles are migrated.
-    ctx.assert_inventory_perm(id, InventoryPerm::EditMetadata).await?;
+    // Deleting must require the dedicated delete permission — the old
+    // "collapse everything into Edit" behavior let edit-only roles delete.
+    ctx.assert_inventory_perm(id, InventoryPerm::Delete).await?;
     foodlib.inventories().delete(id).await?;
     let inventories = foodlib.inventories().list().await?;
     Ok(render_list(&inventories, &[], ""))
@@ -495,12 +497,14 @@ async fn add_item(
     if form.ingredient_id.get() < 0 {
         return render_contents(&foodlib, id, "").await;
     }
+    // Validate like the REST path: zero/negative amounts are rejected.
+    let amount = crate::app::inventories::ensure_positive_amount(form.amount.clone())?;
 
     let items = foodlib.inventories().get_items(id).await?;
     let item = InventoryItem {
         inventory_id: id,
         ingredient_id: form.ingredient_id,
-        amount: form.amount,
+        amount,
     };
     if items.iter().any(|x| x.ingredient_id == form.ingredient_id) {
         foodlib.inventories().update_item(item).await?;
@@ -522,12 +526,13 @@ async fn update_item_amount(
     Form(form): Form<UpdateAmountForm>,
 ) -> MResponse {
     ctx.assert_inventory_perm(id, InventoryPerm::EditStock).await?;
+    let amount = crate::app::inventories::ensure_positive_amount(form.amount.clone())?;
     let updated = foodlib
         .inventories()
         .update_item(InventoryItem {
             inventory_id: id,
             ingredient_id,
-            amount: form.amount,
+            amount,
         })
         .await?;
     let ingredient = foodlib.ingredients().get(ingredient_id).await?;

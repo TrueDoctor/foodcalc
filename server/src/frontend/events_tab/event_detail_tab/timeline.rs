@@ -679,7 +679,8 @@ fn render_lane(lane: &[TimelineItem], bounds: WindowBounds, event_id: EventId, d
 
 /// Render the whole timeline for one event.
 pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    // Read-only view: any viewer of the event may open the timeline.
+    ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
 
     let event = foodlib.events().get(event_id).await?;
     let items = collect_items(&foodlib, event_id).await?;
@@ -851,8 +852,6 @@ async fn handle_move(
     Path(event_id): Path<EventId>,
     Form(form): Form<MoveForm>,
 ) -> MResponse {
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
-
     log::info!(
         "timeline move: kind={} id={} day={} start_min={} end_min={:?}",
         form.kind,
@@ -869,6 +868,9 @@ async fn handle_move(
 
     match form.kind.as_str() {
         "meal" => {
+            // Each drag target carries its own domain permission: frame-edit
+            // rights alone must not allow rescheduling meals or tours.
+            ctx.assert_meal_action(MealId(form.id), EventPerm::ManageMeals).await?;
             let m = foodlib.meals().get_meal(MealId(form.id)).await?;
             // Preserve the meal's duration on a plain move; honor end_min on a
             // resize. Guard against a non-positive span by falling back to the
@@ -894,11 +896,13 @@ async fn handle_move(
                 .await?;
         }
         "tour" => {
+            ctx.assert_shopping_tour_action(TourId(form.id), EventPerm::ShoppingTourEdit).await?;
             let mut tour = foodlib.events().get_shopping_tour(TourId(form.id)).await?;
             tour.tour_date = new_start;
             foodlib.events().update_shopping_tour(tour).await?;
         }
         "prep" => {
+            ctx.assert_food_prep_action(FoodPrepId(form.id), EventPerm::ManageMeals).await?;
             let mut prep = foodlib.events().get_food_prep(FoodPrepId(form.id)).await?;
             // Keep the use window's length relative to the (possibly changed)
             // prep time so a moved prep still "uses until" the same offset.

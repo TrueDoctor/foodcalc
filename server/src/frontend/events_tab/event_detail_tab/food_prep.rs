@@ -47,7 +47,9 @@ async fn create_inline(
     Path(event_id): Path<EventId>,
     Form(form): Form<InlinePrepForm>,
 ) -> MResponse {
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    // Food-prep is meal planning: gated on the meal-planning permission so
+    // the Cook role keeps access (Team/Manager hold events:edit, Cook not).
+    ctx.assert_event_action(event_id, EventPerm::ManageMeals).await?;
     let prep_date = super::shopping_tours::parse_datetime_local(&form.prep_date)?;
     let use_from = form
         .use_from

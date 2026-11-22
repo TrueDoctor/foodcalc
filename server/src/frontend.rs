@@ -95,10 +95,11 @@ pub use foodlib_new::error::redirect_html_error as html_error;
 
 /// Group ids the user holds any membership in.
 ///
-/// Presentation-only helper for filtering which groups the UI *offers*;
-/// authoritative access checks stay in `AuthCtx` (`can_access_group` /
-/// `assert_group_perm`). Replaces the pre-typed-ids `AuthCtx::group_ids`
-/// field: membership now lives in the resolved `UserPolicy`.
+/// Returns plain membership — it does *not* imply any permission. It backs
+/// both the UI's offer-filtering and the `can_edit` ingredient gate (which
+/// resolves the group to `IngredientPerm::Edit`); authoritative checks stay
+/// in `AuthCtx` (`can_access_group` / `assert_group_perm`). Membership now
+/// lives in the resolved `UserPolicy`, not on `AuthCtx` itself.
 pub(crate) fn user_group_ids(ctx: &AuthCtx) -> Vec<GroupId> {
     ctx.policy.group_permissions.keys().copied().collect()
 }

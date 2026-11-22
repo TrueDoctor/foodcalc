@@ -70,6 +70,11 @@ pub async fn update_ingredient(
 ) -> IResponse {
     if ingredient.id.get() == -1 {
         let group = foodlib.users().get_personal_group(ctx.user.id).await?;
+        // Same guards as the REST create: global create right + group create perm.
+        ctx.assert_global(foodlib_new::policy::GlobalPermission::CreateResources)?;
+        ctx.assert_group_perm(group.id, foodlib_new::policy::Permission::Ingredient(
+            foodlib_new::policy::IngredientPerm::Create,
+        ))?;
         ingredient.group_id = group.id;
         foodlib.ingredients().create(ingredient).await?;
         Ok((
@@ -79,12 +84,10 @@ pub async fn update_ingredient(
             .into_response())
     } else {
         let existing = foodlib.ingredients().get(ingredient.id).await?;
-        let ctx_group_ids = super::user_group_ids(&ctx);
-        if !can_edit(existing.group_id, &ctx_group_ids, &ctx.user) {
-            return Err(Error::Forbidden(
-                "You don't have permission to edit this ingredient".into(),
-            ));
-        }
+        // Permission-aware gate instead of plain membership: the group edit
+        // permission decides, admins do not bypass it implicitly.
+        ctx.assert_ingredient_perm(existing.id, foodlib_new::policy::IngredientPerm::Edit)
+            .await?;
 
         let target_group = ingredient.group_id;
         ingredient.group_id = existing.group_id;
@@ -115,25 +118,18 @@ struct SourceData {
 
 async fn update_source(
     foodlib: FoodLib,
-    user: User,
+    ctx: AuthCtx,
     Path((ingredient_id, source_id)): Path<(IngredientId, IngredientSourceId)>,
     form: Form<SourceData>,
 ) -> MResponse {
-    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
-    let user_group_ids: Vec<GroupId> = foodlib
-        .users()
-        .get_user_groups(user.id)
-        .await?
-        .iter()
-        .map(|g| g.id)
-        .collect();
-    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
-        return Err(Error::Forbidden(
-            "You don't have permission to edit sources for this ingredient".into(),
-        ));
-    }
+    ctx.assert_ingredient_perm(ingredient_id, foodlib_new::policy::IngredientPerm::Edit)
+        .await?;
 
     let data = form.0;
+    // A non-finite price (NaN/±inf) must not panic — validate instead.
+    let price = Money::from_f64(data.price).ok_or_else(|| Error::InvalidInput {
+        message: format!("invalid price value: {}", data.price),
+    })?;
 
     if source_id.get() == -1 {
         // Creating a new source
@@ -142,48 +138,58 @@ async fn update_source(
             ingredient_id,
             store_id: data.store_id,
             package_size: Amount::from(data.weight),
-            price: Money::from_f64(data.price).unwrap(),
+            price: price.clone(),
             unit_id: UnitId(0),
             url: data.url,
             comment: data.comment,
         };
 
         foodlib.ingredients().add_source(source).await?;
-        sources_table(foodlib, Some(user), Path(ingredient_id)).await
+        sources_table(foodlib, Some(ctx.user), Path(ingredient_id)).await
     } else {
         // Updating existing source
+        // The source id in the URL must belong to the ingredient in the URL —
+        // otherwise editing one ingredient would let you mutate another's sources.
+        let existing = foodlib.ingredients().get_source(source_id).await?;
+        if existing.ingredient_id != ingredient_id {
+            return Err(Error::NotFound {
+                entity: "IngredientSource",
+                id: source_id.to_string(),
+            });
+        }
         let source = IngredientSource {
             id: source_id,
             ingredient_id,
             store_id: data.store_id,
             package_size: Amount::from(data.weight),
-            price: Money::from_f64(data.price).unwrap(),
+            price,
             unit_id: UnitId(0),
             url: data.url,
             comment: data.comment,
         };
 
         foodlib.ingredients().update_source(source).await?;
-        sources_table(foodlib, Some(user), Path(ingredient_id)).await
+        sources_table(foodlib, Some(ctx.user), Path(ingredient_id)).await
     }
 }
 
 async fn delete_source(
     foodlib: FoodLib,
-    user: User,
+    ctx: AuthCtx,
     Path((ingredient_id, source_id)): Path<(IngredientId, IngredientSourceId)>,
 ) -> MResponse {
-    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
-    let user_groups = foodlib.users().get_user_groups(user.id).await?;
-    let user_group_ids: Vec<GroupId> = user_groups.iter().map(|g| g.id).collect();
-    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
-        return Err(Error::Forbidden(
-            "You don't have permission to delete sources for this ingredient".into(),
-        ));
+    ctx.assert_ingredient_perm(ingredient_id, foodlib_new::policy::IngredientPerm::Edit)
+        .await?;
+    let existing = foodlib.ingredients().get_source(source_id).await?;
+    if existing.ingredient_id != ingredient_id {
+        return Err(Error::NotFound {
+            entity: "IngredientSource",
+            id: source_id.to_string(),
+        });
     }
 
     foodlib.ingredients().delete_source(source_id).await?;
-    sources_table(foodlib, Some(user), Path(ingredient_id)).await
+    sources_table(foodlib, Some(ctx.user), Path(ingredient_id)).await
 }
 
 /// Route handler for `GET /ingredients`. Always returns the full page shell;

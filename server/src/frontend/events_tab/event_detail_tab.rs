@@ -214,8 +214,12 @@ pub async fn delete_meal_dialog(
 
 pub async fn export_recipe_pdf(
     State(state): State<MyAppState>,
+    ctx: AuthCtx,
     Path(meal_id): Path<MealId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
+    // Reading a meal's recipe sheet across groups needs the event export
+    // permission — previously any logged-in user could fetch by ID.
+    ctx.assert_meal_action(meal_id, EventPerm::ExportMealPlan).await?;
     let recipe_info = state.export().fetch_meal_recipe(meal_id).await?;
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
@@ -241,8 +245,10 @@ pub async fn export_recipe_pdf(
 
 pub async fn export_food_prep_pdf(
     State(state): State<MyAppState>,
+    ctx: AuthCtx,
     Path(prep_id): Path<FoodPrepId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
+    ctx.assert_food_prep_action(prep_id, EventPerm::ExportMealPlan).await?;
     let recipe_info = state.export().fetch_food_prep_recipe(prep_id).await?;
     let title = format!("{}_prep", recipe_info.name);
     #[cfg(feature = "typst")]
@@ -514,7 +520,13 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<Eve
     })
 }
 
-async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<MealId>) -> MResponse {
+async fn ingredients_per_serving(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    meal_id: Path<MealId>,
+) -> MResponse {
+    // Per-serving ingredient/cost details are event-scoped data.
+    ctx.assert_meal_action(meal_id.0, EventPerm::ViewEvent).await?;
     let event_meal_ingredients = foodlib.meals().get_meal_ingredients(meal_id.0).await?;
     let meal = foodlib.meals().get_meal(meal_id.0).await?;
 

@@ -63,8 +63,10 @@ pub async fn delete_meal(
     ctx: AuthCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
-    ctx.assert_meal_action(meal_id, EventPerm::EditEvent).await?;
+    // Meal actions belong to the Cook/meal-planning permission, not the
+    // broad frame-edit permission.
+    ctx.assert_event_action(event_id, EventPerm::ManageMeals).await?;
+    ctx.assert_meal_action(meal_id, EventPerm::ManageMeals).await?;
     foodlib.meals().remove_meal(meal_id).await?;
     event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
 }
@@ -74,8 +76,8 @@ pub async fn duplicate_meal(
     ctx: AuthCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
-    ctx.assert_meal_action(meal_id, EventPerm::EditEvent).await?;
+    ctx.assert_event_action(event_id, EventPerm::ManageMeals).await?;
+    ctx.assert_meal_action(meal_id, EventPerm::ManageMeals).await?;
     foodlib.meals().duplicate_meal(meal_id).await?;
     event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
 }
@@ -87,9 +89,9 @@ pub async fn update_meal(
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
     Form(meal): Form<MealForm>,
 ) -> MResponse {
-    ctx.assert_event_action(event_id, EventPerm::EditEvent).await?;
+    ctx.assert_event_action(event_id, EventPerm::ManageMeals).await?;
     if meal_id.get() != -1 {
-        ctx.assert_meal_action(meal_id, EventPerm::EditEvent).await?;
+        ctx.assert_meal_action(meal_id, EventPerm::ManageMeals).await?;
     }
     let append_start = format!("{}:00-00:00", meal.start_time);
     let start_time = OffsetDateTime::parse(
