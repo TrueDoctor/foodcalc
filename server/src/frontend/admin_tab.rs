@@ -46,6 +46,18 @@ pub(crate) fn admin_router() -> axum::Router<MyAppState> {
         .route("/metro-sync", get(metro_sync_view))
         .route("/metro-sync", post(metro_sync_run))
         .route("/permissions", get(permissions::permissions_view))
+        .route(
+            "/permissions/roles/{slug}/permissions",
+            post(permissions::set_role_permissions),
+        )
+        .route(
+            "/permissions/roles",
+            post(permissions::create_role),
+        )
+        .route(
+            "/permissions/roles/{slug}",
+            delete(permissions::delete_role),
+        )
         .nest("/users", users::users_router())
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
 }
@@ -190,16 +202,16 @@ async fn group_members_view(
     render_group_detail(&state, &ctx, group, members).await
 }
 
-/// Role checkboxes shared by the member editor and (later) the group
-/// default-roles section. Slugs come from the app layer's role catalog —
-/// never hardcoded.
-fn role_checkboxes(name: &str, selected: &[String]) -> Markup {
+/// Role checkboxes shared by the member editor and the group default-roles
+/// section. Slugs come from the DB role list (app::users::list_roles) —
+/// never hardcoded, so custom roles show up automatically.
+fn role_checkboxes(roles: &[foodlib_new::ops::users::DbRole], name: &str, selected: &[String]) -> Markup {
     html! {
         div class="flex flex-wrap gap-3" {
-            @for def in app::users::role_catalog() {
+            @for def in roles {
                 label class="flex items-center gap-1 text-sm" {
                     input type="checkbox" name=(name) value=(def.slug)
-                        checked[selected.contains(&def.slug.to_string())];
+                        checked[selected.contains(&def.slug)];
                     (def.name)
                 }
             }
@@ -227,7 +239,11 @@ fn role_chips(roles: &[String]) -> Markup {
 /// per catalog role. Saving posts all checked slugs to the
 /// `set_member_roles` use-case (guard, validation, last-manager protection
 /// and audit live there).
-fn member_roles_row(group_id: GroupId, member: &app::users::MemberWithRoles) -> Markup {
+fn member_roles_row(
+    group_id: GroupId,
+    member: &app::users::MemberWithRoles,
+    roles: &[foodlib_new::ops::users::DbRole],
+) -> Markup {
     html! {
         tr class="bg-gray-50 dark:bg-gray-800" {
             td colspan="4" {
@@ -235,7 +251,7 @@ fn member_roles_row(group_id: GroupId, member: &app::users::MemberWithRoles) -> 
                     hx-post=(format!("/admin/groups/{}/members/{}/roles", group_id, member.member.id))
                     hx-target="#group-detail"
                     hx-swap="outerHTML" {
-                    (role_checkboxes("roles", &member.roles))
+                    (role_checkboxes(roles, "roles", &member.roles))
                     div class="flex gap-2" {
                         button class="btn btn-primary" type="submit" { "Rollen speichern" }
                         button class="btn btn-cancel" type="button"
@@ -261,6 +277,7 @@ async fn render_group_detail(
         .ctx
         .has_group_permission(group.id, Permission::Group(GroupPerm::ManageSettings));
     let defaults = app::users::get_default_roles(state, ctx, group.id).await.ok();
+    let db_roles = state.users().list_roles().await.unwrap_or_default();
     let all_users = state.db.users().get_all_users().await?;
     let member_ids: std::collections::HashSet<UserId> =
         members.iter().map(|m| m.member.id).collect();
@@ -312,7 +329,7 @@ async fn render_group_detail(
                 }
                 div class="flex flex-col gap-1" {
                     p class="text-sm font-semibold" { "Initiale Rollen (optional)" }
-                    (role_checkboxes("roles", &[]))
+                    (role_checkboxes(&db_roles, "roles", &[]))
                 }
                 button class="btn btn-primary" type="submit" { "Add member" }
             }
@@ -336,7 +353,7 @@ async fn render_group_detail(
                             hx-put=(format!("/admin/groups/{}/default-roles", group.id))
                             hx-target="#group-detail"
                             hx-swap="outerHTML" {
-                            (role_checkboxes("roles", d.roles.as_deref().unwrap_or(&[])))
+                            (role_checkboxes(&db_roles, "roles", d.roles.as_deref().unwrap_or(&[])))
                             div class="flex gap-2" {
                                 button class="btn btn-primary" type="submit" { "Speichern" }
                                 @if !d.inherited {
@@ -407,7 +424,8 @@ async fn role_edit_form(
             entity: "GroupMember",
             id: user_id.to_string(),
         })?;
-    Ok(member_roles_row(group_id, member))
+    let db_roles = state.users().list_roles().await.unwrap_or_default();
+    Ok(member_roles_row(group_id, member, &db_roles))
 }
 
 #[derive(Deserialize)]
