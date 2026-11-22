@@ -37,3 +37,7 @@ tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
 urlencoding = "2"
 eyre = "0.6.14"
 tracing = "0.1.41"
+serde_html_form.workspace = true
+
+[dev-dependencies]
+serde_urlencoded = "0.7"

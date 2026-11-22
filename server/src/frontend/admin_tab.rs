@@ -16,6 +16,7 @@ use serde::Deserialize;
 
 use crate::app;
 use crate::frontend::ctx::WebCtx;
+use crate::frontend::form::HtmlForm;
 use crate::frontend::LOGIN_URL;
 use crate::{FoodLib, MyAppState};
 
@@ -387,11 +388,11 @@ async fn add_member(
     State(state): State<MyAppState>,
     ctx: WebCtx,
     Path(group_id): Path<GroupId>,
-    Form(form): Form<AddMemberForm>,
+    form: HtmlForm<AddMemberForm>,
 ) -> MResponse {
     let input = app::users::AddMemberInput {
-        user: form.user,
-        roles: if form.roles.is_empty() { None } else { Some(form.roles) },
+        user: form.0.user,
+        roles: if form.0.roles.is_empty() { None } else { Some(form.0.roles) },
     };
     app::users::add_member(&state, &ctx, group_id, input).await?;
     let group = state.users().get_group(group_id).await?;
@@ -441,9 +442,9 @@ async fn set_member_roles(
     State(state): State<MyAppState>,
     ctx: WebCtx,
     Path((group_id, user_id)): Path<(GroupId, UserId)>,
-    Form(form): Form<SetRolesForm>,
+    form: HtmlForm<SetRolesForm>,
 ) -> MResponse {
-    let input = app::users::SetMemberRolesInput { roles: form.roles };
+    let input = app::users::SetMemberRolesInput { roles: form.0.roles };
     app::users::set_member_roles(&state, &ctx, group_id, user_id, input).await?;
     let group = state.users().get_group(group_id).await?;
     let members = app::users::list_members(&state, &ctx, group_id).await?;
@@ -456,9 +457,9 @@ async fn put_default_roles(
     State(state): State<MyAppState>,
     ctx: WebCtx,
     Path(group_id): Path<GroupId>,
-    Form(form): Form<SetRolesForm>,
+    form: HtmlForm<SetRolesForm>,
 ) -> MResponse {
-    let input = app::users::GroupDefaultRolesInput { roles: form.roles };
+    let input = app::users::GroupDefaultRolesInput { roles: form.0.roles };
     app::users::put_default_roles(&state, &ctx, group_id, input).await?;
     let group = state.users().get_group(group_id).await?;
     let members = app::users::list_members(&state, &ctx, group_id).await?;

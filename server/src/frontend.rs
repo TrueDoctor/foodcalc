@@ -14,6 +14,7 @@ pub type Router = axum::Router<MyAppState>;
 
 pub(crate) mod admin_tab;
 pub(crate) mod ctx;
+pub(crate) mod form;
 pub(crate) mod events_tab;
 pub(crate) mod home;
 pub(crate) mod icons;

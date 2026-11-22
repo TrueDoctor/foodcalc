@@ -17,6 +17,7 @@ use foodlib_new::auth_context::AuthCtx;
 
 use crate::app;
 use crate::frontend::ctx::WebCtx;
+use crate::frontend::form::HtmlForm;
 
 use crate::frontend::MResponse;
 
@@ -381,10 +382,10 @@ async fn set_global_permissions(
     State(state): State<MyAppState>,
     ctx: WebCtx,
     Path(user_id): Path<UserId>,
-    Form(form): Form<GlobalPermissionsForm>,
+    form: HtmlForm<GlobalPermissionsForm>,
 ) -> MResponse {
     let payload = app::users::GlobalPermissionsInput {
-        permissions: form.permissions,
+        permissions: form.0.permissions,
     };
     app::users::set_global_permissions(&state, &ctx, user_id, payload).await?;
     render_user_detail(&state, &ctx, user_id).await

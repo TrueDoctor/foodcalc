@@ -5,6 +5,7 @@ default-members = ["server", "foodlib_new"]
 exclude = ["foodlib", "cli-client", "api"]
 
 [workspace.dependencies]
+serde_html_form = "0.2"
 sqlx = { version = "0.8", features = [
 	"postgres",
 	"time",

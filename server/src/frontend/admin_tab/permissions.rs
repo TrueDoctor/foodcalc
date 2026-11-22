@@ -19,6 +19,7 @@ use maud::{html, Markup};
 use serde::Deserialize;
 
 use crate::app;
+use crate::frontend::form::HtmlForm;
 use crate::app::users::role_catalog;
 use crate::frontend::ctx::WebCtx;
 use crate::MyAppState;
@@ -274,15 +275,14 @@ pub struct RolePermissionsForm {
     #[serde(default)]
     pub permissions: Vec<Permission>,
 }
-
 /// `POST /admin/permissions/roles/{slug}/permissions` — save one column.
 pub async fn set_role_permissions(
     State(state): State<MyAppState>,
     ctx: WebCtx,
     Path(slug): Path<String>,
-    Form(form): Form<RolePermissionsForm>,
+    form: HtmlForm<RolePermissionsForm>,
 ) -> Result<Markup, Response> {
-    if let Err(e) = app::users::set_role_permissions(&state, &ctx, &slug, form.permissions).await
+    if let Err(e) = app::users::set_role_permissions(&state, &ctx, &slug, form.0.permissions).await
     {
         return Ok(crate::frontend::html_error(&format!("{e}"), "/admin/permissions"));
     }
