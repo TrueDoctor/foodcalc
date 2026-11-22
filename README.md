@@ -24,7 +24,7 @@ An explicit energy target replaces ambiguous portion sizes as the scaling unit. 
 
 ### REST API (`/api/*`)
 Foodcalc provides a JSON REST API backed by a dedicated application layer (`server/src/app/`), exposing events, meals, food prep, shopping tours, recipes, ingredients, inventories, status boards, user/group RBAC management, and audit logs to external tools and modern frontends.
-- Full OpenAPI specification: [`server/foodcalc_rest_specification.yaml`](./server/foodcalc_rest_specification.yaml)
+- Full OpenAPI specification: [`docs/openapi.yaml`](docs/openapi.yaml)
 
 
 ### Web Frontend
@@ -87,4 +87,4 @@ cargo test -p foodlib_new
 
 ## Documentation
 
-* [`server/foodcalc_rest_specification.yaml`](./server/foodcalc_rest_specification.yaml) — OpenAPI REST specification
+* [`docs/openapi.yaml`](docs/openapi.yaml) — OpenAPI REST specification

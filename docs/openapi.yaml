@@ -1,13 +1,13 @@
-openapi: 3.0.3
+openapi: "3.1.0"
 info:
   title: Foodcalc REST API
-  description: >
+  description: >-
     API-Spezifikation für die Foodcalc-Applikation. Zuständig für Event-Planung, 
-    Rezeptverwaltung, Logistik und PDF-Generierung für Groß-Caterings.
+     Rezeptverwaltung, Logistik und PDF-Generierung für Groß-Caterings.
   version: 1.1.0
-servers:
-  - url: http://localhost:3000/api
-    description: Lokaler Entwicklungsserver
+  servers:
+    - url: http://localhost:3000
+      description: Lokaler Entwicklungsserver
 
 tags:
   - name: Auth
@@ -62,7 +62,7 @@ components:
   schemas:
     LoginCredentials:
       type: object
-      required: [username, password]
+      required: [ username, password ]
       properties:
         username:
           type: string
@@ -129,7 +129,7 @@ components:
 
     EventCreate:
       type: object
-      required: [name, budget, owner_group_id]
+      required: [ name, budget, owner_group_id ]
       properties:
         name:
           type: string
@@ -178,7 +178,7 @@ components:
 
     MealAdd:
       type: object
-      required: [recipe_id, portions, target_energy_kj]
+      required: [ recipe_id, portions, target_energy_kj ]
       properties:
         recipe_id:
           type: string
@@ -244,7 +244,7 @@ components:
                 format: date-time
               status:
                 type: string
-                enum: [Pending, Planned, Arrived]
+                enum: [ Pending, Planned, Arrived ]
 
     RecipeSummary:
       type: object
@@ -256,7 +256,7 @@ components:
           type: string
         type:
           type: string
-          enum: [meal, component]
+          enum: [ meal, component ]
         owner:
           type: string
         energy_kj_g:
@@ -269,7 +269,7 @@ components:
           type: string
         type:
           type: string
-          enum: [meal, component]
+          enum: [ meal, component ]
         owner_group_id:
           type: string
           format: uuid
@@ -304,11 +304,94 @@ components:
           items:
             $ref: '#/components/schemas/RecipeTree'
 
-security:
-  - bearerAuth: []
 
 
 paths:
+  /api/admin/me/groups:
+    put:
+      summary: "PUT api/admin/me/groups"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
+  /api/audit:
+    get:
+      summary: "GET api/audit"
+      parameters:
+        - name: "from"
+          in: "query"
+          required: false
+        - name: "until"
+          in: "query"
+          required: false
+        - name: "actor_user_id"
+          in: "query"
+          required: false
+        - name: "action"
+          in: "query"
+          required: false
+        - name: "group_id"
+          in: "query"
+          required: false
+        - name: "event_id"
+          in: "query"
+          required: false
+        - name: "limit"
+          in: "query"
+          required: false
+        - name: "offset"
+          in: "query"
+          required: false
+      responses:
+        "200":
+          description: "OK"
+  /api/audit/export:
+    get:
+      summary: "GET api/audit/export"
+      parameters:
+        - name: "from"
+          in: "query"
+          required: false
+        - name: "until"
+          in: "query"
+          required: false
+        - name: "actor_user_id"
+          in: "query"
+          required: false
+        - name: "action"
+          in: "query"
+          required: false
+        - name: "group_id"
+          in: "query"
+          required: false
+        - name: "event_id"
+          in: "query"
+          required: false
+        - name: "limit"
+          in: "query"
+          required: false
+        - name: "offset"
+          in: "query"
+          required: false
+      responses:
+        "200":
+          description: "OK"
+  /api/audit/purge:
+    delete:
+      summary: "DELETE api/audit/purge"
+      parameters:
+        - name: "until"
+          in: "query"
+          required: false
+      responses:
+        "200":
+          description: "OK"
   /api/auth/login:
     post:
       summary: "POST api/auth/login"
@@ -473,6 +556,12 @@ paths:
         - name: "tour_id"
           in: "path"
           required: false
+        - name: "format"
+          in: "query"
+          required: false
+        - name: "deduct_inventory"
+          in: "query"
+          required: false
       responses:
         "200":
           description: "OK"
@@ -579,6 +668,26 @@ paths:
       responses:
         "200":
           description: "OK"
+  /api/events/{id}/meals/{meal_id}/availability:
+    put:
+      summary: "PUT api/events/{id}/meals/{meal_id}/availability"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+        - name: "meal_id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
   /api/events/{id}/meals/{meal_id}/duplicate:
     post:
       summary: "POST api/events/{id}/meals/{meal_id}/duplicate"
@@ -592,6 +701,81 @@ paths:
       responses:
         "200":
           description: "OK"
+  /api/events/{id}/members:
+    get:
+      summary: "GET api/events/{id}/members"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      responses:
+        "200":
+          description: "OK"
+    post:
+      summary: "POST api/events/{id}/members"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
+  /api/events/{id}/members/{user_id}:
+    put:
+      summary: "PUT api/events/{id}/members/{user_id}"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+        - name: "user_id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
+    delete:
+      summary: "DELETE api/events/{id}/members/{user_id}"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+        - name: "user_id"
+          in: "path"
+          required: false
+      responses:
+        "200":
+          description: "OK"
+  /api/events/{id}/owner:
+    put:
+      summary: "PUT api/events/{id}/owner"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
   /api/events/{id}/preps:
     get:
       summary: "GET api/events/{id}/preps"
@@ -599,6 +783,43 @@ paths:
         - name: "id"
           in: "path"
           required: false
+      responses:
+        "200":
+          description: "OK"
+  /api/events/{id}/reorders:
+    post:
+      summary: "POST api/events/{id}/reorders"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
+  /api/events/{id}/reorders/{reorder_id}/status:
+    put:
+      summary: "PUT api/events/{id}/reorders/{reorder_id}/status"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+        - name: "reorder_id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
       responses:
         "200":
           description: "OK"
@@ -646,6 +867,16 @@ paths:
           in: "path"
           required: false
         - name: "source_id"
+          in: "path"
+          required: false
+      responses:
+        "200":
+          description: "OK"
+  /api/events/{id}/status-board:
+    get:
+      summary: "GET api/events/{id}/status-board"
+      parameters:
+        - name: "id"
           in: "path"
           required: false
       responses:
@@ -709,6 +940,62 @@ paths:
       responses:
         "200":
           description: "OK"
+  /api/events/{id}/tours/{tour_id}/completed:
+    put:
+      summary: "PUT api/events/{id}/tours/{tour_id}/completed"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+        - name: "tour_id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
+  /api/events/{id}/tours/{tour_id}/items:
+    post:
+      summary: "POST api/events/{id}/tours/{tour_id}/items"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+        - name: "tour_id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
+  /api/events/{id}/tours/{tour_id}/items/{ingredient_id}:
+    delete:
+      summary: "DELETE api/events/{id}/tours/{tour_id}/items/{ingredient_id}"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+        - name: "tour_id"
+          in: "path"
+          required: false
+        - name: "ingredient_id"
+          in: "path"
+          required: false
+      responses:
+        "200":
+          description: "OK"
   /api/groups:
     get:
       summary: "GET api/groups"
@@ -730,6 +1017,41 @@ paths:
   /api/groups/{id}:
     delete:
       summary: "DELETE api/groups/{id}"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      responses:
+        "200":
+          description: "OK"
+  /api/groups/{id}/default-roles:
+    get:
+      summary: "GET api/groups/{id}/default-roles"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      responses:
+        "200":
+          description: "OK"
+    put:
+      summary: "PUT api/groups/{id}/default-roles"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
+    delete:
+      summary: "DELETE api/groups/{id}/default-roles"
       parameters:
         - name: "id"
           in: "path"
@@ -764,6 +1086,25 @@ paths:
         "200":
           description: "OK"
   /api/groups/{id}/members/{user_id}:
+    put:
+      summary: "PUT api/groups/{id}/members/{user_id}"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+        - name: "user_id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
     delete:
       summary: "DELETE api/groups/{id}/members/{user_id}"
       parameters:
@@ -787,6 +1128,9 @@ paths:
       summary: "GET api/ingredients"
       parameters:
         - name: "search"
+          in: "query"
+          required: false
+        - name: "property_id"
           in: "query"
           required: false
       responses:
@@ -836,6 +1180,23 @@ paths:
         - name: "id"
           in: "path"
           required: false
+      responses:
+        "200":
+          description: "OK"
+  /api/ingredients/{id}/owner:
+    put:
+      summary: "PUT api/ingredients/{id}/owner"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
       responses:
         "200":
           description: "OK"
@@ -931,6 +1292,16 @@ paths:
           in: "path"
           required: false
         - name: "source_id"
+          in: "path"
+          required: false
+      responses:
+        "200":
+          description: "OK"
+  /api/ingredients/{id}/usages:
+    get:
+      summary: "GET api/ingredients/{id}/usages"
+      parameters:
+        - name: "id"
           in: "path"
           required: false
       responses:
@@ -1105,6 +1476,23 @@ paths:
       responses:
         "200":
           description: "OK"
+  /api/inventories/{id}/owner:
+    put:
+      summary: "PUT api/inventories/{id}/owner"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
   /api/places:
     get:
       summary: "GET api/places"
@@ -1259,6 +1647,23 @@ paths:
       responses:
         "200":
           description: "OK"
+  /api/recipes/{id}/owner:
+    put:
+      summary: "PUT api/recipes/{id}/owner"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
   /api/recipes/{id}/steps:
     post:
       summary: "POST api/recipes/{id}/steps"
@@ -1367,6 +1772,30 @@ paths:
       responses:
         "200":
           description: "OK"
+  /api/roles:
+    get:
+      summary: "GET api/roles"
+      responses:
+        "200":
+          description: "OK"
+  /api/settings/member-defaults:
+    get:
+      summary: "GET api/settings/member-defaults"
+      responses:
+        "200":
+          description: "OK"
+    put:
+      summary: "PUT api/settings/member-defaults"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
+      responses:
+        "200":
+          description: "OK"
   /api/stores:
     get:
       summary: "GET api/stores"
@@ -1412,6 +1841,23 @@ paths:
         - name: "id"
           in: "path"
           required: false
+      responses:
+        "200":
+          description: "OK"
+  /api/users/{id}/global-permissions:
+    put:
+      summary: "PUT api/users/{id}/global-permissions"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+
+        required: true
       responses:
         "200":
           description: "OK"
