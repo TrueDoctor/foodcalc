@@ -31,10 +31,12 @@ pub fn render_shopping_tour(data: &TourExportData) -> Result<Vec<u8>> {
         }
         let weight = item_weight.clone() - inv_amount.clone();
 
+        // Only the Metro store's sources are valid for a Metro order — a
+        // non-Metro source's package size must never drive the package count.
         let Some(source) = metro
             .sources
             .iter()
-            .find(|s| s.ingredient_id == item.ingredient_id)
+            .find(|s| s.ingredient_id == item.ingredient_id && s.store_id == metro.store_id)
         else {
             continue;
         };
@@ -65,6 +67,10 @@ pub fn render_shopping_tour(data: &TourExportData) -> Result<Vec<u8>> {
 
     let mut output = String::new();
     for (col1, packages, comment, _) in rows {
+        let col1 = format!(
+            "\"{}\"",
+            col1.replace('"', "\"\"").replace('\n', " ").replace('\r', " ")
+        );
         let comment_field = if comment.is_empty() {
             String::new()
         } else {

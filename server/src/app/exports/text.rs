@@ -25,11 +25,14 @@ fn format_tour_text(tour: &ShoppingTour, items: &[ShoppingListItemWithUsage]) ->
         format_tour_date(tour),
     );
 
-    let mut current_category = String::new();
+    // `Option` tracks initialization separately from the (possibly empty)
+    // category value, so the first uncategorized item still gets its
+    // `=== Sonstiges ===` heading.
+    let mut current_category: Option<String> = None;
     for item in items {
         let category = item.category.clone().unwrap_or_default();
-        if category != current_category {
-            if !current_category.is_empty() {
+        if current_category.as_deref() != Some(category.as_str()) {
+            if current_category.is_some() {
                 output.push('\n');
             }
             let label = if category.is_empty() {
@@ -38,7 +41,7 @@ fn format_tour_text(tour: &ShoppingTour, items: &[ShoppingListItemWithUsage]) ->
                 &category
             };
             output.push_str(&format!("=== {label} ===\n"));
-            current_category = category;
+            current_category = Some(category);
         }
         let weight_str = item
             .weight

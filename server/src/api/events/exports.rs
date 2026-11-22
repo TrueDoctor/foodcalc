@@ -4,7 +4,7 @@
 //! returned [`ExportedFile`] to headers + body.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::header::{CONTENT_DISPOSITION, CONTENT_TYPE},
     response::{IntoResponse, Response},
 };
@@ -92,7 +92,13 @@ pub async fn export_tour(
     State(state): State<MyAppState>,
     ctx: AppCtx,
     Path((event_id, tour_id)): Path<(i32, i32)>,
+    Query(query): Query<exports::TourExportQuery>,
 ) -> Response {
+    let extension = match query.format {
+        crate::app::exports::ExportFormat::Txt => "txt",
+        crate::app::exports::ExportFormat::Csv => "csv",
+        crate::app::exports::ExportFormat::Pdf => "pdf",
+    };
 
     file_response(
         exports::export_shopping_tour_list(
@@ -100,9 +106,9 @@ pub async fn export_tour(
             &ctx,
             EventId(event_id),
             TourId(tour_id),
-            exports::TourExportQuery::default(),
+            query,
         )
             .await,
-        "txt",
+        extension,
     )
 }

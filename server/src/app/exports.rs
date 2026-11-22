@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::app::{Error, MyAppState, Result};
 use foodlib_new::entities::event::{ShoppingListItemWithUsage, ShoppingTour};
-use foodlib_new::entities::types::ids::IngredientId;
+use foodlib_new::entities::types::ids::{IngredientId, StoreId};
 use foodlib_new::ops::export::{EventAllergenInfo, EventOverviewInfo, RecipeInfo};
 use foodlib_new::types::amount::Amount;
 
@@ -30,9 +30,9 @@ pub struct ExportedFile {
 #[serde(rename_all = "lowercase")]
 pub enum ExportFormat {
     #[default]
-    Pdf,
-    #[serde(alias = "text")]
     Txt,
+    #[serde(alias = "text")]
+    Pdf,
     Csv,
 }
 
@@ -57,6 +57,8 @@ pub struct TourExportData {
 pub struct MetroExportContext {
     pub sources: Vec<foodlib_new::entities::ingredient::IngredientSource>,
     pub article_numbers: HashMap<IngredientId, String>,
+    /// The store the sources belong to (currently always the Metro store).
+    pub store_id: StoreId,
 }
 
 /// Polymorphic PDF rendering backend stored once on [`MyAppState`].

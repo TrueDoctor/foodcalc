@@ -23,8 +23,9 @@ use foodlib_new::types::amount::Amount;
 pub struct TourExportQuery {
     #[serde(default)]
     pub format: ExportFormat,
-    /// Defaults to `true` for `Csv` (Metro order always deducts stock) or can be
-    /// explicitly toggled via `?deduct_inventory=true|false` for `Txt`.
+    /// Defaults to `true` only for `Csv` (a Metro order always deducts stock).
+    /// An explicit `?deduct_inventory=true|false` overrides that default for
+    /// every format, including `Csv`.
     #[serde(default)]
     pub deduct_inventory: Option<bool>,
 }
@@ -224,7 +225,19 @@ pub async fn export_shopping_tour_list(
     };
 
     let metro = if matches!(query.format, ExportFormat::Csv) {
-        let sources = state.ingredients().list_sources(None).await?;
+        use foodlib_new::entities::types::ids::StoreId;
+        use foodlib_new::ops::metro_sync::METRO_STORE_ID;
+
+        // Only sources for the tour's ingredients and the Metro store — a
+        // non-Metro source's package size must never drive the package count.
+        let ingredient_ids: Vec<IngredientId> = items.iter().map(|i| i.ingredient_id).collect();
+        let sources = state
+            .ingredients()
+            .list_sources_for_ingredients(&ingredient_ids)
+            .await?
+            .into_iter()
+            .filter(|s| s.store_id == StoreId(METRO_STORE_ID))
+            .collect();
 
         let article_numbers = state
             .events()
@@ -233,6 +246,7 @@ pub async fn export_shopping_tour_list(
         Some(MetroExportContext {
             sources,
             article_numbers,
+            store_id: StoreId(METRO_STORE_ID),
         })
     } else {
         None
