@@ -109,8 +109,10 @@ pub async fn list(
         state,
         actor,
         action::AUDIT_READ,
-        Some(&actor.ctx.user.username),
-        Some(actor.ctx.user.id.into()),
+        // Target is the audit log itself; the actor is recorded separately
+        // by `record`, so echoing the reader as target is misleading.
+        Some("audit_log"),
+        None,
         None,
         None,
         Some(serde_json::json!({ "total": total }))

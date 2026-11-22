@@ -12,7 +12,7 @@ use foodlib_new::entities::types::ids::{
 };
 use foodlib_new::ingredient::{Ingredient, IngredientSource, IngredientWeight};
 use foodlib_new::ops::ingredients::IngredientRepoFilter;
-use foodlib_new::policy::{GlobalPermission, IngredientPerm, Permission};
+use foodlib_new::policy::{GlobalPermission, IngredientPerm, Permission, RecipePerm};
 use foodlib_new::property::{IngredientProperties, Property};
 use foodlib_new::types::money::Money;
 use serde::{Deserialize, Serialize};
@@ -61,10 +61,18 @@ pub async fn usages(
     ctx: &AuthCtx,
     id: IngredientId
 ) -> Result<Vec<Recipe>> {
+    // Reading the usage list requires the ingredient to be visible at all.
+    ctx.assert_ingredient_perm(id, IngredientPerm::View).await?;
     let recipes = state.ingredients().usages(id).await?;
-    // TODO: Maybe add a filter here to only return recipes that the user has permission to view.
-    //   But then the view might be empty even if the ingredient is used in recipes, which could be confusing.
-    Ok(recipes)
+    // Only recipes the caller may view are exposed — private recipe names
+    // and owner groups of other groups must not leak.
+    let mut visible = Vec::new();
+    for recipe in recipes {
+        if ctx.has_group_permission(recipe.group_id, Permission::Recipe(RecipePerm::View)) {
+            visible.push(recipe);
+        }
+    }
+    Ok(visible)
 }
 
 #[derive(Debug, Deserialize)]

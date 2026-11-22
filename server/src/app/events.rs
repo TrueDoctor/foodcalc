@@ -471,8 +471,9 @@ pub async fn delete_tour(
     // Permission & semantic checks
     // actor.ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
     actor.ctx.assert_event_action(event_id, EventPerm::ShoppingTourEdit).await?;
-    // completing a completed tour is an error
-    let tour = get_editable_tour(state, actor, event_id, tour_id).await?;
+    // reopen must use the event-validating lookup: completed tours may be
+    // reopened (completed: false), only re-completing a completed tour is an error.
+    let tour = get_event_tour(state, actor, event_id, tour_id).await?;
     // sanity check: the tour must belong to this event
     if tour.id != tour_id {
         return Err(Error::Validation {
@@ -500,7 +501,7 @@ pub async fn delete_tour(
 
 /// Mark a tour as completed (locked) or reopen it. Completed tours are read-only: no edits, no item changes.
 /// completed tours can be reopened. Completing a completed tour is an error.
-/// Requires `CompleteShoppingTour` permission.
+/// Requires `ShoppingTourComplete` permission.
 pub async fn set_tour_completed(
     state: &MyAppState,
     actor: &AppCtx,
@@ -509,16 +510,19 @@ pub async fn set_tour_completed(
     completed: bool,
 ) -> Result<()> {
     // Permission & semantic checks
-    // actor.ctx.assert_event_action(event_id, EventPerm::ViewEvent).await?;
     actor.ctx.assert_event_actions(event_id, [
         EventPerm::ShoppingTourComplete
     ]).await?;
-    // completing a completed tour is an error
-    let tour = get_editable_tour(state, actor, event_id, tour_id).await?;
+    let tour = get_event_tour(state, actor, event_id, tour_id).await?;
     // sanity check: the tour must belong to this event
     if tour.id != tour_id {
         return Err(Error::Validation {
             message: "tour does not belong to this event".into(),
+        });
+    }
+    if completed && state.events().is_shopping_tour_completed(tour_id).await.unwrap_or(false) {
+        return Err(Error::Validation {
+            message: "tour is already completed".into(),
         });
     }
 

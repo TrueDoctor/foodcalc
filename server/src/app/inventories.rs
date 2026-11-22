@@ -170,7 +170,7 @@ pub async fn add_inventory_item(
 ) -> Result<InventoryItem> {
     actor
         .ctx
-        .assert_inventory_perm(inventory_id, InventoryPerm::EditMetadata)
+        .assert_inventory_perm(inventory_id, InventoryPerm::EditStock)
         .await?;
 
     let amount = parse_positive_amount(&input.amount)?;
@@ -206,7 +206,7 @@ pub async fn update_inventory_item(
 ) -> Result<InventoryItem> {
     actor
         .ctx
-        .assert_inventory_perm(inventory_id, InventoryPerm::EditMetadata)
+        .assert_inventory_perm(inventory_id, InventoryPerm::EditStock)
         .await?;
 
     let amount = parse_positive_amount(&input.amount)?;
@@ -241,7 +241,7 @@ pub async fn remove_inventory_item(
 ) -> Result<()> {
     actor
         .ctx
-        .assert_inventory_perm(inventory_id, InventoryPerm::EditMetadata)
+        .assert_inventory_perm(inventory_id, InventoryPerm::EditStock)
         .await?;
 
     state
@@ -304,14 +304,21 @@ pub async fn transfer_inventory_ownership(
 
 // --------------------------------------------------------------- helpers
 
+/// Validates a form- or payload-provided amount: strictly positive.
+/// Shared by the REST and HTMX item handlers so zero/negative amounts can
+/// never be written.
+pub(crate) fn ensure_positive_amount(amount: Amount) -> Result<Amount> {
+    if amount <= Amount::from(0) {
+        return Err(foodlib_new::Error::InvalidInput {
+            message: "amount must be positive".into(),
+        });
+    }
+    Ok(amount)
+}
+
 fn parse_positive_amount(raw: &str) -> Result<Amount> {
     let amount = Amount::from_str(raw).map_err(|_| foodlib_new::Error::InvalidInput {
         message: format!("invalid amount value: {raw}"),
     })?;
-    if amount <= Amount::from(0) {
-        return Err(foodlib_new::Error::InvalidInput {
-            message: format!("amount must be positive: {raw}"),
-        });
-    }
-    Ok(amount)
+    ensure_positive_amount(amount)
 }

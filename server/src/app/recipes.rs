@@ -184,7 +184,8 @@ pub async fn list_recipes(
         .into_iter()
         // Group visibility: members with `RecipePerm::View` see their groups' recipes; admins see all.
         .filter(|recipe| {
-            ctx.has_group_permission(recipe.group_id, Permission::Recipe(RecipePerm::View))
+            ctx.user.is_admin
+                || ctx.has_group_permission(recipe.group_id, Permission::Recipe(RecipePerm::View))
         })
         .filter(|recipe| kind_filter.as_ref().map_or(true, |kind| &recipe.kind == kind))
         .filter(|recipe| search.is_empty() || recipe.name.to_lowercase().contains(&search))
@@ -538,18 +539,19 @@ pub async fn add_ingredient(
     })
 }
 
-/// replace an ingredient line.
+/// replace an ingredient line. The ingredient id comes from the request path.
 pub async fn update_ingredient(
     state: &MyAppState,
     actor: &AppCtx,
     id: RecipeId,
+    ingredient_id: IngredientId,
     input: RecipeIngredientInput,
 ) -> Result<RecipeIngredientDto> {
     actor.ctx.assert_recipe_perm(id, RecipePerm::Edit).await?;
     let amount = parse_amount(&input.amount)?;
     let line = RecipeIngredient {
         recipe_id: id,
-        ingredient_id: input.ingredient_id,
+        ingredient_id,
         amount: amount.clone(),
         unit_id: input.unit_id,
         name: None,

@@ -12,7 +12,7 @@ use foodlib_new::policy::{EventPerm, InventoryPerm, Permission};
 use crate::app::{audit, AppCtx, Error, MyAppState, Result};
 
 /// List food-prep tasks with recipe names (timeline feed) for an event.
-/// Requires `EventPerm::View` (or `EventPerm::ViewEvent`).
+/// Requires `EventPerm::ViewEvent`.
 pub async fn list_food_preps(
     state: &MyAppState,
     ctx: &AuthCtx,
@@ -42,7 +42,7 @@ pub async fn list_event_inventories(
 /// Link an inventory to an event so its stock counts toward event coverage.
 /// Linking an already-linked inventory is a validation error.
 /// Non-accessible inventories surface as 404 to prevent cross-group enumeration.
-/// Requires `EventPerm::Edit` on the event and `InventoryPerm::View` on the inventory.
+/// Requires `EventPerm::EditEvent` on the event and `InventoryPerm::View` on the inventory.
 pub async fn link_inventory(
     state: &MyAppState,
     actor: &AppCtx,
@@ -63,20 +63,20 @@ pub async fn link_inventory(
         });
     }
 
-    let already_linked = state
-        .events()
-        .list_event_inventories(event_id)
-        .await?
-        .iter()
-        .any(|inv| inv.id == inventory_id);
-    if already_linked {
-        return Err(Error::Validation {
-            message: "inventory is already linked to this event".into(),
-        });
-    }
 
-    // Action
-    let link = state.events().add_inventory(event_id, inventory_id).await?;
+    // Action — Assures inventories can only be linked once
+    let link = state
+        .events()
+        .add_inventory(event_id, inventory_id)
+        .await
+        .map_err(|e| match &e {
+            Error::Database(db) if db.as_database_error().map_or(false, |d| d.is_unique_violation()) => {
+                Error::Validation {
+                    message: "inventory is already linked to this event".into(),
+                }
+            }
+            _ => e,
+        })?;
 
     // Logging
     audit::record(
@@ -96,7 +96,7 @@ pub async fn link_inventory(
 
 /// Unlink an inventory from an event. Unlinking an inventory that is not
 /// linked to the event returns `NotFound`.
-/// Requires `EventPerm::Edit` on the event.
+/// Requires `EventPerm::EditEvent` on the event.
 pub async fn unlink_inventory(
     state: &MyAppState,
     actor: &AppCtx,
