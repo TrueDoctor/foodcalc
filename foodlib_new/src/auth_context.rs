@@ -43,7 +43,9 @@ impl AuthCtx {
     // ------------------------------------------------------------------------
 
     pub fn can_global(&self, perm: GlobalPermission) -> bool {
-        self.user.is_admin || self.policy.has_global_permission(perm)
+        // admins must hold the admin:* permissions through explicit
+        // `user_global_permissions` grants - isAdmin does not have any relevance
+        self.policy.has_global_permission(perm)
     }
 
     pub fn assert_global(&self, perm: GlobalPermission) -> Result<()> {

@@ -55,7 +55,7 @@ impl UserOps {
             VALUES ($1, $2)
             ON CONFLICT DO NOTHING
             "#,
-            user.id.get(),
+            row.id.get(),
             perm.as_str(),
         )
             .execute(&mut *tx)
@@ -757,6 +757,13 @@ impl UserOps {
         if !valid {
             return Err(Error::Validation {
                 message: "role slug must be 1-32 chars of a-z, 0-9, '_' or '-'".into(),
+            });
+        }
+        // Reject built-in and legacy-alias slugs (`editor` etc.): a custom row
+        // with that slug would shadow the built-in fallback permissions.
+        if BuiltInRole::from_slug(slug).is_some() {
+            return Err(Error::Validation {
+                message: format!("'{slug}' is reserved for built-in roles"),
             });
         }
         sqlx::query!(r#"INSERT INTO roles (slug, name, is_system) VALUES ($1, $2, FALSE)"#,
