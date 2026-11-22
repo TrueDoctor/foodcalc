@@ -220,7 +220,7 @@ async fn get_upcoming_event(food_lib: &FoodLib) -> Option<i32> {
         .get_current_or_upcoming_event(OffsetDateTime::now_utc())
         .await
     {
-        Ok(event) => event.map(|e| e.id),
+        Ok(event) => event.map(|e| e.id.get()),
         Err(e) => {
             eprintln!("Error fetching current/upcoming event: {}", e);
             None
@@ -244,7 +244,7 @@ async fn get_event_meals_internal(
     food_lib: &FoodLib,
     event_id: i32,
 ) -> Result<Vec<Meal>, foodlib_new::Error> {
-    food_lib.meals().get_event_meals(event_id).await
+    food_lib.meals().get_event_meals(foodlib_new::entities::types::ids::EventId(event_id)).await
 }
 
 /// Fetch (allergens, dietary) per recipe for all distinct recipe_ids in `meals`.
@@ -255,12 +255,12 @@ async fn fetch_allergens_for_meals(
     meals: &[Meal],
 ) -> HashMap<i32, (Vec<String>, DietaryStatus)> {
     use std::collections::HashSet;
-    let recipe_ids: HashSet<i32> = meals.iter().map(|m| m.recipe_id).collect();
+    let recipe_ids: HashSet<i32> = meals.iter().map(|m| m.recipe_id.get()).collect();
     let mut out = HashMap::new();
     for recipe_id in recipe_ids {
         let props = food_lib
             .properties()
-            .get_recipe_properties(recipe_id)
+            .get_recipe_properties(foodlib_new::entities::types::ids::RecipeId(recipe_id))
             .await
             .map(|rp| rp.properties)
             .unwrap_or_default();
@@ -311,8 +311,8 @@ fn process_meals(
         .into_iter()
         .map(|meal| {
             let (recipe_allergens, recipe_dietary) =
-                allergens.get(&meal.recipe_id).cloned().unwrap_or_default();
-            let mut status = meal_states.get(&meal.meal_id).cloned().unwrap_or_else(|| {
+                allergens.get(&meal.recipe_id.get()).cloned().unwrap_or_default();
+            let mut status = meal_states.get(&meal.meal_id.get()).cloned().unwrap_or_else(|| {
                 // Default meal status if not in state
                 MealStatus {
                     start: meal.start_time.unix_timestamp(),
@@ -322,9 +322,9 @@ fn process_meals(
                     over: false,
                     msg: None,
                     recipe: meal.name.clone(),
-                    recipe_id: meal.recipe_id,
+                    recipe_id: meal.recipe_id.get(),
                     place: meal.place.clone(),
-                    meal_id: meal.meal_id,
+                    meal_id: meal.meal_id.get(),
                     event_id,
                     allergens: recipe_allergens.clone(),
                     dietary: recipe_dietary,
@@ -335,13 +335,13 @@ fn process_meals(
             status.start = meal.start_time.unix_timestamp();
             status.end = meal.end_time.unix_timestamp();
             status.recipe = meal.name.clone();
-            status.recipe_id = meal.recipe_id;
+            status.recipe_id = meal.recipe_id.get();
             status.place = meal.place.clone();
             status.allergens = recipe_allergens;
             status.dietary = recipe_dietary;
 
             FullMealStatus {
-                meal_id: meal.meal_id,
+                meal_id: meal.meal_id.get(),
                 status,
             }
         })
@@ -400,9 +400,9 @@ async fn main() {
 
         for meal in &event_meals {
             let (recipe_allergens, recipe_dietary) =
-                allergens.get(&meal.recipe_id).cloned().unwrap_or_default();
+                allergens.get(&meal.recipe_id.get()).cloned().unwrap_or_default();
             app_state.meal_states.write().await.insert(
-                meal.meal_id,
+                meal.meal_id.get(),
                 MealStatus {
                     start: meal.start_time.unix_timestamp(),
                     end: meal.end_time.unix_timestamp(),
@@ -411,9 +411,9 @@ async fn main() {
                     over: false,
                     msg: None,
                     recipe: meal.name.clone(),
-                    recipe_id: meal.recipe_id,
+                    recipe_id: meal.recipe_id.get(),
                     place: meal.place.clone(),
-                    meal_id: meal.meal_id,
+                    meal_id: meal.meal_id.get(),
                     event_id: next_event,
                     allergens: recipe_allergens,
                     dietary: recipe_dietary,
@@ -647,7 +647,12 @@ async fn get_event_details(
     State(state): State<AppState>,
     Path(event_id): Path<i32>,
 ) -> impl IntoResponse {
-    match state.food_lib.events().get(event_id).await {
+    match state
+        .food_lib
+        .events()
+        .get(foodlib_new::entities::types::ids::EventId(event_id))
+        .await
+    {
         Ok(event) => {
             let event_details = serde_json::json!({
                 "id": event.id,
