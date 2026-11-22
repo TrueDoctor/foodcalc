@@ -173,14 +173,10 @@ async fn user_detail_view(
     Path(user_id): Path<UserId>,
 ) -> MResponse {
     assert_admin(&ctx.ctx)?;
-    render_user_detail(&state, &ctx, user_id).await
+    render_user_detail(&state, user_id).await
 }
 
-async fn render_user_detail(
-    state: &MyAppState,
-    ctx: &WebCtx,
-    user_id: UserId,
-) -> MResponse {
+async fn render_user_detail(state: &MyAppState, user_id: UserId) -> MResponse {
     let user = state.db.users().get_user(user_id).await?;
     let user_groups = state.db.users().get_user_groups(user_id).await?;
     let all_groups = state.db.users().get_all_groups().await?;
@@ -317,7 +313,7 @@ async fn update_user(
     user.username = form.username.trim().to_string();
     user.email = form.email.trim().to_string();
     state.db.users().update_user(user).await?;
-    render_user_detail(&state, &ctx, user_id).await
+    render_user_detail(&state, user_id).await
 }
 
 async fn toggle_admin(
@@ -332,9 +328,39 @@ async fn toggle_admin(
         ));
     }
     let mut user = state.db.users().get_user(user_id).await?;
+    let now_admin = !user.is_admin;
     user.is_admin = !user.is_admin;
     state.db.users().update_user(user).await?;
-    render_user_detail(&state, &ctx, user_id).await
+    // Keep the global permission set in sync with the admin flag: there is no
+    // superuser bypass in `can_global`, so a promoted admin needs the admin:*
+    // grants and a demoted one should lose them.
+    let mut perms: Vec<foodlib_new::policy::GlobalPermission> = state
+        .users()
+        .get_user_policy(user_id)
+        .await?
+        .global_permissions
+        .into_iter()
+        .collect();
+    const ADMIN_PERMS: &[foodlib_new::policy::GlobalPermission] = &[
+        foodlib_new::policy::GlobalPermission::ManageUsers,
+        foodlib_new::policy::GlobalPermission::ManageMasterData,
+        foodlib_new::policy::GlobalPermission::ManageSettings,
+        foodlib_new::policy::GlobalPermission::ViewAuditLog,
+    ];
+    if now_admin {
+        for perm in ADMIN_PERMS {
+            if !perms.contains(perm) {
+                perms.push(*perm);
+            }
+        }
+    } else {
+        perms.retain(|p| !ADMIN_PERMS.contains(p));
+    }
+    state
+        .users()
+        .set_user_global_permissions(user_id, &perms)
+        .await?;
+    render_user_detail(&state, user_id).await
 }
 
 #[derive(Deserialize)]
@@ -355,7 +381,7 @@ async fn set_password(
         });
     }
     state.db.users().update_password(user_id, form.password).await?;
-    render_user_detail(&state, &ctx, user_id).await
+    render_user_detail(&state, user_id).await
 }
 
 async fn delete_user(foodlib: FoodLib, ctx: AuthCtx, Path(user_id): Path<UserId>) -> MResponse {
@@ -388,7 +414,7 @@ async fn set_global_permissions(
         permissions: form.0.permissions,
     };
     app::users::set_global_permissions(&state, &ctx, user_id, payload).await?;
-    render_user_detail(&state, &ctx, user_id).await
+    render_user_detail(&state, user_id).await
 }
 
 #[derive(Deserialize)]
@@ -407,7 +433,7 @@ async fn add_to_group(
         .users()
         .add_user_to_group_with_roles(user_id, form.group_id, &["manager".parse().unwrap()])
         .await?;
-    render_user_detail(&state, &ctx, user_id).await
+    render_user_detail(&state, user_id).await
 }
 
 async fn remove_from_group(

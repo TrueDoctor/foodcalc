@@ -136,10 +136,69 @@ pub struct AdminSelfGrantInput {
     pub role: Option<String>,
 }
 
+/// One catalog entry as served to the SPA / admin UI. Unlike the static
+/// `RoleDefinition`, the permission set comes from the DB (`roles` /
+/// `role_permissions`) — the DB is the source of truth since the role matrix
+/// became editable.
+#[derive(Debug, Serialize)]
+pub struct RoleCatalogEntry {
+    pub slug: String,
+    pub name: String,
+    pub description: String,
+    /// `"basic"` or `"domain"` (render grouping).
+    pub category: String,
+    pub is_system: bool,
+    pub permissions: Vec<Permission>,
+}
+
 /// The role catalog. The SPA renders all role UIs (pills, pickers, matrix
-/// legend) purely from this response.
-pub fn role_catalog() -> Vec<foodlib_new::policy::RoleDefinition> {
-    all_definitions()
+/// legend) purely from this response. Built-in roles contribute name and
+/// description; their *permissions* (and all custom roles) come from the DB.
+pub async fn role_catalog(state: &MyAppState) -> Result<Vec<RoleCatalogEntry>> {
+    let db_roles: HashMap<String, foodlib_new::ops::users::DbRole> = state
+        .users()
+        .list_roles()
+        .await?
+        .into_iter()
+        .map(|r| (r.slug.clone(), r))
+        .collect();
+    let mut db_by_slug = db_roles;
+    let mut out = Vec::new();
+
+    for def in all_definitions() {
+        let (name, permissions, is_system) = match db_by_slug.remove(def.slug) {
+            Some(row) => (row.name, row.permissions, row.is_system),
+            // No DB row (e.g. legacy alias like `editor`): keep the built-in.
+            None => (def.name.to_string(), def.permissions.clone(), true),
+        };
+        out.push(RoleCatalogEntry {
+            slug: def.slug.to_string(),
+            name,
+            description: def.description.to_string(),
+            category: match def.category {
+                foodlib_new::policy::RoleCategory::Basic => "basic",
+                foodlib_new::policy::RoleCategory::Domain => "domain",
+            }
+            .to_string(),
+            is_system,
+            permissions,
+        });
+    }
+
+    // Custom roles not present in the built-in catalog.
+    let mut custom: Vec<_> = db_by_slug.into_values().collect();
+    custom.sort_by(|a, b| a.slug.cmp(&b.slug));
+    for row in custom {
+        out.push(RoleCatalogEntry {
+            slug: row.slug,
+            name: row.name,
+            description: String::new(),
+            category: "domain".to_string(),
+            is_system: row.is_system,
+            permissions: row.permissions,
+        });
+    }
+    Ok(out)
 }
 
 // --------------------------------------------------------------- helpers
@@ -200,7 +259,10 @@ pub async fn set_role_permissions(
             entity: "Role",
             id: slug.to_string(),
         })?;
+    // Only roles that currently carry `group:manage_members` must keep it:
+    // the migration grants it to `manager`, not to every system role.
     if role.is_system
+        && role.permissions.contains(&Permission::Group(GroupPerm::ManageMembers))
         && !permissions.contains(&Permission::Group(GroupPerm::ManageMembers))
     {
         return Err(Error::Validation {
@@ -494,7 +556,7 @@ pub async fn list_groups(state: &MyAppState, actor: &AppCtx) -> Result<Vec<ApiGr
 }
 
 /// create a non-personal group and assign the creator
-/// as `manager`. Guard `admin:allowed_to_create_new_domain_objects`.
+/// as `manager`. Guard `user:create_resources` (`GlobalPermission::CreateResources`).
 pub async fn create_group(
     state: &MyAppState,
     actor: &AppCtx,

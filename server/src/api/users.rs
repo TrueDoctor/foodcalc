@@ -56,8 +56,8 @@ pub fn groups_router() -> Router<MyAppState> {
 
 /// `GET /api/roles` — the role catalog. The SPA renders all role UIs
 /// (pills, pickers, matrix legend) purely from this response.
-async fn list_roles() -> Response {
-    respond(Ok(users::role_catalog()))
+async fn list_roles(State(state): State<MyAppState>) -> Response {
+    respond(users::role_catalog(&state).await)
 }
 
 /// `GET /api/users` — users with group roles and global permissions.

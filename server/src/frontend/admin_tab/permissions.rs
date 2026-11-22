@@ -14,13 +14,12 @@
 use axum::extract::{Form, Path, State};
 use axum::response::Response;
 use foodlib_new::ops::users::DbRole;
-use foodlib_new::policy::{Permission, RoleDefinition};
+use foodlib_new::policy::Permission;
 use maud::{html, Markup};
 use serde::Deserialize;
 
 use crate::app;
 use crate::frontend::form::HtmlForm;
-use crate::app::users::role_catalog;
 use crate::frontend::ctx::WebCtx;
 use crate::MyAppState;
 
@@ -47,7 +46,7 @@ fn short_label(permission: &Permission) -> String {
 
 /// One card per role: permissions grouped by domain, in first-appearance
 /// order (stable and simple).
-fn role_card(role: &RoleDefinition) -> Markup {
+fn role_card(role: &app::users::RoleCatalogEntry) -> Markup {
     let mut order: Vec<&'static str> = Vec::new();
     let mut by_domain: Vec<(&'static str, Vec<&Permission>)> = Vec::new();
     for p in &role.permissions {
@@ -88,7 +87,7 @@ fn role_card(role: &RoleDefinition) -> Markup {
 
 /// The static role catalog page section. Rendered purely from the app
 /// layer's `role_catalog()` — no hardcoding.
-fn render_role_catalog(roles: &[RoleDefinition]) -> Markup {
+fn render_role_catalog(roles: &[app::users::RoleCatalogEntry]) -> Markup {
     html! {
         h2 class="text-2xl mb-2" { "Rollenkatalog" }
         p class="opacity-80 mb-4 max-w-3xl" {
@@ -147,7 +146,9 @@ fn render_matrix(roles: &[DbRole], can_manage: bool) -> Markup {
         @for role in roles {
             form id=(format!("role-form-{}", role.slug))
                 hx-post=(format!("/admin/permissions/roles/{}/permissions", role.slug))
-                hx-target="#permissions-matrix"
+                // The save handler re-renders the full page shell, so the
+                // swap target must match its root element.
+                hx-target="#permissions-page"
                 hx-swap="outerHTML" {}
         }
         div id="permissions-matrix" class="overflow-x-auto mb-8" {
@@ -263,7 +264,11 @@ async fn render_page(state: &MyAppState, ctx: &WebCtx) -> Markup {
             div class="w-full max-w-5xl px-2" {
                 (render_matrix(&roles, can_manage))
                 (render_role_admin(&roles, can_manage))
-                (render_role_catalog(&role_catalog()))
+                (
+                    render_role_catalog(
+                        &app::users::role_catalog(state).await.unwrap_or_default(),
+                    )
+                )
             }
         }
     }

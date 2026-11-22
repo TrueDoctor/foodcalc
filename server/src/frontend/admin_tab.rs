@@ -278,7 +278,9 @@ async fn render_group_detail(
         .ctx
         .has_group_permission(group.id, Permission::Group(GroupPerm::ManageSettings));
     let defaults = app::users::get_default_roles(state, ctx, group.id).await.ok();
-    let db_roles = state.users().list_roles().await.unwrap_or_default();
+    // Propagate like the neighbouring user query: a swallowed error would
+    // render the group page without any role checkboxes and no indication why.
+    let db_roles = state.users().list_roles().await?;
     let all_users = state.db.users().get_all_users().await?;
     let member_ids: std::collections::HashSet<UserId> =
         members.iter().map(|m| m.member.id).collect();
