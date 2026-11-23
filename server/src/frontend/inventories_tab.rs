@@ -14,7 +14,7 @@ use maud::{html, Markup};
 use serde::Deserialize;
 use super::MResponse;
 use crate::frontend::{icons, WebCtx};
-use crate::{FoodLib, MyAppState};
+use crate::MyAppState;
 
 pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -63,12 +63,12 @@ impl ListFilters {
 }
 
 async fn list_view(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     _ctx: AuthCtx,
     headers: HeaderMap,
     Query(filters): Query<ListFilters>,
 ) -> MResponse {
-    let inventories = foodlib.inventories().list().await?;
+    let inventories = app::inventories::list_inventories(&state).await?;
     let open = filters.open_ids();
     let filter = filters.filter_str();
 
@@ -260,8 +260,8 @@ fn render_row_markup(inv: &Inventory, open: bool, filter: &str) -> Markup {
     }
 }
 
-async fn render_row(foodlib: FoodLib, Path(id): Path<InventoryId>) -> MResponse {
-    let inv = foodlib.inventories().get(id).await?;
+async fn render_row(State(state): State<MyAppState>, Path(id): Path<InventoryId>) -> MResponse {
+    let inv = app::inventories::get_inventory(&state, id).await?;
     Ok(render_row_markup(&inv, false, ""))
 }
 
@@ -284,12 +284,13 @@ async fn render_contents(
     inventory_id: InventoryId,
     filter: &str,
 ) -> MResponse {
-    let mut items = state.inventories().get_items(inventory_id).await?;
+    let data = app::inventories::gather_contents(state, inventory_id).await?;
+    let mut items = data.items;
     if !filter.is_empty() {
         let needle = filter.to_lowercase();
         items.retain(|x| x.name.to_lowercase().contains(&needle));
     }
-    let ingredients = state.ingredients().list().await?;
+    let ingredients = data.ingredients;
 
     Ok(html! {
         div class="flex flex-col gap-2 w-full" {
@@ -403,7 +404,7 @@ async fn create_inventory(
     Form(form): Form<NewInventoryForm>,
 ) -> MResponse {
     app::inventories::create_inventory(&state, &actor, form.name).await?;
-    let inventories = state.inventories().list().await?;
+    let inventories = app::inventories::list_inventories(&state).await?;
     Ok(render_list(&inventories, &[], ""))
 }
 
@@ -429,9 +430,7 @@ async fn edit_row(
     WebCtx(actor): WebCtx,
     Path(id): Path<InventoryId>,
 ) -> MResponse {
-    actor.ctx.assert_can_edit_inventory(id).await?;
-
-    let inv = state.inventories().get(id).await?;
+    let inv = app::inventories::get_inventory_for_edit(&state, &actor, id).await?;
     let owner_select =
         crate::frontend::move_group::owner_select(&state, &actor.ctx, inv.group_id).await?;
     let row_id = format!("inv-{}", inv.id);
@@ -461,7 +460,7 @@ async fn delete_inventory(
     Path(id): Path<InventoryId>,
 ) -> MResponse {
     app::inventories::delete_inventory(&state, &actor, id).await?;
-    let inventories = state.inventories().list().await?;
+    let inventories = app::inventories::list_inventories(&state).await?;
     Ok(render_list(&inventories, &[], ""))
 }
 

@@ -7,6 +7,103 @@ use time::OffsetDateTime;
 use crate::app_ctx::AppCtx;
 use crate::{MyAppState, Result};
 
+/// Fetches one meal.
+pub async fn get_meal(
+    state: &MyAppState,
+    meal_id: MealId,
+) -> Result<foodlib_new::entities::meal::Meal> {
+    state.meals().get_meal(meal_id).await
+}
+
+/// Fetches one meal. Requires `EditMeal` permission.
+pub async fn get_meal_for_actor(
+    state: &MyAppState,
+    actor: &AppCtx,
+    meal_id: MealId,
+) -> Result<foodlib_new::entities::meal::Meal> {
+    actor.ctx.assert_can_edit_meal(meal_id).await?;
+    state.meals().get_meal(meal_id).await
+}
+
+/// Fetches one meal's total price. Requires `EditMeal` permission.
+pub async fn get_meal_price_for_actor(
+    state: &MyAppState,
+    actor: &AppCtx,
+    meal_id: MealId,
+) -> Result<Amount> {
+    actor.ctx.assert_can_edit_meal(meal_id).await?;
+    state.meals().get_meal_price(meal_id).await
+}
+
+/// Fetches one meal in the context of an event (e.g. a delete-confirmation
+/// dialog). Requires `EditEvent` and `EditMeal` permission.
+pub async fn get_meal_for_event(
+    state: &MyAppState,
+    actor: &AppCtx,
+    event_id: EventId,
+    meal_id: MealId,
+) -> Result<foodlib_new::entities::meal::Meal> {
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    actor.ctx.assert_can_edit_meal(meal_id).await?;
+    state.meals().get_meal(meal_id).await
+}
+
+/// Authorization for rendering the meal form: requires `EditEvent`, plus
+/// `EditMeal` for an existing meal (the `-1` sentinel is the "new meal" row).
+pub async fn assert_meal_form_access(
+    actor: &AppCtx,
+    event_id: EventId,
+    meal_id: MealId,
+) -> Result<()> {
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    if meal_id != MealId(-1) {
+        actor.ctx.assert_can_edit_meal(meal_id).await?;
+    }
+    Ok(())
+}
+
+/// Fetches one meal's total price.
+pub async fn get_meal_price(
+    state: &MyAppState,
+    meal_id: MealId,
+) -> Result<Amount> {
+    state.meals().get_meal_price(meal_id).await
+}
+
+/// Fetches one meal's ingredients (scaled rows for the per-serving dialog).
+pub async fn get_meal_ingredients(
+    state: &MyAppState,
+    meal_id: MealId,
+) -> Result<Vec<foodlib_new::meal::MealIngredient>> {
+    state.meals().get_meal_ingredients(meal_id).await
+}
+
+/// Everything the meal form renders: the meal being edited (`None` for a new
+/// one), all recipes and all places. Sorting stays presentation.
+pub struct MealFormData {
+    pub meal: Option<foodlib_new::entities::meal::Meal>,
+    pub recipes: Vec<foodlib_new::recipe::Recipe>,
+    pub places: Vec<foodlib_new::event::Place>,
+}
+
+pub async fn gather_meal_form(
+    state: &MyAppState,
+    meal_id: MealId,
+) -> Result<MealFormData> {
+    let meal = if meal_id.is_valid() {
+        Some(state.meals().get_meal(meal_id).await?)
+    } else {
+        None
+    };
+    let recipes = state.recipes().list().await?;
+    let places = state.events().get_places().await?;
+    Ok(MealFormData {
+        meal,
+        recipes,
+        places,
+    })
+}
+
 /// Deletes one meal from an event.
 /// Requires `EditEvent` and `EditMeal` permission.
 pub async fn delete_meal(

@@ -163,14 +163,14 @@ async fn collect_items(
     state: &MyAppState,
     event_id: EventId,
 ) -> foodlib_new::Result<Vec<TimelineItem>> {
-    let meals = state.meals().get_event_meals(event_id).await?;
-    let tours = state.events().get_shopping_tours(event_id).await?;
-    let preps = state.events().get_food_prep_tasks(event_id).await?;
+    let app::events::EventItemSources {
+        meals,
+        tours,
+        preps,
+        recipes,
+    } = app::events::gather_event_item_sources(state, event_id).await?;
 
-    let recipe_names: HashMap<RecipeId, String> = state
-        .recipes()
-        .list()
-        .await?
+    let recipe_names: HashMap<RecipeId, String> = recipes
         .into_iter()
         .map(|r| (r.id, r.name))
         .collect();
@@ -689,9 +689,7 @@ pub async fn timeline_view(
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-
-    let event = state.events().get(event_id).await?;
+    let event = app::events::get_event(&state, &actor, event_id).await?;
     let items = collect_items(&state, event_id).await?;
     let bounds = WindowBounds::from_items(&items);
     let days = group_by_day(&items);

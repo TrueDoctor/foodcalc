@@ -7,7 +7,9 @@ use foodlib_new::entities::types::ids::{
     EventId, IngredientId, InventoryId, ShoppingTourId, StoreId,
 };
 use foodlib_new::event::ShoppingTour;
+use foodlib_new::event::{EventInventory, ShoppingListItem};
 use foodlib_new::inventory::InventoryItem;
+use foodlib_new::inventory::InventoryItemWithName;
 use foodlib_new::meal::Meal;
 use foodlib_new::types::ids::MealId;
 use foodlib_new::types::money::Money;
@@ -141,10 +143,13 @@ fn calculate_subtraction(available: &Amount, remaining: &Amount) -> Amount {
 /// Calculate inventory changes showing what will be deducted from each
 /// inventory to cover the tour's shopping list. Inventories are drained in
 /// the order the event attached them.
+/// Requires `EditShoppingTour` permission.
 pub async fn calculate_inventory_changes(
     state: &MyAppState,
+    actor: &AppCtx,
     tour_id: ShoppingTourId,
 ) -> Result<Vec<InventoryChange>> {
+    actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
     let tour = state.events().get_shopping_tour(tour_id).await?;
     let shopping_list = state.events().get_shopping_list(tour_id).await?;
     let inventories = state.events().get_inventories(tour.event_id).await?;
@@ -208,7 +213,7 @@ pub async fn apply_inventory_changes(
     tour_id: ShoppingTourId,
 ) -> Result<()> {
     actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    let changes = calculate_inventory_changes(state, tour_id).await?;
+    let changes = calculate_inventory_changes(state, actor, tour_id).await?;
     for (_, inventory_id, _, ingredient_id, _, _, amount) in changes {
         state
             .inventories()
@@ -220,6 +225,134 @@ pub async fn apply_inventory_changes(
             .await?;
     }
     Ok(())
+}
+
+/// Everything the shopping-tour add/edit form renders, fetched in one use
+/// case. The tour's own `EditShoppingTour` permission is asserted for
+/// existing tours. `shopping_list` is empty for new tours.
+/// Requires `EditEvent` permission.
+pub struct TourFormData {
+    pub stores: Vec<foodlib_new::store::Store>,
+    pub inventories: Vec<foodlib_new::inventory::Inventory>,
+    pub existing: Option<ShoppingTour>,
+    pub event_inventories: Vec<EventInventory>,
+    pub shopping_list: Vec<ShoppingListItem>,
+}
+
+pub async fn gather_tour_form(
+    state: &MyAppState,
+    actor: &AppCtx,
+    event_id: EventId,
+    tour_id: Option<ShoppingTourId>,
+) -> Result<TourFormData> {
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    if let Some(id) = tour_id {
+        actor.ctx.assert_can_edit_shopping_tour(id).await?;
+    }
+
+    let stores = state.stores().list().await?;
+    let inventories = state.inventories().list().await?;
+    let (existing, event_inventories, shopping_list) = match tour_id {
+        Some(id) => (
+            Some(state.events().get_shopping_tour(id).await?),
+            state.events().get_inventories(event_id).await?,
+            state.events().get_shopping_list(id).await?,
+        ),
+        None => (None, vec![], vec![]),
+    };
+
+    Ok(TourFormData {
+        stores,
+        inventories,
+        existing,
+        event_inventories,
+        shopping_list,
+    })
+}
+
+/// All inventory items of the event's attached inventories (lenient: an
+/// inventory that fails to read contributes no items). Used to annotate the
+/// shopping list with availability.
+pub async fn gather_inventory_items(
+    state: &MyAppState,
+    event_inventories: &[EventInventory],
+) -> Vec<InventoryItemWithName> {
+    let mut all_items = vec![];
+    for inv in event_inventories {
+        if let Ok(items) = state.inventories().get_items(inv.inventory_id).await {
+            all_items.extend(items);
+        }
+    }
+    all_items
+}
+
+/// Fetches one shopping tour.
+pub async fn get_shopping_tour(
+    state: &MyAppState,
+    tour_id: ShoppingTourId,
+) -> Result<ShoppingTour> {
+    state.events().get_shopping_tour(tour_id).await
+}
+
+/// Reads for the tour text export: the shopping list with per-recipe usage
+/// breakdown, the tour, and the event's attached inventories.
+/// Requires `EditShoppingTour` permission.
+pub struct TourExportReads {
+    pub shopping_list: Vec<foodlib_new::event::ShoppingListItemWithUsage>,
+    pub tour: ShoppingTour,
+    pub event_inventories: Vec<EventInventory>,
+}
+
+pub async fn gather_tour_export(
+    state: &MyAppState,
+    actor: &AppCtx,
+    tour_id: ShoppingTourId,
+) -> Result<TourExportReads> {
+    actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    let shopping_list = state
+        .events()
+        .tour_shopping_list_with_usage(tour_id)
+        .await?;
+    let tour = state.events().get_shopping_tour(tour_id).await?;
+    let event_inventories = state.events().get_inventories(tour.event_id).await?;
+    Ok(TourExportReads {
+        shopping_list,
+        tour,
+        event_inventories,
+    })
+}
+
+/// Reads for the Metro CSV export.
+/// Requires `EditShoppingTour` permission.
+pub struct MetroExportReads {
+    pub shopping_list: Vec<foodlib_new::event::ShoppingListItemWithUsage>,
+    pub sources: Vec<foodlib_new::entities::ingredient::IngredientSource>,
+    pub tour: ShoppingTour,
+    pub event_inventories: Vec<EventInventory>,
+    pub article_numbers: std::collections::HashMap<IngredientId, String>,
+}
+
+pub async fn gather_metro_export(
+    state: &MyAppState,
+    actor: &AppCtx,
+    tour_id: ShoppingTourId,
+) -> Result<MetroExportReads> {
+    actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    let shopping_list = state
+        .events()
+        .tour_shopping_list_with_usage(tour_id)
+        .await?;
+    let sources = state.ingredients().list_sources(None).await?;
+    let tour = state.events().get_shopping_tour(tour_id).await?;
+    let event_inventories = state.events().get_inventories(tour.event_id).await?;
+    let article_numbers = state.events().resolve_metro_article_numbers(tour_id).await?;
+    Ok(MetroExportReads {
+        shopping_list,
+        sources,
+        tour,
+        event_inventories,
+        article_numbers,
+    })
 }
 
 /// Everything the per-meal price OOB swap renders.

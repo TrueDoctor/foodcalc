@@ -5,7 +5,7 @@ use foodlib_new::entities::types::ids::{
     EventId, GroupId,
 };
 use foodlib_new::entities::types::money::Money;
-use foodlib_new::event::{CreateEvent, Event, FoodPrep};
+use foodlib_new::event::{CreateEvent, Event, FoodPrep, ShoppingTour};
 use foodlib_new::ingredient::Ingredient;
 use foodlib_new::meal::Meal;
 use foodlib_new::recipe::Recipe;
@@ -145,3 +145,68 @@ pub async fn gather_form_data(
     })
 }
 
+/// Fetches one event (e.g. for delete-confirmation dialogs or overview
+/// pages). Requires `EditEvent` permission.
+pub async fn get_event(
+    state: &MyAppState,
+    actor: &AppCtx,
+    event_id: EventId,
+) -> Result<Event> {
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    state.events().get(event_id).await
+}
+
+/// Lists all events.
+pub async fn list_events(state: &MyAppState) -> Result<Vec<Event>> {
+    state.events().list().await
+}
+
+/// Lists all places (meal locations).
+pub async fn list_places(state: &MyAppState) -> Result<Vec<foodlib_new::event::Place>> {
+    state.events().get_places().await
+}
+
+/// Lists an event's ingredient source default overrides.
+/// Requires `EditEvent` permission.
+pub async fn list_source_overrides(
+    state: &MyAppState,
+    actor: &AppCtx,
+    event_id: EventId,
+) -> Result<Vec<foodlib_new::event::SourceOverrideView>> {
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    state.events().get_source_overrides(event_id).await
+}
+
+/// Lists an event's shopping tours.
+pub async fn get_shopping_tours(
+    state: &MyAppState,
+    event_id: EventId,
+) -> Result<Vec<ShoppingTour>> {
+    state.events().get_shopping_tours(event_id).await
+}
+
+/// Raw building blocks for event timeline-style views: the event's meals,
+/// shopping tours, food preps, and all recipes (for name lookups). Layout,
+/// grouping and filtering stay presentation.
+pub struct EventItemSources {
+    pub meals: Vec<Meal>,
+    pub tours: Vec<foodlib_new::event::ShoppingTour>,
+    pub preps: Vec<FoodPrep>,
+    pub recipes: Vec<Recipe>,
+}
+
+pub async fn gather_event_item_sources(
+    state: &MyAppState,
+    event_id: EventId,
+) -> Result<EventItemSources> {
+    let meals = state.meals().get_event_meals(event_id).await?;
+    let tours = state.events().get_shopping_tours(event_id).await?;
+    let preps = state.events().get_food_prep_tasks(event_id).await?;
+    let recipes = state.recipes().list().await?;
+    Ok(EventItemSources {
+        meals,
+        tours,
+        preps,
+        recipes,
+    })
+}

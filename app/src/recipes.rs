@@ -8,10 +8,88 @@ use foodlib_new::recipe::{
     RecipeStep,
 };
 use foodlib_new::unit::Unit;
+use foodlib_new::user::User;
 use time::Duration;
 
 use crate::app_ctx::{assert_can_move_to, AppCtx};
 use crate::{Error, MyAppState, Result};
+
+/// Everything the recipe overview/list renders: all recipes plus the group
+/// ids of the acting user (empty for anonymous callers), fetched in one use
+/// case so transports only have to deal with presentation.
+pub async fn gather_overview(
+    state: &MyAppState,
+    user: Option<&User>,
+) -> Result<(Vec<Recipe>, Vec<GroupId>)> {
+    let recipes = state.recipes().list().await?;
+    let user_group_ids = match user {
+        Some(u) => crate::users::user_group_ids(state, u.id).await?,
+        None => vec![],
+    };
+    Ok((recipes, user_group_ids))
+}
+
+/// All measurement units (used to render unit pickers).
+pub async fn list_units(state: &MyAppState) -> Result<Vec<Unit>> {
+    state.units().list().await
+}
+
+/// Lists all recipes.
+pub async fn list_recipes(state: &MyAppState) -> Result<Vec<Recipe>> {
+    state.recipes().list().await
+}
+
+/// Fetches one recipe.
+pub async fn get_recipe(state: &MyAppState, recipe_id: RecipeId) -> Result<Recipe> {
+    state.recipes().get(recipe_id).await
+}
+
+/// Everything the recipe allergen dialog renders. The raw property labels
+/// are classified here (regulatory "contains" vs "~spuren-" may-contain vs
+/// informational "~hinweis-" notes) so transports only render.
+pub struct RecipeAllergenData {
+    pub recipe_name: String,
+    pub dietary: foodlib_new::allergen::DietaryFlags,
+    pub contains: Vec<String>,
+    pub may_contain: Vec<String>,
+    pub hinweise: Vec<String>,
+}
+
+pub async fn gather_recipe_allergens(
+    state: &MyAppState,
+    recipe_id: RecipeId,
+) -> Result<RecipeAllergenData> {
+    let rp = state.properties().get_recipe_properties(recipe_id).await?;
+    let dietary = foodlib_new::ops::allergens::dietary_flags(&rp.properties);
+
+    let mut contains_lower: Vec<String> = Vec::new();
+    let mut may_lower: Vec<String> = Vec::new();
+    let mut hinweis_lower: Vec<String> = Vec::new();
+    for p in &rp.properties {
+        let lower = p.name.to_lowercase();
+        if let Some(rest) = lower.strip_prefix("~spuren-") {
+            may_lower.push(rest.to_string());
+        } else if let Some(rest) = lower.strip_prefix("~hinweis-") {
+            hinweis_lower.push(rest.to_string());
+        } else {
+            contains_lower.push(lower);
+        }
+    }
+    contains_lower.sort();
+    contains_lower.dedup();
+    may_lower.sort();
+    may_lower.dedup();
+    hinweis_lower.sort();
+    hinweis_lower.dedup();
+
+    Ok(RecipeAllergenData {
+        recipe_name: rp.recipe_name,
+        dietary,
+        contains: foodlib_new::ops::allergens::compact_allergen_set(&contains_lower),
+        may_contain: foodlib_new::ops::allergens::compact_allergen_set(&may_lower),
+        hinweise: hinweis_lower,
+    })
+}
 
 /// Everything the recipe edit view renders, fetched in one use case so
 /// transports only have to deal with presentation.
@@ -356,6 +434,21 @@ pub async fn add_step(
             ),
             recipe_id,
         })
-        .await?;
+    .await?;
+    Ok(())
+}
+
+/// Deletes a recipe permanently. Only administrators may delete recipes.
+pub async fn delete_recipe(
+    state: &MyAppState,
+    user: &User,
+    recipe_id: RecipeId,
+) -> Result<()> {
+    if !user.is_admin {
+        return Err(Error::Forbidden(
+            "Only administrators can delete recipes".into(),
+        ));
+    }
+    state.recipes().delete(recipe_id).await?;
     Ok(())
 }

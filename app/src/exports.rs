@@ -131,3 +131,60 @@ pub fn sanitize_filename(name: &str) -> String {
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
         .collect()
 }
+
+// Thin read wrappers over the foodlib export ops so transports never touch
+// the lib directly; all of these feed the `PdfExporter` or text/CSV writers.
+
+pub async fn fetch_meal_recipe(
+    state: &MyAppState,
+    meal_id: foodlib_new::entities::types::ids::MealId,
+) -> Result<RecipeInfo> {
+    state.export().fetch_meal_recipe(meal_id).await
+}
+
+pub async fn fetch_food_prep_recipe(
+    state: &MyAppState,
+    prep_id: foodlib_new::entities::types::ids::FoodPrepId,
+) -> Result<RecipeInfo> {
+    state.export().fetch_food_prep_recipe(prep_id).await
+}
+
+pub async fn fetch_user_input_meal(
+    state: &MyAppState,
+    recipe_id: foodlib_new::entities::types::ids::RecipeId,
+    servings: f64,
+    energy_kj: u32,
+) -> Result<RecipeInfo> {
+    state
+        .export()
+        .fetch_user_input_meal(recipe_id, servings, energy_kj, String::new())
+        .await
+}
+
+pub async fn fetch_subrecipes_from_user_input(
+    state: &MyAppState,
+    recipe_id: foodlib_new::entities::types::ids::RecipeId,
+    servings: f64,
+    energy_kj: u32,
+) -> Result<Vec<foodlib_new::entities::recipe::SubRecipe>> {
+    state
+        .export()
+        .fetch_subrecipes_from_user_input(recipe_id, servings, energy_kj)
+        .await
+}
+
+pub async fn fetch_event_allergens(
+    state: &MyAppState,
+    actor: &crate::app_ctx::AppCtx,
+    event_id: foodlib_new::entities::types::ids::EventId,
+) -> Result<EventAllergenInfo> {
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    state.export().fetch_event_allergens(event_id).await
+}
+
+pub async fn fetch_event_combined(
+    state: &MyAppState,
+    event_id: foodlib_new::entities::types::ids::EventId,
+) -> Result<Vec<RecipeInfo>> {
+    state.export().fetch_event_combined(event_id).await
+}

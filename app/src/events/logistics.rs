@@ -1,4 +1,5 @@
 use crate::{AppCtx, MyAppState};
+use crate::Result;
 use foodlib_new::Error;
 use foodlib_new::event::{CreateFoodPrep, FoodPrep};
 use foodlib_new::types::ids::{EventId, FoodPrepId, IngredientId, IngredientSourceId, StoreId};
@@ -100,4 +101,28 @@ pub async fn gather_uncovered_ingredients(
     // Remove water from ingredient list // TODO: Bad smell
     uncovered.retain(|i| i.ingredient_id != IngredientId(4));
     Ok(uncovered)
+}
+
+/// Fetches one food-prep task.
+pub async fn get_food_prep(
+    state: &MyAppState,
+    prep_id: FoodPrepId,
+) -> Result<FoodPrep> {
+    state.events().get_food_prep(prep_id).await
+}
+
+/// Fetches one food-prep task in the context of an event (dialogs, edit
+/// forms). Requires `EditEvent` permission, plus `EditFoodPrep` for an
+/// existing task (an invalid `prep_id` is the "new task" sentinel).
+pub async fn get_food_prep_with_permission(
+    state: &MyAppState,
+    actor: &AppCtx,
+    event_id: EventId,
+    prep_id: FoodPrepId,
+) -> Result<FoodPrep> {
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    if prep_id.is_valid() {
+        actor.ctx.assert_can_edit_food_prep(prep_id).await?;
+    }
+    state.events().get_food_prep(prep_id).await
 }

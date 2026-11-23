@@ -114,6 +114,30 @@ pub fn assert_admin(actor: &AppCtx) -> Result<()> {
     }
 }
 
+/// Everything the user detail view renders, fetched in one use case.
+pub struct UserDetailData {
+    pub user: foodlib_new::user::User,
+    pub user_groups: Vec<Group>,
+    pub all_groups: Vec<Group>,
+}
+
+/// Requires admin privileges.
+pub async fn gather_user_detail(
+    state: &MyAppState,
+    actor: &AppCtx,
+    user_id: UserId,
+) -> Result<UserDetailData> {
+    assert_admin(actor)?;
+    let user = state.users().get_user(user_id).await?;
+    let user_groups = state.users().get_user_groups(user_id).await?;
+    let all_groups = state.users().get_all_groups().await?;
+    Ok(UserDetailData {
+        user,
+        user_groups,
+        all_groups,
+    })
+}
+
 /// Creates a user together with their personal group and sets the initial
 /// password. Username/email are trimmed; username, email and password are
 /// required.

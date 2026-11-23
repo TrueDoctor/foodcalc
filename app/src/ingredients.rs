@@ -21,6 +21,14 @@ pub fn can_edit(group_id: GroupId, user_group_ids: &[GroupId], user: &User) -> b
     user.is_admin || user_group_ids.contains(&group_id)
 }
 
+/// All ingredients together with a "has sources" flag.
+#[allow(deprecated)]
+pub async fn list_with_sources(
+    state: &MyAppState,
+) -> Result<Vec<foodlib_new::ingredient::IngredientWithSource>> {
+    state.ingredients().list_with_sources().await
+}
+
 async fn user_group_ids(state: &MyAppState, user_id: UserId) -> Result<Vec<GroupId>> {
     Ok(state
         .users()

@@ -1,4 +1,3 @@
-use std::collections::hash_map::Entry;
 
 use crate::{
     frontend::{events_tab::event_detail_tab, html_error, icons, MResponse, WebCtx},
@@ -10,7 +9,6 @@ use axum::{
 };
 use foodlib_new::event::CreateFoodPrep;
 use foodlib_new::{
-    auth_context::AuthCtx,
     entities::types::ids::{EventId, FoodPrepId, RecipeId},
     event::FoodPrep,
     recipe::Recipe,
@@ -81,10 +79,10 @@ struct FoodPrepForm {
 
 async fn add_food_prep(
     state: State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> Result<Markup, Markup> {
-    food_prep_form(state, ctx, Path((event_id, FoodPrepId(-1)))).await
+    food_prep_form(state, WebCtx(actor), Path((event_id, FoodPrepId(-1)))).await
 }
 
 async fn delete_food_prep(
@@ -97,16 +95,14 @@ async fn delete_food_prep(
 }
 
 async fn delete_food_prep_dialog(
-    state: State<MyAppState>,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((event_id, prep_id)): Path<(EventId, FoodPrepId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    ctx.assert_can_edit_food_prep(prep_id).await?;
     // Get food prep details if possible
-    let prep = state.events().get_food_prep(prep_id).await?;
+    let prep = app::events::logistics::get_food_prep_with_permission(&state, &actor, event_id, prep_id).await?;
     // Get recipe name if possible
-    let recipe = state.recipes().get(prep.recipe_id).await?;
+    let recipe = app::recipes::get_recipe(&state, prep.recipe_id).await?;
     let recipe_name = recipe.name;
     Ok(html! {
         dialog open="true" class="dialog" id="delete" {
@@ -121,18 +117,13 @@ async fn delete_food_prep_dialog(
 
 async fn food_prep_form(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path((event_id, prep_id)): Path<(EventId, FoodPrepId)>,
 ) -> Result<Markup, Markup> {
-    ctx.assert_can_edit_event(event_id)
+    app::events::logistics::get_food_prep_with_permission(&state, &actor, event_id, prep_id)
         .await
         .map_err(|e| html_error(&format!("{e}"), "/events"))?;
-    if prep_id.is_valid() {
-        ctx.assert_can_edit_food_prep(prep_id)
-            .await
-            .map_err(|e| html_error(&format!("{e}"), "/events"))?;
-    }
-    let recipes = state.recipes().list().await.unwrap_or_default();
+    let recipes = app::recipes::list_recipes(&state).await.unwrap_or_default();
 
     // If prep_id is provided, get existing prep data
     let prep = if prep_id.is_valid() {
@@ -237,12 +228,6 @@ async fn save_food_prep(
     WebCtx(actor): WebCtx,
     Form(form): Form<FoodPrepForm>,
 ) -> MResponse {
-    actor.ctx.assert_can_edit_event(form.event_id).await?;
-    if let Some(prep_id) = form.prep_id {
-        if prep_id.is_valid() {
-            actor.ctx.assert_can_edit_food_prep(prep_id).await?;
-        }
-    }
     // Parse dates
     let date_format = format_description!("[year]-[month]-[day]T[hour]:[minute]");
 
@@ -298,7 +283,7 @@ async fn save_food_prep(
     event_detail_tab::event_form(State(state), WebCtx(actor), Path(form.event_id)).await
 }
 
-fn format_food_prep(event_id: EventId, prep: &FoodPrep, recipe: &Recipe) -> Markup {
+fn format_food_prep(event_id: EventId, prep: &FoodPrep, recipe_name: &str) -> Markup {
     let time_format = format_description!("[day].[month] [hour]:[minute]");
     let prep_date = prep.prep_date.format(time_format).unwrap_or_default();
     let use_from = prep
@@ -309,7 +294,7 @@ fn format_food_prep(event_id: EventId, prep: &FoodPrep, recipe: &Recipe) -> Mark
 
     html! {
         tr {
-            td data-label="Recipe" { (recipe.name) }
+            td data-label="Recipe" { (recipe_name) }
             td data-label="Prep Date" { (prep_date) }
             td data-label="Use From" { (use_from) }
             td data-label="Use Until" { (use_until) }
@@ -336,18 +321,14 @@ pub async fn render_food_prep(
     event_id: EventId,
     default_date: OffsetDateTime,
 ) -> MResponse {
-    let preps = state.events().get_food_prep_tasks(event_id).await?;
+    let app::events::EventItemSources { preps, recipes, .. } =
+        app::events::gather_event_item_sources(state, event_id).await?;
 
-    // Get recipes for all food preps
-    let mut recipe_map = std::collections::HashMap::new();
-    for prep in &preps {
-        if let Entry::Vacant(e) = recipe_map.entry(prep.recipe_id) {
-            if let Ok(recipe) = state.recipes().get(prep.recipe_id).await {
-                e.insert(recipe);
-            }
-        }
-    }
-    let mut all_recipes = state.recipes().list().await.unwrap_or_default();
+    // Recipe names for the prep rows (id -> name), plus the full sorted list
+    // for the inline add-row.
+    let recipe_names: std::collections::HashMap<foodlib_new::entities::types::ids::RecipeId, String> =
+        recipes.iter().map(|r| (r.id, r.name.clone())).collect();
+    let mut all_recipes = recipes;
     all_recipes.sort_by(|a, b| a.name.cmp(&b.name));
 
     Ok(html! {
@@ -367,8 +348,8 @@ pub async fn render_food_prep(
             tbody {
                 (food_prep_add_row(event_id, &all_recipes, default_date))
                 @for prep in preps {
-                    @if let Some(recipe) = recipe_map.get(&prep.recipe_id) {
-                        (format_food_prep(event_id, &prep, recipe))
+                    @if let Some(recipe_name) = recipe_names.get(&prep.recipe_id) {
+                        (format_food_prep(event_id, &prep, recipe_name))
                     }
                 }
             }

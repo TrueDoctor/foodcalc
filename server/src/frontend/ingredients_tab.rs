@@ -649,15 +649,9 @@ async fn fetch_ingredients_and_groups(
     state: &MyAppState,
     user: Option<&User>,
 ) -> Result<(Vec<IngredientWithSource>, Vec<GroupId>), Error> {
-    let ingredients = state.ingredients().list_with_sources().await?;
+    let ingredients = app::ingredients::list_with_sources(state).await?;
     let user_group_ids = match user {
-        Some(u) => state
-            .users()
-            .get_user_groups(u.id)
-            .await?
-            .into_iter()
-            .map(|g| g.id)
-            .collect(),
+        Some(u) => app::users::user_group_ids(state, u.id).await?,
         None => vec![],
     };
     Ok((ingredients, user_group_ids))

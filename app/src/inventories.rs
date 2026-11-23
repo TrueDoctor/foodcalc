@@ -7,6 +7,46 @@ use foodlib_new::inventory::{CreateInventory, Inventory, InventoryItem, Inventor
 use crate::app_ctx::{assert_can_move_to, AppCtx};
 use crate::{MyAppState, Result};
 
+/// Lists all inventories.
+pub async fn list_inventories(state: &MyAppState) -> Result<Vec<Inventory>> {
+    state.inventories().list().await
+}
+
+/// Fetches one inventory.
+pub async fn get_inventory(state: &MyAppState, inventory_id: InventoryId) -> Result<Inventory> {
+    state.inventories().get(inventory_id).await
+}
+
+/// Fetches one inventory for editing (e.g. the inline edit row).
+/// Requires `EditInventory` permission.
+pub async fn get_inventory_for_edit(
+    state: &MyAppState,
+    actor: &AppCtx,
+    inventory_id: InventoryId,
+) -> Result<Inventory> {
+    actor.ctx.assert_can_edit_inventory(inventory_id).await?;
+    state.inventories().get(inventory_id).await
+}
+
+/// Everything the inventory contents view renders: the inventory's items and
+/// all ingredients (for the add-row datalist). Filtering stays presentation.
+pub struct InventoryContentsData {
+    pub items: Vec<InventoryItemWithName>,
+    pub ingredients: Vec<foodlib_new::ingredient::Ingredient>,
+}
+
+pub async fn gather_contents(
+    state: &MyAppState,
+    inventory_id: InventoryId,
+) -> Result<InventoryContentsData> {
+    let items = state.inventories().get_items(inventory_id).await?;
+    let ingredients = state.ingredients().list().await?;
+    Ok(InventoryContentsData {
+        items,
+        ingredients,
+    })
+}
+
 /// Creates a new inventory owned by the actor's personal group.
 pub async fn create_inventory(
     state: &MyAppState,

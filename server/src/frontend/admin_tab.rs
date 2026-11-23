@@ -7,7 +7,7 @@ use axum::{
 };
 use axum_login::login_required;
 use foodlib_new::types::ids::UserId;
-use foodlib_new::{auth::AuthBackend, auth_context::AuthCtx, ops, types::ids::GroupId, user::{Group, User}};
+use foodlib_new::{auth::AuthBackend, auth_context::AuthCtx, types::ids::GroupId, user::{Group, User}};
 use foodlib_new::error::Error;
 use app::{AppCtx, Channel};
 use crate::frontend::WebCtx;
@@ -39,7 +39,7 @@ async fn groups_view(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
 ) -> MResponse {
-    let groups = state.users().get_all_groups().await?;
+    let groups = app::users::list_all_groups(&state).await?;
     let visible: Vec<Group> = groups
         .into_iter()
         .filter(|g| !g.is_personal && (ctx.user.is_admin || ctx.group_ids.contains(&g.id)))
@@ -119,7 +119,7 @@ async fn create_group(
     let group = app::admin::create_group(&state, &actor, form.name).await?;
     let mut group_ids = actor.ctx.group_ids.clone();
     group_ids.push(group.id);
-    let groups = state.users().get_all_groups().await?;
+    let groups = app::users::list_all_groups(&state).await?;
     let visible: Vec<Group> = groups
         .into_iter()
         .filter(|g| !g.is_personal && (actor.ctx.user.is_admin || group_ids.contains(&g.id)))
@@ -151,8 +151,8 @@ async fn group_members_view(
 }
 
 async fn render_group_detail(state: &MyAppState, group: Group) -> MResponse {
-    let members = ops::users::members_of_group(&state.db, group.id).await?;
-    let all_users = state.users().get_all_users().await?;
+    let members = app::users::group_members(state, group.id).await?;
+    let all_users = app::users::list_all_users(state).await?;
     let member_ids: std::collections::HashSet<UserId> = members.iter().map(|u| u.id).collect();
     let candidates: Vec<&User> = all_users
         .iter()

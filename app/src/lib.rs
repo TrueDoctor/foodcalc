@@ -17,10 +17,7 @@ pub mod inventories;
 pub mod recipes;
 pub mod admin;
 pub mod events;
-// pub mod ingredients;
-// pub mod inventories;
-// pub mod recipes;
-// pub mod users;
+pub mod users;
 
 pub use foodlib_new::error::{Error, Result};
 pub use state::MyAppState;

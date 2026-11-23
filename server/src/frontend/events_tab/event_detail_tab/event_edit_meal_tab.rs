@@ -7,7 +7,6 @@ use axum::{
     http::StatusCode,
     routing::{delete, get, post},
 };
-use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::types::amount::Amount;
 use foodlib_new::entities::types::ids::{EventId, MealId, PlaceId, RecipeId};
 use maud::{html, Markup};
@@ -29,23 +28,21 @@ pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
 
 async fn meal_price_cell(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(meal_id): Path<MealId>,
 ) -> MResponse {
-    ctx.assert_can_edit_meal(meal_id).await?;
-    let price = state.meals().get_meal_price(meal_id).await?;
+    let price = app::events::meals::get_meal_price_for_actor(&state, &actor, meal_id).await?;
     Ok(html! { (price.round(2).to_string()) "€" })
 }
 
 async fn meal_price_per_serving_cell(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(meal_id): Path<MealId>,
 ) -> MResponse {
     use bigdecimal::ToPrimitive;
-    ctx.assert_can_edit_meal(meal_id).await?;
-    let meal = state.meals().get_meal(meal_id).await?;
-    let price = state.meals().get_meal_price(meal_id).await?;
+    let meal = app::events::meals::get_meal_for_actor(&state, &actor, meal_id).await?;
+    let price = app::events::meals::get_meal_price_for_actor(&state, &actor, meal_id).await?;
     let per_serving = price.to_f64().unwrap_or_default() / meal.servings as f64;
     Ok(html! { (format!("{:.3}€", per_serving)) })
 }
@@ -130,18 +127,13 @@ pub struct MealPrefill {
 
 async fn meal_form(
     state: State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
     Query(prefill): Query<MealPrefill>,
 ) -> Result<Markup, Markup> {
-    ctx.assert_can_edit_event(event_id)
+    app::events::meals::assert_meal_form_access(&actor, event_id, meal_id)
         .await
         .map_err(|e| html_error(&format!("{e}"), "/events"))?;
-    if meal_id != MealId(-1) {
-        ctx.assert_can_edit_meal(meal_id)
-            .await
-            .map_err(|e| html_error(&format!("{e}"), "/events"))?;
-    }
     let mut meal = foodlib_new::entities::meal::Meal {
         name: "Select Recipe".to_string(),
         place: "Select Place".to_string(),
@@ -155,7 +147,7 @@ async fn meal_form(
             .map_err(|e| html_error(&format!("Failed to fetch meal {e}"), "/events"))?;
     } else {
         if let Some(rid) = prefill.recipe_id {
-            if let Ok(r) = state.recipes().get(rid).await {
+            if let Ok(r) = app::recipes::get_recipe(&state, rid).await {
                 meal.recipe_id = r.id;
                 meal.name = r.name;
             }
@@ -174,15 +166,11 @@ async fn meal_form(
             }
         }
     }
-    let mut recipes = state
-        .recipes()
-        .list()
+    let mut recipes = app::recipes::list_recipes(&state)
         .await
         .map_err(|e| html_error(&format!("Failed to fetch recipes {e}"), "/events"))?;
     recipes.sort_by(|a, b| a.name.cmp(&b.name));
-    let mut places = state
-        .events()
-        .get_places()
+    let mut places = app::events::list_places(&state)
         .await
         .map_err(|e| html_error(&format!("Failed to fetch places {e}"), "/events"))?;
     places.sort_by(|a, b| a.name.cmp(&b.name));

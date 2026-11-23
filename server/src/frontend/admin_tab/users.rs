@@ -13,6 +13,7 @@ use serde::Deserialize;
 use crate::frontend::MResponse;
 use crate::MyAppState;
 use crate::frontend::WebCtx;
+use app::AppCtx;
 
 pub(crate) fn users_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -32,7 +33,7 @@ async fn users_view(
     WebCtx(actor): WebCtx,
 ) -> MResponse {
     app::admin::assert_admin(&actor)?;
-    let users = state.users().get_all_users().await?;
+    let users = app::users::list_all_users(&state).await?;
     Ok(html! {
         div class="flex flex-col items-center w-full" {
             div class="flex justify-center w-full mb-4" {
@@ -126,7 +127,7 @@ async fn create_user(
         form.is_admin.is_some(),
     )
     .await?;
-    let users = state.users().get_all_users().await?;
+    let users = app::users::list_all_users(&state).await?;
     Ok(html! {
         div id="admin-users" class="w-full max-w-3xl" {
             (user_list(&users))
@@ -140,16 +141,19 @@ async fn user_detail_view(
     Path(user_id): Path<UserId>,
 ) -> MResponse {
     app::admin::assert_admin(&actor)?;
-    render_user_detail(&state, user_id).await
+    render_user_detail(&state, &actor, user_id).await
 }
 
 async fn render_user_detail(
     state: &MyAppState,
+    actor: &AppCtx,
     user_id: UserId,
 ) -> MResponse {
-    let user = state.users().get_user(user_id).await?;
-    let user_groups = state.users().get_user_groups(user_id).await?;
-    let all_groups = state.users().get_all_groups().await?;
+    let app::admin::UserDetailData {
+        user,
+        user_groups,
+        all_groups,
+    } = app::admin::gather_user_detail(state, actor, user_id).await?;
     let member_ids: std::collections::HashSet<GroupId> =
         user_groups.iter().map(|g| g.id).collect();
     let candidate_groups: Vec<&Group> = all_groups
@@ -258,7 +262,7 @@ async fn update_user(
     Form(form): Form<UpdateUserForm>,
 ) -> MResponse {
     app::admin::update_user(&state, &actor, user_id, form.username, form.email).await?;
-    render_user_detail(&state, user_id).await
+    render_user_detail(&state, &actor, user_id).await
 }
 
 async fn toggle_admin(
@@ -267,7 +271,7 @@ async fn toggle_admin(
     Path(user_id): Path<UserId>,
 ) -> MResponse {
     app::admin::toggle_admin(&state, &actor, user_id).await?;
-    render_user_detail(&state, user_id).await
+    render_user_detail(&state, &actor, user_id).await
 }
 
 #[derive(Deserialize)]
@@ -282,7 +286,7 @@ async fn set_password(
     Form(form): Form<PasswordForm>,
 ) -> MResponse {
     app::admin::set_password(&state, &actor, user_id, form.password).await?;
-    render_user_detail(&state, user_id).await
+    render_user_detail(&state, &actor, user_id).await
 }
 
 async fn delete_user(
@@ -308,7 +312,7 @@ async fn add_to_group(
     Form(form): Form<AddGroupForm>,
 ) -> MResponse {
     app::admin::add_user_to_group(&state, &actor, user_id, GroupId(form.group_id)).await?;
-    render_user_detail(&state, user_id).await
+    render_user_detail(&state, &actor, user_id).await
 }
 
 async fn remove_from_group(

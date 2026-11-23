@@ -1,3 +1,4 @@
+use app::AppCtx;
 use crate::{
     frontend::{events_tab::event_detail_tab, IResponse, MResponse, WebCtx},
     MyAppState,
@@ -9,7 +10,6 @@ use axum::{
 };
 use bigdecimal::ToPrimitive;
 use foodlib_new::{
-    auth_context::AuthCtx,
     entities::types::amount::Amount,
     entities::types::ids::{EventId, IngredientId, InventoryId, ShoppingTourId, StoreId},
     error::Result,
@@ -53,20 +53,18 @@ struct ToggleForm {
 
 async fn add_shopping_tour(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    render_shopping_tour_form(&state, &ctx, event_id, None).await
+    render_shopping_tour_form(&state, &actor, event_id, None).await
 }
 
 async fn edit_shopping_tour(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path((event_id, tour_id)): Path<(EventId, ShoppingTourId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    render_shopping_tour_form(&state, &ctx, event_id, Some(tour_id)).await
+    render_shopping_tour_form(&state, &actor, event_id, Some(tour_id)).await
 }
 
 
@@ -117,26 +115,17 @@ async fn delete_shopping_tour(
 
 async fn render_shopping_tour_form(
     state: &MyAppState,
-    ctx: &AuthCtx,
+    actor: &AppCtx,
     event_id: EventId,
     tour_id: Option<ShoppingTourId>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    if let Some(id) = tour_id {
-        ctx.assert_can_edit_shopping_tour(id).await?;
-    }
-
-    let stores = state.stores().list().await?;
-    let inventories = state.inventories().list().await?;
-
-    let (existing, event_inventories, shopping_list) = match tour_id {
-        Some(id) => (
-            Some(state.events().get_shopping_tour(id).await?),
-            state.events().get_inventories(event_id).await?,
-            state.events().get_shopping_list(id).await?,
-        ),
-        None => (None, vec![], vec![]),
-    };
+    let app::events::shopping::TourFormData {
+        stores,
+        inventories,
+        existing,
+        event_inventories,
+        shopping_list,
+    } = app::events::shopping::gather_tour_form(state, actor, event_id, tour_id).await?;
 
     let selected_store_id = existing.as_ref().map(|t| t.store_id);
     let initial_date = existing
@@ -144,7 +133,8 @@ async fn render_shopping_tour_form(
         .map(|t| t.tour_date)
         .unwrap_or_else(OffsetDateTime::now_utc);
 
-    let inventory_items = inventory_items(tour_id, &event_inventories, state).await;
+    let inventory_items =
+        app::events::shopping::gather_inventory_items(state, &event_inventories).await;
 
     Ok(html! {
         div class="flex-col space-y-4 w-full" {
@@ -287,26 +277,6 @@ async fn render_shopping_tour_form(
     })
 }
 
-async fn inventory_items(
-    tour_id: Option<ShoppingTourId>,
-    event_inventories: &Vec<foodlib_new::event::EventInventory>,
-    lib: &foodlib_new::FoodLib,
-) -> Vec<InventoryItemWithName> {
-    let inventory_items = if tour_id.is_some() {
-        // Get all inventory items for the event
-        let mut all_items = vec![];
-        for inv in event_inventories {
-            if let Ok(items) = lib.inventories().get_items(inv.inventory_id).await {
-                all_items.extend(items);
-            }
-        }
-        all_items
-    } else {
-        vec![]
-    };
-    inventory_items
-}
-
 async fn save_tour(
     State(state): State<MyAppState>,
     WebCtx(actor): WebCtx,
@@ -382,19 +352,16 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithN
 
 async fn export_plain(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> IResponse {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    // Single query: tour shopping list + per-recipe usage breakdown.
-    let shopping_list = state
-        .events()
-        .tour_shopping_list_with_usage(tour_id)
-        .await?;
-    let tour = state.events().get_shopping_tour(tour_id).await?;
-
-    let event_inventories = state.events().get_inventories(tour.event_id).await?;
-    let inventory_items = inventory_items(Some(tour_id), &event_inventories, &state).await;
+    let app::events::shopping::TourExportReads {
+        shopping_list,
+        tour: _,
+        event_inventories,
+    } = app::events::shopping::gather_tour_export(&state, &actor, tour_id).await?;
+    let inventory_items =
+        app::events::shopping::gather_inventory_items(&state, &event_inventories).await;
 
     let mut output = String::new();
     let mut current_category = String::new();
@@ -486,28 +453,18 @@ fn format_recipe_usage(usages: &[(String, Option<Amount>)]) -> String {
 
 async fn export_metro(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> IResponse {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    // Single query: tour shopping list + per-recipe usage breakdown.
-    let shopping_list = state
-        .events()
-        .tour_shopping_list_with_usage(tour_id)
-        .await?;
-    let sources = state.ingredients().list_sources(None).await?;
-
-    let tour = state.events().get_shopping_tour(tour_id).await?;
-    let event_inventories = state.events().get_inventories(tour.event_id).await?;
-    let inventory_items = inventory_items(Some(tour_id), &event_inventories, &state).await;
-
-    // ingredient_id -> Metro article number (e.g. "208486"), resolved from the
-    // sync cache. Ingredients that can't be resolved are absent here and get
-    // their name in column 1 + sorted to the bottom of the CSV.
-    let article_numbers = state
-        .events()
-        .resolve_metro_article_numbers(tour_id)
-        .await?;
+    let app::events::shopping::MetroExportReads {
+        shopping_list,
+        sources,
+        tour: _,
+        event_inventories,
+        article_numbers,
+    } = app::events::shopping::gather_metro_export(&state, &actor, tour_id).await?;
+    let inventory_items =
+        app::events::shopping::gather_inventory_items(&state, &event_inventories).await;
 
     // CSV rows: (article_number_or_name, amount, comment, resolved?). Resolved
     // rows are emitted first; unresolved (no Metro article number) sink below.
@@ -596,7 +553,7 @@ async fn toggle_inventory(
     app::events::shopping::set_event_inventory(&state, &actor, event_id, inventory_id, form.checked)
         .await?;
 
-    render_shopping_tour_form(&state, &actor.ctx, event_id, Some(form.tour_id)).await
+    render_shopping_tour_form(&state, &actor, event_id, Some(form.tour_id)).await
 }
 
 async fn update_inventory(
@@ -605,7 +562,7 @@ async fn update_inventory(
     Path(tour_id): Path<ShoppingTourId>,
 ) -> MResponse {
     app::events::shopping::apply_inventory_changes(&state, &actor, tour_id).await?;
-    let tour = state.events().get_shopping_tour(tour_id).await?;
+    let tour = app::events::shopping::get_shopping_tour(&state, tour_id).await?;
 
     // Redirect back to event page
     event_detail_tab::event_form(State(state), WebCtx(actor), Path(tour.event_id)).await
@@ -613,18 +570,15 @@ async fn update_inventory(
 
 async fn confirm_update(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> Result<Markup> {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    let lib = &state.db;
-
     // Calculate expected changes
-    let changes = app::events::shopping::calculate_inventory_changes(&state, tour_id)
+    let changes = app::events::shopping::calculate_inventory_changes(&state, &actor, tour_id)
         .await
         .unwrap();
 
-    let tour = lib.events().get_shopping_tour(tour_id).await.unwrap();
+    let tour = app::events::shopping::get_shopping_tour(&state, tour_id).await.unwrap();
 
     Ok(html! {
         div class="flex flex-col space-y-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg" {

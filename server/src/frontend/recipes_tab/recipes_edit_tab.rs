@@ -114,7 +114,7 @@ pub async fn handle_ingredient_change(
     .await?;
 
     Ok(recipe_ingredient.format_for_ingredient_table(
-        state.units().list().await.unwrap_or_default().clone(),
+        app::recipes::list_units(&state).await.unwrap_or_default(),
         recipe_ingredient.recipe_id,
     ))
 }

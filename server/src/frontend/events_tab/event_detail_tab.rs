@@ -1,4 +1,3 @@
-use crate::FoodLib;
 use axum::{
     extract::{Form, Path, State},
     routing::{delete, get, post},
@@ -150,8 +149,7 @@ pub async fn delete_override_dialog(
     WebCtx(actor): WebCtx,
     Path((event_id, source_id)): Path<(EventId, IngredientSourceId)>,
 ) -> MResponse {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    let overrides = state.events().get_source_overrides(event_id).await?;
+    let overrides = app::events::list_source_overrides(&state, &actor, event_id).await?;
     let source = overrides
         .iter()
         .find(|s| s.source_id == source_id)
@@ -185,8 +183,7 @@ pub async fn delete_meal_dialog(
     WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    let meal = state.meals().get_meal(meal_id).await?;
+    let meal = app::events::meals::get_meal_for_event(&state, &actor, event_id, meal_id).await?;
 
     Ok(html! {
         dialog open="true" class="dialog" id="delete" {
@@ -203,7 +200,7 @@ pub async fn export_recipe_pdf(
     State(state): State<MyAppState>,
     Path(meal_id): Path<MealId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let recipe_info = state.export().fetch_meal_recipe(meal_id).await?;
+    let recipe_info = app::exports::fetch_meal_recipe(&state, meal_id).await?;
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
     let result = typst_renderer::DocumentRenderer::new().export_recipes(vec![recipe_info]);
@@ -230,7 +227,7 @@ pub async fn export_food_prep_pdf(
     State(state): State<MyAppState>,
     Path(prep_id): Path<FoodPrepId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let recipe_info = state.export().fetch_food_prep_recipe(prep_id).await?;
+    let recipe_info = app::exports::fetch_food_prep_recipe(&state, prep_id).await?;
     let title = format!("{}_prep", recipe_info.name);
     #[cfg(feature = "typst")]
     let result = typst_renderer::DocumentRenderer::new()
@@ -259,15 +256,15 @@ pub async fn export_dish_labels_tent(
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    dish_labels_response(&state, event_id).await
+    dish_labels_response(&state, &actor, event_id).await
 }
 
 async fn dish_labels_response(
     state: &MyAppState,
+    actor: &app::AppCtx,
     event_id: EventId,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let info = state.export().fetch_event_allergens(event_id).await?;
+    let info = app::exports::fetch_event_allergens(state, actor, event_id).await?;
     let filename = format!("{}_dish_labels_tent", sanitize_filename(&info.event_name));
 
     // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
@@ -300,8 +297,7 @@ pub async fn export_event_allergens(
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    let info = state.export().fetch_event_allergens(event_id).await?;
+    let info = app::exports::fetch_event_allergens(&state, &actor, event_id).await?;
     let filename = format!("{}_allergene", sanitize_filename(&info.event_name));
 
     #[cfg(feature = "typst")]
@@ -336,11 +332,10 @@ pub async fn export_all_pdf(
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    let event = state.events().get(event_id).await?;
+    let event = app::events::get_event(&state, &actor, event_id).await?;
     let filename = format!("{}_alle_rezepte", sanitize_filename(&event.name));
 
-    let recipes = state.export().fetch_event_combined(event_id).await?;
+    let recipes = app::exports::fetch_event_combined(&state, event_id).await?;
 
     #[cfg(feature = "typst")]
    // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
@@ -510,9 +505,13 @@ pub async fn event_form(
     })
 }
 
-async fn ingredients_per_serving(foodlib: FoodLib, meal_id: Path<MealId>) -> MResponse {
-    let event_meal_ingredients = foodlib.meals().get_meal_ingredients(meal_id.0).await?;
-    let meal = foodlib.meals().get_meal(meal_id.0).await?;
+async fn ingredients_per_serving(
+    State(state): State<MyAppState>,
+    meal_id: Path<MealId>,
+) -> MResponse {
+    let event_meal_ingredients =
+        app::events::meals::get_meal_ingredients(&state, meal_id.0).await?;
+    let meal = app::events::meals::get_meal(&state, meal_id.0).await?;
 
     Ok(html! {
         dialog open="true" id="popup" class="w-1/2 dialog" {
@@ -605,7 +604,7 @@ pub async fn render_shopping_tours(
     stores: &[foodlib_new::store::Store],
     default_date: time::OffsetDateTime,
 ) -> MResponse {
-    let tours = state.events().get_shopping_tours(event_id).await?;
+    let tours = app::events::get_shopping_tours(state, event_id).await?;
 
     Ok(html! {
         div class="flex-col items-center justify-center mb-2" {

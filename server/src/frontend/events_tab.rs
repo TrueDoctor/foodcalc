@@ -1,8 +1,6 @@
-use crate::FoodLib;
 use axum::extract::{Form, Path};
 use axum::extract::State;
-use foodlib_new::auth_context::AuthCtx;
-use foodlib_new::entities::types::ids::{EventId, GroupId};
+use foodlib_new::entities::types::ids::EventId;
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
@@ -86,12 +84,11 @@ pub async fn duplicate(
 }
 
 pub async fn delete_dialog(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    let event = foodlib.events().get(event_id).await?;
+    let event = app::events::get_event(&state, &actor, event_id).await?;
     Ok(html! {
         div class="flex flex-col gap-2" {
             p class="text-2xl" { "Are you sure you want to delete this Event permanently?" }
@@ -118,15 +115,8 @@ pub async fn delete(
 }
 
 pub async fn event_list(State(state): State<MyAppState>, user: User) -> Markup {
-    let events = state.events().list().await.unwrap_or_default();
-    let user_group_ids: Vec<GroupId> = state
-        .users()
-        .get_user_groups(user.id)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|g| g.id)
-        .collect();
+    let events = app::events::list_events(&state).await.unwrap_or_default();
+    let user_group_ids = app::users::lenient_user_group_ids(&state, &user).await;
     let visible_events: Vec<_> = if user.is_admin {
         events.iter().collect()
     } else {
@@ -181,15 +171,8 @@ pub async fn search(
 ) -> Markup {
     let query_str = query.search.to_lowercase();
     let mine_only = query.mine_only.is_some();
-    let events = state.events().list().await.unwrap_or_default();
-    let user_group_ids: Vec<GroupId> = state
-        .users()
-        .get_user_groups(user.id)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|g| g.id)
-        .collect();
+    let events = app::events::list_events(&state).await.unwrap_or_default();
+    let user_group_ids = app::users::lenient_user_group_ids(&state, &user).await;
 
     let filtered_events = events.iter().filter(|x| {
         x.name.to_lowercase().contains(&query_str)

@@ -1,9 +1,7 @@
-use crate::FoodLib;
 use axum::extract::{Form, Path, State};
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
-use foodlib_new::error::Error;
 use foodlib_new::recipe::Recipe;
 use foodlib_new::types::ids::{GroupId, RecipeId};
 use foodlib_new::user::User;
@@ -40,13 +38,13 @@ pub struct SearchParameters {
 }
 
 pub async fn search(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     user: Option<User>,
     query: Form<SearchParameters>,
 ) -> MResponse {
     let needle = query.search.to_lowercase();
     let mine_only = query.mine_only.is_some();
-    let (recipes, user_group_ids) = fetch_recipes_and_groups(&foodlib, user.as_ref()).await?;
+    let (recipes, user_group_ids) = app::recipes::gather_overview(&state, user.as_ref()).await?;
 
     let filtered_recipes = recipes.iter().filter(|x| {
         x.name.to_lowercase().contains(&needle)
@@ -102,15 +100,9 @@ pub async fn export_recipe_pdf(
     let energy = form.energy;
     let number_of_servings = form.number_of_servings;
 
-    let recipe_info = state
-        .export()
-        .fetch_user_input_meal(
-            RecipeId(recipe_id),
-            number_of_servings as f64,
-            energy as u32,
-            "".to_string(),
-        )
-        .await?;
+    let recipe_info =
+        app::exports::fetch_user_input_meal(&state, RecipeId(recipe_id), number_of_servings as f64, energy as u32)
+            .await?;
     let title = recipe_info.name.to_owned();
     // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
     #[cfg(feature = "typst")]
@@ -143,14 +135,13 @@ pub async fn shopping_list(
     let energy = form.energy;
     let number_of_servings = form.number_of_servings;
 
-    let subrecipes = state
-        .export()
-        .fetch_subrecipes_from_user_input(
-            RecipeId(recipe_id),
-            number_of_servings as f64,
-            energy as u32,
-        )
-        .await?;
+    let subrecipes = app::exports::fetch_subrecipes_from_user_input(
+        &state,
+        RecipeId(recipe_id),
+        number_of_servings as f64,
+        energy as u32,
+    )
+    .await?;
     let shopping_list = subrecipes
         .iter()
         .filter(|&recipe| !recipe.is_subrecipe)
@@ -177,19 +168,12 @@ pub async fn shopping_list(
 }
 
 pub async fn delete_recipe_nqa(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     user: User,
     Path(recipe_id): Path<i32>,
 ) -> MResponse {
-    // Only admins can delete recipes
-    if !user.is_admin {
-        return Err(Error::Forbidden(
-            "Only administrators can delete recipes".into(),
-        ));
-    }
-
-    foodlib.recipes().delete(RecipeId(recipe_id)).await?;
-    Ok(recipes_view(foodlib, Some(user)).await)
+    app::recipes::delete_recipe(&state, &user, RecipeId(recipe_id)).await?;
+    Ok(recipes_view(State(state), Some(user)).await)
 }
 
 pub async fn delete_recipe(Path(recipe_id): Path<i32>, user: User) -> Markup {
@@ -211,8 +195,8 @@ pub async fn delete_recipe(Path(recipe_id): Path<i32>, user: User) -> Markup {
     }
 }
 
-pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
-    let (recipes, user_group_ids) = fetch_recipes_and_groups(&foodlib, user.as_ref())
+pub async fn recipes_view(State(state): State<MyAppState>, user: Option<User>) -> Markup {
+    let (recipes, user_group_ids) = app::recipes::gather_overview(&state, user.as_ref())
         .await
         .unwrap_or_default();
 
@@ -302,30 +286,9 @@ async fn add_recipe(
     recipes_edit_tab::recipe_edit_view(State(state), WebCtx(actor), Path(created_recipe)).await
 }
 
-async fn fetch_recipes_and_groups(
-    foodlib: &FoodLib,
-    user: Option<&User>,
-) -> Result<(Vec<Recipe>, Vec<GroupId>), foodlib_new::Error> {
-    let recipes = foodlib.recipes().list().await?;
-    let user_group_ids = match user {
-        Some(u) => foodlib
-            .users()
-            .get_user_groups(u.id)
-            .await?
-            .into_iter()
-            .map(|g| g.id)
-            .collect(),
-        None => vec![],
-    };
-    Ok((recipes, user_group_ids))
-}
-
-fn can_edit(group_id: GroupId, user_group_ids: &[GroupId], user: &User) -> bool {
-    user.is_admin || user_group_ids.contains(&group_id)
-}
-
 fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[GroupId]) -> Markup {
-    let can_edit_this = user.is_some_and(|u| can_edit(recipe.group_id, user_group_ids, u));
+    let can_edit_this =
+        user.is_some_and(|u| app::ingredients::can_edit(recipe.group_id, user_group_ids, u));
     let is_admin = user.is_some_and(|u| u.is_admin);
     let comment = recipe.comment.as_deref().unwrap_or("").trim().to_string();
 
@@ -376,40 +339,22 @@ fn pretty_property(name: &str) -> String {
     }
 }
 
-async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
-    let rp = foodlib
-        .properties()
-        .get_recipe_properties(RecipeId(recipe_id))
-        .await?;
-    let dietary = foodlib_new::ops::allergens::dietary_flags(&rp.properties);
-
-    let mut contains_lower: Vec<String> = Vec::new();
-    let mut may_lower: Vec<String> = Vec::new();
-    let mut hinweis_lower: Vec<String> = Vec::new();
-    for p in &rp.properties {
-        let lower = p.name.to_lowercase();
-        if let Some(rest) = lower.strip_prefix("~spuren-") {
-            may_lower.push(rest.to_string());
-        } else if let Some(rest) = lower.strip_prefix("~hinweis-") {
-            hinweis_lower.push(rest.to_string());
-        } else {
-            contains_lower.push(lower);
-        }
-    }
-    contains_lower.sort();
-    contains_lower.dedup();
-    may_lower.sort();
-    may_lower.dedup();
-    hinweis_lower.sort();
-    hinweis_lower.dedup();
-    let contains = foodlib_new::ops::allergens::compact_allergen_set(&contains_lower);
-    let may_contain = foodlib_new::ops::allergens::compact_allergen_set(&may_lower);
-    let hinweise = hinweis_lower;
+async fn allergens_dialog(
+    State(state): State<MyAppState>,
+    Path(recipe_id): Path<i32>,
+) -> MResponse {
+    let app::recipes::RecipeAllergenData {
+        recipe_name,
+        dietary,
+        contains,
+        may_contain,
+        hinweise,
+    } = app::recipes::gather_recipe_allergens(&state, RecipeId(recipe_id)).await?;
 
     Ok(html! {
         dialog open="true" class="dialog z-50" id="popup" {
             div class="flex justify-between items-center w-full mb-3 gap-2" {
-                p class="text-xl font-semibold" { "Allergens: " (rp.recipe_name) }
+                p class="text-xl font-semibold" { "Allergens: " (recipe_name) }
                 button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" { "Close" }
             }
 
