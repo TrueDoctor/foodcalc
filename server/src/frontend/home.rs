@@ -1,10 +1,10 @@
 use axum::response::IntoResponse;
+use axum::extract::State;
 use foodlib_new::user::User;
 use maud::{html, Markup};
 
 use crate::{
     frontend::{ingredients_tab::render_ingredients_view, LOGIN_URL},
-    FoodLib,
 };
 
 pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
@@ -12,18 +12,21 @@ pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
 }
 
 #[axum::debug_handler]
-pub async fn home_view(user: Option<User>, foodlib: FoodLib) -> impl IntoResponse {
+pub async fn home_view(
+    user: Option<User>,
+    State(state): State<crate::MyAppState>,
+) -> impl IntoResponse {
     (
         [("HX-Replace-Url", "ingredients")],
-        content(foodlib, user).await,
+        content(State(state), user).await,
     )
 }
 
-pub async fn content(foodlib: FoodLib, user: Option<User>) -> Markup {
+pub async fn content(State(state): State<crate::MyAppState>, user: Option<User>) -> Markup {
     html! {
         div class="flex flex-col items-center justify-center mb-16" {
             div id="content" class="w-full px-2 sm:px-4 lg:w-3/4 lg:px-0 flex flex-col items-center justify-center" {
-                (render_ingredients_view(foodlib, user).await)
+                (render_ingredients_view(State(state), user).await)
             }
         }
     }

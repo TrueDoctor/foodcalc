@@ -1,5 +1,5 @@
-use crate::FoodLib;
 use axum::extract::{Form, Path, Query};
+use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
@@ -8,10 +8,11 @@ use foodlib_new::auth::AuthBackend;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::types::amount::Amount;
 use foodlib_new::entities::types::ids::{
-    GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId, UnitId,
+    GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId,
 };
 use foodlib_new::entities::types::money::Money;
-use foodlib_new::ingredient::{CreateIngredient, CreateIngredientSource, IngredientWithSource};
+use foodlib_new::ingredient::IngredientWithSource;
+use crate::frontend::WebCtx;
 use foodlib_new::user::User;
 use foodlib_new::{
     error::Error,
@@ -64,48 +65,34 @@ impl IngredientFilters {
 }
 
 pub async fn update_ingredient(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
-    Form(mut ingredient): Form<Ingredient>,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
+    Form(ingredient): Form<Ingredient>,
 ) -> IResponse {
     let result = if !ingredient.id.is_valid() {
-        let group = foodlib.users().get_personal_group(ctx.user.id).await?;
-
-        let create_ingredient = CreateIngredient {
-            name: ingredient.name.clone(),
-            energy: ingredient.energy,
-            comment: ingredient.comment.clone(),
-            group_id: group.id,
-        };
-
-        foodlib.ingredients().create(create_ingredient).await?;
+        app::ingredients::create_ingredient(
+            &state,
+            &actor,
+            ingredient.name.clone(),
+            ingredient.energy,
+            ingredient.comment.clone(),
+        )
+        .await?;
         Ok((
             [("HX-Retarget", "#content"), ("HX-Reswap", "innerHTML")],
-            render_ingredients_view(foodlib, Some(ctx.user)).await,
+            render_ingredients_view(State(state), Some(actor.ctx.user.clone())).await,
         )
             .into_response())
     } else {
-        let existing = foodlib.ingredients().get(ingredient.id).await?;
-        if !can_edit(existing.group_id, &ctx.group_ids, &ctx.user) {
-            return Err(Error::Forbidden(
-                "You don't have permission to edit this ingredient".into(),
-            ));
-        }
-
         let target_group = ingredient.group_id;
-        ingredient.group_id = existing.group_id;
-        if existing.group_id != target_group {
-            move_group::assert_can_move_to(&ctx, target_group)?;
-        }
-        let updated = foodlib.ingredients().update(ingredient).await?;
-        if existing.group_id != target_group {
-            foodlib
-                .ingredients()
-                .set_group(updated.id, target_group)
-                .await?;
-        }
-        let refreshed = foodlib.ingredients().get(updated.id).await?;
-        Ok(format_ingredient(&refreshed.into(), Some(&ctx.user), &ctx.group_ids).into_response())
+        let refreshed =
+            app::ingredients::update_ingredient(&state, &actor, ingredient, target_group).await?;
+        Ok(format_ingredient(
+            &refreshed.into(),
+            Some(&actor.ctx.user),
+            &actor.ctx.group_ids,
+        )
+        .into_response())
     };
     result
 }
@@ -120,86 +107,45 @@ struct SourceData {
 }
 
 async fn update_source(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     user: User,
     Path((ingredient_id, source_id)): Path<(IngredientId, IngredientSourceId)>,
     form: Form<SourceData>,
 ) -> MResponse {
-    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
-    let user_group_ids: Vec<GroupId> = foodlib
-        .users()
-        .get_user_groups(user.id)
-        .await?
-        .iter()
-        .map(|g| g.id)
-        .collect();
-    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
-        return Err(Error::Forbidden(
-            "You don't have permission to edit sources for this ingredient".into(),
-        ));
-    }
-
     let data = form.0;
-
-    if !source_id.is_valid() {
-        // Creating a new source
-        let source = CreateIngredientSource {
-            ingredient_id,
-            store_id: data.store_id,
-            package_size: Amount::from(data.weight),
-            price: Money::from_f64(data.price).unwrap(),
-            unit_id: UnitId(0),
-            url: data.url,
-            comment: data.comment,
-        };
-
-        foodlib.ingredients().add_source(source).await?;
-        sources_table(foodlib, Some(user), Path(ingredient_id)).await
-    } else {
-        // Updating existing source
-        let source = IngredientSource {
-            id: source_id,
-            ingredient_id,
-            store_id: data.store_id,
-            package_size: Amount::from(data.weight),
-            price: Money::from_f64(data.price).unwrap(),
-            unit_id: UnitId(0),
-            url: data.url,
-            comment: data.comment,
-        };
-
-        foodlib.ingredients().update_source(source).await?;
-        sources_table(foodlib, Some(user), Path(ingredient_id)).await
-    }
+    app::ingredients::save_source(
+        &state,
+        &user,
+        ingredient_id,
+        source_id,
+        data.store_id,
+        Amount::from(data.weight),
+        Money::from_f64(data.price).unwrap(),
+        data.url,
+        data.comment,
+    )
+    .await?;
+    sources_table(State(state), Some(user), Path(ingredient_id)).await
 }
 
 async fn delete_source(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     user: User,
     Path((ingredient_id, source_id)): Path<(IngredientId, IngredientSourceId)>,
 ) -> MResponse {
-    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
-    let user_groups = foodlib.users().get_user_groups(user.id).await?;
-    let user_group_ids: Vec<GroupId> = user_groups.iter().map(|g| g.id).collect();
-    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
-        return Err(Error::Forbidden(
-            "You don't have permission to delete sources for this ingredient".into(),
-        ));
-    }
-
-    foodlib.ingredients().delete_source(source_id).await?;
-    sources_table(foodlib, Some(user), Path(ingredient_id)).await
+    app::ingredients::delete_source(&state, &user, ingredient_id, source_id).await?;
+    sources_table(State(state), Some(user), Path(ingredient_id)).await
 }
 
 /// Route handler for `GET /ingredients`. Always returns the full page shell;
 /// the filter form refreshes only the rows via `GET /ingredients/rows`. URL
 /// is shareable — query params drive the initial filter state on full loads.
 pub async fn ingredients_view(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     user: Option<User>,
     Query(filters): Query<IngredientFilters>,
 ) -> Markup {
-    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref())
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&state, user.as_ref())
         .await
         .unwrap_or_default();
     let filtered = filter_ingredients(&ingredients, &filters, &user_group_ids);
@@ -209,11 +155,11 @@ pub async fn ingredients_view(
 /// Returns just the filtered `<tr>` rows for the filter form to swap into
 /// `#search-results`. Same query-param shape as `ingredients_view`.
 pub async fn ingredient_rows_view(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     user: Option<User>,
     Query(filters): Query<IngredientFilters>,
 ) -> Markup {
-    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref())
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&state, user.as_ref())
         .await
         .unwrap_or_default();
     let filtered = filter_ingredients(&ingredients, &filters, &user_group_ids);
@@ -223,8 +169,11 @@ pub async fn ingredient_rows_view(
 /// Render the full ingredients page. Used both by the route handler (on
 /// non-HX requests) and by mutation handlers that want to return the user
 /// to a fresh page; mutations don't preserve filter state today.
-pub async fn render_ingredients_view(foodlib: FoodLib, user: Option<User>) -> Markup {
-    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&foodlib, user.as_ref())
+pub async fn render_ingredients_view(
+    State(state): State<MyAppState>,
+    user: Option<User>,
+) -> Markup {
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&state, user.as_ref())
         .await
         .unwrap_or_default();
     let filters = IngredientFilters::default();
@@ -345,25 +294,23 @@ fn ingredient_add_row(user: Option<&User>, _user_group_ids: &[GroupId]) -> Marku
     }
 }
 
-async fn delete_ingredient(foodlib: FoodLib, user: User, id: Path<IngredientId>) -> MResponse {
-    // Only admins can delete ingredients
-    if !user.is_admin {
-        return Err(foodlib_new::Error::Forbidden(
-            "You don't have permission to delete ingredients".into(),
-        ));
-    }
-    foodlib.ingredients().delete(id.0).await?;
-    Ok(render_ingredients_view(foodlib, Some(user)).await)
+async fn delete_ingredient(
+    State(state): State<MyAppState>,
+    user: User,
+    id: Path<IngredientId>,
+) -> MResponse {
+    app::ingredients::delete_ingredient(&state, &user, id.0).await?;
+    Ok(render_ingredients_view(State(state), Some(user)).await)
 }
 
 pub async fn edit_ingredient_form(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Form(ingredient): Form<IngredientWithSource>,
 ) -> MResponse {
     let id = ingredient.id;
     let owner_select = if id.is_valid() {
-        Some(move_group::owner_select(&foodlib, &ctx, ingredient.group_id).await?)
+        Some(move_group::owner_select(&state, &ctx, ingredient.group_id).await?)
     } else {
         None
     };
@@ -388,15 +335,12 @@ pub async fn edit_ingredient_form(
     })
 }
 
-async fn delete_ingredient_form(foodlib: FoodLib, user: User, id: Path<IngredientId>) -> MResponse {
-    // Only show delete form if user is an admin
-    if !user.is_admin {
-        return Err(foodlib_new::Error::Forbidden(
-            "You don't have permission to delete ingredients".into(),
-        ));
-    }
-
-    let usages = foodlib.ingredients().usages(id.0).await?;
+async fn delete_ingredient_form(
+    State(state): State<MyAppState>,
+    user: User,
+    id: Path<IngredientId>,
+) -> MResponse {
+    let usages = app::ingredients::gather_usages(&state, &user, id.0).await?;
 
     Ok(html! {
         dialog open="true" class="dialog" id="delete" {
@@ -414,26 +358,20 @@ async fn delete_ingredient_form(foodlib: FoodLib, user: User, id: Path<Ingredien
     })
 }
 
-async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<IngredientId>) -> MResponse {
-    let sources = foodlib.ingredients().get_sources(id.0).await?;
-    let stores = foodlib.stores().list().await?;
-    let ingredient = foodlib.ingredients().get(id.0).await?;
-
-    let user_group_ids: Vec<GroupId> = if let Some(u) = user.as_ref() {
-        foodlib
-            .users()
-            .get_user_groups(u.id)
-            .await
-            .unwrap_or_default()
-            .iter()
-            .map(|g| g.id)
-            .collect()
-    } else {
-        vec![]
-    };
+async fn sources_table(
+    State(state): State<MyAppState>,
+    user: Option<User>,
+    id: Path<IngredientId>,
+) -> MResponse {
+    let app::ingredients::SourcesViewData {
+        sources,
+        stores,
+        ingredient,
+        user_group_ids,
+    } = app::ingredients::gather_sources(&state, user.as_ref(), id.0).await?;
     let can_edit_sources = user
         .as_ref()
-        .is_some_and(|u| can_edit(ingredient.group_id, &user_group_ids, u));
+        .is_some_and(|u| app::ingredients::can_edit(ingredient.group_id, &user_group_ids, u));
 
     Ok(html! {
         dialog open="true" class="dialog z-50" id="popup" {
@@ -466,28 +404,18 @@ async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<Ingredient
 }
 
 async fn properties_dialog(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     user: Option<User>,
     id: Path<IngredientId>,
 ) -> MResponse {
-    let props = foodlib.properties().get_ingredient_properties(id.0).await?;
-    let ingredient = foodlib.ingredients().get(id.0).await?;
-
-    let user_group_ids: Vec<GroupId> = if let Some(u) = user.as_ref() {
-        foodlib
-            .users()
-            .get_user_groups(u.id)
-            .await
-            .unwrap_or_default()
-            .iter()
-            .map(|g| g.id)
-            .collect()
-    } else {
-        vec![]
-    };
+    let app::ingredients::PropertiesViewData {
+        properties: props,
+        ingredient,
+        user_group_ids,
+    } = app::ingredients::gather_properties(&state, user.as_ref(), id.0).await?;
     let can_edit = user
         .as_ref()
-        .is_some_and(|u| can_edit(ingredient.group_id, &user_group_ids, u));
+        .is_some_and(|u| app::ingredients::can_edit(ingredient.group_id, &user_group_ids, u));
 
     // Group properties by source kind for readability.
     let mut contains: Vec<&foodlib_new::property::Property> = Vec::new();
@@ -620,29 +548,12 @@ async fn properties_dialog(
 }
 
 async fn delete_property(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     user: User,
     Path((ingredient_id, property_id)): Path<(IngredientId, PropertyId)>,
 ) -> MResponse {
-    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
-    let user_group_ids: Vec<GroupId> = foodlib
-        .users()
-        .get_user_groups(user.id)
-        .await
-        .unwrap_or_default()
-        .iter()
-        .map(|g| g.id)
-        .collect();
-    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
-        return Err(foodlib_new::Error::Forbidden(
-            "You don't have permission to edit this ingredient".into(),
-        ));
-    }
-    foodlib
-        .properties()
-        .remove_from_ingredient(ingredient_id, property_id)
-        .await?;
-    properties_dialog(foodlib, Some(user), Path(ingredient_id)).await
+    app::ingredients::delete_property(&state, &user, ingredient_id, property_id).await?;
+    properties_dialog(State(state), Some(user), Path(ingredient_id)).await
 }
 
 #[derive(Deserialize)]
@@ -652,53 +563,20 @@ struct AddPropertyForm {
 }
 
 async fn add_property(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     user: User,
     Path(ingredient_id): Path<IngredientId>,
     Form(form): Form<AddPropertyForm>,
 ) -> MResponse {
-    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
-    let user_group_ids: Vec<GroupId> = foodlib
-        .users()
-        .get_user_groups(user.id)
-        .await
-        .unwrap_or_default()
-        .iter()
-        .map(|g| g.id)
-        .collect();
-    if !can_edit(ingredient.group_id, &user_group_ids, &user) {
-        return Err(foodlib_new::Error::Forbidden(
-            "You don't have permission to edit this ingredient".into(),
-        ));
-    }
-
-    use foodlib_new::allergen::{canonical, ClassifiedProperty, PropertySource};
-    if !canonical::ALL.contains(&form.canonical.as_str()) {
-        return Err(foodlib_new::Error::Validation {
-            message: format!("Unknown allergen: {}", form.canonical),
-        });
-    }
-    let source = match form.kind.as_str() {
-        "contains" => PropertySource::Contains,
-        "may_contain" => PropertySource::MayContain,
-        _ => {
-            return Err(foodlib_new::Error::Validation {
-                message: format!("Invalid kind: {}", form.kind),
-            })
-        }
-    };
-
-    foodlib
-        .allergens()
-        .apply_to_ingredient(
-            ingredient_id,
-            &[ClassifiedProperty {
-                canonical_name: form.canonical,
-                source,
-            }],
-        )
-        .await?;
-    properties_dialog(foodlib, Some(user), Path(ingredient_id)).await
+    app::ingredients::add_property(
+        &state,
+        &user,
+        ingredient_id,
+        form.canonical,
+        form.kind,
+    )
+    .await?;
+    properties_dialog(State(state), Some(user), Path(ingredient_id)).await
 }
 
 fn format_add_ingredient_source(stores: &[Store], ingredient_id: IngredientId) -> Markup {
@@ -767,17 +645,13 @@ fn format_ingredient_source(
     }
 }
 
-fn can_edit(group_id: GroupId, user_group_ids: &[GroupId], user: &User) -> bool {
-    user.is_admin || user_group_ids.contains(&group_id)
-}
-
 async fn fetch_ingredients_and_groups(
-    foodlib: &FoodLib,
+    state: &MyAppState,
     user: Option<&User>,
 ) -> Result<(Vec<IngredientWithSource>, Vec<GroupId>), Error> {
-    let ingredients = foodlib.ingredients().list_with_sources().await?;
+    let ingredients = state.ingredients().list_with_sources().await?;
     let user_group_ids = match user {
-        Some(u) => foodlib
+        Some(u) => state
             .users()
             .get_user_groups(u.id)
             .await?
@@ -795,7 +669,8 @@ fn format_ingredient(
     user_group_ids: &[GroupId],
 ) -> Markup {
     let sources_button_text = if ingredient.has_sources { "" } else { "⚠️" };
-    let can_edit_this = user.is_some_and(|u| can_edit(ingredient.group_id, user_group_ids, u));
+    let can_edit_this =
+        user.is_some_and(|u| app::ingredients::can_edit(ingredient.group_id, user_group_ids, u));
     let is_admin = user.is_some_and(|u| u.is_admin);
 
     let comment = ingredient

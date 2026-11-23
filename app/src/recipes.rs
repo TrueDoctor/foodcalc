@@ -10,7 +10,7 @@ use foodlib_new::recipe::{
 use foodlib_new::unit::Unit;
 use time::Duration;
 
-use crate::app_ctx::AppCtx;
+use crate::app_ctx::{assert_can_move_to, AppCtx};
 use crate::{Error, MyAppState, Result};
 
 /// Everything the recipe edit view renders, fetched in one use case so
@@ -24,18 +24,6 @@ pub struct EditViewData {
     pub unit_types: Vec<Unit>,
     pub steps: Vec<RecipeStep>,
     pub stats: RecipeStats,
-}
-
-/// Authorizes moving a resource into `target_group_id`: admins may move
-/// anywhere; non-admins may only move into groups they belong to.
-fn assert_can_move_to(actor: &AppCtx, target_group_id: GroupId) -> Result<()> {
-    if actor.ctx.user.is_admin || actor.ctx.group_ids.contains(&target_group_id) {
-        Ok(())
-    } else {
-        Err(Error::Forbidden(
-            "You can only move resources into groups you belong to".into(),
-        ))
-    }
 }
 
 /// Creates a new empty meal recipe owned by the actor's personal group and

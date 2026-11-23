@@ -1,6 +1,5 @@
-use crate::FoodLib;
 use axum::{
-    extract::{Form, Path, Query},
+    extract::{Form, Path, Query, State},
     http::HeaderMap,
     routing::{get, post, put},
 };
@@ -9,14 +8,13 @@ use foodlib_new::{
     entities::types::amount::Amount,
     entities::types::ids::{GroupId, IngredientId, InventoryId},
     ingredient::Ingredient,
-    inventory::{Inventory, InventoryItem, InventoryItemWithName},
+    inventory::{Inventory, InventoryItemWithName},
 };
 use maud::{html, Markup};
 use serde::Deserialize;
-use foodlib_new::inventory::CreateInventory;
 use super::MResponse;
-use crate::frontend::{icons, move_group};
-use crate::MyAppState;
+use crate::frontend::{icons, WebCtx};
+use crate::{FoodLib, MyAppState};
 
 pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -268,11 +266,11 @@ async fn render_row(foodlib: FoodLib, Path(id): Path<InventoryId>) -> MResponse 
 }
 
 async fn contents_view(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     Path(id): Path<InventoryId>,
     Query(filters): Query<ContentsFilters>,
 ) -> MResponse {
-    render_contents(&foodlib, id, filters.filter.as_deref().unwrap_or("")).await
+    render_contents(&state, id, filters.filter.as_deref().unwrap_or("")).await
 }
 
 #[derive(Deserialize, Default)]
@@ -281,13 +279,17 @@ pub struct ContentsFilters {
     pub filter: Option<String>,
 }
 
-async fn render_contents(foodlib: &FoodLib, inventory_id: InventoryId, filter: &str) -> MResponse {
-    let mut items = foodlib.inventories().get_items(inventory_id).await?;
+async fn render_contents(
+    state: &MyAppState,
+    inventory_id: InventoryId,
+    filter: &str,
+) -> MResponse {
+    let mut items = state.inventories().get_items(inventory_id).await?;
     if !filter.is_empty() {
         let needle = filter.to_lowercase();
         items.retain(|x| x.name.to_lowercase().contains(&needle));
     }
-    let ingredients = foodlib.ingredients().list().await?;
+    let ingredients = state.ingredients().list().await?;
 
     Ok(html! {
         div class="flex flex-col gap-2 w-full" {
@@ -396,19 +398,12 @@ struct NewInventoryForm {
 }
 
 async fn create_inventory(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Form(form): Form<NewInventoryForm>,
 ) -> MResponse {
-    let group = foodlib.users().get_personal_group(ctx.user.id).await?;
-    foodlib
-        .inventories()
-        .create(CreateInventory {
-            name: form.name,
-            group_id: group.id,
-        })
-        .await?;
-    let inventories = foodlib.inventories().list().await?;
+    app::inventories::create_inventory(&state, &actor, form.name).await?;
+    let inventories = state.inventories().list().await?;
     Ok(render_list(&inventories, &[], ""))
 }
 
@@ -419,31 +414,26 @@ struct RenameForm {
 }
 
 async fn rename_inventory(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(id): Path<InventoryId>,
     Form(form): Form<RenameForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_inventory(id).await?;
-    let mut inv = foodlib.inventories().get(id).await?;
-    let target_group = form.group_id;
-    if inv.group_id != target_group {
-        move_group::assert_can_move_to(&ctx, target_group)?;
-    }
-    inv.name = form.name;
-    foodlib.inventories().update(inv.clone()).await?;
-    if inv.group_id != target_group {
-        foodlib.inventories().set_group(id, target_group).await?;
-        inv.group_id = target_group;
-    }
+    let inv =
+        app::inventories::rename_inventory(&state, &actor, id, form.name, form.group_id).await?;
     Ok(render_row_markup(&inv, false, ""))
 }
 
-async fn edit_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<InventoryId>) -> MResponse {
-    ctx.assert_can_edit_inventory(id).await?;
+async fn edit_row(
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
+    Path(id): Path<InventoryId>,
+) -> MResponse {
+    actor.ctx.assert_can_edit_inventory(id).await?;
 
-    let inv = foodlib.inventories().get(id).await?;
-    let owner_select = move_group::owner_select(&foodlib, &ctx, inv.group_id).await?;
+    let inv = state.inventories().get(id).await?;
+    let owner_select =
+        crate::frontend::move_group::owner_select(&state, &actor.ctx, inv.group_id).await?;
     let row_id = format!("inv-{}", inv.id);
     Ok(html! {
         details id=(row_id) class="border rounded-lg p-2" open {
@@ -465,14 +455,13 @@ async fn edit_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<InventoryId>) -
     })
 }
 
-async fn delete_inventory(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<InventoryId>) -> MResponse {
-    // TODO(policy): the old assert_can_edit_inventory collapsed metadata/stock/
-    // delete rights into one "Edit" permission; deleting should require
-    // InventoryPerm::Delete once roles are migrated.
-    ctx.assert_can_edit_inventory(id).await?;
-
-    foodlib.inventories().delete(id).await?;
-    let inventories = foodlib.inventories().list().await?;
+async fn delete_inventory(
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
+    Path(id): Path<InventoryId>,
+) -> MResponse {
+    app::inventories::delete_inventory(&state, &actor, id).await?;
+    let inventories = state.inventories().list().await?;
     Ok(render_list(&inventories, &[], ""))
 }
 
@@ -483,31 +472,13 @@ struct AddItemForm {
 }
 
 async fn add_item(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(id): Path<InventoryId>,
     Form(form): Form<AddItemForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_inventory(id).await?;
-    // -1 means the client-side datalist match failed (user typed a name with
-    // no matching ingredient). Bail out without mutating; the unchanged
-    // contents render keeps their input where it is so they can correct it.
-    if !form.ingredient_id.is_valid() {
-        return render_contents(&foodlib, id, "").await;
-    }
-
-    let items = foodlib.inventories().get_items(id).await?;
-    let item = InventoryItem {
-        inventory_id: id,
-        ingredient_id: form.ingredient_id,
-        amount: form.amount,
-    };
-    if items.iter().any(|x| x.ingredient_id == form.ingredient_id) {
-        foodlib.inventories().update_item(item).await?;
-    } else {
-        foodlib.inventories().add_item(item).await?;
-    }
-    render_contents(&foodlib, id, "").await
+    app::inventories::set_item(&state, &actor, id, form.ingredient_id, form.amount).await?;
+    render_contents(&state, id, "").await
 }
 
 #[derive(Deserialize)]
@@ -516,36 +487,29 @@ struct UpdateAmountForm {
 }
 
 async fn update_item_amount(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((id, ingredient_id)): Path<(InventoryId, IngredientId)>,
     Form(form): Form<UpdateAmountForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_inventory(id).await?;
-    let updated = foodlib
-        .inventories()
-        .update_item(InventoryItem {
-            inventory_id: id,
-            ingredient_id,
-            amount: form.amount,
-        })
-        .await?;
-    let ingredient = foodlib.ingredients().get(ingredient_id).await?;
-    let item: InventoryItemWithName = InventoryItemWithName {
-        name: ingredient.name,
-        ..updated.into()
-    };
+    let item = app::inventories::update_item_amount(
+        &state,
+        &actor,
+        id,
+        ingredient_id,
+        form.amount,
+    )
+    .await?;
     Ok(item_row(id, &item))
 }
 
 async fn delete_item(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((id, ingredient_id)): Path<(InventoryId, IngredientId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_inventory(id).await?;
-    foodlib.inventories().delete_item(id, ingredient_id).await?;
-    render_contents(&foodlib, id, "").await
+    app::inventories::delete_item(&state, &actor, id, ingredient_id).await?;
+    render_contents(&state, id, "").await
 }
 
 /// Move (drag-and-drop) an item from one inventory to another. The whole
@@ -554,50 +518,18 @@ async fn delete_item(
 /// `hx-swap-oob` block that updates the source inventory's contents in the
 /// same response — no second round trip.
 async fn move_item(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((from_id, ingredient_id, to_id)): Path<(InventoryId, IngredientId, InventoryId)>,
 ) -> MResponse {
-    if from_id == to_id {
-        return render_contents(&foodlib, to_id, "").await;
+    let moved =
+        app::inventories::move_item(&state, &actor, from_id, to_id, ingredient_id).await?;
+    if !moved {
+        return render_contents(&state, to_id, "").await;
     }
-    ctx.assert_can_edit_inventory(from_id).await?;
-    ctx.assert_can_edit_inventory(to_id).await?;
 
-    let source_items = foodlib.inventories().get_items(from_id).await?;
-    let Some(source_item) = source_items
-        .iter()
-        .find(|x| x.ingredient_id == ingredient_id)
-    else {
-        return render_contents(&foodlib, to_id, "").await;
-    };
-    let amount_to_move = source_item.amount.clone();
-
-    let dest_items = foodlib.inventories().get_items(to_id).await?;
-    let merged_amount = dest_items
-        .iter()
-        .find(|x| x.ingredient_id == ingredient_id)
-        .map(|x| x.amount.clone() + amount_to_move.clone())
-        .unwrap_or(amount_to_move);
-
-    let dest_has = dest_items.iter().any(|x| x.ingredient_id == ingredient_id);
-    let dest_item = InventoryItem {
-        inventory_id: to_id,
-        ingredient_id,
-        amount: merged_amount,
-    };
-    if dest_has {
-        foodlib.inventories().update_item(dest_item).await?;
-    } else {
-        foodlib.inventories().add_item(dest_item).await?;
-    }
-    foodlib
-        .inventories()
-        .delete_item(from_id, ingredient_id)
-        .await?;
-
-    let source_contents = render_contents(&foodlib, from_id, "").await?;
-    let dest_contents = render_contents(&foodlib, to_id, "").await?;
+    let source_contents = render_contents(&state, from_id, "").await?;
+    let dest_contents = render_contents(&state, to_id, "").await?;
 
     Ok(html! {
         (dest_contents)

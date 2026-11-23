@@ -1,9 +1,15 @@
 use std::hash::Hasher;
 
+use app::{AppCtx, Channel};
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
+use foodlib_new::auth::AuthSession;
+use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::error::Error;
 use maud::Markup;
 
 use crate::MyAppState;
@@ -88,3 +94,25 @@ pub type MResponse = foodlib_new::Result<Markup>;
 pub type IResponse = foodlib_new::Result<Response>;
 
 pub use foodlib_new::error::redirect_html_error as html_error;
+
+/// Axum extractor for the application-layer actor context on the HTMX/Maud
+/// transport. Builds an `app::AppCtx` (channel `Channel::WebUi`) from the
+/// request's authentication in one step, so handlers never have to clone or
+/// wrap an `AuthCtx` themselves.
+///
+/// Lives in the server (not `app`) because `FromRequestParts` is axum's
+/// trait and the `app` crate must stay transport-agnostic.
+pub struct WebCtx(pub AppCtx);
+
+impl<S> FromRequestParts<S> for WebCtx
+where
+    S: Send + Sync,
+    AuthSession: FromRequestParts<S>,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Error> {
+        let ctx = AuthCtx::from_request_parts(parts, state).await?;
+        Ok(WebCtx(AppCtx::new(ctx, Channel::WebUi)))
+    }
+}

@@ -3,12 +3,11 @@ use axum::extract::{Form, Path, State};
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
-use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::error::Error;
 use foodlib_new::recipe::Recipe;
 use foodlib_new::types::ids::{GroupId, RecipeId};
 use foodlib_new::user::User;
-use app::{AppCtx, Channel};
+use crate::frontend::WebCtx;
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -290,10 +289,9 @@ struct NewRecipe {
 
 async fn add_recipe(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Form(recipe_data): Form<NewRecipe>,
 ) -> MResponse {
-    let actor = AppCtx::new(ctx.clone(), Channel::WebUi);
     let created_recipe = app::recipes::create_recipe(
         &state,
         &actor,
@@ -301,7 +299,7 @@ async fn add_recipe(
         recipe_data.comment,
     )
     .await?;
-    recipes_edit_tab::recipe_edit_view(State(state), ctx, Path(created_recipe)).await
+    recipes_edit_tab::recipe_edit_view(State(state), WebCtx(actor), Path(created_recipe)).await
 }
 
 async fn fetch_recipes_and_groups(

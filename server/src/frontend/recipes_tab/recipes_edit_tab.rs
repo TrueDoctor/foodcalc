@@ -1,15 +1,13 @@
 use crate::{
-    frontend::{icons, move_group, MResponse},
+    frontend::{icons, move_group, MResponse, WebCtx},
     MyAppState,
 };
-use app::{AppCtx, Channel};
 use axum::{
     extract::{Form, Path, State},
     routing::{delete, put},
 };
 use bigdecimal::ToPrimitive;
 use foodlib_new::{
-    auth_context::AuthCtx,
     entities::types::amount::Amount,
     entities::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId},
     recipe::{RecipeIngredient, RecipeMetaIngredient, RecipeStep},
@@ -17,12 +15,6 @@ use foodlib_new::{
 };
 use maud::{html, Markup};
 use serde::Deserialize;
-
-/// Wraps the request's `AuthCtx` into the transport-agnostic `AppCtx`
-/// (this transport is the HTMX/Maud web UI).
-fn actor(ctx: &AuthCtx) -> AppCtx {
-    AppCtx::new(ctx.clone(), Channel::WebUi)
-}
 
 pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -90,12 +82,12 @@ pub struct UpdateRecipeStepHeader {
 
 pub async fn handle_name_change(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Form(data): Form<UpdateNameHeader>,
 ) -> Result<(), foodlib_new::Error> {
     app::recipes::update_name(
         &state,
-        &actor(&ctx),
+        &actor,
         data.recipe_id,
         data.name,
         data.comment,
@@ -107,12 +99,12 @@ pub async fn handle_name_change(
 
 pub async fn handle_ingredient_change(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
     let recipe_ingredient = app::recipes::update_ingredient(
         &state,
-        &actor(&ctx),
+        &actor,
         data.recipe_id,
         data.ingredient_id,
         data.ingredient_name,
@@ -129,12 +121,12 @@ pub async fn handle_ingredient_change(
 
 pub async fn handle_subrecipe_change(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Form(data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
     let sub_recipe = app::recipes::update_subrecipe(
         &state,
-        &actor(&ctx),
+        &actor,
         data.recipe_id,
         data.subrecipe_id,
         data.subrecipe_name,
@@ -147,13 +139,13 @@ pub async fn handle_subrecipe_change(
 
 pub async fn handle_step_change(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
     let recipe_id = data.recipe_id;
     let step = app::recipes::update_step(
         &state,
-        &actor(&ctx),
+        &actor,
         data.recipe_id,
         data.step_id,
         data.step_order,
@@ -179,52 +171,52 @@ struct ReorderStepForm {
 
 async fn handle_step_reorder(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Form(form): Form<ReorderStepForm>,
 ) -> Result<(), foodlib_new::Error> {
-    app::recipes::reorder_step(&state, &actor(&ctx), form.recipe_id, form.step_id, form.step_order)
+    app::recipes::reorder_step(&state, &actor, form.recipe_id, form.step_id, form.step_order)
         .await
 }
 
 pub async fn handle_ingredient_delete(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path((recipe_id, ingredient_id)): Path<(RecipeId, IngredientId)>,
 ) -> MResponse {
-    app::recipes::delete_ingredient(&state, &actor(&ctx), recipe_id, ingredient_id).await?;
+    app::recipes::delete_ingredient(&state, &actor, recipe_id, ingredient_id).await?;
 
-    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), WebCtx(actor), Path(recipe_id)).await
 }
 
 pub async fn handle_subrecipe_delete(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path((recipe_id, subrecipe_id)): Path<(RecipeId, RecipeId)>,
 ) -> MResponse {
-    app::recipes::delete_subrecipe(&state, &actor(&ctx), recipe_id, subrecipe_id).await?;
+    app::recipes::delete_subrecipe(&state, &actor, recipe_id, subrecipe_id).await?;
 
-    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), WebCtx(actor), Path(recipe_id)).await
 }
 
 pub async fn handle_step_delete(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path((recipe_id, step_id)): Path<(RecipeId, RecipeStepId)>,
 ) -> MResponse {
-    app::recipes::delete_step(&state, &actor(&ctx), recipe_id, step_id).await?;
+    app::recipes::delete_step(&state, &actor, recipe_id, step_id).await?;
 
-    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), WebCtx(actor), Path(recipe_id)).await
 }
 
 pub async fn handle_ingredient_add(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
     let recipe_id = data.recipe_id;
     app::recipes::add_ingredient(
         &state,
-        &actor(&ctx),
+        &actor,
         recipe_id,
         &data.ingredient_name,
         data.ingredient_amount,
@@ -232,36 +224,36 @@ pub async fn handle_ingredient_add(
     )
     .await?;
 
-    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), WebCtx(actor), Path(recipe_id)).await
 }
 
 pub async fn handle_subrecipe_add(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Form(data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
     let recipe_id = data.recipe_id;
     app::recipes::add_subrecipe(
         &state,
-        &actor(&ctx),
+        &actor,
         recipe_id,
         &data.subrecipe_name,
         data.subrecipe_amount,
     )
     .await?;
 
-    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), WebCtx(actor), Path(recipe_id)).await
 }
 
 pub async fn handle_step_add(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
     let recipe_id = data.recipe_id;
     app::recipes::add_step(
         &state,
-        &actor(&ctx),
+        &actor,
         recipe_id,
         data.step_id,
         data.step_name,
@@ -270,7 +262,7 @@ pub async fn handle_step_add(
         data.duration_per_kg_minutes,
     )
     .await?;
-    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), WebCtx(actor), Path(recipe_id)).await
 }
 
 /// First-row inline add for the recipe-ingredients table. Sentinel id -1; the
@@ -351,11 +343,11 @@ fn recipe_subrecipe_add_row(
 
 pub async fn recipe_edit_view(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(recipe_id): Path<RecipeId>,
 ) -> MResponse {
-    let data = app::recipes::gather_edit_view_data(&state, &actor(&ctx), recipe_id).await?;
-    let owner_select = move_group::owner_select(&state, &ctx, data.recipe.group_id).await?;
+    let data = app::recipes::gather_edit_view_data(&state, &actor, recipe_id).await?;
+    let owner_select = move_group::owner_select(&state, &actor.ctx, data.recipe.group_id).await?;
     let app::recipes::EditViewData {
         recipe,
         sub_recipes,
