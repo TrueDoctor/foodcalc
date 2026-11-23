@@ -15,7 +15,7 @@ impl StoreOps {
         Self { pool }
     }
 
-    pub async fn create(&self, store: Store) -> Result<Store> {
+    pub async fn create(&self, store_name: &str) -> Result<Store> {
         let row = sqlx::query_as!(
             Store,
             r#"
@@ -23,7 +23,7 @@ impl StoreOps {
             VALUES ($1)
             RETURNING store_id as "id", name
             "#,
-            store.name,
+            store_name,
         )
         .fetch_one(&*self.pool)
         .await?;

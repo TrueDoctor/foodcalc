@@ -32,7 +32,7 @@ impl IngredientOps {
     }
 
     // Basic CRUD operations
-    pub async fn create(&self, ingredient: Ingredient) -> Result<Ingredient> {
+    pub async fn create(&self, ingredient: CreateIngredient) -> Result<Ingredient> {
         let row = sqlx::query_as!(
             Ingredient,
             r#"

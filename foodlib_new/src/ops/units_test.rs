@@ -10,13 +10,8 @@ use crate::{entities::types::ids::UnitId, entities::unit::*, error::Error, ops::
 async fn test_create_unit(pool: sqlx::PgPool) {
     let ops = UnitOps::new(pool.into());
 
-    let unit = Unit {
-        id: UnitId(-1),
-        name: "Test Unit".to_string(),
-    };
-
-    let created = ops.create(unit.clone()).await.unwrap();
-    assert_eq!(created.name, unit.name);
+    let created = ops.create("Test Unit").await.unwrap();
+    assert_eq!(created.name, "Test Unit");
     assert!(created.id > UnitId(0));
 
     // Verify it exists in DB
@@ -43,10 +38,7 @@ async fn test_update_unit(pool: sqlx::PgPool) {
 
     // Create a test unit to update
     let unit = ops
-        .create(Unit {
-            id: UnitId(-1),
-            name: "Test Unit".to_string(),
-        })
+        .create("Test Unit")
         .await
         .unwrap();
 
@@ -71,10 +63,7 @@ async fn test_delete_unit(pool: sqlx::PgPool) {
 
     // Create temporary unit to delete
     let unit = ops
-        .create(Unit {
-            id: UnitId(-1),
-            name: "To Delete".to_string(),
-        })
+        .create("To Delete")
         .await
         .unwrap();
 

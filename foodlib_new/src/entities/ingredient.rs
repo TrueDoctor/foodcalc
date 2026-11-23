@@ -12,6 +12,13 @@ pub struct Ingredient {
     pub comment: Option<String>,
     pub group_id: GroupId,
 }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CreateIngredient {
+    pub name: String,
+    pub energy: Amount,
+    pub comment: Option<String>,
+    pub group_id: GroupId,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IngredientWithSource {

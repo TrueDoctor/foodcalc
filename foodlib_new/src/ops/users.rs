@@ -6,6 +6,7 @@ use crate::{
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
+use time::OffsetDateTime;
 
 #[derive(Clone, Debug)]
 pub struct UserOps {
@@ -17,7 +18,10 @@ impl UserOps {
         Self { pool }
     }
 
-    pub async fn create_user(&self, user: User) -> Result<User> {
+    pub async fn create_user(&self, user: CreateUser) -> Result<User> {
+        // Encapsulation of the current timestamp to ensure consistent creation time.
+        let created_at: OffsetDateTime = OffsetDateTime::now_utc();
+
         let row = sqlx::query_as!(
             User,
             r#"
@@ -29,7 +33,7 @@ impl UserOps {
             user.email,
             user.password_hash,
             user.is_admin,
-            user.created_at
+            created_at
         )
             .fetch_one(&*self.pool)
             .await?;
@@ -259,7 +263,8 @@ impl UserOps {
     }
 
     /// Creates a user and their personal group atomically.
-    pub async fn create_user_with_personal_group(&self, user: User) -> Result<(User, Group)> {
+    pub async fn create_user_with_personal_group(&self, user: CreateUser) -> Result<(User, Group)> {
+        let created_at: OffsetDateTime = OffsetDateTime::now_utc();
         let mut tx = self.pool.begin().await?;
 
         let created = sqlx::query_as!(
@@ -273,7 +278,7 @@ impl UserOps {
             user.email,
             user.password_hash,
             user.is_admin,
-            user.created_at
+            created_at
         )
             .fetch_one(&mut *tx)
             .await?;
@@ -468,4 +473,22 @@ impl UserOps {
         tx.commit().await?;
         Ok(())
     }
+}
+
+pub async fn members_of_group(foodlib: &crate::FoodLib, group_id: GroupId) -> Result<Vec<User>> {
+    let pool = foodlib.pool_arc();
+    let rows = sqlx::query_as!(
+        User,
+        r#"
+        SELECT u.id, u.username, u.email, u.password_hash, u.is_admin, u.created_at
+        FROM user_groups ug
+        JOIN users u ON u.id = ug.user_id
+        WHERE ug.group_id = $1
+        ORDER BY u.username
+        "#,
+        group_id.get()
+    )
+    .fetch_all(&*pool)
+    .await?;
+    Ok(rows)
 }

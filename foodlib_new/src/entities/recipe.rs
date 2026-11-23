@@ -38,6 +38,17 @@ pub struct Recipe {
     pub weighed_in: bool,
     pub kind: RecipeKind,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRecipe {
+    pub name: String,
+    pub comment: Option<String>,
+    pub group_id: GroupId,
+    /// True when every ingredient amount has been weighed and verified accurate
+    /// to the gram ("eingewogen"). Shown as a warning in the edit tab while
+    /// false and as a badge on the printed recipe sheet once true.
+    pub weighed_in: bool,
+    pub kind: RecipeKind,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecipeIngredient {

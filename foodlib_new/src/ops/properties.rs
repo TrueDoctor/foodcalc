@@ -19,7 +19,7 @@ impl PropertyOps {
         Self { pool }
     }
 
-    pub async fn create(&self, property: Property) -> Result<Property> {
+    pub async fn create(&self, property_name: &str) -> Result<Property> {
         let row = sqlx::query_as!(
             Property,
             r#"
@@ -27,7 +27,7 @@ impl PropertyOps {
             VALUES ($1)
             RETURNING property_id as "id: PropertyId", name
             "#,
-            property.name,
+            property_name,
         )
         .fetch_one(&*self.pool)
         .await?;

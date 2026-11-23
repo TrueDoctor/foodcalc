@@ -6,12 +6,12 @@ use bcrypt;
 use serde::Deserialize;
 use sqlx::postgres::PgPool;
 use std::sync::Arc;
-use time::OffsetDateTime;
 
 use crate::entities::user::User;
 use crate::error::{Error, Result};
 use crate::ops::users::UserOps;
 use crate::types::ids::UserId;
+use crate::user::CreateUser;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Credentials {
@@ -134,13 +134,11 @@ pub async fn register(
 ) -> Result<User> {
     backend
         .user_ops
-        .create_user_with_personal_group(User {
-            id: UserId(-1),
+        .create_user_with_personal_group(CreateUser {
             username: credentials.username,
             email,
             password_hash: bcrypt::hash(&credentials.password, 12)?,
             is_admin,
-            created_at: OffsetDateTime::now_local().unwrap_or(OffsetDateTime::now_utc()),
         })
         .await
         .map(|(user, _group)| user)

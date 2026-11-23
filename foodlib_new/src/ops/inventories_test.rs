@@ -14,8 +14,7 @@ use pretty_assertions::assert_eq;
 async fn test_create_inventory(pool: sqlx::PgPool) {
     let ops = InventoryOps::new(pool.into());
 
-    let inventory = Inventory {
-        id: InventoryId(-1),
+    let inventory = CreateInventory {
         name: "Test Inventory".to_string(),
         group_id: GroupId(1),
     };
@@ -35,8 +34,7 @@ async fn test_update_inventory(pool: sqlx::PgPool) {
 
     // Create a test inventory to update
     let inventory = ops
-        .create(Inventory {
-            id: InventoryId(-1),
+        .create(CreateInventory {
             name: "Test Inventory".to_string(),
             group_id: GroupId(1),
         })
@@ -65,8 +63,7 @@ async fn test_delete_inventory(pool: sqlx::PgPool) {
 
     // Create temporary inventory to delete
     let inventory = ops
-        .create(Inventory {
-            id: InventoryId(-1),
+        .create(CreateInventory {
             name: "To Delete".to_string(),
             group_id: GroupId(1),
         })

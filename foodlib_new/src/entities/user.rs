@@ -12,6 +12,13 @@ pub struct User {
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateUser {
+    pub username: String,
+    pub email: String,
+    pub password_hash: String,
+    pub is_admin: bool,
+}
 
 impl Default for User {
     fn default() -> Self {

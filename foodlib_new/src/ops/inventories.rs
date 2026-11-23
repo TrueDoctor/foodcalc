@@ -16,7 +16,7 @@ impl InventoryOps {
         Self { pool }
     }
 
-    pub async fn create(&self, inventory: Inventory) -> Result<Inventory> {
+    pub async fn create(&self, inventory: CreateInventory) -> Result<Inventory> {
         let row = sqlx::query_as!(
             Inventory,
             r#"

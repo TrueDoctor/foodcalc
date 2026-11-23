@@ -22,7 +22,7 @@ impl EventOps {
     }
 
     /// Creates a new event
-    pub async fn create(&self, event: Event) -> Result<Event> {
+    pub async fn create(&self, event: CreateEvent) -> Result<Event> {
         let record = sqlx::query_as!(
             Event,
             r#"
@@ -496,7 +496,7 @@ impl EventOps {
               AND mc.article_number IS NOT NULL
             "#,
             tour_id.get(),
-            METRO_STORE_ID,
+            METRO_STORE_ID.get(),
         )
             .fetch_all(&*self.pool)
             .await?;

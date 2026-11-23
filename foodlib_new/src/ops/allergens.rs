@@ -23,6 +23,7 @@ use crate::entities::property::Property;
 use crate::error::Result;
 
 use metro_scrape::article::{Article, Feature, FeatureMetaInfo};
+use crate::types::ids::IngredientId;
 
 #[derive(Clone)]
 pub struct AllergenOps {
@@ -154,7 +155,7 @@ impl AllergenOps {
     /// `ON CONFLICT DO NOTHING`.
     pub async fn apply_to_ingredient(
         &self,
-        ingredient_id: i32,
+        ingredient_id: IngredientId,
         properties: &[ClassifiedProperty],
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
@@ -173,7 +174,7 @@ impl AllergenOps {
                 sqlx::query!(
                     r#"INSERT INTO ingredient_properties (ingredient_id, property_id)
                        VALUES ($1, $2) ON CONFLICT DO NOTHING"#,
-                    ingredient_id,
+                    ingredient_id.get(),
                     existing
                 )
                 .execute(&mut *tx)
@@ -188,7 +189,7 @@ impl AllergenOps {
                 sqlx::query!(
                     r#"INSERT INTO ingredient_properties (ingredient_id, property_id)
                        VALUES ($1, $2) ON CONFLICT DO NOTHING"#,
-                    ingredient_id,
+                    ingredient_id.get(),
                     created
                 )
                 .execute(&mut *tx)

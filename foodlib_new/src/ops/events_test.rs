@@ -193,8 +193,7 @@ async fn test_event_crud_operations(pool: PgPool) {
 
     // Create
     let event = ops
-        .create(Event {
-            id: EventId(-1),
+        .create(CreateEvent {
             name: "Test Event".to_string(),
             comment: Some("Test Comment".to_string()),
             budget: Some(Money::from(500)),

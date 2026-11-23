@@ -18,7 +18,7 @@ impl UnitOps {
         Self { pool }
     }
 
-    pub async fn create(&self, unit: Unit) -> Result<Unit> {
+    pub async fn create(&self, unit_name: &str) -> Result<Unit> {
         let row = sqlx::query_as!(
             Unit,
             r#"
@@ -26,7 +26,7 @@ impl UnitOps {
             VALUES ($1)
             RETURNING unit_id as "id", name
             "#,
-            unit.name,
+            unit_name,
         )
         .fetch_one(&*self.pool)
         .await?;

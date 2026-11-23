@@ -41,8 +41,14 @@ macro_rules! make_id {
         impl $name {
             /// The raw database value.
             #[inline]
-            pub fn get(self) -> $inner {
+            pub(crate) fn get(self) -> $inner {
                 self.0
+            }
+
+            /// Check if the ID is valid (i.e., greater than 0).
+            #[inline]
+            pub const fn is_valid(&self) -> bool {
+                self.0 > 0
             }
         }
 
@@ -186,5 +192,23 @@ mod tests {
         assert_eq!(serde_json::to_string(&RecipeId(42)).unwrap(), "42");
         let back: RecipeId = serde_json::from_str("42").unwrap();
         assert_eq!(back, RecipeId(42));
+    }
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TimelineEntityId {
+    Meal(MealId),
+    Tour(ShoppingTourId),
+    Prep(FoodPrepId),
+}
+
+impl fmt::Display for TimelineEntityId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Meal(id) => id.fmt(f),
+            Self::Tour(id) => id.fmt(f),
+            Self::Prep(id) => id.fmt(f),
+        }
     }
 }

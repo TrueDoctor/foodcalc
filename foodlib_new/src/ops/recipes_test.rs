@@ -9,8 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 async fn create_test_recipe(ops: &RecipeOps) -> Recipe {
-    ops.create(Recipe {
-        id: RecipeId(-1),
+    ops.create(CreateRecipe {
         name: "Test Recipe".to_string(),
         comment: Some("Test Comment".to_string()),
         group_id: GroupId(1),
@@ -122,8 +121,7 @@ async fn test_meta_recipes(pool: PgPool) {
 
     let parent_recipe = create_test_recipe(&ops).await;
     let child_recipe = ops
-        .create(Recipe {
-            id: RecipeId(-1),
+        .create(CreateRecipe {
             name: "Child Recipe".to_string(),
             comment: None,
             group_id: GroupId(1),

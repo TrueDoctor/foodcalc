@@ -1,21 +1,18 @@
 // users_test.rs
 
+use crate::types::ids::UserId;
 use crate::{entities::user::*, error::Error, ops::users::UserOps};
 use pretty_assertions::assert_eq;
-use time::OffsetDateTime;
-use crate::types::ids::UserId;
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_create_user(pool: sqlx::PgPool) {
     let ops = UserOps::new(pool.into());
 
-    let user = User {
-        id: UserId(-1),
+    let user = CreateUser {
         username: "testuser".to_string(),
         email: "test@example.com".to_string(),
         password_hash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG".to_string(),
-        is_admin: false,
-        created_at: OffsetDateTime::now_utc(),
+        is_admin: false
     };
 
     let created = ops.create_user(user.clone()).await.unwrap();
@@ -31,14 +28,12 @@ async fn test_update_user(pool: sqlx::PgPool) {
 
     // Create a test user to update
     let user = ops
-        .create_user(User {
-            id: UserId(-1),
+        .create_user(CreateUser {
             username: "testuser".to_string(),
             email: "test@example.com".to_string(),
             password_hash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG"
                 .to_string(),
             is_admin: false,
-            created_at: OffsetDateTime::now_utc(),
         })
         .await
         .unwrap();
@@ -67,14 +62,12 @@ async fn test_delete_user(pool: sqlx::PgPool) {
 
     // Create temporary user to delete
     let user = ops
-        .create_user(User {
-            id: UserId(-1),
+        .create_user(CreateUser {
             username: "todelete".to_string(),
             email: "todelete@example.com".to_string(),
             password_hash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG"
                 .to_string(),
             is_admin: false,
-            created_at: OffsetDateTime::now_utc(),
         })
         .await
         .unwrap();
@@ -106,14 +99,12 @@ async fn test_user_groups(pool: sqlx::PgPool) {
 
     // Create a new user
     let user = ops
-        .create_user(User {
-            id: UserId(-1),
+        .create_user(CreateUser {
             username: "testuser".to_string(),
             email: "test@example.com".to_string(),
             password_hash: "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LQtXDOQSZCDILT2rG"
                 .to_string(),
             is_admin: false,
-            created_at: OffsetDateTime::now_utc(),
         })
         .await
         .unwrap();

@@ -10,13 +10,9 @@ use crate::{
 async fn test_create_store(pool: sqlx::PgPool) {
     let ops = StoreOps::new(pool.into());
 
-    let store = Store {
-        id: StoreId(-1),
-        name: "Test Store".to_string(),
-    };
-
-    let created = ops.create(store.clone()).await.unwrap();
-    assert_eq!(created.name, store.name);
+    let store_name = "Test Store".to_string();
+    let created = ops.create(&store_name).await.unwrap();
+    assert_eq!(created.name, store_name);
     assert!(created.id > StoreId(0));
 
     // Verify it exists in DB
@@ -53,23 +49,23 @@ async fn test_update_store(pool: sqlx::PgPool) {
     let ops = StoreOps::new(pool.into());
 
     // Create a test store to update
+    let store_name = "Test Store".to_string();
+    let updated_name = "Updated Store".to_string();
+    
     let store = ops
-        .create(Store {
-            id: StoreId(-1),
-            name: "Test Store".to_string(),
-        })
+        .create(&store_name)
         .await
         .unwrap();
 
     let updated = ops
         .update(Store {
             id: store.id,
-            name: "Updated Store".to_string(),
+            name: updated_name.clone(),
         })
         .await
         .unwrap();
 
-    assert_eq!(updated.name, "Updated Store");
+    assert_eq!(updated.name, updated_name);
 
     // Verify changes persisted
     let fetched = ops.get(store.id).await.unwrap();
@@ -82,10 +78,7 @@ async fn test_delete_store(pool: sqlx::PgPool) {
 
     // Create temporary store to delete
     let store = ops
-        .create(Store {
-            id: StoreId(-1),
-            name: "To Delete".to_string(),
-        })
+        .create(&"To Delete")
         .await
         .unwrap();
 

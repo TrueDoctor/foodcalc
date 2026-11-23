@@ -25,6 +25,13 @@ pub struct Event {
     pub budget: Option<Money>,
     pub group_id: GroupId,
 }
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateEvent {
+    pub name: String,
+    pub comment: Option<String>,
+    pub budget: Option<Money>,
+    pub group_id: GroupId,
+}
 
 /// Aggregated event row for list views: adds the planner-relevant totals
 /// (meal count, ingredient cost, time span) to the plain event fields.

@@ -16,19 +16,19 @@ use crate::{
 async fn test_create_ingredient(pool: sqlx::PgPool) {
     let ops = IngredientOps::new(pool.into());
 
-    let ingredient = Ingredient {
-        id: IngredientId(-1), // Will be replaced by DB
+    let input = CreateIngredient {
         name: "Test Ingredient".to_string(),
         energy: Amount::from_str("10.5").unwrap(),
         comment: Some("Test comment".to_string()),
         group_id: GroupId(1),
     };
 
-    let created = ops.create(ingredient.clone()).await.unwrap();
-    assert_eq!(created.name, ingredient.name);
-    assert_eq!(created.energy, ingredient.energy);
-    assert_eq!(created.comment, ingredient.comment);
-    assert!(created.id > IngredientId(0));
+    let created = ops.create(input.clone()).await.unwrap();
+    assert!(created.id.is_valid());
+    assert_eq!(created.name, input.name);
+    assert_eq!(created.energy, input.energy);
+    assert_eq!(created.comment, input.comment);
+    assert_eq!(created.group_id, input.group_id);
 
     // Verify it exists in DB
     let fetched = ops.get(created.id).await.unwrap();
@@ -84,8 +84,7 @@ async fn test_delete_ingredient(pool: sqlx::PgPool) {
 
     // Create temporary ingredient to delete
     let ingredient = ops
-        .create(Ingredient {
-            id: IngredientId(-1),
+        .create(CreateIngredient {
             name: "Ingredient To Delete".to_string(),
             energy: Amount::from(1),
             comment: None,
@@ -148,7 +147,7 @@ async fn test_ingredient_sources(pool: sqlx::PgPool) {
         package_size: Amount::from(2),
         unit_id: UnitId(0),
         price: Money::from_str("5.99").unwrap(),
-        url: Some("http://example.com".to_string()),
+        url: Some("https://example.com".to_string()),
         comment: Some("Test source".to_string()),
     };
 

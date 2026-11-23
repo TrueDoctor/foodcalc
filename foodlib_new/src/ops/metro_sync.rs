@@ -14,12 +14,13 @@ use crate::ops::allergens::AllergenOps;
 
 use crate::entities::types::amount::Amount;
 use crate::entities::types::money::Money;
+use crate::types::ids::{IngredientId, IngredientSourceId, StoreId};
 use bigdecimal::{FromPrimitive, ToPrimitive};
 use metro_scrape::article::{Article, Bundle};
 use metro_scrape::request::fetch_articles_from_urls;
 
 /// Metro is `store_id = 0` per legacy `foodlib::ingredients::METRO`.
-pub const METRO_STORE_ID: i32 = 0;
+pub const METRO_STORE_ID: StoreId = StoreId(0);
 
 /// Package weight of a bundle in kilograms.
 ///
@@ -75,8 +76,8 @@ pub struct MetroSyncOps {
 
 #[derive(Debug, Clone)]
 struct MetroSource {
-    ingredient_source_id: i32,
-    ingredient_id: i32,
+    ingredient_source_id: IngredientSourceId,
+    ingredient_id: IngredientId,
     ingredient_name: String,
     url: String,
 }
@@ -93,14 +94,14 @@ impl MetroSyncOps {
     /// otherwise sync every Metro-URL'd source in the database.
     ///
     /// Each per-article failure is recorded in the report and does not abort the run.
-    pub async fn sync(&self, ingredient_id: Option<i32>) -> Result<SyncReport> {
+    pub async fn sync(&self, ingredient_id: Option<IngredientId>) -> Result<SyncReport> {
         self.sync_with(ingredient_id, SyncOptions::default()).await
     }
 
     /// Same as `sync` but with explicit options (e.g. `wipe_existing`).
     pub async fn sync_with(
         &self,
-        ingredient_id: Option<i32>,
+        ingredient_id: Option<IngredientId>,
         opts: SyncOptions,
     ) -> Result<SyncReport> {
         let sources = self.load_metro_sources(ingredient_id).await?;
@@ -119,19 +120,19 @@ impl MetroSyncOps {
 
         // Ingredient names for human-readable report messages (ids alone aren't
         // recognizable in the UI). One name per ingredient id.
-        let ingredient_names: std::collections::HashMap<i32, String> = sources
+        let ingredient_names: std::collections::HashMap<IngredientId, String> = sources
             .iter()
             .map(|s| (s.ingredient_id, s.ingredient_name.clone()))
             .collect();
         // Label an ingredient by name (falling back to id if somehow unknown).
-        let label = |id: i32| match ingredient_names.get(&id) {
+        let label = |id: IngredientId| match ingredient_names.get(&id) {
             Some(name) => format!("{name} (#{id})"),
             None => format!("#{id}"),
         };
 
         let url_pairs: Vec<(i32, String)> = sources
             .iter()
-            .map(|s| (s.ingredient_id, s.url.clone()))
+            .map(|s| (s.ingredient_id.get(), s.url.clone()))
             .collect();
         // Per-URL/batch fetch failures are reported but do not abort the sync —
         // every article that can be fetched is still applied.
@@ -144,7 +145,7 @@ impl MetroSyncOps {
         // ingredient with no data.
         for m in &fetched.missing {
             let who = match m.ingredient_id {
-                Some(id) => label(id),
+                Some(id) => label(IngredientId(id)),
                 None => format!("Metro article {}", m.betty_id),
             };
             let reason = if m.reasons.is_empty() {
@@ -159,6 +160,8 @@ impl MetroSyncOps {
         }
 
         for (ingredient_id, article) in fetched.articles {
+            // Wrap the raw i32 in an IngredientId for type safety -> Allow MetroFetch to work without domain types.
+            let ingredient_id = IngredientId(ingredient_id);
             // One ingredient_id can have multiple sources (rare); apply to whichever source
             // matches this article.
             let matching: Vec<&MetroSource> = sources
@@ -214,7 +217,7 @@ impl MetroSyncOps {
     /// non-Metro ingredients (e.g. items purchased only at Edna or IKEA) are
     /// preserved.
     async fn wipe_metro_ingredient_properties(&self, sources: &[MetroSource]) -> Result<usize> {
-        let ingredient_ids: Vec<i32> = sources.iter().map(|s| s.ingredient_id).collect();
+        let ingredient_ids: Vec<i32> = sources.iter().map(|s| s.ingredient_id.get()).collect();
         let rec = sqlx::query!(
             r#"DELETE FROM ingredient_properties WHERE ingredient_id = ANY($1)"#,
             &ingredient_ids,
@@ -224,7 +227,10 @@ impl MetroSyncOps {
         Ok(rec.rows_affected() as usize)
     }
 
-    async fn load_metro_sources(&self, ingredient_id: Option<i32>) -> Result<Vec<MetroSource>> {
+    async fn load_metro_sources(
+        &self,
+        ingredient_id: Option<IngredientId>,
+    ) -> Result<Vec<MetroSource>> {
         let rows: Vec<MetroSource> = match ingredient_id {
             Some(id) => sqlx::query!(
                 r#"
@@ -233,15 +239,15 @@ impl MetroSyncOps {
                 JOIN ingredients i ON i.ingredient_id = s.ingredient_id
                 WHERE s.store_id = $1 AND s.url IS NOT NULL AND s.url <> '' AND s.ingredient_id = $2
                 "#,
-                METRO_STORE_ID,
-                id,
+                METRO_STORE_ID.get(),
+                id.get(),
             )
             .fetch_all(&*self.pool)
             .await?
             .into_iter()
             .map(|r| MetroSource {
-                ingredient_source_id: r.ingredient_source_id,
-                ingredient_id: r.ingredient_id,
+                ingredient_source_id: IngredientSourceId(r.ingredient_source_id),
+                ingredient_id: IngredientId(r.ingredient_id),
                 ingredient_name: r.ingredient_name,
                 url: r.url.unwrap_or_default(),
             })
@@ -253,14 +259,14 @@ impl MetroSyncOps {
                 JOIN ingredients i ON i.ingredient_id = s.ingredient_id
                 WHERE s.store_id = $1 AND s.url IS NOT NULL AND s.url <> ''
                 "#,
-                METRO_STORE_ID,
+                METRO_STORE_ID.get(),
             )
             .fetch_all(&*self.pool)
             .await?
             .into_iter()
             .map(|r| MetroSource {
-                ingredient_source_id: r.ingredient_source_id,
-                ingredient_id: r.ingredient_id,
+                ingredient_source_id: IngredientSourceId(r.ingredient_source_id),
+                ingredient_id: IngredientId(r.ingredient_id),
                 ingredient_name: r.ingredient_name,
                 url: r.url.unwrap_or_default(),
             })
@@ -269,7 +275,11 @@ impl MetroSyncOps {
         Ok(rows.into_iter().filter(|s| !s.url.is_empty()).collect())
     }
 
-    async fn apply_allergens(&self, ingredient_id: i32, article: &Article) -> Result<usize> {
+    async fn apply_allergens(
+        &self,
+        ingredient_id: IngredientId,
+        article: &Article,
+    ) -> Result<usize> {
         let classified = AllergenOps::classify_article(article);
         if classified.is_empty() {
             return Ok(0);
@@ -338,7 +348,7 @@ impl MetroSyncOps {
                 category = EXCLUDED.category,
                 article_number = EXCLUDED.article_number
             "#,
-            source.ingredient_source_id,
+            source.ingredient_source_id.get(),
             category,
             article_number,
         )
@@ -374,7 +384,7 @@ impl MetroSyncOps {
             "#,
             price_bd.into_raw(),
             weight.get().clone(),
-            source.ingredient_source_id,
+            source.ingredient_source_id.get(),
         )
         .execute(&*self.pool)
         .await?;

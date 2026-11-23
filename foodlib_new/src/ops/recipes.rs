@@ -4,7 +4,7 @@ use crate::entities::recipe::{
 };
 use crate::entities::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId, UserId};
 use crate::error::{Error, Result};
-use crate::recipe::{RecipeMetaIngredient, RecipeStats, ResolvedRecipe};
+use crate::recipe::{CreateRecipe, RecipeMetaIngredient, RecipeStats, ResolvedRecipe};
 
 use crate::entities::types::amount::Amount;
 use time::Duration;
@@ -75,7 +75,7 @@ impl RecipeOps {
     /// # Errors
     /// - If database operation fails
     /// - If recipe name already exists
-    pub async fn create(&self, recipe: Recipe) -> Result<Recipe> {
+    pub async fn create(&self, recipe: CreateRecipe) -> Result<Recipe> {
         let record = sqlx::query_as!(
             Recipe,
             r#"
