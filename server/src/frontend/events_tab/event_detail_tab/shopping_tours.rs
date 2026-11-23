@@ -8,7 +8,6 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use bigdecimal::ToPrimitive;
 use foodlib_new::{
     entities::types::amount::Amount,
     entities::types::ids::{EventId, IngredientId, InventoryId, ShoppingTourId, StoreId},
@@ -355,100 +354,20 @@ async fn export_plain(
     WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> IResponse {
-    let app::events::shopping::TourExportReads {
-        shopping_list,
-        tour: _,
-        event_inventories,
-    } = app::events::shopping::gather_tour_export(&state, &actor, tour_id).await?;
-    let inventory_items =
-        app::events::shopping::gather_inventory_items(&state, &event_inventories).await;
-
-    let mut output = String::new();
-    let mut current_category = String::new();
-
-    for item in shopping_list {
-        let category = item.category.clone().unwrap_or_default();
-        if category != current_category {
-            if !current_category.is_empty() {
-                output.push('\n');
-            }
-            output.push_str(&format!("=== {} ===\n", category));
-            current_category = category;
-        }
-        let inv_amount = get_inventory_amount_by_id(item.ingredient_id, &inventory_items);
-        // Unknown weight → the buy amount can't be resolved; keep the row
-        // visible with a "?" placeholder instead of inventing numbers.
-        let (status, to_buy, weight_text, new_price) = match &item.weight {
-            Some(weight) => {
-                let status = if inv_amount > *weight { "x" } else { " " };
-                // Clamp at zero: Amount has no `Ord`, so `max` isn't available.
-                let diff = weight.clone() - inv_amount.clone();
-                let to_buy = if diff < Amount::default() {
-                    Amount::default()
-                } else {
-                    diff
-                };
-
-                // Scale package price proportionally to `to_buy` (`price / weight * to_buy`),
-                // returning `None` if price/weight is missing or weight is zero.
-                let mut new_price = None;
-                if let (Some(price), Some(weight)) = (&item.price, &item.weight) {
-                    if let Some(unit_price) = price.checked_div_amount(weight) {
-                        new_price = Some(unit_price * &to_buy);
-                    }
-                }
-
-                (status, to_buy, format!("{:.2} kg", weight), new_price)
-            }
-            None => ("?", Amount::default(), "? kg".to_string(), None),
-        };
-
-        output.push_str(&format!(
-            "[{}] {} - {:.2} kg {} -> {:.2} kg",
-            status,
-            item.ingredient_name,
-            to_buy,
-            if let Some(price) = new_price {
-                format!(" (€{:.2})", price)
-            } else {
-                String::new()
-            },
-            weight_text
-        ));
-        // Usage breakdown without the ingredient-name prefix the Metro export uses.
-        let usage = format_recipe_usage(&item.recipe_usage);
-        if !usage.is_empty() {
-            output.push_str(&format!("  [{}]", usage));
-        }
-        output.push('\n');
-    }
+    let file = app::exports::render_shopping_tour_txt(&state, &actor, tour_id).await?;
     Ok(IntoResponse::into_response((
         [
             (
                 axum::http::header::CONTENT_TYPE,
-                "text/plain; charset=utf-8".to_string(),
+                format!("{}; charset=utf-8", file.mime),
             ),
             (
                 axum::http::header::CONTENT_DISPOSITION,
-                format!("inline; filename=\"shopping_list_{}.txt\"", tour_id),
+                format!("inline; filename=\"{}\"", file.filename),
             ),
         ],
-        output,
+        file.bytes,
     )))
-}
-
-/// Format a per-recipe usage breakdown as "3.00kg Recipe 2.00kg Other".
-/// `usages` is the `[(recipe, kg)]` list from `tour_shopping_list_with_usage`.
-/// Returns an empty string when there are no usages.
-fn format_recipe_usage(usages: &[(String, Option<Amount>)]) -> String {
-    usages
-        .iter()
-        .map(|(recipe, kg)| match kg {
-            Some(kg) => format!("{:.2}kg {}", kg.to_f64().unwrap_or_default(), recipe),
-            None => format!("?kg {}", recipe),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 async fn export_metro(
@@ -456,91 +375,20 @@ async fn export_metro(
     WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> IResponse {
-    let app::events::shopping::MetroExportReads {
-        shopping_list,
-        sources,
-        tour: _,
-        event_inventories,
-        article_numbers,
-    } = app::events::shopping::gather_metro_export(&state, &actor, tour_id).await?;
-    let inventory_items =
-        app::events::shopping::gather_inventory_items(&state, &event_inventories).await;
-
-    // CSV rows: (article_number_or_name, amount, comment, resolved?). Resolved
-    // rows are emitted first; unresolved (no Metro article number) sink below.
-    let mut rows: Vec<(String, f64, String, bool)> = Vec::new();
-
-    for item in shopping_list {
-        // Unresolvable weight (unknown unit weight) → not orderable via Metro.
-        let Some(item_weight) = item.weight else {
-            continue;
-        };
-        let inv_amount = get_inventory_amount_by_id(item.ingredient_id, &inventory_items);
-        if inv_amount > item_weight {
-            continue;
-        }
-        let weight = item_weight - inv_amount;
-
-        // Find source with matching ingredient_id
-        let Some(source) = sources
-            .iter()
-            .find(|s| s.ingredient_id == item.ingredient_id)
-        else {
-            continue;
-        };
-
-        // Round up to whole packages; column 2 is the package count Metro orders.
-        let package_size = source.package_size.to_f64().unwrap();
-        let packages = (weight.to_f64().unwrap() / package_size).ceil();
-        let total_kg = packages * package_size;
-
-        // Comment: "<name>(<count> * <size>kg = <total>kg): <usage breakdown>".
-        // The prefix explains how the package count maps to kg; the usage list
-        // is the per-recipe breakdown for this tour.
-        let mut comment = format!(
-            "{}({} * {:.2}kg = {:.2}kg)",
-            item.ingredient_name, packages as i64, package_size, total_kg
-        );
-        let usage = format_recipe_usage(&item.recipe_usage);
-        if !usage.is_empty() {
-            comment.push_str(&format!(": {usage}"));
-        }
-
-        match article_numbers.get(&item.ingredient_id) {
-            Some(article) => rows.push((article.clone(), packages, comment, true)),
-            // Unresolved: fall back to the ingredient name and sink to the bottom.
-            None => rows.push((item.ingredient_name.clone(), packages, comment, false)),
-        }
-    }
-
-    // Resolved rows first (stable within each group preserves the shopping-list
-    // category/name ordering).
-    rows.sort_by_key(|(_, _, _, resolved)| !*resolved);
-
-    let mut output = String::new();
-    for (col1, packages, comment, _) in rows {
-        // Quote the comment (may contain commas); CSV-escape embedded quotes.
-        let comment_field = if comment.is_empty() {
-            String::new()
-        } else {
-            format!("\"{}\"", comment.replace('"', "\"\""))
-        };
-        // Column 2 is a whole package count.
-        output.push_str(&format!("{},{},{}\n", col1, packages as i64, comment_field));
-    }
+    let file = app::exports::render_metro_shopping_tour_csv(&state, &actor, tour_id).await?;
 
     Ok(IntoResponse::into_response((
         [
             (
                 axum::http::header::CONTENT_TYPE,
-                "text/csv; charset=utf-8".to_string(),
+                format!("{}; charset=utf-8", file.mime),
             ),
             (
                 axum::http::header::CONTENT_DISPOSITION,
-                "inline; filename=\"metro_list.csv\"".to_string(),
+                format!("inline; filename=\"{}\"", file.filename),
             ),
         ],
-        output,
+        file.bytes,
     )))
 }
 

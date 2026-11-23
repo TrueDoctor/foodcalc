@@ -188,3 +188,81 @@ pub async fn fetch_event_combined(
 ) -> Result<Vec<RecipeInfo>> {
     state.export().fetch_event_combined(event_id).await
 }
+
+/// Renders a shopping tour as a Metro order CSV: whole package counts per
+/// article (resolved via the Metro sync cache), minus what the event's
+/// attached inventories already cover. Requires `EditShoppingTour` permission.
+pub async fn render_metro_shopping_tour_csv(
+    state: &MyAppState,
+    actor: &crate::app_ctx::AppCtx,
+    tour_id: foodlib_new::entities::types::ids::ShoppingTourId,
+) -> Result<ExportedFile> {
+    use crate::events::shopping::{gather_inventory_items, gather_metro_export};
+
+    let metro_reads = gather_metro_export(state, actor, tour_id).await?;
+    let inventory_items = gather_inventory_items(state, &metro_reads.event_inventories).await;
+
+    // Sum the stock per ingredient across all attached inventories.
+    let mut inventory_stock: HashMap<IngredientId, Amount> = HashMap::new();
+    for item in inventory_items {
+        *inventory_stock
+            .entry(item.ingredient_id)
+            .or_insert_with(Amount::zero) += item.amount;
+    }
+
+    let store_id = metro_reads.tour.store_id;
+    let data = TourExportData {
+        tour: metro_reads.tour,
+        items: metro_reads.shopping_list,
+        inventory_stock: Some(inventory_stock),
+        show_prices: false,
+        metro: Some(MetroExportContext {
+            sources: metro_reads.sources,
+            article_numbers: metro_reads.article_numbers,
+            store_id,
+        }),
+    };
+    let bytes = csv::render_shopping_tour(&data)?;
+
+    Ok(ExportedFile {
+        filename: "metro_list.csv".to_string(),
+        mime: "text/csv",
+        bytes,
+    })
+}
+
+/// Renders a shopping tour as a plain-text shopping list, subtracting what
+/// the event's attached inventories already cover and showing proportional
+/// package prices. Requires `EditShoppingTour` permission.
+pub async fn render_shopping_tour_txt(
+    state: &MyAppState,
+    actor: &crate::app_ctx::AppCtx,
+    tour_id: foodlib_new::entities::types::ids::ShoppingTourId,
+) -> Result<ExportedFile> {
+    use crate::events::shopping::{gather_inventory_items, gather_tour_export};
+
+    let reads = gather_tour_export(state, actor, tour_id).await?;
+    let inventory_items = gather_inventory_items(state, &reads.event_inventories).await;
+
+    let mut inventory_stock: HashMap<IngredientId, Amount> = HashMap::new();
+    for item in inventory_items {
+        *inventory_stock
+            .entry(item.ingredient_id)
+            .or_insert_with(Amount::zero) += item.amount;
+    }
+
+    let data = TourExportData {
+        tour: reads.tour,
+        items: reads.shopping_list,
+        inventory_stock: Some(inventory_stock),
+        show_prices: true,
+        metro: None,
+    };
+    let bytes = text::render_shopping_tour(&data);
+
+    Ok(ExportedFile {
+        filename: format!("shopping_list_{tour_id}.txt"),
+        mime: "text/plain",
+        bytes,
+    })
+}
