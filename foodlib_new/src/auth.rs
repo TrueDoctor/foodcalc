@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use axum::extract::{FromRequestParts, OptionalFromRequestParts};
 use axum::http::request::Parts;
-use axum_login::{AuthUser, AuthnBackend, UserId};
+use axum_login::{AuthUser, AuthnBackend, UserId as AuthUserId};
 use bcrypt;
 use serde::Deserialize;
 use sqlx::postgres::PgPool;
@@ -11,6 +11,7 @@ use time::OffsetDateTime;
 use crate::entities::user::User;
 use crate::error::{Error, Result};
 use crate::ops::users::UserOps;
+use crate::types::ids::UserId;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Credentials {
@@ -19,7 +20,7 @@ pub struct Credentials {
 }
 
 impl AuthUser for User {
-    type Id = i64;
+    type Id = UserId;
 
     fn id(&self) -> Self::Id {
         self.id
@@ -97,7 +98,7 @@ impl AuthnBackend for AuthBackend {
         )
     }
 
-    async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<Self::User>> {
+    async fn get_user(&self, user_id: &AuthUserId<Self>) -> Result<Option<Self::User>> {
         match self.user_ops.get_user(*user_id).await {
             Err(Error::UserNotFound { .. }) => Ok(None),
             a => a.map(Some),
@@ -134,10 +135,10 @@ pub async fn register(
     backend
         .user_ops
         .create_user_with_personal_group(User {
-            id: -1,
+            id: UserId(-1),
             username: credentials.username,
             email,
-            password_hash: bcrypt::hash(&credentials.password, 12).unwrap(),
+            password_hash: bcrypt::hash(&credentials.password, 12)?,
             is_admin,
             created_at: OffsetDateTime::now_local().unwrap_or(OffsetDateTime::now_utc()),
         })
@@ -148,7 +149,7 @@ pub async fn register(
 
 pub async fn change_password(
     backend: &AuthBackend,
-    user_id: i64,
+    user_id: UserId,
     new_password: String,
 ) -> Result<User> {
     backend

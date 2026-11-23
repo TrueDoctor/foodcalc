@@ -1,11 +1,17 @@
-use bigdecimal::BigDecimal;
+use crate::entities::types::ids::{
+    EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, InventoryId, PlaceId, RecipeId,
+    StoreId, ShoppingTourId,
+};
+
+use crate::entities::types::amount::Amount;
+use crate::entities::types::money::Money;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 /// A physical location/place where meals are served
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Place {
-    pub id: i32,
+    pub id: PlaceId,
     pub name: String,
     pub comment: Option<String>,
 }
@@ -13,21 +19,38 @@ pub struct Place {
 /// Represents an event (e.g., dinner, party) with associated meals and planning
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Event {
-    pub id: i32,
+    pub id: EventId,
     pub name: String,
     pub comment: Option<String>,
-    pub budget: Option<BigDecimal>,
-    pub group_id: i32,
+    pub budget: Option<Money>,
+    pub group_id: GroupId,
+}
+
+/// Aggregated event row for list views: adds the planner-relevant totals
+/// (meal count, ingredient cost, time span) to the plain event fields.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventSummary {
+    pub id: EventId,
+    pub name: String,
+    pub comment: Option<String>,
+    pub budget: Option<Money>,
+    pub group_id: GroupId,
+    pub meal_count: i64,
+    pub total_cost: Money,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub first_meal: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub last_meal: Option<OffsetDateTime>,
 }
 
 impl Default for Event {
     fn default() -> Self {
         Self {
-            id: 0,
+            id: EventId(0),
             name: "Test Event".to_string(),
             comment: Some("Test comment".to_string()),
             budget: None,
-            group_id: -1,
+            group_id: GroupId(-1),
         }
     }
 }
@@ -35,53 +58,61 @@ impl Default for Event {
 /// A scheduled shopping trip for an event
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShoppingTour {
-    pub id: i32,
-    pub event_id: i32,
+    pub id: ShoppingTourId,
+    pub event_id: EventId,
+    #[serde(with = "time::serde::rfc3339")]
     pub tour_date: OffsetDateTime,
-    pub store_id: i32,
+    pub store_id: StoreId,
     pub store_name: Option<String>,
 }
 
 /// Food preparation task scheduled for an event
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FoodPrep {
-    pub id: i32,
-    pub event_id: i32,
-    pub recipe_id: i32,
+    pub id: FoodPrepId,
+    pub event_id: EventId,
+    pub recipe_id: RecipeId,
+    #[serde(with = "time::serde::rfc3339")]
     pub prep_date: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub use_from: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
     pub use_until: OffsetDateTime,
 }
 
 /// Source override for ingredients in an event
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq)]
 pub struct SourceOverride {
-    pub event_id: i32,
-    pub source_id: i32,
+    pub event_id: EventId,
+    pub source_id: IngredientSourceId,
 }
 
 /// View of source overrides with additional information
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceOverrideView {
-    pub event_id: i32,
-    pub ingredient_id: i32,
-    pub source_id: i32,
+    pub event_id: EventId,
+    pub ingredient_id: IngredientId,
+    pub source_id: IngredientSourceId,
     pub ingredient_name: String,
-    pub store_id: i32,
+    pub store_id: StoreId,
     pub store_name: String,
 }
 
 /// Item in a shopping list for an event
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShoppingListItem {
-    pub event_id: i32,
+    pub event_id: EventId,
     pub event_name: String,
-    pub ingredient_id: i32,
+    pub ingredient_id: IngredientId,
     pub ingredient_name: String,
-    pub weight: BigDecimal,
-    pub energy: BigDecimal,
-    pub price: Option<BigDecimal>,
-    pub tour_id: Option<i32>,
+    /// Total kg to buy. `None` when the ingredient's unit weight is unknown
+    /// (no `weights` row for the recipe's unit) — the demand is then
+    /// unresolvable and the UI shows a placeholder.
+    pub weight: Option<Amount>,
+    /// Energy in kJ; `None` whenever weight is `None`.
+    pub energy: Option<Amount>,
+    pub price: Option<Money>,
+    pub tour_id: Option<ShoppingTourId>,
     pub category: Option<String>,
 }
 
@@ -92,26 +123,62 @@ pub struct ShoppingListItem {
 /// descending amount; `weight`/`price` are the tour totals for the ingredient.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShoppingListItemWithUsage {
-    pub ingredient_id: i32,
+    pub ingredient_id: IngredientId,
     pub ingredient_name: String,
-    pub weight: BigDecimal,
-    pub price: Option<BigDecimal>,
+    /// `None` when any contributing recipe row has an unknown weight.
+    pub weight: Option<Amount>,
+    pub price: Option<Money>,
     pub category: Option<String>,
-    pub recipe_usage: Vec<(String, BigDecimal)>,
+    pub recipe_usage: Vec<(String, Option<Amount>)>,
 }
 
-/// Custom type for ingredients without a shopping tour
-#[derive(Debug, Clone)]
+
+/// An event ingredient that has no shopping tour covering it yet.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IngredientWithoutTour {
-    pub ingredient_id: i32,
+    pub ingredient_id: IngredientId,
     pub ingredient_name: String,
-    pub weight: Option<BigDecimal>,
+    pub weight: Option<Amount>,
     pub store_name: String,
+}
+
+/// A manually pinned tour item: forces `ingredient_id` onto `tour_id`,
+/// overriding the view-derived store/date-window assignment.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TourItemPin {
+    pub tour_id: ShoppingTourId,
+    pub ingredient_id: IngredientId,
 }
 
 /// Inventory associated with an event
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventInventory {
-    pub event_id: i32,
-    pub inventory_id: i32,
+    pub event_id: EventId,
+    pub inventory_id: InventoryId,
+}
+
+/// A food prep task plus the prepared recipe's name (timeline feed).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FoodPrepWithRecipe {
+    pub id: FoodPrepId,
+    pub event_id: EventId,
+    pub recipe_id: RecipeId,
+    #[serde(with = "time::serde::rfc3339")]
+    pub prep_date: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub use_from: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub use_until: OffsetDateTime,
+    pub recipe_name: String,
+}
+
+/// Per-ingredient coverage of the event's demand by its linked inventories.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EventInventoryCoverage {
+    pub ingredient_id: IngredientId,
+    pub ingredient_name: String,
+    /// Total demand in kg (from the resolved event shopping list).
+    pub demand_kg: Amount,
+    /// Amount stocked across the event's linked inventories, in kg.
+    pub covered_kg: Amount,
 }

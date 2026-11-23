@@ -1,14 +1,16 @@
 use crate::entities::recipe::{
-    Recipe, RecipeIngredient, RecipeKind, RecipeListItem, RecipeStep,
-    RecipeTreeIngredient, RecipeTreeNode,
+    Recipe, RecipeIngredient, RecipeKind, RecipeListItem, RecipeStep, RecipeTreeIngredient,
+    RecipeTreeNode,
 };
+use crate::entities::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId, UserId};
 use crate::error::{Error, Result};
 use crate::recipe::{RecipeMetaIngredient, RecipeStats, ResolvedRecipe};
-use bigdecimal::BigDecimal;
+
+use crate::entities::types::amount::Amount;
+use time::Duration;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
-use time::Duration;
 use time::ext::NumericalDuration;
 
 /// Operations for managing recipes and their components (ingredients, steps, meta-recipes)
@@ -51,13 +53,13 @@ struct RecipeStepDB {
 impl RecipeStepDB {
     fn to_recipe_step(&self) -> RecipeStep {
         RecipeStep {
-            id: self.id,
+            id: RecipeStepId(self.id),
             order: self.order,
             name: self.name.clone(),
             description: self.description.clone(),
             fixed_duration: pg_interval_to_duration(&self.fixed_duration),
             duration_per_kg: pg_interval_to_duration(&self.duration_per_kg),
-            recipe_id: self.recipe_id,
+            recipe_id: RecipeId(self.recipe_id),
         }
     }
 }
@@ -79,12 +81,12 @@ impl RecipeOps {
             r#"
             INSERT INTO recipes (name, comment, group_id, kind)
             VALUES ($1, $2, $3, $4::text::recipe_kind)
-            RETURNING recipe_id as id, name, comment, group_id, weighed_in,
+            RETURNING recipe_id as "id: RecipeId", name, comment, group_id as "group_id: GroupId", weighed_in,
                      kind as "kind: RecipeKind"
             "#,
             recipe.name,
             recipe.comment,
-            recipe.group_id,
+            recipe.group_id.get(),
             recipe.kind.as_str(),
         )
             .fetch_one(&*self.pool)
@@ -93,16 +95,16 @@ impl RecipeOps {
         Ok(record)
     }
 
-    pub async fn get(&self, id: i32) -> Result<Recipe> {
+    pub async fn get(&self, id: RecipeId) -> Result<Recipe> {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+            SELECT recipe_id as "id: RecipeId", name, comment, group_id as "group_id: GroupId", weighed_in,
                    kind as "kind: RecipeKind"
             FROM recipes
             WHERE recipe_id = $1
             "#,
-            id
+            id.get()
         )
             .fetch_optional(&*self.pool)
             .await?
@@ -118,7 +120,7 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+            SELECT recipe_id as "id: RecipeId", name, comment, group_id as "group_id: GroupId", weighed_in,
                    kind as "kind: RecipeKind"
             FROM recipes
             WHERE name = $1
@@ -142,12 +144,12 @@ impl RecipeOps {
             UPDATE recipes
             SET name = $1, comment = $2, weighed_in = $4, kind = $5::text::recipe_kind
             WHERE recipe_id = $3
-            RETURNING recipe_id as id, name, comment, group_id, weighed_in,
+            RETURNING recipe_id as "id: RecipeId", name, comment, group_id as "group_id: GroupId", weighed_in,
                      kind as "kind: RecipeKind"
             "#,
             recipe.name,
             recipe.comment,
-            recipe.id,
+            recipe.id.get(),
             recipe.weighed_in,
             recipe.kind.as_str()
         )
@@ -161,40 +163,43 @@ impl RecipeOps {
         Ok(record)
     }
 
-    pub async fn set_group(&self, recipe_id: i32, group_id: i32) -> Result<()> {
+    pub async fn set_group(&self, recipe_id: RecipeId, group_id: GroupId) -> Result<()> {
         sqlx::query!(
             r#"UPDATE recipes SET group_id = $1 WHERE recipe_id = $2"#,
-            group_id,
-            recipe_id
+            group_id.get(),
+            recipe_id.get()
         )
-            .execute(&*self.pool)
-            .await?;
+        .execute(&*self.pool)
+        .await?;
         Ok(())
     }
 
-    pub async fn delete(&self, id: i32) -> Result<()> {
+    pub async fn delete(&self, id: RecipeId) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query!(r#"DELETE FROM recipe_ingredients WHERE recipe_id = $1"#, id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query!(
+            r#"DELETE FROM recipe_ingredients WHERE recipe_id = $1"#,
+            id.get()
+        )
+        .execute(&mut *tx)
+        .await?;
 
-        sqlx::query!(r#"DELETE FROM steps WHERE recipe_id = $1"#, id)
+        sqlx::query!(r#"DELETE FROM steps WHERE recipe_id = $1"#, id.get())
             .execute(&mut *tx)
             .await?;
 
         sqlx::query!(
             r#"DELETE FROM meta_recipes WHERE parent_id = $1 OR child_id = $1"#,
-            id
+            id.get()
         )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(r#"DELETE FROM event_meals WHERE recipe_id = $1"#, id.get())
             .execute(&mut *tx)
             .await?;
 
-        sqlx::query!(r#"DELETE FROM event_meals WHERE recipe_id = $1"#, id)
-            .execute(&mut *tx)
-            .await?;
-
-        let result = sqlx::query!(r#"DELETE FROM recipes WHERE recipe_id = $1"#, id)
+        let result = sqlx::query!(r#"DELETE FROM recipes WHERE recipe_id = $1"#, id.get())
             .execute(&mut *tx)
             .await?;
 
@@ -210,11 +215,11 @@ impl RecipeOps {
     }
 
     /// Lists recipes whose group the user belongs to
-    pub async fn list_for_user(&self, user_id: i64) -> Result<Vec<Recipe>> {
+    pub async fn list_for_user(&self, user_id: UserId) -> Result<Vec<Recipe>> {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+            SELECT recipe_id as "id: RecipeId", name, comment, group_id as "group_id: GroupId", weighed_in,
                    kind as "kind: RecipeKind"
             FROM recipes
             WHERE group_id IN (
@@ -222,7 +227,7 @@ impl RecipeOps {
             )
             ORDER BY name
             "#,
-            user_id
+            user_id.get()
         )
             .fetch_all(&*self.pool)
             .await?;
@@ -235,7 +240,7 @@ impl RecipeOps {
         let records = sqlx::query_as!(
             Recipe,
             r#"
-            SELECT recipe_id as id, name, comment, group_id, weighed_in,
+            SELECT recipe_id as "id: RecipeId", name, comment, group_id as "group_id: GroupId", weighed_in,
                    kind as "kind: RecipeKind"
             FROM recipes
             ORDER BY recipe_id
@@ -254,13 +259,13 @@ impl RecipeOps {
             INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id)
             VALUES ($1, $2, $3, $4)
             "#,
-            ingredient.recipe_id,
-            ingredient.ingredient_id,
-            ingredient.amount,
-            ingredient.unit_id,
+            ingredient.recipe_id.get(),
+            ingredient.ingredient_id.get(),
+            ingredient.amount.get().clone(),
+            ingredient.unit_id.get(),
         )
-            .execute(&*self.pool)
-            .await?;
+        .execute(&*self.pool)
+        .await?;
 
         Ok(())
     }
@@ -271,17 +276,17 @@ impl RecipeOps {
     ) -> Result<RecipeIngredient> {
         let result = sqlx::query!(
             r#"
-            UPDATE recipe_ingredients 
+            UPDATE recipe_ingredients
             SET amount = $3, unit_id = $4
             WHERE recipe_id = $1 AND ingredient_id = $2
             "#,
-            ingredient.recipe_id,
-            ingredient.ingredient_id,
-            ingredient.amount,
-            ingredient.unit_id,
+            ingredient.recipe_id.get(),
+            ingredient.ingredient_id.get(),
+            ingredient.amount.get().clone(),
+            ingredient.unit_id.get(),
         )
-            .execute(&*self.pool)
-            .await?;
+        .execute(&*self.pool)
+        .await?;
 
         if result.rows_affected() == 0 {
             return Err(Error::NotFound {
@@ -296,17 +301,21 @@ impl RecipeOps {
         Ok(ingredient)
     }
 
-    pub async fn delete_ingredient(&self, recipe_id: i32, ingredient_id: i32) -> Result<()> {
+    pub async fn delete_ingredient(
+        &self,
+        recipe_id: RecipeId,
+        ingredient_id: IngredientId,
+    ) -> Result<()> {
         let result = sqlx::query!(
             r#"
-            DELETE FROM recipe_ingredients 
+            DELETE FROM recipe_ingredients
             WHERE recipe_id = $1 AND ingredient_id = $2
             "#,
-            recipe_id,
-            ingredient_id,
+            recipe_id.get(),
+            ingredient_id.get(),
         )
-            .execute(&*self.pool)
-            .await?;
+        .execute(&*self.pool)
+        .await?;
 
         if result.rows_affected() == 0 {
             return Err(Error::NotFound {
@@ -318,24 +327,22 @@ impl RecipeOps {
         Ok(())
     }
 
-    pub async fn get_ingredients(&self, recipe_id: i32) -> Result<Vec<RecipeIngredient>> {
+    pub async fn get_ingredients(&self, recipe_id: RecipeId) -> Result<Vec<RecipeIngredient>> {
         let records = sqlx::query_as!(
             RecipeIngredient,
             r#"
-            SELECT recipe_id, ingredient_id, amount, unit_id, name
+            SELECT recipe_id as "recipe_id: RecipeId", ingredient_id as "ingredient_id: IngredientId", amount as "amount: Amount", unit_id as "unit_id: UnitId", name
             FROM recipe_ingredients JOIN ingredients USING(ingredient_id)
             WHERE recipe_id = $1
             ORDER BY ingredient_id
             "#,
-            recipe_id
+            recipe_id.get()
         )
             .fetch_all(&*self.pool)
             .await?;
 
         Ok(records)
     }
-
-
 
     // Recipe Steps
     pub async fn add_step(&self, step: RecipeStep) -> Result<RecipeStep> {
@@ -350,15 +357,15 @@ impl RecipeOps {
                 step_name as name, step_description as description,
                 fixed_duration, duration_per_kg
             "#,
-            step.recipe_id,
+            step.recipe_id.get(),
             step.order,
             step.name,
             step.description,
             duration_to_pg_interval(step.fixed_duration),
             duration_to_pg_interval(step.duration_per_kg),
         )
-            .fetch_one(&*self.pool)
-            .await?;
+        .fetch_one(&*self.pool)
+        .await?;
 
         Ok(record.to_recipe_step())
     }
@@ -367,44 +374,44 @@ impl RecipeOps {
         let record = sqlx::query_as!(
             RecipeStepDB,
             r#"
-            UPDATE steps 
+            UPDATE steps
             SET step_order = $2, step_name = $3, step_description = $4,
                 fixed_duration = $5,
                 duration_per_kg = $6
             WHERE step_id = $1
-            RETURNING 
+            RETURNING
                 step_id as id, recipe_id, step_order as "order",
                 step_name as name, step_description as description,
                 fixed_duration, duration_per_kg
             "#,
-            step.id,
+            step.id.get(),
             step.order,
             step.name,
             step.description,
             duration_to_pg_interval(step.fixed_duration),
             duration_to_pg_interval(step.duration_per_kg),
         )
-            .fetch_optional(&*self.pool)
-            .await?
-            .ok_or(Error::NotFound {
-                entity: "RecipeStep",
-                id: step.id.to_string(),
-            })?;
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "RecipeStep",
+            id: step.id.to_string(),
+        })?;
 
         Ok(record.to_recipe_step())
     }
 
-    pub async fn delete_step(&self, recipe_id: i32, step_id: i32) -> Result<()> {
+    pub async fn delete_step(&self, recipe_id: RecipeId, step_id: RecipeStepId) -> Result<()> {
         let result = sqlx::query!(
             r#"
-            DELETE FROM steps 
+            DELETE FROM steps
             WHERE recipe_id = $1 AND step_id = $2
             "#,
-            recipe_id,
-            step_id,
+            recipe_id.get(),
+            step_id.get(),
         )
-            .execute(&*self.pool)
-            .await?;
+        .execute(&*self.pool)
+        .await?;
 
         if result.rows_affected() == 0 {
             return Err(Error::NotFound {
@@ -416,7 +423,7 @@ impl RecipeOps {
         Ok(())
     }
 
-    pub async fn get_steps(&self, recipe_id: i32) -> Result<Vec<RecipeStep>> {
+    pub async fn get_steps(&self, recipe_id: RecipeId) -> Result<Vec<RecipeStep>> {
         let records = sqlx::query_as!(
             RecipeStepDB,
             r#"
@@ -428,16 +435,15 @@ impl RecipeOps {
             WHERE recipe_id = $1
             ORDER BY step_order
             "#,
-            recipe_id
+            recipe_id.get()
         )
-            .fetch_all(&*self.pool)
-            .await?;
+        .fetch_all(&*self.pool)
+        .await?;
 
-        Ok(
-            records.into_iter()
-                .map(|record| record.to_recipe_step())
-                .collect()
-        )
+        Ok(records
+            .into_iter()
+            .map(|record| record.to_recipe_step())
+            .collect())
     }
 
     // Meta Recipes
@@ -459,23 +465,26 @@ impl RecipeOps {
     ///
     /// # Errors
     /// - If database operation fails
-    pub async fn get_meta_ingredients(&self, recipe_id: i32) -> Result<Vec<RecipeMetaIngredient>> {
+    pub async fn get_meta_ingredients(
+        &self,
+        recipe_id: RecipeId,
+    ) -> Result<Vec<RecipeMetaIngredient>> {
         let records = sqlx::query_as!(
             RecipeMetaIngredient,
             r#"
-            SELECT 
-                parent_id,
-                child_id,
+            SELECT
+                parent_id as "parent_id: RecipeId",
+                child_id as "child_id: RecipeId",
                 name,
-                weight
+                weight as "weight: Amount"
             FROM meta_recipes JOIN recipes ON(child_id = recipe_id)
             WHERE parent_id = $1
             ORDER BY child_id
             "#,
-            recipe_id
+            recipe_id.get()
         )
-            .fetch_all(&*self.pool)
-            .await?;
+        .fetch_all(&*self.pool)
+        .await?;
 
         Ok(records)
     }
@@ -486,12 +495,12 @@ impl RecipeOps {
             INSERT INTO meta_recipes (parent_id, child_id, weight)
             VALUES ($1, $2, $3)
             "#,
-            meta.parent_id,
-            meta.child_id,
-            meta.weight,
+            meta.parent_id.get(),
+            meta.child_id.get(),
+            meta.weight.get().clone(),
         )
-            .execute(&*self.pool)
-            .await?;
+        .execute(&*self.pool)
+        .await?;
 
         Ok(())
     }
@@ -502,16 +511,16 @@ impl RecipeOps {
     ) -> Result<RecipeMetaIngredient> {
         let result = sqlx::query!(
             r#"
-            UPDATE meta_recipes 
+            UPDATE meta_recipes
             SET weight = $3
             WHERE parent_id = $1 AND child_id = $2
             "#,
-            meta.parent_id,
-            meta.child_id,
-            meta.weight,
+            meta.parent_id.get(),
+            meta.child_id.get(),
+            meta.weight.get().clone(),
         )
-            .execute(&*self.pool)
-            .await?;
+        .execute(&*self.pool)
+        .await?;
 
         if result.rows_affected() == 0 {
             return Err(Error::NotFound {
@@ -523,17 +532,21 @@ impl RecipeOps {
         Ok(meta)
     }
 
-    pub async fn delete_meta_ingredient(&self, parent_id: i32, child_id: i32) -> Result<()> {
+    pub async fn delete_meta_ingredient(
+        &self,
+        parent_id: RecipeId,
+        child_id: RecipeId,
+    ) -> Result<()> {
         let result = sqlx::query!(
             r#"
-            DELETE FROM meta_recipes 
+            DELETE FROM meta_recipes
             WHERE parent_id = $1 AND child_id = $2
             "#,
-            parent_id,
-            child_id,
+            parent_id.get(),
+            child_id.get(),
         )
-            .execute(&*self.pool)
-            .await?;
+        .execute(&*self.pool)
+        .await?;
 
         if result.rows_affected() == 0 {
             return Err(Error::NotFound {
@@ -546,17 +559,17 @@ impl RecipeOps {
     }
 
     // Advanced operations
-    pub async fn get_resolved_recipe(&self, recipe_id: i32) -> Result<Vec<ResolvedRecipe>> {
+    pub async fn get_resolved_recipe(&self, recipe_id: RecipeId) -> Result<Vec<ResolvedRecipe>> {
         let records = sqlx::query_as!(
             ResolvedRecipe,
             r#"
-            SELECT 
-                r.recipe_id,
+            SELECT
+                r.recipe_id as "recipe_id: RecipeId",
                 r.name as recipe_name,
-                i.ingredient_id,
+                i.ingredient_id as "ingredient_id: IngredientId",
                 i.name as ingredient_name,
-                coalesce(rr.weight, 0) as "weight!",
-                sr.recipe_id as subrecipe_id,
+                coalesce(rr.weight, 0) as "weight!: Amount",
+                sr.recipe_id as "subrecipe_id: Option<RecipeId>",
                 sr.name as subrecipe_name,
                 rr.acc as hierarchy_path
             FROM resolved_recipes rr
@@ -566,33 +579,33 @@ impl RecipeOps {
             WHERE r.recipe_id = $1
             ORDER BY COALESCE(sr.name, i.name)
             "#,
-            recipe_id
+            recipe_id.get()
         )
-            .fetch_all(&*self.pool)
-            .await?;
+        .fetch_all(&*self.pool)
+        .await?;
 
         Ok(records)
     }
 
-    pub async fn get_recipe_stats(&self, recipe_id: i32) -> Result<RecipeStats> {
+    pub async fn get_recipe_stats(&self, recipe_id: RecipeId) -> Result<RecipeStats> {
         sqlx::query_as!(
             RecipeStats,
             r#"
-            SELECT 
-                recipe_id as "recipe_id!",
-                COALESCE(weight, 0) as "weight!",
+            SELECT
+                recipe_id as "recipe_id!: RecipeId",
+                COALESCE(weight, 0) as "weight!: Amount",
                 COALESCE(energy, 0) as "energy!"
             FROM recipe_stats
             WHERE recipe_id = $1
             "#,
-            recipe_id
+            recipe_id.get()
         )
-            .fetch_optional(&*self.pool)
-            .await?
-            .ok_or(Error::NotFound {
-                entity: "RecipeStats",
-                id: recipe_id.to_string(),
-            })
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "RecipeStats",
+            id: recipe_id.to_string(),
+        })
     }
 
     pub async fn search_by_ingredients(
@@ -615,14 +628,14 @@ impl RecipeOps {
                 GROUP BY r.recipe_id, r.name, r.comment, r.weighed_in
             )
             SELECT
-                recipe_id as id,
+                recipe_id as "id: RecipeId",
                 name,
                 comment,
-                group_id,
+                group_id as "group_id: GroupId",
                 weighed_in,
                 kind as "kind: RecipeKind"
             FROM matching_recipes
-            ORDER BY 
+            ORDER BY
                 matching_ingredients::float / total_ingredients DESC,
                 name ASC
             LIMIT $2
@@ -630,8 +643,8 @@ impl RecipeOps {
             ingredients,
             limit.unwrap_or(10)
         )
-            .fetch_all(&*self.pool)
-            .await?;
+        .fetch_all(&*self.pool)
+        .await?;
 
         Ok(records)
     }
@@ -640,7 +653,7 @@ impl RecipeOps {
     /// Replaces all existing entries with the new ones.
     pub async fn update_recipe_entries(
         &self,
-        recipe_id: i32,
+        recipe_id: RecipeId,
         regular_ingredients: Vec<RecipeIngredient>,
         meta_ingredients: Vec<RecipeMetaIngredient>,
     ) -> Result<()> {
@@ -649,14 +662,17 @@ impl RecipeOps {
         // Delete all existing ingredients and meta recipes
         sqlx::query!(
             "DELETE FROM recipe_ingredients WHERE recipe_id = $1",
-            recipe_id
+            recipe_id.get()
         )
-            .execute(&mut *tx)
-            .await?;
+        .execute(&mut *tx)
+        .await?;
 
-        sqlx::query!("DELETE FROM meta_recipes WHERE parent_id = $1", recipe_id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query!(
+            "DELETE FROM meta_recipes WHERE parent_id = $1",
+            recipe_id.get()
+        )
+        .execute(&mut *tx)
+        .await?;
 
         // Insert new ingredients
         for ingredient in regular_ingredients {
@@ -665,13 +681,13 @@ impl RecipeOps {
             INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id)
             VALUES ($1, $2, $3, $4)
             "#,
-                recipe_id,
-                ingredient.ingredient_id,
-                ingredient.amount,
-                ingredient.unit_id,
+                recipe_id.get(),
+                ingredient.ingredient_id.get(),
+                ingredient.amount.get().clone(),
+                ingredient.unit_id.get(),
             )
-                .execute(&mut *tx)
-                .await?;
+            .execute(&mut *tx)
+            .await?;
         }
 
         // Insert new meta recipes
@@ -681,23 +697,27 @@ impl RecipeOps {
             INSERT INTO meta_recipes (parent_id, child_id, weight)
             VALUES ($1, $2, $3)
             "#,
-                recipe_id,
-                meta.child_id,
-                meta.weight,
+                recipe_id.get(),
+                meta.child_id.get(),
+                meta.weight.get().clone(),
             )
-                .execute(&mut *tx)
-                .await?;
+            .execute(&mut *tx)
+            .await?;
         }
 
         tx.commit().await?;
         Ok(())
     }
 
-    pub async fn update_recipe_steps(&self, recipe_id: i32, steps: Vec<RecipeStep>) -> Result<()> {
+    pub async fn update_recipe_steps(
+        &self,
+        recipe_id: RecipeId,
+        steps: Vec<RecipeStep>,
+    ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
         // Delete existing steps
-        sqlx::query!(r#"DELETE FROM steps WHERE recipe_id = $1"#, recipe_id)
+        sqlx::query!(r#"DELETE FROM steps WHERE recipe_id = $1"#, recipe_id.get())
             .execute(&mut *tx)
             .await?;
 
@@ -711,15 +731,15 @@ impl RecipeOps {
                 )
                 VALUES ($1, $2, $3, $4, $5, $6)
                 "#,
-                recipe_id,
+                recipe_id.get(),
                 step.order,
                 step.name,
                 step.description,
                 duration_to_pg_interval(step.fixed_duration),
                 duration_to_pg_interval(step.duration_per_kg),
             )
-                .execute(&mut *tx)
-                .await?;
+            .execute(&mut *tx)
+            .await?;
         }
 
         tx.commit().await?;
@@ -734,21 +754,21 @@ impl RecipeOps {
             RecipeListItem,
             r#"
             SELECT
-                r.recipe_id as id,
+                r.recipe_id as "id: RecipeId",
                 r.name,
                 r.comment,
-                r.group_id,
+                r.group_id as "group_id: GroupId",
                 r.kind as "kind: RecipeKind",
                 r.weighed_in,
-                COALESCE(s.weight, 0) as "weight!",
+                COALESCE(s.weight, 0) as "weight!: Amount",
                 COALESCE(s.energy, 0) as "energy!"
             FROM recipes r
             LEFT JOIN recipe_stats s ON s.recipe_id = r.recipe_id
             ORDER BY r.name
             "#
         )
-            .fetch_all(&*self.pool)
-            .await?;
+        .fetch_all(&*self.pool)
+        .await?;
 
         Ok(records)
     }
@@ -757,15 +777,15 @@ impl RecipeOps {
     /// independent recipe owned by `group_id`. Returns the new recipe id.
     pub async fn duplicate(
         &self,
-        recipe_id: i32,
+        recipe_id: RecipeId,
         new_name: Option<String>,
-        new_group_id: i32,
-    ) -> Result<i32> {
+        new_group_id: GroupId,
+    ) -> Result<RecipeId> {
         let mut tx = self.pool.begin().await?;
 
         let source = sqlx::query!(
             r#"SELECT name, comment, kind as "kind: RecipeKind", weighed_in FROM recipes WHERE recipe_id = $1"#,
-            recipe_id
+            recipe_id.get()
         )
             .fetch_optional(&mut *tx)
             .await?
@@ -776,20 +796,20 @@ impl RecipeOps {
 
         let name = new_name.unwrap_or_else(|| format!("{} (Kopie)", source.name));
 
-        let new_id: i32 = sqlx::query_scalar!(
+        let new_id: RecipeId = sqlx::query_scalar!(
             r#"
             INSERT INTO recipes (name, comment, group_id, weighed_in, kind)
             VALUES ($1, $2, $3, $4, $5::text::recipe_kind)
-            RETURNING recipe_id
+            RETURNING recipe_id as "recipe_id: RecipeId"
             "#,
             name,
             source.comment,
-            new_group_id,
+            new_group_id.get(),
             source.weighed_in,
             source.kind.as_str()
         )
-            .fetch_one(&mut *tx)
-            .await?;
+        .fetch_one(&mut *tx)
+        .await?;
 
         sqlx::query!(
             r#"
@@ -797,11 +817,11 @@ impl RecipeOps {
             SELECT $1, ingredient_id, amount, unit_id
             FROM recipe_ingredients WHERE recipe_id = $2
             "#,
-            new_id,
-            recipe_id
+            new_id.get(),
+            recipe_id.get()
         )
-            .execute(&mut *tx)
-            .await?;
+        .execute(&mut *tx)
+        .await?;
 
         sqlx::query!(
             r#"
@@ -809,8 +829,8 @@ impl RecipeOps {
             SELECT $1, step_order, step_name, step_description, fixed_duration, duration_per_kg
             FROM steps WHERE recipe_id = $2
             "#,
-            new_id,
-            recipe_id
+            new_id.get(),
+            recipe_id.get()
         )
             .execute(&mut *tx)
             .await?;
@@ -820,11 +840,11 @@ impl RecipeOps {
             INSERT INTO meta_recipes (parent_id, child_id, weight)
             SELECT $1, child_id, weight FROM meta_recipes WHERE parent_id = $2
             "#,
-            new_id,
-            recipe_id
+            new_id.get(),
+            recipe_id.get()
         )
-            .execute(&mut *tx)
-            .await?;
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         Ok(new_id)
@@ -838,12 +858,12 @@ impl RecipeOps {
     /// Structure: a depth-first walk over `meta_recipes` yields one path per
     /// node (`"<root>.<sub>.<sub>"`); `resolved_recipes.acc` uses the same
     /// id chains, so ingredient leaves attach to nodes by matching path.
-    pub async fn get_recipe_tree(&self, root_id: i32) -> Result<RecipeTreeNode> {
+    pub async fn get_recipe_tree(&self, root_id: RecipeId) -> Result<RecipeTreeNode> {
         #[derive(Debug)]
         struct WalkRow {
             path: String,
             node_id: i32,
-            parent_weight: Option<BigDecimal>,
+            parent_weight: Option<Amount>,
         }
         let walk = sqlx::query_as!(
             WalkRow,
@@ -857,18 +877,18 @@ impl RecipeOps {
                 WHERE w.depth < 10
                   AND position('.' || m.child_id::text || '.' IN w.path || '.') = 0
             )
-            SELECT path AS "path!", node_id AS "node_id!", parent_weight
+            SELECT path AS "path!", node_id AS "node_id!", parent_weight as "parent_weight: Amount"
             FROM walk
             "#,
             root_id.to_string(),
-            root_id
+            root_id.get()
         )
-            .fetch_all(&*self.pool)
-            .await?;
+        .fetch_all(&*self.pool)
+        .await?;
 
         // Node recipe data (name, kind) for every visited node.
-        let node_ids: Vec<i32> = walk.iter().map(|row| row.node_id).collect();
-        let mut name_by_id: HashMap<i32, (String, RecipeKind)> = HashMap::new();
+        let node_ids: Vec<RecipeId> = walk.iter().map(|row| RecipeId(row.node_id)).collect();
+        let mut name_by_id: HashMap<RecipeId, (String, RecipeKind)> = HashMap::new();
         for id in &node_ids {
             if let Ok(recipe) = self.get(*id).await {
                 name_by_id.insert(*id, (recipe.name, recipe.kind));
@@ -883,8 +903,8 @@ impl RecipeOps {
             acc: String,
             ingredient_id: i32,
             ingredient: Option<String>,
-            weight: Option<BigDecimal>,
-            amount: BigDecimal,
+            weight: Option<Amount>,
+            amount: Amount,
             unit_id: i32,
             unit_name: Option<String>,
         }
@@ -903,8 +923,8 @@ impl RecipeOps {
             SELECT walk.path AS "acc!",
                    ri.ingredient_id AS "ingredient_id!",
                    i.name AS ingredient,
-                   (ri.amount * w.weight) AS "weight?",
-                   ri.amount AS "amount!",
+                   (ri.amount * w.weight) AS "weight?: Amount",
+                   ri.amount AS "amount!: Amount",
                    ri.unit_id AS "unit_id!",
                    u.name AS unit_name
             FROM walk
@@ -915,10 +935,10 @@ impl RecipeOps {
             LEFT JOIN units u ON u.unit_id = ri.unit_id
             "#,
             root_id.to_string(),
-            root_id
+            root_id.get()
         )
-            .fetch_all(&*self.pool)
-            .await?;
+        .fetch_all(&*self.pool)
+        .await?;
 
         let mut leaves_by_acc: HashMap<String, Vec<RecipeTreeIngredient>> = HashMap::new();
         for leaf in &leaves {
@@ -926,10 +946,10 @@ impl RecipeOps {
                 .entry(leaf.acc.clone())
                 .or_default()
                 .push(RecipeTreeIngredient {
-                    ingredient_id: leaf.ingredient_id,
+                    ingredient_id: IngredientId(leaf.ingredient_id),
                     name: leaf.ingredient.clone(),
                     amount: leaf.amount.clone(),
-                    unit_id: leaf.unit_id,
+                    unit_id: UnitId(leaf.unit_id),
                     unit_name: leaf.unit_name.clone(),
                     weight: leaf.weight.clone(),
                 });
@@ -939,13 +959,13 @@ impl RecipeOps {
         let mut nodes: HashMap<String, RecipeTreeNode> = HashMap::new();
         for row in &walk {
             let (name, kind) = name_by_id
-                .get(&row.node_id)
+                .get(&RecipeId(row.node_id))
                 .cloned()
                 .unwrap_or_else(|| ("?".into(), RecipeKind::Meal));
             nodes.insert(
                 row.path.clone(),
                 RecipeTreeNode {
-                    recipe_id: row.node_id,
+                    recipe_id: RecipeId(row.node_id),
                     name,
                     kind,
                     weight: row.parent_weight.clone(),

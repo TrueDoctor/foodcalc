@@ -1,8 +1,10 @@
 use crate::{
     entities::meal::*,
+    entities::types::ids::{EventId, IngredientId, MealId, PlaceId, RecipeId},
     error::{Error, Result},
 };
-use bigdecimal::BigDecimal;
+
+use crate::entities::types::amount::Amount;
 use sqlx::PgPool;
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -22,17 +24,17 @@ impl MealOps {
     /// `weight` is derived from `recipe_stats` (cheap). Price is not included —
     /// it requires the deep `event_ingredients` aggregate and should be fetched
     /// separately per meal via [`Self::get_meal_price`] (e.g. lazy-loaded over HTMX).
-    pub async fn get_event_meals(&self, event_id: i32) -> Result<Vec<Meal>> {
+    pub async fn get_event_meals(&self, event_id: EventId) -> Result<Vec<Meal>> {
         let meals = sqlx::query_as!(
             Meal,
             r#"
             SELECT
-                event_meals.meal_id,
-                event_meals.event_id,
-                event_meals.recipe_id,
+                event_meals.meal_id as "meal_id: MealId",
+                event_meals.event_id as "event_id: EventId",
+                event_meals.recipe_id as "recipe_id: RecipeId",
                 recipes.name as "name!",
                 COALESCE(recipes.weighed_in, false) as "weighed_in!",
-                event_meals.place_id,
+                event_meals.place_id as "place_id: PlaceId",
                 places.name as "place!",
                 event_meals.start_time,
                 event_meals.end_time,
@@ -47,10 +49,54 @@ impl MealOps {
             WHERE event_meals.event_id = $1
             ORDER BY event_meals.start_time
             "#,
-            event_id
+            event_id.get()
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
+
+        Ok(meals)
+    }
+
+    /// Get all meals for a given event enriched with planner aggregates:
+    /// scaled total weight, recipe energy density (kJ/g) and ingredient cost.
+    ///
+    /// The weight is derived from `recipe_stats` like [`Self::get_event_meals`]
+    /// (cheap); the price comes from `event_ingredients_before_prep_time_resolve`
+    /// as a correlated subquery — identical to [`Self::get_event_meal_prices`],
+    /// just fused into one round trip for the SPA detail view.
+    pub async fn get_event_meals_planner(&self, event_id: EventId) -> Result<Vec<PlannerMeal>> {
+        let meals = sqlx::query_as!(
+            PlannerMeal,
+            r#"
+            SELECT
+                em.meal_id as "meal_id: MealId",
+                em.event_id as "event_id: EventId",
+                em.recipe_id as "recipe_id: RecipeId",
+                r.name as "name!",
+                COALESCE(r.weighed_in, false) as "weighed_in!",
+                em.place_id as "place_id: PlaceId",
+                COALESCE(p.name, '') as "place!",
+                em.start_time,
+                em.end_time,
+                em.comment,
+                em.servings,
+                em.energy_per_serving as "energy_per_serving!",
+                COALESCE(round(rs.weight * em.energy_per_serving * em.servings / NULLIF(rs.energy, 0), 2), 0) as "weight!",
+                CASE WHEN rs.weight > 0 THEN (rs.energy / NULLIF(rs.weight * 1000, 0))::float8 END::numeric as "energy_kj_per_g: Amount",
+                (SELECT COALESCE(SUM(ei.price), 0)
+                    FROM event_ingredients_before_prep_time_resolve ei
+                    WHERE ei.meal_id = em.meal_id) as "price!: Amount"
+            FROM event_meals em
+            LEFT JOIN recipes r ON em.recipe_id = r.recipe_id
+            LEFT JOIN places p ON em.place_id = p.place_id
+            LEFT JOIN recipe_stats rs ON em.recipe_id = rs.recipe_id
+            WHERE em.event_id = $1
+            ORDER BY em.start_time
+            "#,
+            event_id.get()
+        )
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(meals)
     }
@@ -64,17 +110,17 @@ impl MealOps {
     /// Price is not included — it is event-source-specific and requires the
     /// expensive aggregate. Callers that need the price should fetch it separately
     /// via [`Self::get_meal_price`] (e.g. lazy-loaded over HTMX).
-    pub async fn get_meal(&self, meal_id: i32) -> Result<Meal> {
+    pub async fn get_meal(&self, meal_id: MealId) -> Result<Meal> {
         let meal = sqlx::query_as!(
             Meal,
             r#"
             SELECT
-                event_meals.meal_id,
-                event_meals.event_id,
-                event_meals.recipe_id,
+                event_meals.meal_id as "meal_id: MealId",
+                event_meals.event_id as "event_id: EventId",
+                event_meals.recipe_id as "recipe_id: RecipeId",
                 recipes.name as "name!",
                 COALESCE(recipes.weighed_in, false) as "weighed_in!",
-                event_meals.place_id,
+                event_meals.place_id as "place_id: PlaceId",
                 places.name as "place!",
                 event_meals.start_time,
                 event_meals.end_time,
@@ -88,10 +134,10 @@ impl MealOps {
             LEFT JOIN recipe_stats ON event_meals.recipe_id = recipe_stats.recipe_id
             WHERE event_meals.meal_id = $1
             "#,
-            meal_id
+            meal_id.get()
         )
-        .fetch_optional(&*self.pool)
-        .await?;
+            .fetch_optional(&*self.pool)
+            .await?;
 
         meal.ok_or(Error::NotFound {
             entity: "Meal",
@@ -105,14 +151,14 @@ impl MealOps {
     /// meal. Calling this once per meal is **much** more expensive than calling
     /// [`Self::get_event_meal_prices`] once for the whole event, because the
     /// recursive view is re-evaluated per call.
-    pub async fn get_meal_price(&self, meal_id: i32) -> Result<BigDecimal> {
+    pub async fn get_meal_price(&self, meal_id: MealId) -> Result<Amount> {
         let row = sqlx::query!(
             r#"
-            SELECT COALESCE(sum(price), 0) as "price!"
+            SELECT COALESCE(sum(price), 0) as "price!: Amount"
             FROM event_ingredients
             WHERE meal_id = $1
             "#,
-            meal_id
+            meal_id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -126,19 +172,16 @@ impl MealOps {
     /// `event_ingredients`. The two views produce identical per-meal price sums
     /// (the prep-time-resolve join only shifts `buy_by`, not the cost) but the
     /// former avoids a ~2-3x recursive-view join cost on events with food preps.
-    pub async fn get_event_meal_prices(
-        &self,
-        event_id: i32,
-    ) -> Result<Vec<(i32, BigDecimal)>> {
+    pub async fn get_event_meal_prices(&self, event_id: EventId) -> Result<Vec<(MealId, Amount)>> {
         let rows = sqlx::query!(
             r#"
-            SELECT em.meal_id as "meal_id!", COALESCE(sum(ei.price), 0) as "price!"
+            SELECT em.meal_id as "meal_id!: MealId", COALESCE(sum(ei.price), 0) as "price!: Amount"
             FROM event_meals em
             LEFT JOIN event_ingredients_before_prep_time_resolve ei ON ei.meal_id = em.meal_id
             WHERE em.event_id = $1
             GROUP BY em.meal_id
             "#,
-            event_id
+            event_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -152,12 +195,12 @@ impl MealOps {
             Meal,
             r#"
             SELECT
-                event_meals.meal_id,
-                event_meals.event_id,
-                event_meals.recipe_id,
+                event_meals.meal_id as "meal_id: MealId",
+                event_meals.event_id as "event_id: EventId",
+                event_meals.recipe_id as "recipe_id: RecipeId",
                 recipes.name as "name!",
                 COALESCE(recipes.weighed_in, false) as "weighed_in!",
-                event_meals.place_id,
+                event_meals.place_id as "place_id: PlaceId",
                 places.name as "place!",
                 event_meals.start_time,
                 event_meals.end_time,
@@ -172,8 +215,8 @@ impl MealOps {
             ORDER BY event_meals.start_time
             "#
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(meals)
     }
@@ -182,12 +225,12 @@ impl MealOps {
     #[allow(clippy::too_many_arguments)]
     pub async fn update_meal(
         &self,
-        meal_id: i32,
-        recipe_id: i32,
-        place_id: i32,
+        meal_id: MealId,
+        recipe_id: RecipeId,
+        place_id: PlaceId,
         start_time: OffsetDateTime,
         end_time: OffsetDateTime,
-        energy: BigDecimal,
+        energy: Amount,
         servings: i32,
         comment: Option<String>,
     ) -> Result<()> {
@@ -204,14 +247,14 @@ impl MealOps {
                 WHERE
                     meal_id = $8
             "#,
-            recipe_id,
-            place_id,
+            recipe_id.get(),
+            place_id.get(),
             start_time,
             end_time,
-            energy,
+            energy.get().clone(),
             servings,
             comment,
-            meal_id
+            meal_id.get()
         )
         .execute(&*self.pool)
         .await?
@@ -227,57 +270,57 @@ impl MealOps {
         Ok(())
     }
 
-    /// Add a new meal.
+    /// Add a new meal. Returns the new meal's id.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_meal(
         &self,
-        event_id: i32,
-        recipe_id: i32,
-        place_id: i32,
+        event_id: EventId,
+        recipe_id: RecipeId,
+        place_id: PlaceId,
         start_time: OffsetDateTime,
         end_time: OffsetDateTime,
-        energy: BigDecimal,
+        energy: Amount,
         servings: i32,
         comment: Option<String>,
-    ) -> Result<()> {
-        sqlx::query!(
+    ) -> Result<MealId> {
+        let row = sqlx::query!(
             r#"
                 INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING meal_id as "meal_id: MealId"
             "#,
-            event_id,
-            recipe_id,
-            place_id,
+            event_id.get(),
+            recipe_id.get(),
+            place_id.get(),
             start_time,
             end_time,
-            energy,
+            energy.get().clone(),
             servings,
             comment,
         )
-        .execute(&*self.pool)
-        .await?
-        .rows_affected();
+            .fetch_one(&*self.pool)
+            .await?;
 
-        Ok(())
+        Ok(row.meal_id)
     }
 
     /// Duplicate a single meal within its own event.
     ///
     /// An event meal has no child tables of its own (ingredients are derived
     /// from the recipe), so this is a single-row copy. Returns the new meal_id.
-    pub async fn duplicate_meal(&self, meal_id: i32) -> Result<i32> {
+    pub async fn duplicate_meal(&self, meal_id: MealId) -> Result<MealId> {
         let row = sqlx::query!(
             r#"
                 INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
                 SELECT event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment
                 FROM event_meals
                 WHERE meal_id = $1
-                RETURNING meal_id
+                RETURNING meal_id as "meal_id: MealId"
             "#,
-            meal_id
+            meal_id.get()
         )
-        .fetch_optional(&*self.pool)
-        .await?;
+            .fetch_optional(&*self.pool)
+            .await?;
 
         row.map(|r| r.meal_id).ok_or(Error::NotFound {
             entity: "Meal",
@@ -286,14 +329,14 @@ impl MealOps {
     }
 
     /// Remove a meal.
-    pub async fn remove_meal(&self, meal_id: i32) -> Result<()> {
+    pub async fn remove_meal(&self, meal_id: MealId) -> Result<()> {
         let count = sqlx::query!(
             r#"
                 DELETE FROM event_meals
                 WHERE
                     meal_id = $1
             "#,
-            meal_id
+            meal_id.get()
         )
         .execute(&*self.pool)
         .await?
@@ -312,9 +355,9 @@ impl MealOps {
     /// Remove a meal by its event, recipe, place, and start time.
     pub async fn remove_meal_by_reference(
         &self,
-        event_id: i32,
-        recipe_id: i32,
-        place_id: i32,
+        event_id: EventId,
+        recipe_id: RecipeId,
+        place_id: PlaceId,
         start_time: OffsetDateTime,
     ) -> Result<()> {
         let count = sqlx::query!(
@@ -326,9 +369,9 @@ impl MealOps {
                     place_id = $3 AND
                     start_time = $4
             "#,
-            event_id,
-            recipe_id,
-            place_id,
+            event_id.get(),
+            recipe_id.get(),
+            place_id.get(),
             start_time,
         )
         .execute(&*self.pool)
@@ -346,20 +389,20 @@ impl MealOps {
     }
 
     /// Get all ingredients for a given meal.
-    pub async fn get_meal_ingredients(&self, meal_id: i32) -> Result<Vec<MealIngredient>> {
+    pub async fn get_meal_ingredients(&self, meal_id: MealId) -> Result<Vec<MealIngredient>> {
         let ingredients = sqlx::query_as!(
             MealIngredient,
             r#"
             SELECT
-                event_id as "event_id!",
-                recipe_id as "recipe_id!",
-                ingredient_id as "ingredient_id!",
+                event_id as "event_id!: EventId",
+                recipe_id as "recipe_id!: RecipeId",
+                ingredient_id as "ingredient_id!: IngredientId",
                 ingredient as "ingredient!",
                 coalesce(weight,0) as "weight!",
                 coalesce(energy, 0) as "energy!",
-                coalesce(price, 0) as "price!",
+                coalesce(price, 0) as "price!: Amount",
                 servings as "servings!",
-                meal_id as "meal_id!",
+                meal_id as "meal_id!: MealId",
                 subrecipe_hierarchy
             -- Non-recursive base view: identical per-meal weights/energy/prices
             -- (incl. event source overrides) but skips the expensive prep-time
@@ -371,7 +414,7 @@ impl MealOps {
               AND meal_id = $1
             ORDER BY weight DESC
             "#,
-            meal_id
+            meal_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -382,14 +425,14 @@ impl MealOps {
     /// Update the meals for a given event.
     pub async fn update_event_meals(
         &self,
-        event_id: i32,
+        event_id: EventId,
         meals: impl Iterator<Item = Meal>,
     ) -> Result<()> {
         let mut transaction = self.pool.begin().await?;
 
         async fn insert_meal<'a>(
             executor: impl sqlx::Executor<'a, Database = sqlx::Postgres>,
-            event_id: i32,
+            event_id: EventId,
             meal: Meal,
         ) -> sqlx::Result<()> {
             sqlx::query!(
@@ -397,18 +440,18 @@ impl MealOps {
                     INSERT INTO event_meals (event_id, recipe_id, place_id, comment, energy_per_serving, servings, start_time, end_time)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 "#,
-                event_id,
-                meal.recipe_id,
-                meal.place_id,
+                event_id.get(),
+                meal.recipe_id.get(),
+                meal.place_id.get(),
                 meal.comment,
-                meal.energy,
+                meal.energy.get().clone(),
                 meal.servings,
                 meal.start_time,
                 meal.end_time
             )
-            .execute(executor)
-            .await?
-            .rows_affected();
+                .execute(executor)
+                .await?
+                .rows_affected();
 
             Ok(())
         }
@@ -418,7 +461,7 @@ impl MealOps {
                 DELETE FROM event_meals
                 WHERE event_id = $1
             "#,
-            event_id,
+            event_id.get(),
         )
         .execute(&mut *transaction)
         .await?

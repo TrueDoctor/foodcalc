@@ -8,6 +8,7 @@ use crate::auth::AuthSession;
 use crate::entities::user::User;
 use crate::error::{Error, Result};
 use crate::FoodLib;
+use crate::types::ids::{EventId, FoodPrepId, GroupId, IngredientId, InventoryId, MealId, RecipeId, ShoppingTourId};
 
 /// Authenticated user together with the IDs of every group they belong to.
 ///
@@ -17,18 +18,18 @@ use crate::FoodLib;
 #[derive(Debug, Clone)]
 pub struct AuthCtx {
     pub user: User,
-    pub group_ids: Vec<i32>,
+    pub group_ids: Vec<GroupId>,
     pool: Arc<PgPool>,
 }
 
 impl AuthCtx {
     /// True if the user is an admin or belongs to the given group.
-    pub fn can_access_group(&self, group_id: i32) -> bool {
+    pub fn can_access_group(&self, group_id: GroupId) -> bool {
         self.user.is_admin || self.group_ids.contains(&group_id)
     }
 
     /// Returns Forbidden unless the user has access to the given group.
-    pub fn assert_group(&self, group_id: i32) -> Result<()> {
+    pub fn assert_group(&self, group_id: GroupId) -> Result<()> {
         if self.can_access_group(group_id) {
             Ok(())
         } else {
@@ -38,10 +39,12 @@ impl AuthCtx {
         }
     }
 
-    pub async fn assert_can_edit_recipe(&self, recipe_id: i32) -> Result<()> {
-        let group_id = sqlx::query_scalar!(
-            r#"SELECT group_id FROM recipes WHERE recipe_id = $1"#,
-            recipe_id
+    pub async fn assert_can_edit_recipe(&self, recipe_id: RecipeId) -> Result<()> {
+        let group_id = sqlx::query_scalar!(r#"
+            SELECT group_id as "group_id: GroupId" FROM recipes
+            WHERE recipe_id = $1
+            "#,
+            recipe_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -52,10 +55,10 @@ impl AuthCtx {
         self.assert_group(group_id)
     }
 
-    pub async fn assert_can_edit_event(&self, event_id: i32) -> Result<()> {
+    pub async fn assert_can_edit_event(&self, event_id: EventId) -> Result<()> {
         let group_id = sqlx::query_scalar!(
-            r#"SELECT group_id FROM events WHERE event_id = $1"#,
-            event_id
+            r#"SELECT group_id as "group_id: GroupId" FROM events WHERE event_id = $1"#,
+            event_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -66,10 +69,10 @@ impl AuthCtx {
         self.assert_group(group_id)
     }
 
-    pub async fn assert_can_edit_ingredient(&self, ingredient_id: i32) -> Result<()> {
+    pub async fn assert_can_edit_ingredient(&self, ingredient_id: IngredientId) -> Result<()> {
         let group_id = sqlx::query_scalar!(
-            r#"SELECT group_id FROM ingredients WHERE ingredient_id = $1"#,
-            ingredient_id
+            r#"SELECT group_id as "group_id: GroupId" FROM ingredients WHERE ingredient_id = $1"#,
+            ingredient_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -80,10 +83,10 @@ impl AuthCtx {
         self.assert_group(group_id)
     }
 
-    pub async fn assert_can_edit_inventory(&self, inventory_id: i32) -> Result<()> {
+    pub async fn assert_can_edit_inventory(&self, inventory_id: InventoryId) -> Result<()> {
         let group_id = sqlx::query_scalar!(
-            r#"SELECT group_id FROM inventories WHERE inventory_id = $1"#,
-            inventory_id
+            r#"SELECT group_id as "group_id: GroupId" FROM inventories WHERE inventory_id = $1"#,
+            inventory_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -96,15 +99,15 @@ impl AuthCtx {
 
     /// Meals, food preps, shopping tours and source overrides all belong to an
     /// event; permission follows the parent event.
-    pub async fn assert_can_edit_meal(&self, meal_id: i32) -> Result<()> {
+    pub async fn assert_can_edit_meal(&self, meal_id: MealId) -> Result<()> {
         let group_id = sqlx::query_scalar!(
             r#"
-            SELECT e.group_id
+            SELECT e.group_id as "group_id: GroupId"
             FROM event_meals m
             JOIN events e ON e.event_id = m.event_id
             WHERE m.meal_id = $1
             "#,
-            meal_id
+            meal_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -115,15 +118,15 @@ impl AuthCtx {
         self.assert_group(group_id)
     }
 
-    pub async fn assert_can_edit_food_prep(&self, prep_id: i32) -> Result<()> {
+    pub async fn assert_can_edit_food_prep(&self, prep_id: FoodPrepId) -> Result<()> {
         let group_id = sqlx::query_scalar!(
             r#"
-            SELECT e.group_id
+            SELECT e.group_id as "group_id: GroupId"
             FROM food_prep fp
             JOIN events e ON e.event_id = fp.event_id
             WHERE fp.prep_id = $1
             "#,
-            prep_id
+            prep_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -134,15 +137,15 @@ impl AuthCtx {
         self.assert_group(group_id)
     }
 
-    pub async fn assert_can_edit_shopping_tour(&self, tour_id: i32) -> Result<()> {
+    pub async fn assert_can_edit_shopping_tour(&self, tour_id: ShoppingTourId) -> Result<()> {
         let group_id = sqlx::query_scalar!(
             r#"
-            SELECT e.group_id
+            SELECT e.group_id as "group_id: GroupId"
             FROM shopping_tours t
             JOIN events e ON e.event_id = t.event_id
             WHERE t.tour_id = $1
             "#,
-            tour_id
+            tour_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?

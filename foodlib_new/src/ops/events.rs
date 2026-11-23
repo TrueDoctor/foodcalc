@@ -1,6 +1,12 @@
 use crate::entities::event::*;
+use crate::entities::types::ids::{
+    EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, InventoryId, RecipeId, StoreId,
+    ShoppingTourId, UserId,
+};
 use crate::error::{Error, Result};
-use bigdecimal::BigDecimal;
+
+use crate::entities::types::amount::Amount;
+use crate::entities::types::money::Money;
 use sqlx::PgPool;
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -22,34 +28,34 @@ impl EventOps {
             r#"
             INSERT INTO events (event_name, comment, budget, group_id)
             VALUES ($1, $2, $3, $4)
-            RETURNING event_id as id, event_name as name, comment, budget, group_id
+            RETURNING event_id as "id: EventId", event_name as name, comment, budget as "budget: Money", group_id as "group_id: GroupId"
             "#,
             event.name,
             event.comment,
-            event.budget,
-            event.group_id,
+            event.budget.clone().map(|m| m.into_raw()),
+            event.group_id.get(),
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(record)
     }
 
     /// Retrieves an event by ID
-    pub async fn get(&self, id: i32) -> Result<Event> {
+    pub async fn get(&self, id: EventId) -> Result<Event> {
         let record = sqlx::query_as!(
             Event,
             r#"
-            SELECT 
-                event_id as id,
+            SELECT
+                event_id as "id: EventId",
                 event_name as name,
                 comment,
-                group_id,
-                budget
-            FROM events 
+                group_id as "group_id: GroupId",
+                budget as "budget: Money"
+            FROM events
             WHERE event_id = $1
             "#,
-            id
+            id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -69,29 +75,29 @@ impl EventOps {
             UPDATE events
             SET event_name = $1, comment = $2, budget = $3
             WHERE event_id = $4
-            RETURNING event_id as id, event_name as name, comment, budget, group_id
+            RETURNING event_id as "id: EventId", event_name as name, comment, budget as "budget: Money", group_id as "group_id: GroupId"
             "#,
             event.name,
             event.comment,
-            event.budget,
-            event.id
+            event.budget.clone().map(|m| m.into_raw()),
+            event.id.get()
         )
-        .fetch_optional(&*self.pool)
-        .await?
-        .ok_or(Error::NotFound {
-            entity: "Event",
-            id: event.id.to_string(),
-        })?;
+            .fetch_optional(&*self.pool)
+            .await?
+            .ok_or(Error::NotFound {
+                entity: "Event",
+                id: event.id.to_string(),
+            })?;
 
         Ok(record)
     }
 
     /// Moves an event to a different group
-    pub async fn set_group(&self, event_id: i32, group_id: i32) -> Result<()> {
+    pub async fn set_group(&self, event_id: EventId, group_id: GroupId) -> Result<()> {
         sqlx::query!(
             r#"UPDATE events SET group_id = $1 WHERE event_id = $2"#,
-            group_id,
-            event_id
+            group_id.get(),
+            event_id.get()
         )
         .execute(&*self.pool)
         .await?;
@@ -99,32 +105,38 @@ impl EventOps {
     }
 
     /// Deletes an event and all associated data
-    pub async fn delete(&self, id: i32) -> Result<()> {
+    pub async fn delete(&self, id: EventId) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
         // Delete associated data first
-        sqlx::query!("DELETE FROM event_meals WHERE event_id = $1", id)
+        sqlx::query!("DELETE FROM event_meals WHERE event_id = $1", id.get())
             .execute(&mut *tx)
             .await?;
 
-        sqlx::query!("DELETE FROM event_source_overrides WHERE event_id = $1", id)
+        sqlx::query!(
+            "DELETE FROM event_source_overrides WHERE event_id = $1",
+            id.get()
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!("DELETE FROM shopping_tours WHERE event_id = $1", id.get())
             .execute(&mut *tx)
             .await?;
 
-        sqlx::query!("DELETE FROM shopping_tours WHERE event_id = $1", id)
+        sqlx::query!("DELETE FROM food_prep WHERE event_id = $1", id.get())
             .execute(&mut *tx)
             .await?;
 
-        sqlx::query!("DELETE FROM food_prep WHERE event_id = $1", id)
-            .execute(&mut *tx)
-            .await?;
-
-        sqlx::query!("DELETE FROM event_inventories WHERE event_id = $1", id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query!(
+            "DELETE FROM event_inventories WHERE event_id = $1",
+            id.get()
+        )
+        .execute(&mut *tx)
+        .await?;
 
         // Finally delete the event
-        let result = sqlx::query!("DELETE FROM events WHERE event_id = $1", id)
+        let result = sqlx::query!("DELETE FROM events WHERE event_id = $1", id.get())
             .execute(&mut *tx)
             .await?;
 
@@ -140,23 +152,23 @@ impl EventOps {
     }
 
     /// Duplicates an event, including all associated data
-    pub async fn duplicate(&self, id: i32, new_group_id: i32) -> Result<i32> {
+    pub async fn duplicate(&self, id: EventId, new_group_id: GroupId) -> Result<EventId> {
         let mut tx = self.pool.begin().await?;
 
         // Get the event details
         let event = sqlx::query_as!(
             Event,
             r#"
-            SELECT 
-                event_id as id,
+            SELECT
+                event_id as "id: EventId",
                 event_name as name,
                 comment,
-                group_id,
-                budget
-            FROM events 
+                group_id as "group_id: GroupId",
+                budget as "budget: Money"
+            FROM events
             WHERE event_id = $1
             "#,
-            id
+            id.get()
         )
         .fetch_one(&mut *tx)
         .await?;
@@ -169,15 +181,15 @@ impl EventOps {
             r#"
             INSERT INTO events (event_name, comment, budget, group_id)
             VALUES ($1, $2, $3, $4)
-            RETURNING event_id as id, event_name as name, comment, budget, group_id
+            RETURNING event_id as "id: EventId", event_name as name, comment, budget as "budget: Money", group_id as "group_id: GroupId"
             "#,
             new_name,
             event.comment,
-            event.budget,
-            new_group_id,
+            event.budget.clone().map(|m| m.into_raw()),
+            new_group_id.get(),
         )
-        .fetch_one(&mut *tx)
-        .await?;
+            .fetch_one(&mut *tx)
+            .await?;
 
         // Duplicate meal plans
         let meals = crate::ops::meals::MealOps::new(self.pool.clone())
@@ -190,12 +202,12 @@ impl EventOps {
                         INSERT INTO event_meals (event_id, recipe_id, place_id, start_time, end_time, energy_per_serving, servings, comment)
                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     "#,
-                    new_event.id,
-                    meal.recipe_id,
-                    meal.place_id,
+                    new_event.id.get(),
+                    meal.recipe_id.get(),
+                    meal.place_id.get(),
                     meal.start_time,
                     meal.end_time,
-                    meal.energy,
+                    meal.energy.get().clone(),
                     meal.servings,
                     meal.comment,
                 )
@@ -207,14 +219,14 @@ impl EventOps {
         let overrides = sqlx::query_as!(
             SourceOverride,
             r#"
-            SELECT event_id, ingredient_source_id as source_id
+            SELECT event_id as "event_id: EventId", ingredient_source_id as "source_id: IngredientSourceId"
             FROM event_source_overrides
             WHERE event_id = $1
             "#,
-            id
+            id.get()
         )
-        .fetch_all(&mut *tx)
-        .await?;
+            .fetch_all(&mut *tx)
+            .await?;
 
         for source_override in overrides {
             sqlx::query!(
@@ -222,8 +234,8 @@ impl EventOps {
                 INSERT INTO event_source_overrides (event_id, ingredient_source_id)
                 VALUES ($1, $2)
                 "#,
-                new_event.id,
-                source_override.source_id,
+                new_event.id.get(),
+                source_override.source_id.get(),
             )
             .execute(&mut *tx)
             .await?;
@@ -233,14 +245,14 @@ impl EventOps {
         let tours = sqlx::query_as!(
             ShoppingTour,
             r#"
-            SELECT tour_id as id, event_id, tour_date, store_id, name as store_name
+            SELECT tour_id as "id: ShoppingTourId", event_id as "event_id: EventId", tour_date, store_id as "store_id: StoreId", name as store_name
             FROM shopping_tours JOIN stores USING(store_id)
             WHERE event_id = $1
             "#,
-            id
+            id.get()
         )
-        .fetch_all(&mut *tx)
-        .await?;
+            .fetch_all(&mut *tx)
+            .await?;
 
         for tour in tours {
             sqlx::query!(
@@ -248,9 +260,9 @@ impl EventOps {
                 INSERT INTO shopping_tours (event_id, tour_date, store_id)
                 VALUES ($1, $2, $3)
                 "#,
-                new_event.id,
+                new_event.id.get(),
                 tour.tour_date,
-                tour.store_id,
+                tour.store_id.get(),
             )
             .execute(&mut *tx)
             .await?;
@@ -260,14 +272,14 @@ impl EventOps {
         let preps = sqlx::query_as!(
             FoodPrep,
             r#"
-            SELECT prep_id as id, event_id, recipe_id, prep_date, use_from, use_until
+            SELECT prep_id as "id: FoodPrepId", event_id as "event_id: EventId", recipe_id as "recipe_id: RecipeId", prep_date, use_from, use_until
             FROM food_prep
             WHERE event_id = $1
             "#,
-            id
+            id.get()
         )
-        .fetch_all(&mut *tx)
-        .await?;
+            .fetch_all(&mut *tx)
+            .await?;
 
         for prep in preps {
             sqlx::query!(
@@ -275,8 +287,8 @@ impl EventOps {
                 INSERT INTO food_prep (event_id, recipe_id, prep_date, use_from, use_until)
                 VALUES ($1, $2, $3, $4, $5)
                 "#,
-                new_event.id,
-                prep.recipe_id,
+                new_event.id.get(),
+                prep.recipe_id.get(),
                 prep.prep_date,
                 prep.use_from,
                 prep.use_until,
@@ -289,11 +301,11 @@ impl EventOps {
         let inventories = sqlx::query_as!(
             EventInventory,
             r#"
-            SELECT event_id, inventory_id
+            SELECT event_id as "event_id: EventId", inventory_id as "inventory_id: InventoryId"
             FROM event_inventories
             WHERE event_id = $1
             "#,
-            id
+            id.get()
         )
         .fetch_all(&mut *tx)
         .await?;
@@ -304,8 +316,8 @@ impl EventOps {
                 INSERT INTO event_inventories (event_id, inventory_id)
                 VALUES ($1, $2)
                 "#,
-                new_event.id,
-                inventory.inventory_id,
+                new_event.id.get(),
+                inventory.inventory_id.get(),
             )
             .execute(&mut *tx)
             .await?;
@@ -317,16 +329,16 @@ impl EventOps {
     }
 
     /// Lists events visible to a user (those whose group the user belongs to)
-    pub async fn list_for_user(&self, user_id: i64) -> Result<Vec<Event>> {
+    pub async fn list_for_user(&self, user_id: UserId) -> Result<Vec<Event>> {
         let records = sqlx::query_as!(
             Event,
             r#"
             SELECT
-                event_id as id,
+                event_id as "id: EventId",
                 event_name as name,
                 events.comment,
-                group_id,
-                budget
+                group_id as "group_id: GroupId",
+                budget as "budget: Money"
             FROM events
             LEFT JOIN event_meals USING (event_id)
             WHERE group_id IN (
@@ -335,7 +347,7 @@ impl EventOps {
             GROUP BY event_id, event_name, events.comment, group_id, budget
             ORDER BY MIN(start_time) DESC
             "#,
-            user_id
+            user_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -348,12 +360,12 @@ impl EventOps {
         let records = sqlx::query_as!(
             Event,
             r#"
-            SELECT 
-                event_id as id,
+            SELECT
+                event_id as "id: EventId",
                 event_name as name,
                 events.comment,
-                group_id,
-                budget
+                group_id as "group_id: GroupId",
+                budget as "budget: Money"
             FROM events LEFT JOIN event_meals USING (event_id)
             GROUP BY event_id, event_name, events.comment, group_id, budget
             ORDER BY MIN(start_time) DESC
@@ -372,14 +384,14 @@ impl EventOps {
             r#"
             INSERT INTO shopping_tours (event_id, tour_date, store_id)
             VALUES ($1, $2, $3)
-            RETURNING tour_id as id, event_id, tour_date, store_id, (SELECT name FROM stores WHERE store_id = $3) as store_name
+            RETURNING tour_id as "id: ShoppingTourId", event_id as "event_id: EventId", tour_date, store_id as "store_id: StoreId", (SELECT name FROM stores WHERE store_id = $3) as store_name
             "#,
-            tour.event_id,
+            tour.event_id.get(),
             tour.tour_date,
-            tour.store_id,
+            tour.store_id.get(),
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(record)
     }
@@ -392,26 +404,26 @@ impl EventOps {
             UPDATE shopping_tours
             SET tour_date = $2, store_id = $3
             WHERE tour_id = $1
-            RETURNING tour_id as id, event_id, tour_date, store_id, $4 as store_name
+            RETURNING tour_id as "id: ShoppingTourId", event_id as "event_id: EventId", tour_date, store_id as "store_id: StoreId", $4 as store_name
             "#,
-            tour.id,
+            tour.id.get(),
             tour.tour_date,
-            tour.store_id,
+            tour.store_id.get(),
             tour.store_name,
         )
-        .fetch_optional(&*self.pool)
-        .await?
-        .ok_or(Error::NotFound {
-            entity: "ShoppingTour",
-            id: tour.id.to_string(),
-        })?;
+            .fetch_optional(&*self.pool)
+            .await?
+            .ok_or(Error::NotFound {
+                entity: "ShoppingTour",
+                id: tour.id.to_string(),
+            })?;
 
         Ok(record)
     }
 
     /// Deletes a shopping tour
-    pub async fn delete_shopping_tour(&self, id: i32) -> Result<()> {
-        let result = sqlx::query!("DELETE FROM shopping_tours WHERE tour_id = $1", id)
+    pub async fn delete_shopping_tour(&self, id: ShoppingTourId) -> Result<()> {
+        let result = sqlx::query!("DELETE FROM shopping_tours WHERE tour_id = $1", id.get())
             .execute(&*self.pool)
             .await?;
 
@@ -426,37 +438,37 @@ impl EventOps {
     }
 
     /// Gets all shopping tours for an event
-    pub async fn get_shopping_tours(&self, event_id: i32) -> Result<Vec<ShoppingTour>> {
+    pub async fn get_shopping_tours(&self, event_id: EventId) -> Result<Vec<ShoppingTour>> {
         let records = sqlx::query_as!(
             ShoppingTour,
             r#"
-            SELECT tour_id as id, event_id, tour_date, store_id, name as store_name
+            SELECT tour_id as "id: ShoppingTourId", event_id as "event_id: EventId", tour_date, store_id as "store_id: StoreId", name as store_name
             FROM shopping_tours JOIN stores USING(store_id)
             WHERE event_id = $1
             ORDER BY tour_date
             "#,
-            event_id
+            event_id.get()
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(records)
     }
 
     /// Gets shopping tour by id
-    pub async fn get_shopping_tour(&self, tour_id: i32) -> Result<ShoppingTour> {
+    pub async fn get_shopping_tour(&self, tour_id: ShoppingTourId) -> Result<ShoppingTour> {
         let records = sqlx::query_as!(
             ShoppingTour,
             r#"
-            SELECT tour_id as id, event_id, tour_date, store_id, name as store_name
+            SELECT tour_id as "id: ShoppingTourId", event_id as "event_id: EventId", tour_date, store_id as "store_id: StoreId", name as store_name
             FROM shopping_tours JOIN stores USING(store_id)
             WHERE tour_id = $1
             ORDER BY tour_date
             "#,
-            tour_id
+            tour_id.get()
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(records)
     }
@@ -469,13 +481,13 @@ impl EventOps {
     /// run a metro sync to refresh the cache.
     pub async fn resolve_metro_article_numbers(
         &self,
-        tour_id: i32,
-    ) -> Result<std::collections::HashMap<i32, String>> {
+        tour_id: ShoppingTourId,
+    ) -> Result<std::collections::HashMap<IngredientId, String>> {
         use crate::ops::metro_sync::METRO_STORE_ID;
 
         let rows = sqlx::query!(
             r#"
-            SELECT DISTINCT s.ingredient_id, mc.article_number AS "article_number!"
+            SELECT DISTINCT s.ingredient_id as "ingredient_id: IngredientId", mc.article_number AS "article_number!"
             FROM shopping_list sl
             JOIN ingredient_sources s ON s.ingredient_id = sl.ingredient_id
             JOIN metro_categories mc ON mc.ingredient_source_id = s.ingredient_source_id
@@ -483,11 +495,11 @@ impl EventOps {
               AND s.store_id = $2
               AND mc.article_number IS NOT NULL
             "#,
-            tour_id,
+            tour_id.get(),
             METRO_STORE_ID,
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(rows
             .into_iter()
@@ -509,18 +521,18 @@ impl EventOps {
     /// by category then name, matching the shopping-list ordering.
     pub async fn tour_shopping_list_with_usage(
         &self,
-        tour_id: i32,
+        tour_id: ShoppingTourId,
     ) -> Result<Vec<ShoppingListItemWithUsage>> {
         // One row per (ingredient, recipe). price_per_unit and category repeat
         // across an ingredient's recipe rows (they're ingredient-level); weight
         // is the recipe's share.
         let rows = sqlx::query!(
             r#"
-            SELECT sti.ingredient_id AS "ingredient_id!",
+            SELECT sti.ingredient_id AS "ingredient_id!: IngredientId",
                    sti.ingredient AS "ingredient_name!",
                    sti.recipe AS "recipe!",
-                   SUM(sti.weight) AS "weight!",
-                   beis.price AS price_per_unit,
+                   SUM(sti.weight) AS "weight?: Amount",
+                   beis.price as "price_per_unit: Money",
                    mc.category AS "category?"
             FROM shopping_tour_ingredients sti
             LEFT JOIN best_event_ingredient_sources beis
@@ -531,18 +543,22 @@ impl EventOps {
             ORDER BY COALESCE(mc.category, ''), sti.ingredient,
                      SUM(sti.weight) DESC, sti.recipe
             "#,
-            tour_id,
+            tour_id.get(),
         )
         .fetch_all(&*self.pool)
         .await?;
 
         // Aggregate recipe-grain rows into per-ingredient items, preserving the
         // SQL ordering (category, name) for items and (desc weight) for recipes.
+        // A `None` weight (unknown unit weight) taints the ingredient total.
         let mut items: Vec<ShoppingListItemWithUsage> = Vec::new();
         for row in rows {
             match items.last_mut() {
                 Some(item) if item.ingredient_id == row.ingredient_id => {
-                    item.weight += &row.weight;
+                    item.weight = match (item.weight.take(), row.weight.clone()) {
+                        (Some(sum), Some(part)) => Some(sum + part),
+                        _ => None,
+                    };
                     item.recipe_usage.push((row.recipe, row.weight));
                 }
                 _ => items.push(ShoppingListItemWithUsage {
@@ -559,35 +575,38 @@ impl EventOps {
         }
         // Finalize price: per-unit × summed weight (matches the shopping_list
         // view's `SUM(weight) * price`). A negative sentinel (-1) means "no
-        // source priced", which we surface as None.
+        // source priced", which we surface as None. Unknown weight → None.
         for item in &mut items {
             item.price = item.price.as_ref().and_then(|per_unit| {
-                (per_unit >= &BigDecimal::from(0)).then(|| per_unit * &item.weight)
+                if per_unit < &Money::from(0) {
+                    return None;
+                }
+                item.weight.as_ref().map(|weight| per_unit * weight)
             });
         }
         Ok(items)
     }
 
     /// Gets the shopping list for a specific tour
-    pub async fn get_shopping_list(&self, tour_id: i32) -> Result<Vec<ShoppingListItem>> {
+    pub async fn get_shopping_list(&self, tour_id: ShoppingTourId) -> Result<Vec<ShoppingListItem>> {
         let records = sqlx::query_as!(
             ShoppingListItem,
             r#"
-            SELECT 
-                event_id as "event_id!",
+            SELECT
+                event_id as "event_id!: EventId",
                 event_name as "event_name!",
-                ingredient_id as "ingredient_id!",
+                ingredient_id as "ingredient_id!: IngredientId",
                 ingredient as "ingredient_name!",
-                weight as "weight!",
-                energy as "energy!",
-                price,
-                tour_id,
+                weight as "weight: Amount",
+                energy as "energy: Amount",
+                price as "price: Money",
+                tour_id as "tour_id: ShoppingTourId",
                 category
             FROM shopping_list
             WHERE tour_id = $1
             ORDER BY COALESCE(category, ''), ingredient
             "#,
-            tour_id
+            tour_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -596,25 +615,28 @@ impl EventOps {
     }
 
     /// Gets all shopping list items for an event
-    pub async fn get_event_shopping_list(&self, event_id: i32) -> Result<Vec<ShoppingListItem>> {
+    pub async fn get_event_shopping_list(
+        &self,
+        event_id: EventId,
+    ) -> Result<Vec<ShoppingListItem>> {
         let records = sqlx::query_as!(
             ShoppingListItem,
             r#"
-            SELECT 
-                event_id as "event_id!",
+            SELECT
+                event_id as "event_id!: EventId",
                 event_name as "event_name!",
-                ingredient_id as "ingredient_id!",
+                ingredient_id as "ingredient_id!: IngredientId",
                 ingredient as "ingredient_name!",
-                weight as "weight!",
-                energy as "energy!",
-                price,
-                tour_id,
+                weight as "weight: Amount",
+                energy as "energy: Amount",
+                price as "price: Money",
+                tour_id as "tour_id: ShoppingTourId",
                 category
             FROM shopping_list
             WHERE event_id = $1
             ORDER BY COALESCE(category, ''), ingredient
             "#,
-            event_id
+            event_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -625,15 +647,15 @@ impl EventOps {
     /// Gets all ingredients for an event that don't have a shopping tour
     pub async fn get_ingredients_without_tour(
         &self,
-        event_id: i32,
+        event_id: EventId,
     ) -> Result<Vec<IngredientWithoutTour>> {
         let items = sqlx::query_as!(
             IngredientWithoutTour,
             r#"
-        SELECT 
-            ingredient_id as "ingredient_id!",
+        SELECT
+            ingredient_id as "ingredient_id!: IngredientId",
             ingredient as "ingredient_name!",
-            sum(weight) as "weight",
+            sum(weight) as "weight?: Amount",
             coalesce(sn.name, 'No Store') as "store_name!"
         FROM shopping_tour_ingredients_without_tour
         LEFT JOIN stores sn USING (store_id)
@@ -641,7 +663,7 @@ impl EventOps {
         GROUP BY event_id, ingredient_id, ingredient, store_id, sn.name
         ORDER BY ingredient
         "#,
-            event_id
+            event_id.get()
         )
         .fetch_all(&*self.pool)
         .await
@@ -659,16 +681,16 @@ impl EventOps {
                 event_id, recipe_id, prep_date, use_from, use_until
             )
             VALUES ($1, $2, $3, $4, $5)
-            RETURNING 
-                prep_id as id,
-                event_id,
-                recipe_id,
+            RETURNING
+                prep_id as "id: FoodPrepId",
+                event_id as "event_id: EventId",
+                recipe_id as "recipe_id: RecipeId",
                 prep_date,
                 use_from,
                 use_until
             "#,
-            prep.event_id,
-            prep.recipe_id,
+            prep.event_id.get(),
+            prep.recipe_id.get(),
             prep.prep_date,
             prep.use_from,
             prep.use_until,
@@ -685,22 +707,22 @@ impl EventOps {
             FoodPrep,
             r#"
             UPDATE food_prep
-            SET 
+            SET
                 recipe_id = $2,
                 prep_date = $3,
                 use_from = $4,
                 use_until = $5
             WHERE prep_id = $1
-            RETURNING 
-                prep_id as id,
-                event_id,
-                recipe_id,
+            RETURNING
+                prep_id as "id: FoodPrepId",
+                event_id as "event_id: EventId",
+                recipe_id as "recipe_id: RecipeId",
                 prep_date,
                 use_from,
                 use_until
             "#,
-            prep.id,
-            prep.recipe_id,
+            prep.id.get(),
+            prep.recipe_id.get(),
             prep.prep_date,
             prep.use_from,
             prep.use_until,
@@ -714,21 +736,21 @@ impl EventOps {
 
         Ok(record)
     }
-    pub async fn get_food_prep(&self, prep_id: i32) -> Result<FoodPrep> {
+    pub async fn get_food_prep(&self, prep_id: FoodPrepId) -> Result<FoodPrep> {
         let record = sqlx::query_as!(
             FoodPrep,
             r#"
             SELECT
-                prep_id as id,
-                event_id,
-                recipe_id,
+                prep_id as "id: FoodPrepId",
+                event_id as "event_id: EventId",
+                recipe_id as "recipe_id: RecipeId",
                 prep_date,
                 use_from,
                 use_until
             FROM food_prep
             WHERE prep_id = $1
             "#,
-            prep_id,
+            prep_id.get(),
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -746,14 +768,14 @@ impl EventOps {
     /// meals — without a meal there is no anchor to shift from.
     pub async fn shift_event_times(
         &self,
-        event_id: i32,
+        event_id: EventId,
         new_first_meal_start: OffsetDateTime,
     ) -> Result<time::Duration> {
         let mut tx = self.pool.begin().await?;
 
         let earliest: Option<OffsetDateTime> = sqlx::query_scalar!(
             "SELECT MIN(start_time) FROM event_meals WHERE event_id = $1",
-            event_id,
+            event_id.get(),
         )
         .fetch_one(&mut *tx)
         .await?;
@@ -771,23 +793,23 @@ impl EventOps {
         // no special-casing.
         sqlx::query!(
             "UPDATE event_meals SET start_time = start_time + $2, end_time = end_time + $2 WHERE event_id = $1",
-            event_id,
+            event_id.get(),
             delta as _,
         )
-        .execute(&mut *tx)
-        .await?;
+            .execute(&mut *tx)
+            .await?;
 
         sqlx::query!(
             "UPDATE food_prep SET prep_date = prep_date + $2, use_from = use_from + $2, use_until = use_until + $2 WHERE event_id = $1",
-            event_id,
+            event_id.get(),
             delta as _,
         )
-        .execute(&mut *tx)
-        .await?;
+            .execute(&mut *tx)
+            .await?;
 
         sqlx::query!(
             "UPDATE shopping_tours SET tour_date = tour_date + $2 WHERE event_id = $1",
-            event_id,
+            event_id.get(),
             delta as _,
         )
         .execute(&mut *tx)
@@ -798,8 +820,8 @@ impl EventOps {
     }
 
     /// Deletes a food preparation task
-    pub async fn delete_food_prep(&self, id: i32) -> Result<()> {
-        let result = sqlx::query!("DELETE FROM food_prep WHERE prep_id = $1", id)
+    pub async fn delete_food_prep(&self, id: FoodPrepId) -> Result<()> {
+        let result = sqlx::query!("DELETE FROM food_prep WHERE prep_id = $1", id.get())
             .execute(&*self.pool)
             .await?;
 
@@ -814,14 +836,14 @@ impl EventOps {
     }
 
     /// Gets all food preparation tasks for an event
-    pub async fn get_food_prep_tasks(&self, event_id: i32) -> Result<Vec<FoodPrep>> {
+    pub async fn get_food_prep_tasks(&self, event_id: EventId) -> Result<Vec<FoodPrep>> {
         let records = sqlx::query_as!(
             FoodPrep,
             r#"
-            SELECT 
-                prep_id as id,
-                event_id,
-                recipe_id,
+            SELECT
+                prep_id as "id: FoodPrepId",
+                event_id as "event_id: EventId",
+                recipe_id as "recipe_id: RecipeId",
                 prep_date,
                 use_from,
                 use_until
@@ -829,7 +851,7 @@ impl EventOps {
             WHERE event_id = $1
             ORDER BY prep_date
             "#,
-            event_id
+            event_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -838,10 +860,10 @@ impl EventOps {
     }
 
     /// Manages source overrides for an event
-    pub async fn set_source_override(
+    pub async fn set_source_default_override(
         &self,
-        event_id: i32,
-        source_id: i32,
+        event_id: EventId,
+        source_id: IngredientSourceId,
     ) -> Result<SourceOverride> {
         let record = sqlx::query_as!(
             SourceOverride,
@@ -850,26 +872,30 @@ impl EventOps {
             VALUES ($1, $2)
             ON CONFLICT (event_id, ingredient_source_id) DO UPDATE
             SET event_id = $1
-            RETURNING event_id, ingredient_source_id as source_id
+            RETURNING event_id as "event_id: EventId", ingredient_source_id as "source_id: IngredientSourceId"
             "#,
-            event_id,
-            source_id,
+            event_id.get(),
+            source_id.get(),
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(record)
     }
 
     /// Removes a source override
-    pub async fn delete_source_override(&self, event_id: i32, source_id: i32) -> Result<()> {
+    pub async fn delete_source_override(
+        &self,
+        event_id: EventId,
+        source_id: IngredientSourceId,
+    ) -> Result<()> {
         let result = sqlx::query!(
             r#"
-            DELETE FROM event_source_overrides 
+            DELETE FROM event_source_overrides
             WHERE event_id = $1 AND ingredient_source_id = $2
             "#,
-            event_id,
-            source_id,
+            event_id.get(),
+            source_id.get(),
         )
         .execute(&*self.pool)
         .await?;
@@ -885,16 +911,16 @@ impl EventOps {
     }
 
     /// Gets all source overrides for an event with detailed information
-    pub async fn get_source_overrides(&self, event_id: i32) -> Result<Vec<SourceOverrideView>> {
+    pub async fn get_source_overrides(&self, event_id: EventId) -> Result<Vec<SourceOverrideView>> {
         let records = sqlx::query_as!(
             SourceOverrideView,
             r#"
-            SELECT 
-                event_id,
-                ingredient_id,
-                ingredient_sources.ingredient_source_id as source_id,
+            SELECT
+                event_id as "event_id: EventId",
+                ingredient_id as "ingredient_id: IngredientId",
+                ingredient_sources.ingredient_source_id as "source_id: IngredientSourceId",
                 ingredients.name as ingredient_name,
-                stores.store_id,
+                stores.store_id as "store_id: StoreId",
                 stores.name as store_name
             FROM event_source_overrides
             INNER JOIN ingredient_sources USING (ingredient_source_id)
@@ -903,7 +929,7 @@ impl EventOps {
             WHERE event_id = $1
             ORDER BY ingredients.name
             "#,
-            event_id
+            event_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -912,16 +938,20 @@ impl EventOps {
     }
 
     /// Associates an inventory with an event
-    pub async fn add_inventory(&self, event_id: i32, inventory_id: i32) -> Result<EventInventory> {
+    pub async fn add_inventory(
+        &self,
+        event_id: EventId,
+        inventory_id: InventoryId,
+    ) -> Result<EventInventory> {
         let record = sqlx::query_as!(
             EventInventory,
             r#"
             INSERT INTO event_inventories (event_id, inventory_id)
             VALUES ($1, $2)
-            RETURNING event_id, inventory_id
+            RETURNING event_id as "event_id: EventId", inventory_id as "inventory_id: InventoryId"
             "#,
-            event_id,
-            inventory_id
+            event_id.get(),
+            inventory_id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -930,14 +960,18 @@ impl EventOps {
     }
 
     /// Removes an inventory association from an event
-    pub async fn remove_inventory(&self, event_id: i32, inventory_id: i32) -> Result<()> {
+    pub async fn remove_inventory(
+        &self,
+        event_id: EventId,
+        inventory_id: InventoryId,
+    ) -> Result<()> {
         let result = sqlx::query!(
             r#"
-            DELETE FROM event_inventories 
+            DELETE FROM event_inventories
             WHERE event_id = $1 AND inventory_id = $2
             "#,
-            event_id,
-            inventory_id
+            event_id.get(),
+            inventory_id.get()
         )
         .execute(&*self.pool)
         .await?;
@@ -953,16 +987,16 @@ impl EventOps {
     }
 
     /// Gets all inventories associated with an event
-    pub async fn get_inventories(&self, event_id: i32) -> Result<Vec<EventInventory>> {
+    pub async fn get_inventories(&self, event_id: EventId) -> Result<Vec<EventInventory>> {
         let records = sqlx::query_as!(
             EventInventory,
             r#"
-            SELECT event_id, inventory_id
+            SELECT event_id as "event_id: EventId", inventory_id as "inventory_id: InventoryId"
             FROM event_inventories
             WHERE event_id = $1
             ORDER BY inventory_id
             "#,
-            event_id
+            event_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -971,14 +1005,14 @@ impl EventOps {
     }
 
     /// Calculates the total cost for an event
-    pub async fn get_total_cost(&self, event_id: i32) -> Result<BigDecimal> {
+    pub async fn get_total_cost(&self, event_id: EventId) -> Result<Money> {
         let record = sqlx::query!(
             r#"
-            SELECT COALESCE(SUM(price), 0) as "total!"
+            SELECT COALESCE(SUM(price), 0) as "total!: Money"
             FROM event_ingredients
             WHERE event_id = $1
             "#,
-            event_id
+            event_id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -989,19 +1023,16 @@ impl EventOps {
     /// Picks the event to show by default at the given time: an ongoing event
     /// (window contains `at`) ending soonest, else the soonest upcoming event.
     /// Fully-past events are never returned; `None` means nothing is scheduled.
-    pub async fn get_current_or_upcoming_event(
-        &self,
-        at: OffsetDateTime,
-    ) -> Result<Option<Event>> {
+    pub async fn get_current_or_upcoming_event(&self, at: OffsetDateTime) -> Result<Option<Event>> {
         let record = sqlx::query_as!(
             Event,
             r#"
             SELECT
-                e.event_id as id,
+                e.event_id as "id: EventId",
                 e.event_name as name,
                 e.comment,
-                e.group_id,
-                e.budget
+                e.group_id as "group_id: GroupId",
+                e.budget as "budget: Money"
             FROM events e
             LEFT JOIN event_meals em ON e.event_id = em.event_id
             LEFT JOIN food_prep fp ON e.event_id = fp.event_id
@@ -1034,7 +1065,7 @@ impl EventOps {
                 e.event_name as name,
                 e.comment,
                 e.group_id,
-                e.budget
+                e.budget as "budget: Money"
             FROM events e
             LEFT JOIN event_meals em ON e.event_id = em.event_id
             LEFT JOIN food_prep fp ON e.event_id = fp.event_id
@@ -1056,12 +1087,12 @@ impl EventOps {
         let records = sqlx::query_as!(
             Event,
             r#"
-            SELECT 
+            SELECT
                 event_id as id,
                 event_name as name,
                 comment,
                 group_id,
-                budget
+                budget as "budget: Money"
             FROM events
             WHERE LOWER(event_name) LIKE $1
             ORDER BY event_name

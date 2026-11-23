@@ -1,4 +1,6 @@
-use bigdecimal::BigDecimal;
+use crate::entities::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId};
+
+use crate::entities::types::amount::Amount;
 use serde::{Deserialize, Serialize};
 use time::Duration;
 
@@ -26,10 +28,10 @@ impl RecipeKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recipe {
-    pub id: i32,
+    pub id: RecipeId,
     pub name: String,
     pub comment: Option<String>,
-    pub group_id: i32,
+    pub group_id: GroupId,
     /// True when every ingredient amount has been weighed and verified accurate
     /// to the gram ("eingewogen"). Shown as a warning in the edit tab while
     /// false and as a badge on the printed recipe sheet once true.
@@ -39,18 +41,18 @@ pub struct Recipe {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecipeIngredient {
-    pub recipe_id: i32,
-    pub ingredient_id: i32,
-    pub amount: BigDecimal,
-    pub unit_id: i32,
+    pub recipe_id: RecipeId,
+    pub ingredient_id: IngredientId,
+    pub amount: Amount,
+    pub unit_id: UnitId,
     pub name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct RecipeStep {
-    pub id: i32,
-    pub recipe_id: i32,
-    pub order: f64,
+    pub id: RecipeStepId,
+    pub recipe_id: RecipeId,
+    pub order: f64, // TODO: use a proper ordering type instead of f64
     pub name: String,
     pub description: String,
     pub fixed_duration: Duration,  // duration in seconds
@@ -59,39 +61,39 @@ pub struct RecipeStep {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecipeMetaIngredient {
-    pub parent_id: i32,
-    pub child_id: i32,
-    pub weight: BigDecimal,
+    pub parent_id: RecipeId,
+    pub child_id: RecipeId,
+    pub weight: Amount,
     pub name: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RecipeStats {
-    pub recipe_id: i32,
-    pub weight: BigDecimal,
-    pub energy: BigDecimal,
+    pub recipe_id: RecipeId,
+    pub weight: Amount,
+    pub energy: Amount,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubRecipe {
-    pub subrecipe_id: i32,
+    pub subrecipe_id: RecipeId,
     pub recipe: String,
     pub ingredient: String,
     pub subrecipe: String,
-    pub weight: BigDecimal,
+    pub weight: Amount,
     pub is_subrecipe: bool,
-    pub recipe_id: i32,
+    pub recipe_id: RecipeId,
     pub subrecipe_hierarchy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedRecipe {
-    pub recipe_id: i32,
+    pub recipe_id: RecipeId,
     pub recipe_name: String,
-    pub ingredient_id: i32,
+    pub ingredient_id: IngredientId,
     pub ingredient_name: String,
-    pub weight: BigDecimal,
-    pub subrecipe_id: Option<i32>,
+    pub weight: Amount,
+    pub subrecipe_id: Option<RecipeId>,
     pub subrecipe_name: Option<String>,
     pub hierarchy_path: Option<String>,
 }
@@ -100,27 +102,27 @@ pub struct ResolvedRecipe {
 /// view. Used by list endpoints that show the energy density (kJ/g).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecipeListItem {
-    pub id: i32,
+    pub id: RecipeId,
     pub name: String,
     pub comment: Option<String>,
-    pub group_id: i32,
+    pub group_id: GroupId,
     pub kind: RecipeKind,
     pub weighed_in: bool,
     /// Total resolved ingredient weight in kg (0 for empty recipes).
-    pub weight: BigDecimal,
+    pub weight: Amount,
     /// Total resolved energy in kJ.
-    pub energy: BigDecimal,
+    pub energy: Amount,
 }
 
 /// A node of the recipe recursion tree: a recipe together with its direct
 /// ingredients (resolved weights) and its used sub-recipes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecipeTreeNode {
-    pub recipe_id: i32,
+    pub recipe_id: RecipeId,
     pub name: String,
     pub kind: RecipeKind,
     /// kg of this sub-recipe used by its parent (`None` for the root).
-    pub weight: Option<BigDecimal>,
+    pub weight: Option<Amount>,
     /// Direct ingredients of this recipe, resolved to kg where possible.
     pub ingredients: Vec<RecipeTreeIngredient>,
     /// Sub-recipes used by this recipe.
@@ -131,14 +133,14 @@ pub struct RecipeTreeNode {
 /// unit-converted weight the event views use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecipeTreeIngredient {
-    pub ingredient_id: i32,
+    pub ingredient_id: IngredientId,
     pub name: Option<String>,
     /// Raw amount as entered on the recipe.
-    pub amount: BigDecimal,
-    pub unit_id: i32,
+    pub amount: Amount,
+    pub unit_id: UnitId,
     /// Unit name for display ("kg", "Stück", "Liter", …).
     pub unit_name: Option<String>,
     /// Unit-converted weight (kg) from the `resolved_recipes` view;
     /// `None` when no conversion exists.
-    pub weight: Option<BigDecimal>,
+    pub weight: Option<Amount>,
 }
