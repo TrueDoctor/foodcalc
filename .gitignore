@@ -1,10 +1,19 @@
-/target
-target
+# Rust & SQLx
+target/
+.sqlx/
+
+# Node & Frontend
+server/node_modules/
+
+# Generated TeX & Recipe Exports
 tex
 recipes/*.tex
 recipes/out/
-server/node_modules
-status-api/feedback.log
-.env
 
+# Environment & Logs
+.env
+status-api/feedback.log
+
+# IDEs & Local Tooling
+.idea/
 .playwright-mcp/
