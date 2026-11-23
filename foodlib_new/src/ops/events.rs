@@ -673,7 +673,7 @@ impl EventOps {
     }
 
     /// Adds a food preparation task
-    pub async fn add_food_prep(&self, prep: FoodPrep) -> Result<FoodPrep> {
+    pub async fn add_food_prep(&self, prep: CreateFoodPrep) -> Result<FoodPrep> {
         let record = sqlx::query_as!(
             FoodPrep,
             r#"

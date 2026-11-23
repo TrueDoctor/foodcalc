@@ -1,9 +1,14 @@
 use crate::FoodLib;
+use crate::{
+    frontend::{icons, move_group, MResponse},
+    MyAppState,
+};
 use axum::{
     extract::{Form, Path},
     routing::{delete, put},
 };
 use bigdecimal::ToPrimitive;
+use foodlib_new::recipe::RecipeData;
 use foodlib_new::{
     auth_context::AuthCtx,
     entities::types::amount::Amount,
@@ -14,10 +19,6 @@ use foodlib_new::{
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::Duration;
-use crate::{
-    frontend::{icons, move_group, MResponse},
-    MyAppState,
-};
 
 pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -114,7 +115,9 @@ impl From<UpdateRecipeStepHeader> for RecipeStep {
             name: value.step_name,
             description: value.step_description,
             fixed_duration: Duration::seconds((value.fixed_duration_minutes * 60.0).round() as i64),
-            duration_per_kg: Duration::seconds((value.duration_per_kg_minutes * 60.0).round() as i64),
+            duration_per_kg: Duration::seconds(
+                (value.duration_per_kg_minutes * 60.0).round() as i64
+            ),
             recipe_id: value.recipe_id,
         }
     }
@@ -126,20 +129,23 @@ pub async fn handle_name_change(
     Form(data): Form<UpdateNameHeader>,
 ) -> Result<(), foodlib_new::Error> {
     ctx.assert_can_edit_recipe(data.recipe_id).await?;
+
     let current = foodlib.recipes().get(data.recipe_id).await?;
     if current.group_id != data.group_id {
         move_group::assert_can_move_to(&ctx, data.group_id)?;
     }
+
     foodlib
         .recipes()
-        .update(foodlib_new::recipe::Recipe {
-            id: data.recipe_id,
-            name: data.name,
-            comment: Some(data.comment),
-            group_id: GroupId(-1), // Placeholder; ops-level update ignores group_id
-            weighed_in: data.weighed_in,
-            kind: current.kind,
-        })
+        .update(
+            data.recipe_id,
+            RecipeData {
+                name: data.name,
+                comment: Some(data.comment),
+                weighed_in: data.weighed_in,
+                kind: current.kind,
+            },
+        )
         .await?;
     if current.group_id != data.group_id {
         foodlib
@@ -348,7 +354,10 @@ fn recipe_ingredient_add_row(
 
 /// First-row inline add for the recipe-subrecipes table. Sentinel id -1; the
 /// commit handler resolves the subrecipe id by name lookup.
-fn recipe_subrecipe_add_row(recipe_id: RecipeId, all_recipes: &[foodlib_new::recipe::Recipe]) -> Markup {
+fn recipe_subrecipe_add_row(
+    recipe_id: RecipeId,
+    all_recipes: &[foodlib_new::recipe::Recipe],
+) -> Markup {
     let list_id = format!("subrecipe-add-datalist-{}", recipe_id);
     html! {
         tr id="recipe-subrecipe--1" {

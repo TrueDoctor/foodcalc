@@ -11,7 +11,7 @@ use foodlib_new::entities::types::ids::{
     GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId, UnitId,
 };
 use foodlib_new::entities::types::money::Money;
-use foodlib_new::ingredient::{CreateIngredient, IngredientWithSource};
+use foodlib_new::ingredient::{CreateIngredient, CreateIngredientSource, IngredientWithSource};
 use foodlib_new::user::User;
 use foodlib_new::{
     error::Error,
@@ -143,8 +143,7 @@ async fn update_source(
 
     if !source_id.is_valid() {
         // Creating a new source
-        let source = IngredientSource {
-            id: IngredientSourceId(-1),
+        let source = CreateIngredientSource {
             ingredient_id,
             store_id: data.store_id,
             package_size: Amount::from(data.weight),

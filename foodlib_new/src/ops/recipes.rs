@@ -4,7 +4,7 @@ use crate::entities::recipe::{
 };
 use crate::entities::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId, UserId};
 use crate::error::{Error, Result};
-use crate::recipe::{CreateRecipe, RecipeMetaIngredient, RecipeStats, ResolvedRecipe};
+use crate::recipe::{RecipeData, RecipeMetaIngredient, RecipeStats, ResolvedRecipe};
 
 use crate::entities::types::amount::Amount;
 use time::Duration;
@@ -75,7 +75,7 @@ impl RecipeOps {
     /// # Errors
     /// - If database operation fails
     /// - If recipe name already exists
-    pub async fn create(&self, recipe: CreateRecipe) -> Result<Recipe> {
+    pub async fn create(&self, group_id: GroupId, data: RecipeData) -> Result<Recipe> {
         let record = sqlx::query_as!(
             Recipe,
             r#"
@@ -84,10 +84,10 @@ impl RecipeOps {
             RETURNING recipe_id as "id: RecipeId", name, comment, group_id as "group_id: GroupId", weighed_in,
                      kind as "kind: RecipeKind"
             "#,
-            recipe.name,
-            recipe.comment,
-            recipe.group_id.get(),
-            recipe.kind.as_str(),
+            data.name,
+            data.comment,
+            group_id.get(),
+            data.kind.as_str(),
         )
             .fetch_one(&*self.pool)
             .await?;
@@ -137,7 +137,7 @@ impl RecipeOps {
         Ok(record)
     }
 
-    pub async fn update(&self, recipe: Recipe) -> Result<Recipe> {
+    pub async fn update(&self, id: RecipeId, recipe: RecipeData) -> Result<Recipe> {
         let record = sqlx::query_as!(
             Recipe,
             r#"
@@ -149,7 +149,7 @@ impl RecipeOps {
             "#,
             recipe.name,
             recipe.comment,
-            recipe.id.get(),
+            id.get(),
             recipe.weighed_in,
             recipe.kind.as_str()
         )
@@ -157,7 +157,7 @@ impl RecipeOps {
             .await?
             .ok_or(Error::NotFound {
                 entity: "Recipe",
-                id: recipe.id.to_string(),
+                id: id.to_string(),
             })?;
 
         Ok(record)

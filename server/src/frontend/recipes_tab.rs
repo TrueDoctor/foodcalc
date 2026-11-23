@@ -5,7 +5,7 @@ use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::error::Error;
-use foodlib_new::recipe::{CreateRecipe, Recipe, RecipeKind};
+use foodlib_new::recipe::{RecipeData, Recipe, RecipeKind};
 use foodlib_new::types::ids::{GroupId, RecipeId};
 use foodlib_new::user::User;
 use maud::{html, Markup};
@@ -293,15 +293,14 @@ async fn add_recipe(
     Form(recipe_data): Form<NewRecipe>,
 ) -> MResponse {
     let group = foodlib.users().get_personal_group(ctx.user.id).await?;
-    let recipe = CreateRecipe {
+    let recipe = RecipeData {
         name: recipe_data.name,
         comment: recipe_data.comment,
-        group_id: group.id,
         weighed_in: false,
         kind: RecipeKind::Meal,
     };
 
-    let created_recipe = foodlib.recipes().create(recipe).await?;
+    let created_recipe = foodlib.recipes().create(group.id, recipe).await?;
     recipes_edit_tab::recipe_edit_view(foodlib, ctx, Path(created_recipe.id)).await
 }
 

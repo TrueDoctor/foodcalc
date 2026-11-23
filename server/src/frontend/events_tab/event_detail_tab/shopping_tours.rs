@@ -25,7 +25,7 @@ pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
     axum::Router::new()
         .route("/add/{event_id}", get(add_shopping_tour))
         .route("/create_inline/{event_id}", post(create_inline))
-        .route("/edit/{event_id}/{tour_id}", get(shopping_tour_form))
+        .route("/edit/{event_id}/{tour_id}", get(edit_shopping_tour))
         .route("/save", post(save_tour))
         .route("/export/{tour_id}/plain", get(export_plain))
         .route("/export/{tour_id}/metro", get(export_metro))
@@ -53,13 +53,24 @@ struct ToggleForm {
 }
 
 async fn add_shopping_tour(
-    state: State<MyAppState>,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
-    shopping_tour_form(state, ctx, Path((event_id, ShoppingTourId(-1)))).await
+    render_shopping_tour_form(&state, &ctx, event_id, None).await
 }
+
+async fn edit_shopping_tour(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path((event_id, tour_id)): Path<(EventId, ShoppingTourId)>,
+) -> MResponse {
+    ctx.assert_can_edit_event(event_id).await?;
+    render_shopping_tour_form(&state, &ctx, event_id, Some(tour_id)).await
+}
+
+
 #[derive(Deserialize)]
 struct InlineTourForm {
     store_id: StoreId,
@@ -115,48 +126,37 @@ async fn delete_shopping_tour(
     Ok(html! {})
 }
 
-async fn shopping_tour_form(
-    State(state): State<MyAppState>,
-    ctx: AuthCtx,
-    Path((event_id, tour_id)): Path<(EventId, ShoppingTourId)>,
+
+async fn render_shopping_tour_form(
+    state: &MyAppState,
+    ctx: &AuthCtx,
+    event_id: EventId,
+    tour_id: Option<ShoppingTourId>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
-    if tour_id.is_valid() {
-        ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    if let Some(id) = tour_id {
+        ctx.assert_can_edit_shopping_tour(id).await?;
     }
+
     let stores = state.stores().list().await?;
     let inventories = state.inventories().list().await?;
 
-    let mut default_tour = ShoppingTour {
-        event_id,
-        id: ShoppingTourId(-1),
-        tour_date: OffsetDateTime::now_utc(),
-        store_id: StoreId(0),
-        store_name: None,
-    };
-
-    if tour_id.is_valid() {
-        default_tour = state.events().get_shopping_tour(tour_id).await?;
-    }
-
-    // If tour_id is provided, get existing tour data. `default_tour` was already
-    // loaded by `get_shopping_tour(tour_id)` above, so reuse it directly.
-    let (tour, event_inventories, shopping_list) = if tour_id.is_valid() {
-        (
-            default_tour,
+    let (existing, event_inventories, shopping_list) = match tour_id {
+        Some(id) => (
+            Some(state.events().get_shopping_tour(id).await?),
             state.events().get_inventories(event_id).await?,
-            state.events().get_shopping_list(tour_id).await?,
-        )
-    } else {
-        (default_tour, vec![], vec![])
-    };
-    let tour_id = if !tour_id.is_valid() {
-        None
-    } else {
-        Some(tour_id)
+            state.events().get_shopping_list(id).await?,
+        ),
+        None => (None, vec![], vec![]),
     };
 
-    let inventory_items = inventory_items(tour_id, &event_inventories, &state).await;
+    let selected_store_id = existing.as_ref().map(|t| t.store_id);
+    let initial_date = existing
+        .as_ref()
+        .map(|t| t.tour_date)
+        .unwrap_or_else(OffsetDateTime::now_utc);
+
+    let inventory_items = inventory_items(tour_id, &event_inventories, state).await;
 
     Ok(html! {
         div class="flex-col space-y-4 w-full" {
@@ -173,14 +173,16 @@ async fn shopping_tour_form(
                 // Form section - takes full width on mobile, half on desktop
                 form class="w-full lg:w-1/2 space-y-4" hx-post="/events/edit/shopping_tours/save" hx-target="#content" {
                     input type="hidden" name="event_id" value=(event_id);
-                    input type="hidden" name="tour_id" value=(tour_id.unwrap_or(ShoppingTourId(-1)));
+                    @if let Some(id) = tour_id {
+                        input type="hidden" name="tour_id" value=(id);
+                    }
 
                     div class="flex flex-col space-y-2" {
                         label for="store_id" { "Store" }
                         select name="store_id" class="text" required {
                             @for store in stores {
                                 option value=(store.id)
-                                    selected[store.id == tour.store_id] {
+                                    selected[selected_store_id == Some(store.id)] {
                                     (store.name)
                                 }
                             }
@@ -192,24 +194,25 @@ async fn shopping_tour_form(
                         input type="datetime-local"
                             name="date"
                             class="text"
-                            value= (tour.tour_date
+                            value=(initial_date
                                 .format(format_description!("[year]-[month]-[day]T[hour]:[minute]"))
                                 .unwrap())
                             required;
                     }
 
-                    div class="flex flex-col space-y-2" {
-                        @if tour_id.is_some() {
+                    @if let Some(id) = tour_id {
+                        div class="flex flex-col space-y-2" {
                             label { "Use Inventories" }
                             div class="space-y-1" {
                                 @for inventory in inventories {
+                                    @let is_checked = event_inventories.iter().any(|inv| inv.inventory_id == inventory.id);
                                     div class="flex items-center gap-2" {
                                         input type="checkbox"
                                             class="w-4 h-4"
-                                            checked[event_inventories.iter().any(|inv| inv.inventory_id == inventory.id)]
+                                            checked[is_checked]
                                             hx-post=(format!("/events/edit/shopping_tours/toggle_inventory/{}/{}", event_id, inventory.id))
                                             hx-target="#content"
-                                            hx-vals=(format!("{{\"checked\": {}, \"tour_id\": {}}}", !event_inventories.iter().any(|inv| inv.inventory_id == inventory.id), tour_id.unwrap_or_default()));
+                                            hx-vals=(format!("{{\"checked\": {}, \"tour_id\": {}}}", !is_checked, id));
                                         span { (inventory.name) }
                                     }
                                 }
@@ -233,22 +236,22 @@ async fn shopping_tour_form(
                 }
 
                 // Shopping list section - takes full width on mobile, half on desktop
-                @if !shopping_list.is_empty() {
+                @if let (Some(id), false) = (tour_id, shopping_list.is_empty()) {
                     div class="w-full lg:w-1/2 space-y-4" {
                         // Action buttons in a grid on mobile, row on desktop
                         div class="grid grid-cols-2 lg:flex gap-2 mb-4" {
                             a class="btn btn-primary text-center"
-                                href=(format!("/events/edit/shopping_tours/export/{}/plain", tour_id.unwrap()))
+                                href=(format!("/events/edit/shopping_tours/export/{}/plain", id))
                                 target="_blank" {
                                 "Export Plain"
                             }
                             a class="btn btn-primary text-center"
-                                href=(format!("/events/edit/shopping_tours/export/{}/metro", tour_id.unwrap()))
+                                href=(format!("/events/edit/shopping_tours/export/{}/metro", id))
                                 target="_blank" {
                                 "Export Metro"
                             }
                             button class="btn btn-cancel col-span-2 lg:col-span-1"
-                                hx-get=(format!("/events/edit/shopping_tours/confirm_update/{}", tour_id.unwrap()))
+                                hx-get=(format!("/events/edit/shopping_tours/confirm_update/{}", id))
                                 hx-target="closest div" {
                                 "Update Inventory"
                             }
@@ -320,24 +323,16 @@ async fn save_tour(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<TourForm>) -
     ctx.assert_can_edit_event(form.event_id).await?;
 
     if let Some(tour_id) = form.tour_id {
-        if tour_id.is_valid() {
-            ctx.assert_can_edit_shopping_tour(tour_id).await?;
-        }
+        ctx.assert_can_edit_shopping_tour(tour_id).await?;
     }
-    // Parse the date
-    let primitive_date = time::PrimitiveDateTime::parse(
-        &form.date,
-        format_description!("[year]-[month]-[day]T[hour]:[minute]"),
-    )
-    .map_err(|x| foodlib_new::Error::Misc(x.to_string()))?;
-    let tour_date = primitive_date.assume_utc();
 
-    // Create or update tour
+    let tour_date = parse_datetime_local(&form.date)?;
+
     let result = match form.tour_id {
-        Some(tour_id) if tour_id.is_valid() => {
+        Some(tour_id) => {
             foodlib
                 .events()
-                .update_shopping_tour(foodlib_new::event::ShoppingTour {
+                .update_shopping_tour(ShoppingTour {
                     id: tour_id,
                     event_id: form.event_id,
                     tour_date,
@@ -346,10 +341,10 @@ async fn save_tour(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<TourForm>) -
                 })
                 .await
         }
-        _ => {
+        None => {
             foodlib
                 .events()
-                .add_shopping_tour(foodlib_new::event::ShoppingTour {
+                .add_shopping_tour(ShoppingTour {
                     id: ShoppingTourId(-1),
                     event_id: form.event_id,
                     tour_date,
@@ -360,10 +355,9 @@ async fn save_tour(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<TourForm>) -
         }
     };
     if let Err(ref e) = result {
-        log::error!("Encounterd error while saving tour {e}");
+        log::error!("Encountered error while saving tour {e}");
     }
 
-    // Redirect back to event edit page
     Ok(html! {
         (event_detail_tab::event_form(foodlib, ctx, Path(form.event_id)).await?)
     })
@@ -649,7 +643,7 @@ async fn toggle_inventory(
             .await?;
     };
 
-    shopping_tour_form(State(state), ctx, Path((event_id, form.tour_id))).await
+    render_shopping_tour_form(&state, &ctx, event_id, Some(form.tour_id)).await
 }
 
 async fn update_inventory(

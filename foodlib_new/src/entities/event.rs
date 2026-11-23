@@ -50,18 +50,6 @@ pub struct EventSummary {
     pub last_meal: Option<OffsetDateTime>,
 }
 
-impl Default for Event {
-    fn default() -> Self {
-        Self {
-            id: EventId(0),
-            name: "Test Event".to_string(),
-            comment: Some("Test comment".to_string()),
-            budget: None,
-            group_id: GroupId(-1),
-        }
-    }
-}
-
 /// A scheduled shopping trip for an event
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShoppingTour {
@@ -77,6 +65,18 @@ pub struct ShoppingTour {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FoodPrep {
     pub id: FoodPrepId,
+    pub event_id: EventId,
+    pub recipe_id: RecipeId,
+    #[serde(with = "time::serde::rfc3339")]
+    pub prep_date: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub use_from: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub use_until: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateFoodPrep {
     pub event_id: EventId,
     pub recipe_id: RecipeId,
     #[serde(with = "time::serde::rfc3339")]

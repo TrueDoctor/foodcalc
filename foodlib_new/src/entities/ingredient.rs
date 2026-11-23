@@ -61,6 +61,16 @@ pub struct IngredientSource {
     pub url: Option<String>,
     pub comment: Option<String>,
 }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CreateIngredientSource {
+    pub ingredient_id: IngredientId,
+    pub store_id: StoreId,
+    pub package_size: Amount,
+    pub unit_id: UnitId,
+    pub price: Money,
+    pub url: Option<String>,
+    pub comment: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IngredientWeight {

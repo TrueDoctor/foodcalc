@@ -13,7 +13,7 @@ use foodlib_new::{
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
-
+use foodlib_new::event::CreateFoodPrep;
 use crate::{
     frontend::{events_tab::event_detail_tab, html_error, icons, MResponse},
     FoodLib, MyAppState,
@@ -58,8 +58,7 @@ async fn create_inline(
     let use_until = super::shopping_tours::parse_datetime_local(&form.use_until)?;
     foodlib
         .events()
-        .add_food_prep(FoodPrep {
-            id: FoodPrepId(-1),
+        .add_food_prep(CreateFoodPrep {
             event_id,
             recipe_id: form.recipe_id,
             prep_date,
@@ -283,8 +282,7 @@ async fn save_food_prep(
         _ => {
             foodlib
                 .events()
-                .add_food_prep(FoodPrep {
-                    id: FoodPrepId(-1),
+                .add_food_prep(CreateFoodPrep {
                     event_id: form.event_id,
                     recipe_id: form.recipe_id,
                     prep_date,

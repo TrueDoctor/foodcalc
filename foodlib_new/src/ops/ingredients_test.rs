@@ -94,8 +94,7 @@ async fn test_delete_ingredient(pool: sqlx::PgPool) {
         .unwrap();
 
     // Add some related records
-    ops.add_source(IngredientSource {
-        id: IngredientSourceId(-1),
+    ops.add_source(CreateIngredientSource {
         ingredient_id: ingredient.id,
         store_id: StoreId(1),
         package_size: Amount::from(1),
@@ -140,8 +139,7 @@ async fn test_ingredient_sources(pool: sqlx::PgPool) {
     let ops = IngredientOps::new(pool.into());
 
     // Test adding source
-    let source = IngredientSource {
-        id: IngredientSourceId(-1),
+    let source = CreateIngredientSource {
         ingredient_id: IngredientId(1),
         store_id: StoreId(1),
         package_size: Amount::from(2),

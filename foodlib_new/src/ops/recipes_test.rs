@@ -9,10 +9,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 async fn create_test_recipe(ops: &RecipeOps) -> Recipe {
-    ops.create(CreateRecipe {
+    ops.create(GroupId(1), RecipeData {
         name: "Test Recipe".to_string(),
         comment: Some("Test Comment".to_string()),
-        group_id: GroupId(1),
         weighed_in: false,
         kind: RecipeKind::Meal,
     })
@@ -47,14 +46,15 @@ async fn test_update_recipe(pool: PgPool) {
     let ops = RecipeOps::new(Arc::new(pool));
 
     let mut recipe = create_test_recipe(&ops).await;
+    let id = recipe.id;
     recipe.name = "Updated Recipe".to_string();
 
     let updated = ops
-        .update(recipe.clone())
+        .update(id, recipe.into())
         .await
         .expect("Failed to update recipe");
     assert_eq!(updated.name, "Updated Recipe");
-    assert_eq!(updated.id, recipe.id);
+    assert_eq!(updated.id, id);
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -121,10 +121,9 @@ async fn test_meta_recipes(pool: PgPool) {
 
     let parent_recipe = create_test_recipe(&ops).await;
     let child_recipe = ops
-        .create(CreateRecipe {
+        .create(GroupId(1), RecipeData {
             name: "Child Recipe".to_string(),
             comment: None,
-            group_id: GroupId(1),
             weighed_in: false,
             kind: RecipeKind::Meal,
         })

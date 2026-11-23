@@ -338,7 +338,7 @@ impl IngredientOps {
 
 
     // Source operations
-    pub async fn add_source(&self, source: IngredientSource) -> Result<IngredientSource> {
+    pub async fn add_source(&self, source: CreateIngredientSource) -> Result<IngredientSource> {
         let row = sqlx::query_as!(
             IngredientSource,
             r#"
