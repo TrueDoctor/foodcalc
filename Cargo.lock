@@ -24,6 +24,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "app"
+version = "0.1.0"
+dependencies = [
+ "bigdecimal",
+ "foodlib_new",
+ "log",
+ "serde",
+ "serde_json",
+ "time",
+ "tokio",
+ "typst-renderer",
+]
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3657,6 +3671,7 @@ dependencies = [
 name = "server"
 version = "0.1.1"
 dependencies = [
+ "app",
  "axum",
  "axum-extra",
  "axum-login",

@@ -12,6 +12,7 @@ typst = ["dep:typst-renderer"]
 
 [dependencies]
 axum.workspace = true
+app = { path = "../app" }
 foodlib_new = { path = "../foodlib_new", features = ["axum"] }
 typst-renderer = { path = "../typst-renderer", optional = true }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }

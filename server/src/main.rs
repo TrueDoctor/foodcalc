@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
+use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{Extension, Router};
 use axum_login::{
@@ -18,18 +18,9 @@ mod htmx_middleware;
 
 type FoodLib = Extension<foodlib_new::FoodLib>;
 
-#[derive(Clone)]
-pub struct MyAppState {
-    pub db: foodlib_new::FoodLib,
-}
-
-impl Deref for MyAppState {
-    type Target = foodlib_new::FoodLib;
-
-    fn deref(&self) -> &Self::Target {
-        &self.db
-    }
-}
+// The shared, transport-agnostic application state from the `app` crate:
+// business-logic use-cases take `&MyAppState`, and it derefs to `FoodLib`.
+pub use app::MyAppState;
 
 #[tokio::main]
 async fn main() {
@@ -95,7 +86,7 @@ async fn main() {
     let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
 
     let lib = foodlib_new::FoodLib::new(pool.clone());
-    let state = MyAppState { db: lib.clone() };
+    let state = MyAppState::new(lib.clone());
     let new_lib = lib;
 
     // Combine routes with middleware
