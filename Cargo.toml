@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["metro-scrape", "server", "status-api", "foodlib_new"]
+members = ["metro-scrape", "server", "status-api", "foodlib_new", "typst-renderer"]
 default-members = ["server", "foodlib_new"]
 exclude = ["foodlib", "cli-client", "api"]
 
@@ -32,3 +32,4 @@ futures = { version = "0.3", default-features = false }
 maud = { version = "0.27", features = ["axum"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde_json = "1"
+bcrypt = "0.19.3"

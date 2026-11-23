@@ -1,6 +1,11 @@
 // foodlib_new/src/ops/ingredients.rs
 
-use crate::{entities::ingredient::*, error::Result, recipe::Recipe, Error};
+use crate::{
+    entities::ingredient::*,
+    error::Result,
+    recipe::{Recipe, RecipeKind},
+    Error,
+};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -28,8 +33,8 @@ impl IngredientOps {
             ingredient.comment,
             ingredient.group_id,
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -38,19 +43,19 @@ impl IngredientOps {
         let row = sqlx::query_as!(
             Ingredient,
             r#"
-            SELECT 
-                ingredient_id as "id", 
-                name, 
-                energy, 
+            SELECT
+                ingredient_id as "id",
+                name,
+                energy,
                 group_id,
-                comment 
-            FROM ingredients 
+                comment
+            FROM ingredients
             WHERE ingredient_id = $1
             "#,
             id
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -59,23 +64,23 @@ impl IngredientOps {
         sqlx::query_as!(
             Ingredient,
             r#"
-            SELECT 
-                ingredient_id as "id", 
-                name, 
-                energy, 
+            SELECT
+                ingredient_id as "id",
+                name,
+                energy,
                 group_id,
-                comment 
-            FROM ingredients 
+                comment
+            FROM ingredients
             WHERE name = $1
             "#,
             name
         )
-        .fetch_optional(&*self.pool)
-        .await?
-        .ok_or(Error::NotFound {
-            entity: "Ingredient",
-            id: name.to_string(),
-        })
+            .fetch_optional(&*self.pool)
+            .await?
+            .ok_or(Error::NotFound {
+                entity: "Ingredient",
+                id: name.to_string(),
+            })
     }
 
     pub async fn usages(&self, ingredient_id: i32) -> Result<Vec<Recipe>> {
@@ -87,14 +92,15 @@ impl IngredientOps {
                 name,
                 group_id,
                 comment,
-                weighed_in
+                weighed_in,
+                kind as "kind: RecipeKind"
             FROM recipes JOIN recipe_ingredients USING(recipe_id)
             WHERE ingredient_id = $1
             "#,
             ingredient_id
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -113,8 +119,8 @@ impl IngredientOps {
             ingredient.comment,
             ingredient.id,
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -125,8 +131,8 @@ impl IngredientOps {
             group_id,
             ingredient_id
         )
-        .execute(&*self.pool)
-        .await?;
+            .execute(&*self.pool)
+            .await?;
         Ok(())
     }
 
@@ -139,16 +145,16 @@ impl IngredientOps {
             r#"DELETE FROM recipe_ingredients WHERE ingredient_id = $1"#,
             id
         )
-        .execute(&mut *tx)
-        .await?;
+            .execute(&mut *tx)
+            .await?;
 
         // Delete from ingredient_sources
         sqlx::query!(
             r#"DELETE FROM ingredient_sources WHERE ingredient_id = $1"#,
             id
         )
-        .execute(&mut *tx)
-        .await?;
+            .execute(&mut *tx)
+            .await?;
 
         // Delete from weights
         sqlx::query!(r#"DELETE FROM weights WHERE ingredient_id = $1"#, id)
@@ -160,8 +166,8 @@ impl IngredientOps {
             r#"DELETE FROM ingredient_properties WHERE ingredient_id = $1"#,
             id
         )
-        .execute(&mut *tx)
-        .await?;
+            .execute(&mut *tx)
+            .await?;
 
         // Finally delete the ingredient
         sqlx::query!(r#"DELETE FROM ingredients WHERE ingredient_id = $1"#, id)
@@ -186,12 +192,15 @@ impl IngredientOps {
             "#,
             user_id
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
         Ok(rows)
     }
 
-    pub async fn list_with_sources_for_user(&self, user_id: i64) -> Result<Vec<IngredientWithSource>> {
+    pub async fn list_with_sources_for_user(
+        &self,
+        user_id: i64,
+    ) -> Result<Vec<IngredientWithSource>> {
         let rows = sqlx::query_as!(
             IngredientWithSource,
             r#"
@@ -206,8 +215,8 @@ impl IngredientOps {
             "#,
             user_id
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
         Ok(rows)
     }
 
@@ -225,8 +234,8 @@ impl IngredientOps {
             ORDER BY ingredient_id
             "#,
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(rows)
     }
@@ -246,8 +255,8 @@ impl IngredientOps {
             ORDER BY ingredient_id
             "#,
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(rows)
     }
@@ -279,8 +288,8 @@ impl IngredientOps {
             source.url,
             source.comment,
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -316,8 +325,8 @@ impl IngredientOps {
             source.comment,
             source.id
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -330,16 +339,16 @@ impl IngredientOps {
             r#"DELETE FROM metro_categories WHERE ingredient_source_id = $1"#,
             id
         )
-        .execute(&mut *tx)
-        .await?;
+            .execute(&mut *tx)
+            .await?;
 
         // Then delete the source
         sqlx::query!(
             r#"DELETE FROM ingredient_sources WHERE ingredient_source_id = $1"#,
             id
         )
-        .execute(&mut *tx)
-        .await?;
+            .execute(&mut *tx)
+            .await?;
 
         tx.commit().await?;
         Ok(())
@@ -363,8 +372,8 @@ impl IngredientOps {
             "#,
             ingredient_id
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(rows)
     }
@@ -382,8 +391,8 @@ impl IngredientOps {
             weight.unit_id,
             weight.weight,
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -401,8 +410,8 @@ impl IngredientOps {
             weight.ingredient_id,
             weight.unit_id,
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -413,8 +422,8 @@ impl IngredientOps {
             ingredient_id,
             unit_id
         )
-        .execute(&*self.pool)
-        .await?;
+            .execute(&*self.pool)
+            .await?;
 
         Ok(())
     }
@@ -429,8 +438,8 @@ impl IngredientOps {
             "#,
             ingredient_id
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(rows)
     }
@@ -447,8 +456,8 @@ impl IngredientOps {
             property.ingredient_id,
             property.property_id,
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -462,8 +471,8 @@ impl IngredientOps {
             ingredient_id,
             property_id
         )
-        .execute(&*self.pool)
-        .await?;
+            .execute(&*self.pool)
+            .await?;
 
         Ok(())
     }
@@ -478,8 +487,8 @@ impl IngredientOps {
             "#,
             ingredient_id
         )
-        .fetch_all(&*self.pool)
-        .await?;
+            .fetch_all(&*self.pool)
+            .await?;
 
         Ok(rows)
     }
@@ -498,8 +507,8 @@ impl IngredientOps {
             category.ingredient_source_id,
             category.category,
         )
-        .fetch_one(&*self.pool)
-        .await?;
+            .fetch_one(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -514,8 +523,8 @@ impl IngredientOps {
             "#,
             source_id
         )
-        .fetch_optional(&*self.pool)
-        .await?;
+            .fetch_optional(&*self.pool)
+            .await?;
 
         Ok(row)
     }
@@ -530,8 +539,8 @@ impl IngredientOps {
                 "#,
                 id
             )
-            .fetch_all(&*self.pool)
-            .await?,
+                .fetch_all(&*self.pool)
+                .await?,
             None => sqlx::query_as!(
                 IngredientSource,
                 r#"
@@ -539,8 +548,8 @@ impl IngredientOps {
                 FROM ingredient_sources ORDER BY ingredient_id
                 "#,
             )
-            .fetch_all(&*self.pool)
-            .await?,
+                .fetch_all(&*self.pool)
+                .await?,
         };
         Ok(rows)
     }

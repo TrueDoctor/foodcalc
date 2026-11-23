@@ -39,13 +39,14 @@
 )
 
 #let pretty(name) = {
-  if name in allergen_label_de { allergen_label_de.at(name) }
-  else { upper(name.at(0)) + name.slice(1) }
+  if name in allergen_label_de { allergen_label_de.at(name) } else { upper(name.at(0)) + name.slice(1) }
 }
 
 // Decorative flourish built from typst primitives — no glyph dependency.
 #let flourish() = {
-  box(baseline: -0.2em, stack(dir: ltr, spacing: 3pt,
+  box(baseline: -0.2em, stack(
+    dir: ltr,
+    spacing: 3pt,
     line(length: 1.5em, stroke: 0.5pt),
     rotate(45deg, square(size: 0.35em, fill: black)),
     line(length: 1.5em, stroke: 0.5pt),
@@ -58,10 +59,37 @@
   set text(size: 0.85em)
   let star(cond) = if cond [\*] else []
   let parts = ()
-  if d.vegan { parts.push(box(stroke: 0.5pt + green, inset: 3pt, radius: 3pt, fill: green.lighten(80%))[*vegan#star(d.vegan_trace)*]) }
-  else if d.vegetarian { parts.push(box(stroke: 0.5pt + olive, inset: 3pt, radius: 3pt, fill: olive.lighten(80%))[*vegetarisch#star(d.vegetarian_trace)*]) }
-  if d.lactose_free { parts.push(box(stroke: 0.5pt + blue, inset: 3pt, radius: 3pt, fill: blue.lighten(80%))[*laktosefrei#star(d.lactose_free_trace)*]) }
-  if d.gluten_free { parts.push(box(stroke: 0.5pt + purple, inset: 3pt, radius: 3pt, fill: purple.lighten(80%))[*glutenfrei#star(d.gluten_free_trace)*]) }
+  if d.vegan {
+    parts.push(box(
+      stroke: 0.5pt + green,
+      inset: 3pt,
+      radius: 3pt,
+      fill: green.lighten(80%),
+    )[*vegan#star(d.vegan_trace)*])
+  } else if d.vegetarian {
+    parts.push(box(
+      stroke: 0.5pt + olive,
+      inset: 3pt,
+      radius: 3pt,
+      fill: olive.lighten(80%),
+    )[*vegetarisch#star(d.vegetarian_trace)*])
+  }
+  if d.lactose_free {
+    parts.push(box(
+      stroke: 0.5pt + blue,
+      inset: 3pt,
+      radius: 3pt,
+      fill: blue.lighten(80%),
+    )[*laktosefrei#star(d.lactose_free_trace)*])
+  }
+  if d.gluten_free {
+    parts.push(box(
+      stroke: 0.5pt + purple,
+      inset: 3pt,
+      radius: 3pt,
+      fill: purple.lighten(80%),
+    )[*glutenfrei#star(d.gluten_free_trace)*])
+  }
   let has_trace = d.vegan_trace or d.vegetarian_trace or d.lactose_free_trace or d.gluten_free_trace
   if parts.len() == 0 { [] } else {
     stack(dir: ltr, spacing: 4pt, ..parts)
@@ -76,7 +104,7 @@
   set text(font: ("Linux Libertine", "New Computer Modern", "Source Sans Pro"), lang: "de")
   align(center)[
     #if draw_flourish { flourish() } #h(0.4em)
-    #text(font: ("Linux Libertine"), size: 1.4em, weight: "bold", style: "italic", meal.name)
+    #text(font: "Linux Libertine", size: 1.4em, weight: "bold", style: "italic", meal.name)
     #h(0.4em) #if draw_flourish { flourish() }
   ]
   v(0.2em)
@@ -99,7 +127,14 @@
 
 #let flat_layout(meals) = {
   set page(paper: "a4", margin: 1cm)
-  let cells = meals.map(meal => rect(stroke: 0.5pt + gray, inset: 8pt, radius: 4pt, width: 100%, height: 100%, label_content(meal, false)))
+  let cells = meals.map(meal => rect(
+    stroke: 0.5pt + gray,
+    inset: 8pt,
+    radius: 4pt,
+    width: 100%,
+    height: 100%,
+    label_content(meal, false),
+  ))
   // 2 columns × 3 rows = 6 labels per A4 page; typst grid automatically pages.
   grid(
     columns: (1fr, 1fr),
@@ -118,8 +153,10 @@
 #let card_w = 92mm      // folded card width
 #let half_h = 52mm      // height of one face; card block is 2 × this tall
 
-#let tent_face(meal) = align(horizon + center,
-  block(width: card_w, height: half_h, inset: 4pt, label_content(meal, true)))
+#let tent_face(meal) = align(horizon + center, block(width: card_w, height: half_h, inset: 4pt, label_content(
+  meal,
+  true,
+)))
 
 #let tent_card(meal) = {
   set text(size: 8pt)
@@ -129,8 +166,11 @@
     // Bottom face: upright (front).
     tent_face(meal)
     // Dashed fold guide on the centerline, placed within this card block.
-    place(top + center, dy: half_h,
-      line(length: card_w, stroke: (paint: gray.lighten(20%), thickness: 0.4pt, dash: "dashed")))
+    place(top + center, dy: half_h, line(length: card_w, stroke: (
+      paint: gray.lighten(20%),
+      thickness: 0.4pt,
+      dash: "dashed",
+    )))
   })
 }
 
@@ -158,3 +198,48 @@
 #let dish_labels(event_name, layout, meals) = {
   if layout == "tent" { tent_layout(meals) } else { flat_layout(meals) }
 }
+
+// ======================================================================================================
+// Layout entrypoint
+#import sys: inputs
+#let data = inputs.v
+#let layout = inputs.layout
+
+// DEBUG: Uncomment to test and develop with a hardcoded recipe list.
+// #let layout = "tent"
+// #let data = (
+//     (
+//       event_name: "Family Dinner",
+//       meals: (
+//         (
+//           name: "Simple Pasta",
+//           place: "Main Kitchen",
+//           time: "04.12. 18:00",
+//           servings: 4,
+//           dietary: (
+//             vegan: true,
+//             vegan_trace: false,
+//             vegetarian: false,
+//             vegetarian_trace: false,
+//             gluten_free: true,
+//             gluten_free_trace: false,
+//             lactose_free: true,
+//             lactose_free_trace: true,
+//           ),
+//           contains: (
+//             "Contains Gluten",
+//             "Dairy-Free",
+//             "Gluten-Free",
+//             "Nut-Free",
+//             "Vegan",
+//             "Vegetarian",
+//           ),
+//           may_contain: (),
+//           hinweise: (),
+//         ),
+//       ),
+//     ),
+// )
+
+
+#dish_labels(data.event_name, layout, data.meals)

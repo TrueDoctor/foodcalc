@@ -1,6 +1,28 @@
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::types::PgInterval;
+use time::Duration;
+
+/// Kind of the recipe: "meal" (Gericht) or "component" (Komponente).
+/// Purely organizational — meals and components can reference each
+/// other freely as sub-recipes.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[serde(rename_all = "lowercase")]
+#[sqlx(type_name = "recipe_kind", rename_all = "lowercase")]
+pub enum RecipeKind {
+    Meal,
+    Component,
+}
+
+impl RecipeKind {
+    /// The database / JSON representation ("meal" | "component").
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Meal => "meal",
+            Self::Component => "component",
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recipe {
@@ -12,6 +34,7 @@ pub struct Recipe {
     /// to the gram ("eingewogen"). Shown as a warning in the edit tab while
     /// false and as a badge on the printed recipe sheet once true.
     pub weighed_in: bool,
+    pub kind: RecipeKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,8 +53,8 @@ pub struct RecipeStep {
     pub order: f64,
     pub name: String,
     pub description: String,
-    pub fixed_duration: PgInterval,  // duration in seconds
-    pub duration_per_kg: PgInterval, // duration in seconds per kg
+    pub fixed_duration: Duration,  // duration in seconds
+    pub duration_per_kg: Duration, // duration in seconds per kg
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,4 +94,51 @@ pub struct ResolvedRecipe {
     pub subrecipe_id: Option<i32>,
     pub subrecipe_name: Option<String>,
     pub hierarchy_path: Option<String>,
+}
+
+/// A recipe together with its aggregated stats from the `recipe_stats`
+/// view. Used by list endpoints that show the energy density (kJ/g).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeListItem {
+    pub id: i32,
+    pub name: String,
+    pub comment: Option<String>,
+    pub group_id: i32,
+    pub kind: RecipeKind,
+    pub weighed_in: bool,
+    /// Total resolved ingredient weight in kg (0 for empty recipes).
+    pub weight: BigDecimal,
+    /// Total resolved energy in kJ.
+    pub energy: BigDecimal,
+}
+
+/// A node of the recipe recursion tree: a recipe together with its direct
+/// ingredients (resolved weights) and its used sub-recipes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeTreeNode {
+    pub recipe_id: i32,
+    pub name: String,
+    pub kind: RecipeKind,
+    /// kg of this sub-recipe used by its parent (`None` for the root).
+    pub weight: Option<BigDecimal>,
+    /// Direct ingredients of this recipe, resolved to kg where possible.
+    pub ingredients: Vec<RecipeTreeIngredient>,
+    /// Sub-recipes used by this recipe.
+    pub children: Vec<RecipeTreeNode>,
+}
+
+/// One leaf of the tree: an ingredient row with its raw amount and the
+/// unit-converted weight the event views use.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeTreeIngredient {
+    pub ingredient_id: i32,
+    pub name: Option<String>,
+    /// Raw amount as entered on the recipe.
+    pub amount: BigDecimal,
+    pub unit_id: i32,
+    /// Unit name for display ("kg", "Stück", "Liter", …).
+    pub unit_name: Option<String>,
+    /// Unit-converted weight (kg) from the `resolved_recipes` view;
+    /// `None` when no conversion exists.
+    pub weight: Option<BigDecimal>,
 }
