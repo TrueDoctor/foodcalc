@@ -1,9 +1,9 @@
 use axum::{
     extract::{Form, Path},
+    extract::State,
     routing::{delete, get, post},
 };
 use foodlib_new::{
-    error::{Error, Result},
     types::ids::{GroupId, UserId},
     user::{Group, User},
 };
@@ -11,9 +11,8 @@ use maud::{html, Markup};
 use serde::Deserialize;
 
 use crate::frontend::MResponse;
-use crate::{FoodLib, MyAppState};
-use foodlib_new::auth_context::AuthCtx;
-use foodlib_new::user::CreateUser;
+use crate::MyAppState;
+use crate::frontend::WebCtx;
 
 pub(crate) fn users_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -28,19 +27,12 @@ pub(crate) fn users_router() -> axum::Router<MyAppState> {
         .route("/{user_id}/groups/{group_id}", delete(remove_from_group))
 }
 
-fn assert_admin(ctx: &AuthCtx) -> Result<()> {
-    if ctx.user.is_admin {
-        Ok(())
-    } else {
-        Err(Error::Forbidden(
-            "Admin privileges required to manage users".into(),
-        ))
-    }
-}
-
-async fn users_view(foodlib: FoodLib, ctx: AuthCtx) -> MResponse {
-    assert_admin(&ctx)?;
-    let users = foodlib.users().get_all_users().await?;
+async fn users_view(
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
+) -> MResponse {
+    app::admin::assert_admin(&actor)?;
+    let users = state.users().get_all_users().await?;
     Ok(html! {
         div class="flex flex-col items-center w-full" {
             div class="flex justify-center w-full mb-4" {
@@ -121,29 +113,20 @@ struct CreateUserForm {
 }
 
 async fn create_user(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Form(form): Form<CreateUserForm>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    let username = form.username.trim();
-    let email = form.email.trim();
-    if username.is_empty() || email.is_empty() || form.password.is_empty() {
-        return Err(Error::Validation {
-            message: "Username, email, and password are required".into(),
-        });
-    }
-    let (created, _) = foodlib.users().create_user_with_personal_group(CreateUser {
-        username: username.to_string(),
-        email: email.to_string(),
-        password_hash: String::new(),
-        is_admin: form.is_admin.is_some(),
-    }).await?;
-    foodlib
-        .users()
-        .update_password(created.id, form.password)
-        .await?;
-    let users = foodlib.users().get_all_users().await?;
+    app::admin::create_user(
+        &state,
+        &actor,
+        form.username,
+        form.email,
+        form.password,
+        form.is_admin.is_some(),
+    )
+    .await?;
+    let users = state.users().get_all_users().await?;
     Ok(html! {
         div id="admin-users" class="w-full max-w-3xl" {
             (user_list(&users))
@@ -152,21 +135,21 @@ async fn create_user(
 }
 
 async fn user_detail_view(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(user_id): Path<UserId>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    render_user_detail(&foodlib, user_id).await
+    app::admin::assert_admin(&actor)?;
+    render_user_detail(&state, user_id).await
 }
 
 async fn render_user_detail(
-    foodlib: &foodlib_new::FoodLib,
+    state: &MyAppState,
     user_id: UserId,
 ) -> MResponse {
-    let user = foodlib.users().get_user(user_id).await?;
-    let user_groups = foodlib.users().get_user_groups(user_id).await?;
-    let all_groups = foodlib.users().get_all_groups().await?;
+    let user = state.users().get_user(user_id).await?;
+    let user_groups = state.users().get_user_groups(user_id).await?;
+    let all_groups = state.users().get_all_groups().await?;
     let member_ids: std::collections::HashSet<GroupId> =
         user_groups.iter().map(|g| g.id).collect();
     let candidate_groups: Vec<&Group> = all_groups
@@ -269,34 +252,22 @@ struct UpdateUserForm {
 }
 
 async fn update_user(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(user_id): Path<UserId>,
     Form(form): Form<UpdateUserForm>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    let mut user = foodlib.users().get_user(user_id).await?;
-    user.username = form.username.trim().to_string();
-    user.email = form.email.trim().to_string();
-    foodlib.users().update_user(user).await?;
-    render_user_detail(&foodlib, user_id).await
+    app::admin::update_user(&state, &actor, user_id, form.username, form.email).await?;
+    render_user_detail(&state, user_id).await
 }
 
 async fn toggle_admin(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(user_id): Path<UserId>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    if user_id == ctx.user.id {
-        return Err(Error::Forbidden(
-            "You cannot change your own admin status".into(),
-        ));
-    }
-    let mut user = foodlib.users().get_user(user_id).await?;
-    user.is_admin = !user.is_admin;
-    foodlib.users().update_user(user).await?;
-    render_user_detail(&foodlib, user_id).await
+    app::admin::toggle_admin(&state, &actor, user_id).await?;
+    render_user_detail(&state, user_id).await
 }
 
 #[derive(Deserialize)]
@@ -305,31 +276,21 @@ struct PasswordForm {
 }
 
 async fn set_password(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(user_id): Path<UserId>,
     Form(form): Form<PasswordForm>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    if form.password.is_empty() {
-        return Err(Error::Validation {
-            message: "Password cannot be empty".into(),
-        });
-    }
-    foodlib.users().update_password(user_id, form.password).await?;
-    render_user_detail(&foodlib, user_id).await
+    app::admin::set_password(&state, &actor, user_id, form.password).await?;
+    render_user_detail(&state, user_id).await
 }
 
 async fn delete_user(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(user_id): Path<UserId>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    if user_id == ctx.user.id {
-        return Err(Error::Forbidden("You cannot delete yourself".into()));
-    }
-    foodlib.users().delete_user_cascade(user_id).await?;
+    app::admin::delete_user(&state, &actor, user_id).await?;
     Ok(html! {
         div id="user-detail" class="w-full max-w-3xl" {}
     })
@@ -341,34 +302,20 @@ struct AddGroupForm {
 }
 
 async fn add_to_group(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(user_id): Path<UserId>,
     Form(form): Form<AddGroupForm>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    foodlib
-        .users()
-        .add_user_to_group(user_id, GroupId(form.group_id))
-        .await?;
-    render_user_detail(&foodlib, user_id).await
+    app::admin::add_user_to_group(&state, &actor, user_id, GroupId(form.group_id)).await?;
+    render_user_detail(&state, user_id).await
 }
 
 async fn remove_from_group(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((user_id, group_id)): Path<(UserId, i32)>,
 ) -> MResponse {
-    assert_admin(&ctx)?;
-    let group = foodlib.users().get_group(GroupId(group_id)).await?;
-    if group.is_personal {
-        return Err(Error::Forbidden(
-            "Cannot remove a user from their personal group".into(),
-        ));
-    }
-    foodlib
-        .users()
-        .remove_user_from_group(user_id, GroupId(group_id))
-        .await?;
+    app::admin::remove_user_from_group(&state, &actor, user_id, GroupId(group_id)).await?;
     Ok(html! {})
 }

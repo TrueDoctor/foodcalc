@@ -1,17 +1,17 @@
 use crate::FoodLib;
 use axum::extract::{Form, Path};
-use bigdecimal::FromPrimitive;
+use axum::extract::State;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::entities::types::ids::{EventId, GroupId};
-use foodlib_new::entities::types::money::Money;
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
-use foodlib_new::event::CreateEvent;
+use app::{AppCtx, Channel};
 
 mod event_detail_tab;
 
 use crate::frontend::icons;
+use crate::frontend::WebCtx;
 use crate::MyAppState;
 
 use super::MResponse;
@@ -41,19 +41,13 @@ pub struct AddEventForm {
     comment: Option<String>,
 }
 
-pub async fn add(foodlib: FoodLib, user: User, Form(form): Form<AddEventForm>) -> MResponse {
-    let group = foodlib.users().get_personal_group(user.id).await?;
-    let create_event = CreateEvent {
-        name: form.name,
-        comment: form.comment.filter(|s| !s.is_empty()),
-        budget: form
-            .budget
-            .and_then(bigdecimal::BigDecimal::from_f64)
-            .map(Money::from),
-        group_id: group.id,
-    };
-    foodlib.events().create(create_event).await?;
-    Ok(event_list(foodlib, user).await)
+pub async fn add(
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
+    Form(form): Form<AddEventForm>,
+) -> MResponse {
+    app::events::create_event(&state, &actor, form.name, form.comment, form.budget).await?;
+    Ok(event_list(State(state), actor.ctx.user).await)
 }
 
 /// Inline add-row for events. Visible columns mirror the table (name +
@@ -83,10 +77,16 @@ fn event_add_row(is_admin: bool) -> Markup {
     }
 }
 
-pub async fn duplicate(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    let group = foodlib.users().get_personal_group(ctx.user.id).await?;
-    let id = foodlib.events().duplicate(event_id, group.id).await?;
+pub async fn duplicate(
+    State(state): State<MyAppState>,
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(event_id): Path<EventId>,
+) -> MResponse {
+    // Transitional: event_detail_tab::event_form still takes (FoodLib, AuthCtx);
+    // it will switch to WebCtx when the detail tab is migrated.
+    let actor = AppCtx::new(ctx.clone(), Channel::WebUi);
+    let id = app::events::duplicate_event(&state, &actor, event_id).await?;
     event_detail_tab::event_form(foodlib, ctx, Path(id)).await
 }
 
@@ -113,16 +113,18 @@ pub async fn delete_dialog(
     })
 }
 
-pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
-    // Kept as EditEvent to preserve the old assert_can_edit_event behavior.
-    ctx.assert_can_edit_event(event_id).await?;
-    foodlib.events().delete(event_id).await?;
-    Ok(event_list(foodlib, ctx.user).await)
+pub async fn delete(
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
+    Path(event_id): Path<EventId>,
+) -> MResponse {
+    app::events::delete_event(&state, &actor, event_id).await?;
+    Ok(event_list(State(state), actor.ctx.user).await)
 }
 
-pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
-    let events = foodlib.events().list().await.unwrap_or_default();
-    let user_group_ids: Vec<GroupId> = foodlib
+pub async fn event_list(State(state): State<MyAppState>, user: User) -> Markup {
+    let events = state.events().list().await.unwrap_or_default();
+    let user_group_ids: Vec<GroupId> = state
         .users()
         .get_user_groups(user.id)
         .await
@@ -177,11 +179,15 @@ pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
     }
 }
 
-pub async fn search(foodlib: FoodLib, user: User, query: Form<SearchParameters>) -> Markup {
+pub async fn search(
+    State(state): State<MyAppState>,
+    user: User,
+    query: Form<SearchParameters>,
+) -> Markup {
     let query_str = query.search.to_lowercase();
     let mine_only = query.mine_only.is_some();
-    let events = foodlib.events().list().await.unwrap_or_default();
-    let user_group_ids: Vec<GroupId> = foodlib
+    let events = state.events().list().await.unwrap_or_default();
+    let user_group_ids: Vec<GroupId> = state
         .users()
         .get_user_groups(user.id)
         .await

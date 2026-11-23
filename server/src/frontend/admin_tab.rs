@@ -1,12 +1,16 @@
 use crate::frontend::LOGIN_URL;
-use crate::{FoodLib, MyAppState};
+use crate::MyAppState;
 use axum::{
     extract::{Form, Path},
+    extract::State,
     routing::{delete, get, post},
 };
 use axum_login::login_required;
 use foodlib_new::types::ids::UserId;
-use foodlib_new::{auth::AuthBackend, auth_context::AuthCtx, error::{Error, Result}, ops, types::ids::GroupId, user::{Group, User}};
+use foodlib_new::{auth::AuthBackend, auth_context::AuthCtx, ops, types::ids::GroupId, user::{Group, User}};
+use foodlib_new::error::Error;
+use app::{AppCtx, Channel};
+use crate::frontend::WebCtx;
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -31,29 +35,11 @@ pub(crate) fn admin_router() -> axum::Router<MyAppState> {
         .route_layer(login_required!(AuthBackend, login_url = LOGIN_URL))
 }
 
-/// Admins may manage any group. Members may manage groups they belong to (Option C).
-/// Personal groups are never editable here — they live and die with their user.
-async fn assert_can_manage_group(
-    foodlib: &foodlib_new::FoodLib,
-    ctx: &AuthCtx,
-    group_id: i32,
-) -> Result<Group> {
-    let group = foodlib.users().get_group(GroupId(group_id)).await?;
-    if group.is_personal {
-        return Err(Error::Forbidden(
-            "Personal groups can only be managed via their owning user".into(),
-        ));
-    }
-    if !ctx.can_access_group(GroupId(group_id)) {
-        return Err(Error::Forbidden(
-            "You don't have permission to manage this group".into(),
-        ));
-    }
-    Ok(group)
-}
-
-async fn groups_view(foodlib: FoodLib, ctx: AuthCtx) -> MResponse {
-    let groups = foodlib.users().get_all_groups().await?;
+async fn groups_view(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+) -> MResponse {
+    let groups = state.users().get_all_groups().await?;
     let visible: Vec<Group> = groups
         .into_iter()
         .filter(|g| !g.is_personal && (ctx.user.is_admin || ctx.group_ids.contains(&g.id)))
@@ -126,27 +112,17 @@ struct CreateGroupForm {
 }
 
 async fn create_group(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Form(form): Form<CreateGroupForm>,
 ) -> MResponse {
-    let trimmed = form.name.trim();
-    if trimmed.is_empty() {
-        return Err(Error::Validation {
-            message: "Group name cannot be empty".into(),
-        });
-    }
-    let group = foodlib.users().create_group(trimmed).await?;
-    foodlib
-        .users()
-        .add_user_to_group(ctx.user.id, group.id)
-        .await?;
-    let mut group_ids = ctx.group_ids.clone();
+    let group = app::admin::create_group(&state, &actor, form.name).await?;
+    let mut group_ids = actor.ctx.group_ids.clone();
     group_ids.push(group.id);
-    let groups = foodlib.users().get_all_groups().await?;
+    let groups = state.users().get_all_groups().await?;
     let visible: Vec<Group> = groups
         .into_iter()
-        .filter(|g| !g.is_personal && (ctx.user.is_admin || group_ids.contains(&g.id)))
+        .filter(|g| !g.is_personal && (actor.ctx.user.is_admin || group_ids.contains(&g.id)))
         .collect();
     Ok(html! {
         div id="admin-groups" class="w-full max-w-3xl" {
@@ -155,24 +131,28 @@ async fn create_group(
     })
 }
 
-async fn delete_group(foodlib: FoodLib, ctx: AuthCtx, Path(group_id): Path<i32>) -> MResponse {
-    assert_can_manage_group(&foodlib, &ctx, group_id).await?;
-    foodlib.users().delete_group(GroupId(group_id)).await?;
+async fn delete_group(
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
+    Path(group_id): Path<i32>,
+) -> MResponse {
+    app::admin::delete_group(&state, &actor, GroupId(group_id)).await?;
     Ok(html! {})
 }
 
 async fn group_members_view(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(group_id): Path<i32>,
 ) -> MResponse {
-    let group = assert_can_manage_group(&foodlib, &ctx, group_id).await?;
-    render_group_detail(&foodlib, group).await
+    let actor = AppCtx::new(ctx.clone(), Channel::WebUi);
+    let group = app::admin::assert_can_manage_group(&state, &actor, GroupId(group_id)).await?;
+    render_group_detail(&state, group).await
 }
 
-async fn render_group_detail(foodlib: &foodlib_new::FoodLib, group: Group) -> MResponse {
-    let members = ops::users::members_of_group(foodlib, group.id).await?;
-    let all_users = foodlib.users().get_all_users().await?;
+async fn render_group_detail(state: &MyAppState, group: Group) -> MResponse {
+    let members = ops::users::members_of_group(&state.db, group.id).await?;
+    let all_users = state.users().get_all_users().await?;
     let member_ids: std::collections::HashSet<UserId> = members.iter().map(|u| u.id).collect();
     let candidates: Vec<&User> = all_users
         .iter()
@@ -222,29 +202,22 @@ struct AddMemberForm {
 }
 
 async fn add_member(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(group_id): Path<i32>,
     Form(form): Form<AddMemberForm>,
 ) -> MResponse {
-    let group = assert_can_manage_group(&foodlib, &ctx, group_id).await?;
-    foodlib
-        .users()
-        .add_user_to_group(UserId(form.user_id), GroupId(group_id))
-        .await?;
-    render_group_detail(&foodlib, group).await
+    let group =
+        app::admin::add_member(&state, &actor, GroupId(group_id), UserId(form.user_id)).await?;
+    render_group_detail(&state, group).await
 }
 
 async fn remove_member(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((group_id, user_id)): Path<(i32, i64)>,
 ) -> MResponse {
-    assert_can_manage_group(&foodlib, &ctx, group_id).await?;
-    foodlib
-        .users()
-        .remove_user_from_group(UserId(user_id), GroupId(group_id))
-        .await?;
+    app::admin::remove_member(&state, &actor, GroupId(group_id), UserId(user_id)).await?;
     Ok(html! {})
 }
 
@@ -299,19 +272,11 @@ struct MetroSyncForm {
 }
 
 async fn metro_sync_run(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Form(form): Form<MetroSyncForm>,
 ) -> MResponse {
-    if !ctx.user.is_admin {
-        return Err(Error::Forbidden(
-            "Only admins can trigger Metro sync".into(),
-        ));
-    }
-    let opts = foodlib_new::ops::metro_sync::SyncOptions {
-        wipe_existing: form.wipe_existing.is_some(),
-    };
-    let report = foodlib.metro_sync().sync_with(None, opts).await?;
+    let report = app::admin::run_metro_sync(&state, &actor, form.wipe_existing.is_some()).await?;
     Ok(html! {
         div class="flex flex-col gap-2 p-4 border rounded" {
             p class="text-xl font-semibold" { "Sync complete" }
