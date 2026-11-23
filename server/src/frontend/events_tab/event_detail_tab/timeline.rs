@@ -376,7 +376,7 @@ impl Band {
     /// The `(start, label, id)` sort key makes both passes deterministic for
     /// identical input.
     fn pack(mut items: Vec<TimelineItem>) -> Self {
-        items.sort_by(|a, b| lane_sort_key(a).cmp(&lane_sort_key(b)));
+        items.sort_by_key(|a| lane_sort_key(a));
         let mut lanes: Vec<Vec<TimelineItem>> = Vec::new();
         // `lane_ends[i]` is the end-time of the last (latest) bar in `lanes[i]`.
         // Because we visit in start order, that's always the lane's current tail.
@@ -396,7 +396,7 @@ impl Band {
         }
         // Float the visually-heaviest lanes to the top. `sort_by` is stable, so
         // lanes of equal rank keep their (start-ordered) packing order.
-        lanes.sort_by(|a, b| lane_rank(a).cmp(&lane_rank(b)));
+        lanes.sort_by_key(|a| lane_rank(a));
         Band { lanes }
     }
 }

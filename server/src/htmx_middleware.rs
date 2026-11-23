@@ -19,7 +19,7 @@ pub async fn htmx_middleware(
     let is_htmx = req
         .headers()
         .get("HX-Request")
-        .map_or(false, |v| v == "true");
+        .is_some_and(|v| v == "true");
 
     let (host, _) = host.split_once(':').unwrap_or_default();
     #[cfg(debug_assertions)]

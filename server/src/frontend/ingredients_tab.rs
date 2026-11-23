@@ -294,7 +294,7 @@ fn render_ingredients_page(
             span class="htmx-indicator" { "Searching..." }
 
             table class="table-fixed responsive-card"{
-                @let is_admin = user.map_or(false, |u| u.is_admin);
+                @let is_admin = user.is_some_and(|u| u.is_admin);
                 thead { tr class="p-2" {
                     @if is_admin { th class="w-1/12" { "ID" } }
                     th class="w-1/4" { "Name" }
@@ -320,7 +320,7 @@ fn render_ingredients_page(
 /// to #content) which restores a fresh empty add-row, and the after-request
 /// handler refocuses the name input so the user can keep adding.
 fn ingredient_add_row(user: Option<&User>, _user_group_ids: &[GroupId]) -> Markup {
-    let is_admin = user.map_or(false, |u| u.is_admin);
+    let is_admin = user.is_some_and(|u| u.is_admin);
     html! {
         tr id="ingredient--1" {
             input type="hidden" name="id" value="-1";
@@ -433,7 +433,7 @@ async fn sources_table(foodlib: FoodLib, user: Option<User>, id: Path<Ingredient
     };
     let can_edit_sources = user
         .as_ref()
-        .map_or(false, |u| can_edit(ingredient.group_id, &user_group_ids, u));
+        .is_some_and(|u| can_edit(ingredient.group_id, &user_group_ids, u));
 
     Ok(html! {
         dialog open="true" class="dialog z-50" id="popup" {
@@ -487,7 +487,7 @@ async fn properties_dialog(
     };
     let can_edit = user
         .as_ref()
-        .map_or(false, |u| can_edit(ingredient.group_id, &user_group_ids, u));
+        .is_some_and(|u| can_edit(ingredient.group_id, &user_group_ids, u));
 
     // Group properties by source kind for readability.
     let mut contains: Vec<&foodlib_new::property::Property> = Vec::new();
@@ -795,8 +795,8 @@ fn format_ingredient(
     user_group_ids: &[GroupId],
 ) -> Markup {
     let sources_button_text = if ingredient.has_sources { "" } else { "⚠️" };
-    let can_edit_this = user.map_or(false, |u| can_edit(ingredient.group_id, user_group_ids, u));
-    let is_admin = user.map_or(false, |u| u.is_admin);
+    let can_edit_this = user.is_some_and(|u| can_edit(ingredient.group_id, user_group_ids, u));
+    let is_admin = user.is_some_and(|u| u.is_admin);
 
     let comment = ingredient
         .comment

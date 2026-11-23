@@ -38,7 +38,7 @@ pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
 }
 
 fn is_htmx(headers: &HeaderMap) -> bool {
-    headers.get("HX-Request").map_or(false, |v| v == "true")
+    headers.get("HX-Request").is_some_and(|v| v == "true")
 }
 
 #[derive(Deserialize, Default, Clone)]

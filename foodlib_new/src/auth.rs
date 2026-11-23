@@ -141,9 +141,7 @@ pub async fn register(
             is_admin,
         })
         .await
-        .map(|(user, _group)| user)
-        .map_err(Into::into)
-}
+        .map(|(user, _group)| user)}
 
 pub async fn change_password(
     backend: &AuthBackend,
@@ -154,5 +152,4 @@ pub async fn change_password(
         .user_ops
         .update_password(user_id, new_password)
         .await
-        .map_err(Into::into)
 }

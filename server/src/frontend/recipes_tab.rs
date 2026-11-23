@@ -55,7 +55,7 @@ pub async fn search(
 
     Ok(html! {
         @if user.is_some() {
-            (recipe_add_row(user.as_ref().map_or(false, |u| u.is_admin)))
+            (recipe_add_row(user.as_ref().is_some_and(|u| u.is_admin)))
         }
         @for recipe in filtered_recipes {
             (format_recipe(recipe, user.as_ref(), &user_group_ids))
@@ -236,7 +236,7 @@ pub async fn recipes_view(foodlib: FoodLib, user: Option<User>) -> Markup {
                 }
             }
             table class="w-full text-inherit table-auto object-center responsive-card" {
-                @let is_admin = user.as_ref().map_or(false, |u| u.is_admin);
+                @let is_admin = user.as_ref().is_some_and(|u| u.is_admin);
                 thead { tr {
                     @if is_admin { th class="w-1/12" { "ID" } }
                     th { "Name" } th { "Comment" } th {} th {}
@@ -327,8 +327,8 @@ fn can_edit(group_id: GroupId, user_group_ids: &[GroupId], user: &User) -> bool 
 }
 
 fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[GroupId]) -> Markup {
-    let can_edit_this = user.map_or(false, |u| can_edit(recipe.group_id, user_group_ids, u));
-    let is_admin = user.map_or(false, |u| u.is_admin);
+    let can_edit_this = user.is_some_and(|u| can_edit(recipe.group_id, user_group_ids, u));
+    let is_admin = user.is_some_and(|u| u.is_admin);
     let comment = recipe.comment.as_deref().unwrap_or("").trim().to_string();
 
     html! {

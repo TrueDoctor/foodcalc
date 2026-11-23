@@ -143,7 +143,7 @@ pub async fn update_meal(
         Ok(_) => {
             event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(e),
     }
 }
 
