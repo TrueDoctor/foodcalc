@@ -23,16 +23,17 @@
 
 use std::collections::HashMap;
 
+use crate::{frontend::MResponse, FoodLib, MyAppState};
 use axum::{
     extract::{Form, Path},
     routing::{get, post},
 };
 use foodlib_new::auth_context::AuthCtx;
+use foodlib_new::entities::types::ids::{EventId, FoodPrepId, MealId, RecipeId};
+use foodlib_new::types::ids::{ShoppingTourId, TimelineEntityId};
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, Date, Duration, OffsetDateTime, PrimitiveDateTime, Time};
-
-use crate::{frontend::MResponse, FoodLib, MyAppState};
 
 pub(crate) fn timeline_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -124,7 +125,7 @@ pub struct TimelineItem {
     /// DB primary key of the underlying row (meal_id / tour_id / prep_id). Used
     /// by the drag/resize JS and the update endpoints to identify the row.
     /// `None` for helper shifts, which come from Engelsystem and are read-only.
-    pub id: Option<i32>,
+    pub id: Option<TimelineEntityId>,
     pub label: String,
     /// Secondary line shown under the label (place, servings, …).
     pub detail: Option<String>,
@@ -159,12 +160,15 @@ impl ItemKind {
 ///
 /// Food-prep rows only carry a `recipe_id`, so recipe names are resolved once
 /// via a single `recipes().list()` into a lookup map (avoids N queries).
-async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<Vec<TimelineItem>> {
+async fn collect_items(
+    foodlib: &FoodLib,
+    event_id: EventId,
+) -> foodlib_new::Result<Vec<TimelineItem>> {
     let meals = foodlib.meals().get_event_meals(event_id).await?;
     let tours = foodlib.events().get_shopping_tours(event_id).await?;
     let preps = foodlib.events().get_food_prep_tasks(event_id).await?;
 
-    let recipe_names: HashMap<i32, String> = foodlib
+    let recipe_names: HashMap<RecipeId, String> = foodlib
         .recipes()
         .list()
         .await?
@@ -177,7 +181,10 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
     for m in meals {
         items.push(TimelineItem {
             kind: ItemKind::Meal,
-            id: Some(m.meal_id),
+            // TimelineItem.id is deliberately a raw i32: it is polymorphic
+            // across meals, tours and preps and only round-trips through the
+            // client JS; each update endpoint re-wraps it into the typed id.
+            id: Some(TimelineEntityId::Meal(m.meal_id)),
             label: m.name,
             detail: Some(format!("{} · {} Port.", m.place, m.servings)),
             start: m.start_time,
@@ -192,7 +199,7 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
         let start = t.tour_date;
         items.push(TimelineItem {
             kind: ItemKind::ShoppingTour,
-            id: Some(t.id),
+            id: Some(TimelineEntityId::Tour(t.id)),
             label: t.store_name.unwrap_or_else(|| "Einkauf".to_string()),
             detail: None,
             start,
@@ -212,7 +219,7 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
             .unwrap_or_else(|| format!("Rezept #{}", p.recipe_id));
         items.push(TimelineItem {
             kind: ItemKind::FoodPrep,
-            id: Some(p.id),
+            id: Some(TimelineEntityId::Prep(p.id)),
             label,
             detail: None,
             start: p.prep_date,
@@ -226,7 +233,7 @@ async fn collect_items(foodlib: &FoodLib, event_id: i32) -> foodlib_new::Result<
     // shifts for other events/days at the same location. Best-effort: an unset
     // integration or a failed fetch simply contributes no bars.
     if let Some(engel) = foodlib_new::ops::engelsystem::EngelSystem::from_env() {
-        let event_days: std::collections::HashSet<time::Date> =
+        let event_days: std::collections::HashSet<Date> =
             items.iter().map(|i| logical_date(i.start)).collect();
         for shift in engel.get_location_shifts(ENGELSYSTEM_LOCATION_ID).await {
             if !event_days.is_empty() && !event_days.contains(&logical_date(shift.start)) {
@@ -265,7 +272,9 @@ const DAY_START_HOUR: i64 = 4;
 /// meal groups with the evening it belongs to.
 fn logical_date(ts: OffsetDateTime) -> Date {
     if (ts.time().hour() as i64) < DAY_START_HOUR {
-        ts.date().previous_day().expect("date within representable range")
+        ts.date()
+            .previous_day()
+            .expect("date within representable range")
     } else {
         ts.date()
     }
@@ -320,15 +329,24 @@ impl WindowBounds {
     /// Compute the shared window from all items. Falls back to a sensible
     /// working-day window (08:00–20:00) when the event has no items yet.
     fn from_items(items: &[TimelineItem]) -> Self {
-        let earliest = items.iter().map(|i| hour_pos(i.start)).fold(f64::MAX, f64::min);
+        let earliest = items
+            .iter()
+            .map(|i| hour_pos(i.start))
+            .fold(f64::MAX, f64::min);
         let latest = items.iter().map(end_hour_pos).fold(f64::MIN, f64::max);
         if items.is_empty() || earliest > latest {
-            return WindowBounds { first_hour: 8, last_hour: 20 };
+            return WindowBounds {
+                first_hour: 8,
+                last_hour: 20,
+            };
         }
         // Floor/ceil to whole hours, pad one hour each side, clamp to [0, 24].
         let first_hour = ((earliest.floor() as i64) - 1).max(0);
         let last_hour = ((latest.ceil() as i64) + 1).min(SLOTS_PER_DAY);
-        WindowBounds { first_hour, last_hour }
+        WindowBounds {
+            first_hour,
+            last_hour,
+        }
     }
 }
 
@@ -412,8 +430,8 @@ fn lane_rank(lane: &[TimelineItem]) -> (std::cmp::Reverse<Duration>, OffsetDateT
 /// deterministic for identical input. Start-first ordering is what guarantees
 /// the minimum lane count; the "longest on top" concern is handled afterwards
 /// by [`lane_rank`], not here.
-fn lane_sort_key(item: &TimelineItem) -> (OffsetDateTime, String, i32) {
-    (item.start, item.label.clone(), item.id.unwrap_or(i32::MAX))
+fn lane_sort_key(item: &TimelineItem) -> (OffsetDateTime, String, bool, Option<TimelineEntityId>) {
+    (item.start, item.label.clone(), item.id.is_none(), item.id)
 }
 
 /// One calendar day's worth of items, grouped into per-kind packed bands.
@@ -449,8 +467,11 @@ fn group_by_day(items: &[TimelineItem]) -> Vec<DayRow> {
             let bands = KIND_ORDER
                 .iter()
                 .filter_map(|&kind| {
-                    let of_kind: Vec<TimelineItem> =
-                        day_items.iter().filter(|i| i.kind == kind).cloned().collect();
+                    let of_kind: Vec<TimelineItem> = day_items
+                        .iter()
+                        .filter(|i| i.kind == kind)
+                        .cloned()
+                        .collect();
                     (!of_kind.is_empty()).then(|| Band::pack(of_kind))
                 })
                 .collect();
@@ -555,14 +576,16 @@ fn render_gridlines(bounds: WindowBounds) -> Markup {
 /// `event_id` and `day` (the bar's logical date) are emitted as `data-*` so the
 /// drag/resize JS can reconstruct the wall-clock timestamp and POST an update.
 /// Meal/tour/prep bars are made draggable; helper bars stay static.
-fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: i32, day: Date) -> Markup {
+fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: EventId, day: Date) -> Markup {
     let left = pct(hour_pos(item.start), bounds);
     let right = pct(end_hour_pos(item), bounds);
     let width = (right - left).max(1.5);
     let time_fmt = format_description!("[hour]:[minute]");
     let start_label = item.start.time().format(&time_fmt).unwrap_or_default();
     let end_label = item.end.time().format(&time_fmt).unwrap_or_default();
-    let colors = item.class_override.unwrap_or_else(|| item.kind.bar_classes());
+    let colors = item
+        .class_override
+        .unwrap_or_else(|| item.kind.bar_classes());
 
     // A bar is interactive when it has both a DB id and a drag key (i.e. not a
     // read-only helper). The JS attaches handlers by the `data-drag` marker.
@@ -578,7 +601,11 @@ fn render_bar(item: &TimelineItem, bounds: WindowBounds, event_id: i32, day: Dat
         "group absolute top-0.5 bottom-0.5 rounded border px-2 py-0.5 text-xs \
          overflow-hidden whitespace-nowrap flex items-center {} {}",
         colors,
-        if drag_key.is_some() { "cursor-grab select-none tl-bar" } else { "" },
+        if drag_key.is_some() {
+            "cursor-grab select-none tl-bar"
+        } else {
+            ""
+        },
     );
 
     html! {
@@ -641,7 +668,12 @@ fn resize_handle(edge: &str) -> Markup {
 
 /// Render one lane (grid row): a relative track holding the gridlines plus the
 /// absolutely-positioned bars assigned to this lane.
-fn render_lane(lane: &[TimelineItem], bounds: WindowBounds, event_id: i32, day: Date) -> Markup {
+fn render_lane(
+    lane: &[TimelineItem],
+    bounds: WindowBounds,
+    event_id: EventId,
+    day: Date,
+) -> Markup {
     html! {
         div class="relative h-7 w-full" {
             (render_gridlines(bounds))
@@ -653,7 +685,11 @@ fn render_lane(lane: &[TimelineItem], bounds: WindowBounds, event_id: i32, day: 
 }
 
 /// Render the whole timeline for one event.
-pub async fn timeline_view(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
+pub async fn timeline_view(
+    foodlib: FoodLib,
+    ctx: AuthCtx,
+    Path(event_id): Path<EventId>,
+) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
 
     let event = foodlib.events().get(event_id).await?;
@@ -823,14 +859,18 @@ fn to_stored(day: Date, minutes_since_day_start: i64) -> Option<OffsetDateTime> 
 async fn handle_move(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
     Form(form): Form<MoveForm>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
 
     log::info!(
         "timeline move: kind={} id={} day={} start_min={} end_min={:?}",
-        form.kind, form.id, form.day, form.start_min, form.end_min
+        form.kind,
+        form.id,
+        form.day,
+        form.start_min,
+        form.end_min
     );
 
     let day = Date::parse(&form.day, format_description!("[year]-[month]-[day]"))
@@ -840,7 +880,7 @@ async fn handle_move(
 
     match form.kind.as_str() {
         "meal" => {
-            let m = foodlib.meals().get_meal(form.id).await?;
+            let m = foodlib.meals().get_meal(MealId(form.id)).await?;
             // Preserve the meal's duration on a plain move; honor end_min on a
             // resize. Guard against a non-positive span by falling back to the
             // original duration.
@@ -865,12 +905,15 @@ async fn handle_move(
                 .await?;
         }
         "tour" => {
-            let mut tour = foodlib.events().get_shopping_tour(form.id).await?;
+            let mut tour = foodlib
+                .events()
+                .get_shopping_tour(ShoppingTourId(form.id))
+                .await?;
             tour.tour_date = new_start;
             foodlib.events().update_shopping_tour(tour).await?;
         }
         "prep" => {
-            let mut prep = foodlib.events().get_food_prep(form.id).await?;
+            let mut prep = foodlib.events().get_food_prep(FoodPrepId(form.id)).await?;
             // Keep the use window's length relative to the (possibly changed)
             // prep time so a moved prep still "uses until" the same offset.
             let delta = new_start - prep.prep_date;
@@ -921,12 +964,10 @@ mod tests {
     /// Build a meal item spanning [start_h, end_h) o'clock on a fixed test day.
     fn meal(label: &str, start_h: u8, end_h: u8) -> TimelineItem {
         let day = date!(2026 - 07 - 06);
-        let at = |h: u8| {
-            PrimitiveDateTime::new(day, Time::from_hms(h, 0, 0).unwrap()).assume_utc()
-        };
+        let at = |h: u8| PrimitiveDateTime::new(day, Time::from_hms(h, 0, 0).unwrap()).assume_utc();
         TimelineItem {
             kind: ItemKind::Meal,
-            id: Some(1),
+            id: Some(TimelineEntityId::Meal(MealId(0))),
             label: label.to_string(),
             detail: None,
             start: at(start_h),
@@ -967,7 +1008,11 @@ mod tests {
             meal("c", 12, 13),
             meal("d", 14, 15),
         ]);
-        assert_eq!(band.lanes.len(), 1, "non-overlapping meals should share a lane");
+        assert_eq!(
+            band.lanes.len(),
+            1,
+            "non-overlapping meals should share a lane"
+        );
         assert_eq!(band.lanes[0].len(), 4);
     }
 
@@ -1000,7 +1045,10 @@ mod tests {
         ]);
         assert_eq!(band.lanes.len(), 2);
         let top_has_long = band.lanes[0].iter().any(|i| i.label == "long");
-        assert!(top_has_long, "the lane with the longest bar should be on top");
+        assert!(
+            top_has_long,
+            "the lane with the longest bar should be on top"
+        );
     }
 
     #[test]
@@ -1014,6 +1062,9 @@ mod tests {
         };
         assert_eq!(names(&forward), names(&reversed));
         // And "alpha" comes before "bravo" (name tiebreak, lane 0 first).
-        assert_eq!(names(&forward), vec!["alpha".to_string(), "bravo".to_string()]);
+        assert_eq!(
+            names(&forward),
+            vec!["alpha".to_string(), "bravo".to_string()]
+        );
     }
 }

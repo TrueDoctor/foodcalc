@@ -1,6 +1,6 @@
 [package]
 name = "status-api"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -9,7 +9,7 @@ edition = "2021"
 axum = {version = "0.8", features = ["macros"]}
 time.workspace = true
 dotenv.workspace = true
-foodlib_new = { version = "0.1.0", path = "../foodlib_new" }
+foodlib_new = { version = "1.0.0", path = "../foodlib_new" }
 http = "1.1.0"
 num = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

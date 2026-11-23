@@ -1,6 +1,6 @@
 [package]
 name = "server"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -12,7 +12,6 @@ typst = ["dep:typst-renderer"]
 
 [dependencies]
 axum.workspace = true
-bcrypt = {workspace = true}
 foodlib_new = { path = "../foodlib_new", features = ["axum"] }
 typst-renderer = { path = "../typst-renderer", optional = true }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }

@@ -5,7 +5,8 @@ use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::error::Error;
-use foodlib_new::recipe::{Recipe, RecipeKind};
+use foodlib_new::recipe::{CreateRecipe, Recipe, RecipeKind};
+use foodlib_new::types::ids::{GroupId, RecipeId};
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
@@ -104,7 +105,7 @@ pub async fn export_recipe_pdf(
     let recipe_info = state
         .export()
         .fetch_user_input_meal(
-            recipe_id,
+            RecipeId(recipe_id),
             number_of_servings as f64,
             energy as u32,
             "".to_string(),
@@ -144,7 +145,11 @@ pub async fn shopping_list(
 
     let subrecipes = state
         .export()
-        .fetch_subrecipes_from_user_input(recipe_id, number_of_servings as f64, energy as u32)
+        .fetch_subrecipes_from_user_input(
+            RecipeId(recipe_id),
+            number_of_servings as f64,
+            energy as u32,
+        )
         .await?;
     let shopping_list = subrecipes
         .iter()
@@ -183,7 +188,7 @@ pub async fn delete_recipe_nqa(
         ));
     }
 
-    foodlib.recipes().delete(recipe_id).await?;
+    foodlib.recipes().delete(RecipeId(recipe_id)).await?;
     Ok(recipes_view(foodlib, Some(user)).await)
 }
 
@@ -288,8 +293,7 @@ async fn add_recipe(
     Form(recipe_data): Form<NewRecipe>,
 ) -> MResponse {
     let group = foodlib.users().get_personal_group(ctx.user.id).await?;
-    let recipe = Recipe {
-        id: -1,
+    let recipe = CreateRecipe {
         name: recipe_data.name,
         comment: recipe_data.comment,
         group_id: group.id,
@@ -304,7 +308,7 @@ async fn add_recipe(
 async fn fetch_recipes_and_groups(
     foodlib: &FoodLib,
     user: Option<&User>,
-) -> Result<(Vec<Recipe>, Vec<i32>), foodlib_new::Error> {
+) -> Result<(Vec<Recipe>, Vec<GroupId>), foodlib_new::Error> {
     let recipes = foodlib.recipes().list().await?;
     let user_group_ids = match user {
         Some(u) => foodlib
@@ -319,11 +323,11 @@ async fn fetch_recipes_and_groups(
     Ok((recipes, user_group_ids))
 }
 
-fn can_edit(group_id: i32, user_group_ids: &[i32], user: &User) -> bool {
+fn can_edit(group_id: GroupId, user_group_ids: &[GroupId], user: &User) -> bool {
     user.is_admin || user_group_ids.contains(&group_id)
 }
 
-fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[i32]) -> Markup {
+fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[GroupId]) -> Markup {
     let can_edit_this = user.map_or(false, |u| can_edit(recipe.group_id, user_group_ids, u));
     let is_admin = user.map_or(false, |u| u.is_admin);
     let comment = recipe.comment.as_deref().unwrap_or("").trim().to_string();
@@ -378,7 +382,7 @@ fn pretty_property(name: &str) -> String {
 async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
     let rp = foodlib
         .properties()
-        .get_recipe_properties(recipe_id)
+        .get_recipe_properties(RecipeId(recipe_id))
         .await?;
     let dietary = foodlib_new::ops::allergens::dietary_flags(&rp.properties);
 

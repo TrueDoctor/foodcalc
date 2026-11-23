@@ -3,6 +3,7 @@ use axum::{
 };
 use axum_extra::extract::Host;
 use foodlib_new::auth::AuthSession;
+use foodlib_new::types::ids::UserId;
 use foodlib_new::user::User;
 use maud::{html, DOCTYPE};
 
@@ -31,7 +32,7 @@ pub async fn htmx_middleware(
     {
         let user = User {
             username: "test".into(),
-            id: 0,
+            id: UserId(0),
             is_admin: true,
             // TODO: replace this with a better way to handle this
             password_hash: String::from("password"),
