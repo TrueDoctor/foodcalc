@@ -5,9 +5,10 @@ use axum_login::login_required;
 use foodlib_new::auth::AuthBackend;
 use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::error::Error;
-use foodlib_new::recipe::{RecipeData, Recipe, RecipeKind};
+use foodlib_new::recipe::Recipe;
 use foodlib_new::types::ids::{GroupId, RecipeId};
 use foodlib_new::user::User;
+use app::{AppCtx, Channel};
 use maud::{html, Markup};
 use serde::Deserialize;
 
@@ -288,20 +289,19 @@ struct NewRecipe {
 }
 
 async fn add_recipe(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Form(recipe_data): Form<NewRecipe>,
 ) -> MResponse {
-    let group = foodlib.users().get_personal_group(ctx.user.id).await?;
-    let recipe = RecipeData {
-        name: recipe_data.name,
-        comment: recipe_data.comment,
-        weighed_in: false,
-        kind: RecipeKind::Meal,
-    };
-
-    let created_recipe = foodlib.recipes().create(group.id, recipe).await?;
-    recipes_edit_tab::recipe_edit_view(foodlib, ctx, Path(created_recipe.id)).await
+    let actor = AppCtx::new(ctx.clone(), Channel::WebUi);
+    let created_recipe = app::recipes::create_recipe(
+        &state,
+        &actor,
+        recipe_data.name,
+        recipe_data.comment,
+    )
+    .await?;
+    recipes_edit_tab::recipe_edit_view(State(state), ctx, Path(created_recipe)).await
 }
 
 async fn fetch_recipes_and_groups(

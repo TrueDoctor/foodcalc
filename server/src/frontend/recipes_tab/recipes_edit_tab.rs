@@ -1,14 +1,13 @@
-use crate::FoodLib;
 use crate::{
     frontend::{icons, move_group, MResponse},
     MyAppState,
 };
+use app::{AppCtx, Channel};
 use axum::{
-    extract::{Form, Path},
+    extract::{Form, Path, State},
     routing::{delete, put},
 };
 use bigdecimal::ToPrimitive;
-use foodlib_new::recipe::RecipeData;
 use foodlib_new::{
     auth_context::AuthCtx,
     entities::types::amount::Amount,
@@ -18,7 +17,12 @@ use foodlib_new::{
 };
 use maud::{html, Markup};
 use serde::Deserialize;
-use time::Duration;
+
+/// Wraps the request's `AuthCtx` into the transport-agnostic `AppCtx`
+/// (this transport is the HTMX/Maud web UI).
+fn actor(ctx: &AuthCtx) -> AppCtx {
+    AppCtx::new(ctx.clone(), Channel::WebUi)
+}
 
 pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -65,35 +69,12 @@ pub struct UpdateIngredientHeader {
     pub ingredient_unit_id: UnitId,
 }
 
-impl From<UpdateIngredientHeader> for RecipeIngredient {
-    fn from(value: UpdateIngredientHeader) -> Self {
-        Self {
-            recipe_id: value.recipe_id,
-            ingredient_id: value.ingredient_id,
-            amount: value.ingredient_amount,
-            unit_id: value.ingredient_unit_id,
-            name: Some(value.ingredient_name),
-        }
-    }
-}
-
 #[derive(Deserialize, Debug)]
 pub struct UpdateSubrecipeHeader {
     pub recipe_id: RecipeId,
     pub subrecipe_id: RecipeId,
     pub subrecipe_name: String,
     pub subrecipe_amount: Amount,
-}
-
-impl From<UpdateSubrecipeHeader> for RecipeMetaIngredient {
-    fn from(value: UpdateSubrecipeHeader) -> Self {
-        Self {
-            parent_id: value.recipe_id,
-            child_id: value.subrecipe_id,
-            weight: value.subrecipe_amount,
-            name: Some(value.subrecipe_name),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,91 +88,81 @@ pub struct UpdateRecipeStepHeader {
     pub recipe_id: RecipeId,
 }
 
-impl From<UpdateRecipeStepHeader> for RecipeStep {
-    fn from(value: UpdateRecipeStepHeader) -> Self {
-        RecipeStep {
-            id: value.step_id,
-            order: value.step_order,
-            name: value.step_name,
-            description: value.step_description,
-            fixed_duration: Duration::seconds((value.fixed_duration_minutes * 60.0).round() as i64),
-            duration_per_kg: Duration::seconds(
-                (value.duration_per_kg_minutes * 60.0).round() as i64
-            ),
-            recipe_id: value.recipe_id,
-        }
-    }
-}
-
 pub async fn handle_name_change(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Form(data): Form<UpdateNameHeader>,
 ) -> Result<(), foodlib_new::Error> {
-    ctx.assert_can_edit_recipe(data.recipe_id).await?;
-
-    let current = foodlib.recipes().get(data.recipe_id).await?;
-    if current.group_id != data.group_id {
-        move_group::assert_can_move_to(&ctx, data.group_id)?;
-    }
-
-    foodlib
-        .recipes()
-        .update(
-            data.recipe_id,
-            RecipeData {
-                name: data.name,
-                comment: Some(data.comment),
-                weighed_in: data.weighed_in,
-                kind: current.kind,
-            },
-        )
-        .await?;
-    if current.group_id != data.group_id {
-        foodlib
-            .recipes()
-            .set_group(data.recipe_id, data.group_id)
-            .await?;
-    }
-    Ok(())
+    app::recipes::update_name(
+        &state,
+        &actor(&ctx),
+        data.recipe_id,
+        data.name,
+        data.comment,
+        data.group_id,
+        data.weighed_in,
+    )
+    .await
 }
 
 pub async fn handle_ingredient_change(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(data.recipe_id).await?;
-    let recipe_ingredient = foodlib.recipes().update_ingredient(data.into()).await?;
+    let recipe_ingredient = app::recipes::update_ingredient(
+        &state,
+        &actor(&ctx),
+        data.recipe_id,
+        data.ingredient_id,
+        data.ingredient_name,
+        data.ingredient_amount,
+        data.ingredient_unit_id,
+    )
+    .await?;
 
     Ok(recipe_ingredient.format_for_ingredient_table(
-        foodlib.units().list().await.unwrap_or_default().clone(),
+        state.units().list().await.unwrap_or_default().clone(),
         recipe_ingredient.recipe_id,
     ))
 }
 
 pub async fn handle_subrecipe_change(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Form(data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(data.recipe_id).await?;
-    let sub_recipe = foodlib
-        .recipes()
-        .update_meta_ingredient(data.into())
-        .await?;
+    let sub_recipe = app::recipes::update_subrecipe(
+        &state,
+        &actor(&ctx),
+        data.recipe_id,
+        data.subrecipe_id,
+        data.subrecipe_name,
+        data.subrecipe_amount,
+    )
+    .await?;
 
     Ok(sub_recipe.format_for_subrecipe_table())
 }
 
 pub async fn handle_step_change(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let recipe_id = data.recipe_id;
-    let step = foodlib.recipes().update_step(data.into()).await?;
+    let step = app::recipes::update_step(
+        &state,
+        &actor(&ctx),
+        data.recipe_id,
+        data.step_id,
+        data.step_order,
+        data.step_name,
+        data.step_description,
+        data.fixed_duration_minutes,
+        data.duration_per_kg_minutes,
+    )
+    .await?;
 
     Ok(step.format_for_step_table(recipe_id))
 }
@@ -207,109 +178,99 @@ struct ReorderStepForm {
 }
 
 async fn handle_step_reorder(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Form(form): Form<ReorderStepForm>,
 ) -> Result<(), foodlib_new::Error> {
-    ctx.assert_can_edit_recipe(form.recipe_id).await?;
-    let mut step = foodlib
-        .recipes()
-        .get_steps(form.recipe_id)
-        .await?
-        .into_iter()
-        .find(|s| s.id == form.step_id)
-        .ok_or_else(|| foodlib_new::Error::NotFound {
-            entity: "RecipeStep",
-            id: form.step_id.to_string(),
-        })?;
-    step.order = form.step_order;
-    foodlib.recipes().update_step(step).await?;
-    Ok(())
+    app::recipes::reorder_step(&state, &actor(&ctx), form.recipe_id, form.step_id, form.step_order)
+        .await
 }
 
 pub async fn handle_ingredient_delete(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path((recipe_id, ingredient_id)): Path<(RecipeId, IngredientId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(recipe_id).await?;
-    foodlib
-        .recipes()
-        .delete_ingredient(recipe_id, ingredient_id)
-        .await?;
+    app::recipes::delete_ingredient(&state, &actor(&ctx), recipe_id, ingredient_id).await?;
 
-    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_subrecipe_delete(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path((recipe_id, subrecipe_id)): Path<(RecipeId, RecipeId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(recipe_id).await?;
-    foodlib
-        .recipes()
-        .delete_meta_ingredient(recipe_id, subrecipe_id)
-        .await?;
+    app::recipes::delete_subrecipe(&state, &actor(&ctx), recipe_id, subrecipe_id).await?;
 
-    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_step_delete(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path((recipe_id, step_id)): Path<(RecipeId, RecipeStepId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(recipe_id).await?;
-    foodlib.recipes().delete_step(recipe_id, step_id).await?;
+    app::recipes::delete_step(&state, &actor(&ctx), recipe_id, step_id).await?;
 
-    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_ingredient_add(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Form(mut data): Form<UpdateIngredientHeader>,
+    Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(data.recipe_id).await?;
-    let ingredient = foodlib
-        .ingredients()
-        .get_by_name(&data.ingredient_name)
-        .await?;
-
     let recipe_id = data.recipe_id;
-    data.ingredient_id = ingredient.id;
-    foodlib.recipes().add_ingredient(data.into()).await?;
+    app::recipes::add_ingredient(
+        &state,
+        &actor(&ctx),
+        recipe_id,
+        &data.ingredient_name,
+        data.ingredient_amount,
+        data.ingredient_unit_id,
+    )
+    .await?;
 
-    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_subrecipe_add(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Form(mut data): Form<UpdateSubrecipeHeader>,
+    Form(data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(data.recipe_id).await?;
-    let subrecipe = foodlib.recipes().get_by_name(&data.subrecipe_name).await?;
     let recipe_id = data.recipe_id;
-    data.subrecipe_id = subrecipe.id;
-    foodlib.recipes().add_meta_ingredient(data.into()).await?;
+    app::recipes::add_subrecipe(
+        &state,
+        &actor(&ctx),
+        recipe_id,
+        &data.subrecipe_name,
+        data.subrecipe_amount,
+    )
+    .await?;
 
-    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
+    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
 }
 
 pub async fn handle_step_add(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Form(mut data): Form<UpdateRecipeStepHeader>,
+    Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(data.recipe_id).await?;
     let recipe_id = data.recipe_id;
-    // Order is no longer user-supplied — append after the current max.
-    let existing = foodlib.recipes().get_steps(recipe_id).await?;
-    data.step_order = existing.iter().map(|s| s.order).fold(0.0_f64, f64::max) + 1.0;
-    foodlib.recipes().add_step(data.into()).await?;
-    recipe_edit_view(foodlib, ctx, Path(recipe_id)).await
+    app::recipes::add_step(
+        &state,
+        &actor(&ctx),
+        recipe_id,
+        data.step_id,
+        data.step_name,
+        data.step_description,
+        data.fixed_duration_minutes,
+        data.duration_per_kg_minutes,
+    )
+    .await?;
+    recipe_edit_view(State(state), ctx, Path(recipe_id)).await
 }
 
 /// First-row inline add for the recipe-ingredients table. Sentinel id -1; the
@@ -389,26 +350,22 @@ fn recipe_subrecipe_add_row(
 }
 
 pub async fn recipe_edit_view(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(recipe_id): Path<RecipeId>,
 ) -> MResponse {
-    ctx.assert_can_edit_recipe(recipe_id).await?;
-    let subrecipes = foodlib.recipes().get_meta_ingredients(recipe_id).await?;
-
-    let ingredients = foodlib.recipes().get_ingredients(recipe_id).await?;
-    let all_ingredients = foodlib.ingredients().list().await?;
-    let all_recipes = foodlib.recipes().list().await?;
-    let unit_types = foodlib.units().list().await?;
-    let steps = foodlib.recipes().get_steps(recipe_id).await?;
-    // The stats might not exist yet if we are creating a new recipe
-    let stats = foodlib
-        .recipes()
-        .get_recipe_stats(recipe_id)
-        .await
-        .unwrap_or_default();
-    let recipe = foodlib.recipes().get(recipe_id).await?;
-    let owner_select = move_group::owner_select(&foodlib, &ctx, recipe.group_id).await?;
+    let data = app::recipes::gather_edit_view_data(&state, &actor(&ctx), recipe_id).await?;
+    let owner_select = move_group::owner_select(&state, &ctx, data.recipe.group_id).await?;
+    let app::recipes::EditViewData {
+        recipe,
+        sub_recipes,
+        ingredients,
+        all_ingredients,
+        all_recipes,
+        unit_types,
+        steps,
+        stats,
+    } = data;
 
     Ok(html! {
         div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full"{
@@ -451,7 +408,7 @@ pub async fn recipe_edit_view(
                     thead { tr { th { "Name" } th { "Amount" } th { "Unit" } th { "Delete" } } }
                     tbody {
                         (recipe_subrecipe_add_row(recipe_id, &all_recipes))
-                        @for item in subrecipes { (item.format_for_subrecipe_table()) }
+                        @for item in &sub_recipes { (item.format_for_subrecipe_table()) }
                     }
                 }
             }

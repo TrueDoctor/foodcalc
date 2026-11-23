@@ -12,7 +12,7 @@ pub use app_ctx::AppCtx;
 
 // Domain modules (use-case contracts, DTOs) — transport-agnostic
 pub mod exports;
-// pub mod recipes;
+pub mod recipes;
 // pub mod events;
 // pub mod ingredients;
 // pub mod inventories;
