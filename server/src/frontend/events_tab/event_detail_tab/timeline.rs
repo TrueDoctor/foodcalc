@@ -23,14 +23,13 @@
 
 use std::collections::HashMap;
 
-use crate::{frontend::MResponse, FoodLib, MyAppState};
+use crate::{frontend::MResponse, frontend::WebCtx, MyAppState};
 use axum::{
-    extract::{Form, Path},
+    extract::{Form, Path, State},
     routing::{get, post},
 };
-use foodlib_new::auth_context::AuthCtx;
-use foodlib_new::entities::types::ids::{EventId, FoodPrepId, MealId, RecipeId};
-use foodlib_new::types::ids::{ShoppingTourId, TimelineEntityId};
+use foodlib_new::entities::types::ids::{EventId, RecipeId};
+use foodlib_new::types::ids::TimelineEntityId;
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, Date, Duration, OffsetDateTime, PrimitiveDateTime, Time};
@@ -161,14 +160,14 @@ impl ItemKind {
 /// Food-prep rows only carry a `recipe_id`, so recipe names are resolved once
 /// via a single `recipes().list()` into a lookup map (avoids N queries).
 async fn collect_items(
-    foodlib: &FoodLib,
+    state: &MyAppState,
     event_id: EventId,
 ) -> foodlib_new::Result<Vec<TimelineItem>> {
-    let meals = foodlib.meals().get_event_meals(event_id).await?;
-    let tours = foodlib.events().get_shopping_tours(event_id).await?;
-    let preps = foodlib.events().get_food_prep_tasks(event_id).await?;
+    let meals = state.meals().get_event_meals(event_id).await?;
+    let tours = state.events().get_shopping_tours(event_id).await?;
+    let preps = state.events().get_food_prep_tasks(event_id).await?;
 
-    let recipe_names: HashMap<RecipeId, String> = foodlib
+    let recipe_names: HashMap<RecipeId, String> = state
         .recipes()
         .list()
         .await?
@@ -686,14 +685,14 @@ fn render_lane(
 
 /// Render the whole timeline for one event.
 pub async fn timeline_view(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
+    actor.ctx.assert_can_edit_event(event_id).await?;
 
-    let event = foodlib.events().get(event_id).await?;
-    let items = collect_items(&foodlib, event_id).await?;
+    let event = state.events().get(event_id).await?;
+    let items = collect_items(&state, event_id).await?;
     let bounds = WindowBounds::from_items(&items);
     let days = group_by_day(&items);
 
@@ -857,13 +856,11 @@ fn to_stored(day: Date, minutes_since_day_start: i64) -> Option<OffsetDateTime> 
 /// timeline. Read-modify-write: the current row is fetched and only its time
 /// fields are patched, so no other data is trusted from the client.
 async fn handle_move(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
     Form(form): Form<MoveForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-
     log::info!(
         "timeline move: kind={} id={} day={} start_min={} end_min={:?}",
         form.kind,
@@ -878,63 +875,28 @@ async fn handle_move(
     let new_start = to_stored(day, form.start_min)
         .ok_or_else(|| foodlib_new::Error::Misc("invalid start time".into()))?;
 
-    match form.kind.as_str() {
-        "meal" => {
-            let m = foodlib.meals().get_meal(MealId(form.id)).await?;
-            // Preserve the meal's duration on a plain move; honor end_min on a
-            // resize. Guard against a non-positive span by falling back to the
-            // original duration.
-            let new_end = match form.end_min {
-                Some(end_min) => to_stored(day, end_min)
-                    .filter(|e| *e > new_start)
-                    .unwrap_or(new_start + (m.end_time - m.start_time)),
-                None => new_start + (m.end_time - m.start_time),
-            };
-            foodlib
-                .meals()
-                .update_meal(
-                    m.meal_id,
-                    m.recipe_id,
-                    m.place_id,
-                    new_start,
-                    new_end,
-                    m.energy,
-                    m.servings,
-                    m.comment,
-                )
-                .await?;
-        }
-        "tour" => {
-            let mut tour = foodlib
-                .events()
-                .get_shopping_tour(ShoppingTourId(form.id))
-                .await?;
-            tour.tour_date = new_start;
-            foodlib.events().update_shopping_tour(tour).await?;
-        }
-        "prep" => {
-            let mut prep = foodlib.events().get_food_prep(FoodPrepId(form.id)).await?;
-            // Keep the use window's length relative to the (possibly changed)
-            // prep time so a moved prep still "uses until" the same offset.
-            let delta = new_start - prep.prep_date;
-            prep.prep_date = new_start;
-            prep.use_until += delta;
-            if let Some(from) = prep.use_from {
-                prep.use_from = Some(from + delta);
-            }
-            foodlib.events().update_food_prep(prep).await?;
-        }
-        other => {
-            return Err(foodlib_new::Error::Misc(format!("unknown kind: {other}")));
-        }
-    }
+    let new_end = match form.end_min {
+        Some(end_min) => to_stored(day, end_min),
+        None => None,
+    };
+    app::events::timeline::move_timeline_item(
+        &state,
+        &actor,
+        event_id,
+        &form.kind,
+        form.id,
+        new_start,
+        new_end,
+    )
+    .await?;
 
-    timeline_view(foodlib, ctx, Path(event_id)).await
+    timeline_view(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use foodlib_new::entities::types::ids::MealId;
     use time::macros::date;
 
     #[test]

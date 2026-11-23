@@ -1,12 +1,23 @@
 //! Event use-cases.
 
 use bigdecimal::FromPrimitive;
-use foodlib_new::entities::types::ids::EventId;
+use foodlib_new::entities::types::ids::{
+    EventId, GroupId,
+};
 use foodlib_new::entities::types::money::Money;
-use foodlib_new::event::CreateEvent;
+use foodlib_new::event::{CreateEvent, Event, FoodPrep};
+use foodlib_new::ingredient::Ingredient;
+use foodlib_new::meal::Meal;
+use foodlib_new::recipe::Recipe;
+use foodlib_new::store::Store;
 
-use crate::app_ctx::AppCtx;
+use crate::app_ctx::{AppCtx, assert_can_move_to};
 use crate::{MyAppState, Result};
+
+pub mod meals;
+pub mod shopping;
+pub mod timeline;
+pub mod logistics;
 
 /// Creates a new event owned by the actor's personal group. An empty comment
 /// is normalized to `None`.
@@ -56,3 +67,81 @@ pub async fn delete_event(
     state.events().delete(event_id).await?;
     Ok(())
 }
+
+/// Updates an event's metadata and optionally transfers it to another group.
+/// An empty comment is normalized to `None`.
+/// Requires `EditEvent` permission; moving to another group additionally
+/// requires membership in (or admin over) the target group.
+pub async fn update_event(
+    state: &MyAppState,
+    actor: &AppCtx,
+    event_id: EventId,
+    name: String,
+    comment: String,
+    budget: Option<f64>,
+    target_group: GroupId,
+) -> Result<()> {
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    let current = state.events().get(event_id).await?;
+    if current.group_id != target_group {
+        assert_can_move_to(actor, target_group)?;
+    }
+
+    state
+        .events()
+        .update(Event {
+            id: event_id,
+            name,
+            comment: (!comment.is_empty()).then_some(comment),
+            budget: budget
+                .and_then(bigdecimal::BigDecimal::from_f64)
+                .map(Money::from),
+            group_id: GroupId(0), // Placeholder; ops-level update ignores group_id
+        })
+        .await?;
+
+    if current.group_id != target_group {
+        state.events().set_group(event_id, target_group).await?;
+    }
+    Ok(())
+}
+
+/// Everything the event edit form renders, fetched in one use case so
+/// transports only have to deal with presentation.
+pub struct EventFormData {
+    pub event: Event,
+    pub stores: Vec<Store>,
+    pub overrides: Vec<foodlib_new::event::SourceOverrideView>,
+    pub ingredients: Vec<Ingredient>,
+    pub meals: Vec<Meal>,
+    pub recipes: Vec<Recipe>,
+    pub preps: Vec<FoodPrep>,
+}
+
+/// Collects all data needed to render the event edit form.
+/// Requires `EditEvent` permission.
+pub async fn gather_form_data(
+    state: &MyAppState,
+    actor: &AppCtx,
+    event_id: EventId,
+) -> Result<EventFormData> {
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    let stores = state.stores().list().await?;
+    let overrides = state.events().get_source_overrides(event_id).await?;
+    let ingredients = state.ingredients().list().await?;
+    let meals = state.meals().get_event_meals(event_id).await?;
+    let recipes = state.recipes().list().await?;
+    let preps = state.events().get_food_prep_tasks(event_id).await?;
+    let event = state.events().get(event_id).await?;
+
+    Ok(EventFormData {
+        event,
+        stores,
+        overrides,
+        ingredients,
+        meals,
+        recipes,
+        preps,
+    })
+}
+

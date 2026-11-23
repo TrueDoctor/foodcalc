@@ -5,14 +5,12 @@ use axum::{
 };
 use bigdecimal::ToPrimitive;
 use foodlib_new::{
-    auth_context::AuthCtx,
     entities::types::amount::Amount,
     entities::types::ids::{
         EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, MealId, StoreId,
     },
-    entities::types::money::Money,
     error::{Error, Result},
-    event::{Event, SourceOverrideView},
+    event::SourceOverrideView,
     meal::Meal,
 };
 use maud::{html, Markup};
@@ -26,7 +24,7 @@ mod shopping_tours;
 mod timeline;
 
 use crate::{
-    frontend::{icons, move_group, MResponse},
+    frontend::{icons, move_group, MResponse, WebCtx},
     MyAppState,
 };
 
@@ -71,29 +69,30 @@ struct ShiftTimesForm {
 }
 
 async fn handle_shift_times(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
     Form(form): Form<ShiftTimesForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
     let target = shopping_tours::parse_datetime_local(&form.new_first_meal_start)?;
-    foodlib.events().shift_event_times(event_id, target).await?;
-    event_form(foodlib, ctx, Path(event_id)).await
+    app::events::timeline::shift_event_times(&state, &actor, event_id, target).await?;
+    event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 async fn render_meal_prices(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
     use bigdecimal::ToPrimitive;
     use std::collections::HashMap;
 
-    ctx.assert_can_edit_event(event_id).await?;
-    let meals = foodlib.meals().get_event_meals(event_id).await?;
-    let prices = foodlib.meals().get_event_meal_prices(event_id).await?;
-    let price_by_meal: HashMap<MealId, f64> = prices
+    let app::events::shopping::MealPricesData {
+        meals,
+        price_by_meal,
+        budget,
+    } = app::events::shopping::gather_meal_prices(&state, &actor, event_id).await?;
+    let price_by_meal: HashMap<MealId, f64> = price_by_meal
         .into_iter()
         .map(|(id, p)| (id, p.to_f64().unwrap_or_default()))
         .collect();
@@ -112,14 +111,7 @@ async fn render_meal_prices(
     // event budget: red when over, green when within. A budget of 0 / unset
     // carries no meaning, so it stays uncolored.
     let event_total: f64 = price_by_meal.values().sum();
-    let budget = foodlib
-        .events()
-        .get(event_id)
-        .await?
-        .budget
-        .as_ref()
-        .and_then(|b| b.to_f64())
-        .filter(|b| *b > 0.0);
+    let budget = budget.as_ref().and_then(|b| b.to_f64()).filter(|b| *b > 0.0);
     let total_color = match budget {
         Some(b) if event_total > b => "text-red-600 dark:text-red-400",
         Some(_) => "text-green-600 dark:text-green-400",
@@ -154,12 +146,12 @@ async fn render_meal_prices(
 }
 
 pub async fn delete_override_dialog(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((event_id, source_id)): Path<(EventId, IngredientSourceId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    let overrides = foodlib.events().get_source_overrides(event_id).await?;
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    let overrides = state.events().get_source_overrides(event_id).await?;
     let source = overrides
         .iter()
         .find(|s| s.source_id == source_id)
@@ -180,25 +172,21 @@ pub async fn delete_override_dialog(
 }
 
 pub async fn delete_override(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((event_id, source_id)): Path<(EventId, IngredientSourceId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    foodlib
-        .events()
-        .delete_source_override(event_id, source_id)
-        .await?;
-    event_form(foodlib, ctx, Path(event_id)).await
+    app::events::logistics::delete_source_override(&state, &actor, event_id, source_id).await?;
+    event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 pub async fn delete_meal_dialog(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    let meal = foodlib.meals().get_meal(meal_id).await?;
+    actor.ctx.assert_can_edit_event(event_id).await?;
+    let meal = state.meals().get_meal(meal_id).await?;
 
     Ok(html! {
         dialog open="true" class="dialog" id="delete" {
@@ -268,10 +256,10 @@ pub async fn export_food_prep_pdf(
 
 pub async fn export_dish_labels_tent(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    ctx.assert_can_edit_event(event_id).await?;
+    actor.ctx.assert_can_edit_event(event_id).await?;
     dish_labels_response(&state, event_id).await
 }
 
@@ -309,10 +297,10 @@ async fn dish_labels_response(
 
 pub async fn export_event_allergens(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    ctx.assert_can_edit_event(event_id).await?;
+    actor.ctx.assert_can_edit_event(event_id).await?;
     let info = state.export().fetch_event_allergens(event_id).await?;
     let filename = format!("{}_allergene", sanitize_filename(&info.event_name));
 
@@ -345,10 +333,10 @@ pub async fn export_event_allergens(
 /// sheet, ordered chronologically, in a single download.
 pub async fn export_all_pdf(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    ctx.assert_can_edit_event(event_id).await?;
+    actor.ctx.assert_can_edit_event(event_id).await?;
     let event = state.events().get(event_id).await?;
     let filename = format!("{}_alle_rezepte", sanitize_filename(&event.name));
 
@@ -394,13 +382,20 @@ fn sanitize_filename(s: &str) -> String {
         .collect()
 }
 
-pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    let stores = foodlib.stores().list().await?;
-    let overrides = foodlib.events().get_source_overrides(event_id).await?;
-    let ingredients = foodlib.ingredients().list().await?;
-    let meals = foodlib.meals().get_event_meals(event_id).await?;
-    let mut recipes = foodlib.recipes().list().await?;
+pub async fn event_form(
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
+    Path(event_id): Path<EventId>,
+) -> MResponse {
+    let app::events::EventFormData {
+        event,
+        stores,
+        overrides,
+        ingredients,
+        meals,
+        mut recipes,
+        preps,
+    } = app::events::gather_form_data(&state, &actor, event_id).await?;
     recipes.sort_by(|a, b| a.name.cmp(&b.name));
     // Default start-time for the inline meal add-row: latest meal's start_time
     // if any, otherwise "now". Saves the user retyping when adding meals
@@ -413,7 +408,6 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<Eve
     // Default date for tour + food-prep add-rows: a day before the earliest
     // meal (or food prep), so shopping/prep naturally precedes consumption.
     // Falls back to "now" when nothing is scheduled yet.
-    let preps = foodlib.events().get_food_prep_tasks(event_id).await?;
     let earliest = meals
         .iter()
         .map(|m| m.start_time)
@@ -433,8 +427,7 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<Eve
         store_name: String::new(),
     };
 
-    let event = foodlib.events().get(event_id).await?;
-    let owner_select = move_group::owner_select(&foodlib, &ctx, event.group_id).await?;
+    let owner_select = move_group::owner_select(&state, &actor.ctx, event.group_id).await?;
 
     let first_meal_start = meals.iter().map(|m| m.start_time).min();
     Ok(html! {
@@ -500,8 +493,8 @@ pub async fn event_form(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<Eve
                 option value=(ingredient.name) {}
             }
         }
-        (render_shopping_tours(&foodlib, event_id, &stores, default_shop_date).await?)
-        (food_prep::render_food_prep(foodlib, event_id, default_shop_date).await?)
+        (render_shopping_tours(&state, event_id, &stores, default_shop_date).await?)
+        (food_prep::render_food_prep(&state, event_id, default_shop_date).await?)
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Ingredient Sources Overrides" }
         }
@@ -543,17 +536,12 @@ use std::collections::HashMap;
 use typst_renderer::renderer::DishLabelLayout;
 
 async fn render_ingredients_without_tours(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    let mut uncovered_ingredients = foodlib
-        .events()
-        .get_ingredients_without_tour(event_id)
-        .await?;
-    // Remove water from ingredient list // TODO: Bad smell
-    uncovered_ingredients.retain(|i| i.ingredient_id != IngredientId(4));
+    let uncovered_ingredients =
+        app::events::logistics::gather_uncovered_ingredients(&state, &actor, event_id).await?;
 
     if uncovered_ingredients.is_empty() {
         return Ok(html! {});
@@ -612,12 +600,12 @@ async fn render_ingredients_without_tours(
 }
 
 pub async fn render_shopping_tours(
-    foodlib: &FoodLib,
+    state: &MyAppState,
     event_id: EventId,
     stores: &[foodlib_new::store::Store],
     default_date: time::OffsetDateTime,
 ) -> MResponse {
-    let tours = foodlib.events().get_shopping_tours(event_id).await?;
+    let tours = state.events().get_shopping_tours(event_id).await?;
 
     Ok(html! {
         div class="flex-col items-center justify-center mb-2" {
@@ -717,39 +705,22 @@ struct EventForm {
 }
 
 async fn update_event(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     event_id: Path<EventId>,
     event_data: Form<EventForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id.0).await?;
-    let current = foodlib.events().get(event_id.0).await?;
-    if current.group_id != event_data.group_id {
-        move_group::assert_can_move_to(&ctx, event_data.group_id)?;
-    }
-    let budget = event_data
-        .budget
-        .and_then(bigdecimal::BigDecimal::from_f64)
-        .map(Money::from);
-
-    let event = Event {
-        id: event_id.0,
-        name: event_data.name.clone(),
-        comment: (!event_data.comment.is_empty()).then(|| event_data.comment.clone()),
-        budget,
-        group_id: GroupId(0), // Placeholder; ops-level update ignores group_id
-    };
-
-    foodlib.events().update(event).await?;
-
-    if current.group_id != event_data.group_id {
-        foodlib
-            .events()
-            .set_group(event_id.0, event_data.group_id)
-            .await?;
-    }
-
-    event_form(foodlib, ctx, event_id).await
+    app::events::update_event(
+        &state,
+        &actor,
+        event_id.0,
+        event_data.name.clone(),
+        event_data.comment.clone(),
+        event_data.budget,
+        event_data.group_id,
+    )
+    .await?;
+    event_form(State(state), WebCtx(actor), event_id).await
 }
 
 #[derive(Deserialize, Debug)]
@@ -759,33 +730,27 @@ struct SourceData {
 }
 
 async fn update_override(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((event_id, ingredient_id)): Path<(EventId, IngredientId)>,
     Form(source): Form<SourceData>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    let ingredient = foodlib
-        .ingredients()
-        .get_by_name(&source.ingredient)
-        .await?;
-    let sources = foodlib.ingredients().get_sources(ingredient.id).await?;
-    let source = sources
-        .iter()
-        .find(|s| s.store_id == source.store_id)
-        .ok_or(Error::Misc("This Source is not defined for this ingredient! \n Add this source to the ingredient in the ingredients tab.".to_string()))?;
-    foodlib
-        .events()
-        .set_source_default_override(event_id, source.id)
-        .await?;
+    app::events::logistics::set_source_default_override(
+        &state,
+        &actor,
+        event_id,
+        &source.ingredient,
+        source.store_id,
+    )
+    .await?;
 
     // Adding a brand-new override (id -1 from the Add row) must re-render the
     // form so the new row appears. Editing an existing override only changes
     // prices, so refresh just the price cells via the OOB swaps.
     if !ingredient_id.is_valid() {
-        event_form(foodlib, ctx, Path(event_id)).await
+        event_form(State(state), WebCtx(actor), Path(event_id)).await
     } else {
-        render_meal_prices(foodlib, ctx, Path(event_id)).await
+        render_meal_prices(State(state), WebCtx(actor), Path(event_id)).await
     }
 }
 

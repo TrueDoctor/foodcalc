@@ -6,7 +6,6 @@ use foodlib_new::entities::types::ids::{EventId, GroupId};
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
-use app::{AppCtx, Channel};
 
 mod event_detail_tab;
 
@@ -79,15 +78,11 @@ fn event_add_row(is_admin: bool) -> Markup {
 
 pub async fn duplicate(
     State(state): State<MyAppState>,
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    // Transitional: event_detail_tab::event_form still takes (FoodLib, AuthCtx);
-    // it will switch to WebCtx when the detail tab is migrated.
-    let actor = AppCtx::new(ctx.clone(), Channel::WebUi);
     let id = app::events::duplicate_event(&state, &actor, event_id).await?;
-    event_detail_tab::event_form(foodlib, ctx, Path(id)).await
+    event_detail_tab::event_form(State(state), WebCtx(actor), Path(id)).await
 }
 
 pub async fn delete_dialog(

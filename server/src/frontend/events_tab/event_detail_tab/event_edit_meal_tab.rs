@@ -1,6 +1,6 @@
 use crate::{
-    frontend::{events_tab::event_detail_tab, html_error, MResponse},
-    FoodLib, MyAppState,
+    frontend::{events_tab::event_detail_tab, html_error, MResponse, WebCtx},
+    MyAppState,
 };
 use axum::{
     extract::{Form, Path, Query, State},
@@ -27,21 +27,25 @@ pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
         )
 }
 
-async fn meal_price_cell(foodlib: FoodLib, ctx: AuthCtx, Path(meal_id): Path<MealId>) -> MResponse {
+async fn meal_price_cell(
+    State(state): State<MyAppState>,
+    ctx: AuthCtx,
+    Path(meal_id): Path<MealId>,
+) -> MResponse {
     ctx.assert_can_edit_meal(meal_id).await?;
-    let price = foodlib.meals().get_meal_price(meal_id).await?;
+    let price = state.meals().get_meal_price(meal_id).await?;
     Ok(html! { (price.round(2).to_string()) "€" })
 }
 
 async fn meal_price_per_serving_cell(
-    foodlib: FoodLib,
+    State(state): State<MyAppState>,
     ctx: AuthCtx,
     Path(meal_id): Path<MealId>,
 ) -> MResponse {
     use bigdecimal::ToPrimitive;
     ctx.assert_can_edit_meal(meal_id).await?;
-    let meal = foodlib.meals().get_meal(meal_id).await?;
-    let price = foodlib.meals().get_meal_price(meal_id).await?;
+    let meal = state.meals().get_meal(meal_id).await?;
+    let price = state.meals().get_meal_price(meal_id).await?;
     let per_serving = price.to_f64().unwrap_or_default() / meal.servings as f64;
     Ok(html! { (format!("{:.3}€", per_serving)) })
 }
@@ -58,38 +62,29 @@ pub struct MealForm {
 }
 
 pub async fn delete_meal(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    ctx.assert_can_edit_meal(meal_id).await?;
-    foodlib.meals().remove_meal(meal_id).await?;
-    event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
+    app::events::meals::delete_meal(&state, &actor, event_id, meal_id).await?;
+    event_detail_tab::event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 pub async fn duplicate_meal(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    ctx.assert_can_edit_meal(meal_id).await?;
-    foodlib.meals().duplicate_meal(meal_id).await?;
-    event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
+    app::events::meals::duplicate_meal(&state, &actor, event_id, meal_id).await?;
+    event_detail_tab::event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 pub async fn update_meal(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
     state: State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
     Form(meal): Form<MealForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    if meal_id != MealId(-1) {
-        ctx.assert_can_edit_meal(meal_id).await?;
-    }
     let append_start = format!("{}:00-00:00", meal.start_time);
     let start_time = OffsetDateTime::parse(
         &append_start,
@@ -109,42 +104,21 @@ pub async fn update_meal(
                 message: "Please select a place for the meal.".into(),
             })?;
 
-    let result = if meal_id.is_valid() {
-        state
-            .meals()
-            .update_meal(
-                meal_id,
-                meal.recipe_id,
-                place_id,
-                start_time,
-                end_time,
-                meal.energy,
-                meal.servings,
-                meal.comment,
-            )
-            .await
-    } else {
-        state
-            .meals()
-            .add_meal(
-                event_id,
-                meal.recipe_id,
-                place_id,
-                start_time,
-                end_time,
-                meal.energy,
-                meal.servings,
-                meal.comment,
-            )
-            .await
-            .map(|_| ())
-    };
-    match result {
-        Ok(_) => {
-            event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
-        }
-        Err(e) => Err(e),
-    }
+    app::events::meals::save_meal(
+        &state,
+        &actor,
+        event_id,
+        meal_id,
+        meal.recipe_id,
+        place_id,
+        start_time,
+        end_time,
+        meal.energy,
+        meal.servings,
+        meal.comment,
+    )
+    .await?;
+    event_detail_tab::event_form(state, WebCtx(actor), Path(event_id)).await
 }
 
 #[derive(Deserialize, Default)]

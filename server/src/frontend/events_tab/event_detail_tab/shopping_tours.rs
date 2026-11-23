@@ -1,6 +1,6 @@
 use crate::{
-    frontend::{events_tab::event_detail_tab, IResponse, MResponse},
-    FoodLib, MyAppState,
+    frontend::{events_tab::event_detail_tab, IResponse, MResponse, WebCtx},
+    MyAppState,
 };
 use axum::{
     extract::{Form, Path, State},
@@ -13,9 +13,8 @@ use foodlib_new::{
     entities::types::amount::Amount,
     entities::types::ids::{EventId, IngredientId, InventoryId, ShoppingTourId, StoreId},
     error::Result,
+    event::ShoppingListItem,
     inventory::InventoryItemWithName,
-    event::{ShoppingListItem, ShoppingTour},
-    inventory::InventoryItem,
 };
 use maud::{html, Markup};
 use serde::Deserialize;
@@ -78,24 +77,14 @@ struct InlineTourForm {
 }
 
 async fn create_inline(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
     Form(form): Form<InlineTourForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
     let tour_date = parse_datetime_local(&form.date)?;
-    foodlib
-        .events()
-        .add_shopping_tour(ShoppingTour {
-            id: ShoppingTourId(-1),
-            event_id,
-            tour_date,
-            store_id: form.store_id,
-            store_name: None,
-        })
-        .await?;
-    event_detail_tab::event_form(foodlib, ctx, Path(event_id)).await
+    app::events::shopping::create_tour(&state, &actor, event_id, form.store_id, tour_date).await?;
+    event_detail_tab::event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 /// Parse a `datetime-local` value, accepting a date-only string (e.g.
@@ -118,11 +107,10 @@ pub(crate) fn parse_datetime_local(s: &str) -> Result<OffsetDateTime> {
 
 async fn delete_shopping_tour(
     state: State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> MResponse {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    state.events().delete_shopping_tour(tour_id).await?;
+    app::events::shopping::delete_tour(&state, &actor, tour_id).await?;
     Ok(html! {})
 }
 
@@ -319,47 +307,28 @@ async fn inventory_items(
     inventory_items
 }
 
-async fn save_tour(foodlib: FoodLib, ctx: AuthCtx, Form(form): Form<TourForm>) -> MResponse {
-    ctx.assert_can_edit_event(form.event_id).await?;
-
-    if let Some(tour_id) = form.tour_id {
-        ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    }
-
+async fn save_tour(
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
+    Form(form): Form<TourForm>,
+) -> MResponse {
     let tour_date = parse_datetime_local(&form.date)?;
 
-    let result = match form.tour_id {
-        Some(tour_id) => {
-            foodlib
-                .events()
-                .update_shopping_tour(ShoppingTour {
-                    id: tour_id,
-                    event_id: form.event_id,
-                    tour_date,
-                    store_id: form.store_id,
-                    store_name: None,
-                })
-                .await
-        }
-        None => {
-            foodlib
-                .events()
-                .add_shopping_tour(ShoppingTour {
-                    id: ShoppingTourId(-1),
-                    event_id: form.event_id,
-                    tour_date,
-                    store_id: form.store_id,
-                    store_name: None,
-                })
-                .await
-        }
-    };
+    let result = app::events::shopping::save_tour(
+        &state,
+        &actor,
+        form.event_id,
+        form.tour_id,
+        form.store_id,
+        tour_date,
+    )
+    .await;
     if let Err(ref e) = result {
         log::error!("Encountered error while saving tour {e}");
     }
 
     Ok(html! {
-        (event_detail_tab::event_form(foodlib, ctx, Path(form.event_id)).await?)
+        (event_detail_tab::event_form(State(state), WebCtx(actor), Path(form.event_id)).await?)
     })
 }
 
@@ -618,126 +587,28 @@ async fn export_metro(
     )))
 }
 
-/// Calculates how much to subtract from a specific inventory for a given ingredient
-fn calculate_subtraction(available: &Amount, remaining: &Amount) -> Amount {
-    if available >= remaining {
-        remaining.clone()
-    } else {
-        available.clone()
-    }
-}
-
 async fn toggle_inventory(
     State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    WebCtx(actor): WebCtx,
     Path((event_id, inventory_id)): Path<(EventId, InventoryId)>,
     Form(form): Form<ToggleForm>,
 ) -> MResponse {
-    ctx.assert_can_edit_event(event_id).await?;
-    if form.checked {
-        state.events().add_inventory(event_id, inventory_id).await?;
-    } else {
-        state
-            .events()
-            .remove_inventory(event_id, inventory_id)
-            .await?;
-    };
+    app::events::shopping::set_event_inventory(&state, &actor, event_id, inventory_id, form.checked)
+        .await?;
 
-    render_shopping_tour_form(&state, &ctx, event_id, Some(form.tour_id)).await
+    render_shopping_tour_form(&state, &actor.ctx, event_id, Some(form.tour_id)).await
 }
 
 async fn update_inventory(
-    foodlib: FoodLib,
-    ctx: AuthCtx,
+    State(state): State<MyAppState>,
+    WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> MResponse {
-    ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    let changes = calculate_inventory_changes(&foodlib.0, tour_id).await?;
-    let tour = foodlib.events().get_shopping_tour(tour_id).await?;
-
-    for (_, inventory_id, _, ingredient_id, _, _, amount) in changes {
-        foodlib
-            .inventories()
-            .update_item(InventoryItem {
-                inventory_id,
-                ingredient_id,
-                amount,
-            })
-            .await?;
-    }
+    app::events::shopping::apply_inventory_changes(&state, &actor, tour_id).await?;
+    let tour = state.events().get_shopping_tour(tour_id).await?;
 
     // Redirect back to event page
-    event_detail_tab::event_form(foodlib, ctx, Path(tour.event_id)).await
-}
-
-/// Calculate inventory changes showing what will be deducted from each inventory
-async fn calculate_inventory_changes(
-    lib: &foodlib_new::FoodLib,
-    tour_id: ShoppingTourId,
-) -> Result<
-    Vec<(
-        String,
-        InventoryId,
-        String,
-        IngredientId,
-        Amount,
-        Amount,
-        Amount,
-    )>,
-> {
-    let tour = lib.events().get_shopping_tour(tour_id).await?;
-    let inventory_ops = lib.inventories();
-
-    let shopping_list = lib.events().get_shopping_list(tour_id).await?;
-    let inventories = lib.events().get_inventories(tour.event_id).await?;
-    let inventories = inventories
-        .iter()
-        .map(|inv| inv.inventory_id)
-        .map(|id| inventory_ops.get(id));
-    let inventories = ::futures::future::join_all(inventories).await;
-
-    let mut changes = Vec::new();
-
-    // For each item in the shopping list
-    for item in &shopping_list {
-        // Unresolvable weight (unknown unit weight) → nothing to deduct.
-        let Some(initial_weight) = item.weight.clone() else {
-            continue;
-        };
-        let mut remaining = initial_weight;
-
-        // Try to satisfy from each inventory in order
-        for inv in &inventories {
-            let inv = inv.as_ref().unwrap().clone();
-            if remaining <= Amount::default() {
-                break;
-            }
-
-            if let Ok(items) = lib.inventories().get_items(inv.id).await {
-                if let Some(current_item) =
-                    items.iter().find(|i| i.ingredient_id == item.ingredient_id)
-                {
-                    let to_subtract = calculate_subtraction(&current_item.amount, &remaining);
-
-                    if to_subtract > Amount::default() {
-                        let new_amount = current_item.amount.clone() - to_subtract.clone();
-                        changes.push((
-                            inv.name.clone(),
-                            inv.id,
-                            item.ingredient_name.clone(),
-                            item.ingredient_id,
-                            current_item.amount.clone(),
-                            to_subtract.clone(),
-                            new_amount,
-                        ));
-                        remaining -= to_subtract;
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(changes)
+    event_detail_tab::event_form(State(state), WebCtx(actor), Path(tour.event_id)).await
 }
 
 async fn confirm_update(
@@ -749,7 +620,9 @@ async fn confirm_update(
     let lib = &state.db;
 
     // Calculate expected changes
-    let changes = calculate_inventory_changes(lib, tour_id).await.unwrap();
+    let changes = app::events::shopping::calculate_inventory_changes(&state, tour_id)
+        .await
+        .unwrap();
 
     let tour = lib.events().get_shopping_tour(tour_id).await.unwrap();
 
