@@ -30,12 +30,13 @@ pub fn render_shopping_tour(data: &TourExportData) -> Result<Vec<u8>> {
         }
         let weight = item_weight.clone() - inv_amount.clone();
 
-        // Only the Metro store's sources are valid for a Metro order — a
-        // non-Metro source's package size must never drive the package count.
+        // Match on the ingredient like the legacy frontend: the source may live
+        // at a different store than the tour's store, but its package size is
+        // still what drives the package count for this order.
         let Some(source) = metro
             .sources
             .iter()
-            .find(|s| s.ingredient_id == item.ingredient_id && s.store_id == metro.store_id)
+            .find(|s| s.ingredient_id == item.ingredient_id)
         else {
             continue;
         };

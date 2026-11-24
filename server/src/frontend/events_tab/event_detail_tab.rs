@@ -699,8 +699,21 @@ fn format_event_meal_ingredient(
 struct EventForm {
     name: String,
     comment: String,
+    #[serde(default, deserialize_with = "empty_to_none")]
     budget: Option<f64>,
     group_id: GroupId,
+}
+
+/// An empty form field (`""`) means "unset", not "unparseable number".
+fn empty_to_none<'de, D>(deserializer: D) -> std::result::Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: Option<String> = Option::deserialize(deserializer)?;
+    match raw.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(s) => s.parse().map(Some).map_err(serde::de::Error::custom),
+    }
 }
 
 async fn update_event(

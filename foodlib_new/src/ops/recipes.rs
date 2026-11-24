@@ -11,7 +11,6 @@ use time::Duration;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
-use time::ext::NumericalDuration;
 
 /// Operations for managing recipes and their components (ingredients, steps, meta-recipes)
 ///
@@ -37,7 +36,7 @@ fn duration_to_pg_interval(seconds: Duration) -> sqlx::postgres::types::PgInterv
 }
 
 fn pg_interval_to_duration(interval: &sqlx::postgres::types::PgInterval) -> Duration {
-    interval.microseconds.seconds() // Known limitation: ignores months and days
+    Duration::seconds(i64::from(interval.days)) + Duration::microseconds(interval.microseconds)
 }
 
 struct RecipeStepDB {

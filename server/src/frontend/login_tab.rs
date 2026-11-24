@@ -252,18 +252,28 @@ async fn signup_handler(
     Ok(([("HX-Redirect", next.as_str())], ()).into_response())
 }
 
-async fn logout_handler(mut auth: AuthSession) -> impl IntoResponse {
+async fn logout_handler(mut auth: AuthSession, headers: axum::http::HeaderMap) -> impl IntoResponse {
     dbg!("Logging out user: {}", &auth.user);
     if let Err(e) = auth.logout().await {
         log::error!("failed to log out {:?}: {e}", auth.user);
     }
 
-    (
-        [
-            // ("HX-Reswap", "delete"),
-            // ("HX-Retarget", "#login-dialog"),
-            ("HX-Redirect", "/"),
-        ],
-        (),
-    )
+    // HX-Redirect is only honored by htmx; a plain browser navigation (typed
+    // URL, bookmark, opened in a new tab) needs a real redirect.
+    if headers
+        .get("HX-Request")
+        .is_some_and(|v| v == "true")
+    {
+        (
+            [
+                // ("HX-Reswap", "delete"),
+                // ("HX-Retarget", "#login-dialog"),
+                ("HX-Redirect", "/"),
+            ],
+            (),
+        )
+            .into_response()
+    } else {
+        axum::response::Redirect::to("/").into_response()
+    }
 }
