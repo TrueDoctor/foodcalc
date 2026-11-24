@@ -189,7 +189,9 @@ pub async fn update_name(
             recipe_id,
             RecipeData {
                 name,
-                comment: Some(comment),
+                // An empty comment means "no comment", matching how
+                // events::update_event normalizes its comment field.
+                comment: if comment.is_empty() { None } else { Some(comment) },
                 weighed_in,
                 kind: current.kind,
             },

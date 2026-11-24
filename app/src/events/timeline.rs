@@ -20,6 +20,13 @@ pub async fn move_timeline_item(
     match kind {
         "meal" => {
             let m = state.meals().get_meal(MealId(item_id)).await?;
+            // The timeline only shows items of `event_id`; reject a mismatched
+            // id so one event's editor cannot move another event's row.
+            if m.event_id != event_id {
+                return Err(Error::Validation {
+                    message: "meal does not belong to this event".into(),
+                });
+            }
             // Preserve the meal's duration on a plain move; honor new_end on a
             // resize. Guard against a non-positive span by falling back to the
             // original duration.
@@ -45,11 +52,21 @@ pub async fn move_timeline_item(
                 .events()
                 .get_shopping_tour(ShoppingTourId(item_id))
                 .await?;
+            if tour.event_id != event_id {
+                return Err(Error::Validation {
+                    message: "shopping tour does not belong to this event".into(),
+                });
+            }
             tour.tour_date = new_start;
             state.events().update_shopping_tour(tour).await?;
         }
         "prep" => {
             let mut prep = state.events().get_food_prep(FoodPrepId(item_id)).await?;
+            if prep.event_id != event_id {
+                return Err(Error::Validation {
+                    message: "food prep task does not belong to this event".into(),
+                });
+            }
             // Keep the use window's length relative to the (possibly changed)
             // prep time so a moved prep still "uses until" the same offset.
             let delta = new_start - prep.prep_date;

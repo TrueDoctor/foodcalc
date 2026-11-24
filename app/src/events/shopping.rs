@@ -158,7 +158,7 @@ pub async fn calculate_inventory_changes(
         .iter()
         .map(|inv| inv.inventory_id)
         .map(|id| inventory_ops.get(id));
-    let inventories = ::futures::future::join_all(inventories).await;
+    let inventories = futures::future::try_join_all(inventories).await?;
 
     let mut changes = Vec::new();
 
@@ -172,7 +172,7 @@ pub async fn calculate_inventory_changes(
 
         // Try to satisfy from each inventory in order
         for inv in &inventories {
-            let inv = inv.as_ref().unwrap().clone();
+            let inv = inv.clone();
             if remaining <= Amount::default() {
                 break;
             }

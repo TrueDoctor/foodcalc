@@ -2,6 +2,7 @@
 
 use foodlib_new::entities::types::amount::Amount;
 use foodlib_new::entities::types::ids::{EventId, MealId, PlaceId, RecipeId};
+use foodlib_new::Error;
 use time::OffsetDateTime;
 
 use crate::app_ctx::AppCtx;
@@ -45,7 +46,29 @@ pub async fn get_meal_for_event(
 ) -> Result<foodlib_new::entities::meal::Meal> {
     actor.ctx.assert_can_edit_event(event_id).await?;
     actor.ctx.assert_can_edit_meal(meal_id).await?;
-    state.meals().get_meal(meal_id).await
+    let meal = state.meals().get_meal(meal_id).await?;
+    if meal.event_id != event_id {
+        return Err(Error::Validation {
+            message: "meal does not belong to this event".into(),
+        });
+    }
+    Ok(meal)
+}
+
+/// Guards meal mutations against cross-event ids: the meal's `event_id` must
+/// match the event whose editor the request came from.
+async fn assert_meal_in_event(
+    state: &MyAppState,
+    event_id: EventId,
+    meal_id: MealId,
+) -> Result<()> {
+    let meal = state.meals().get_meal(meal_id).await?;
+    if meal.event_id != event_id {
+        return Err(Error::Validation {
+            message: "meal does not belong to this event".into(),
+        });
+    }
+    Ok(())
 }
 
 /// Authorization for rendering the meal form: requires `EditEvent`, plus
@@ -114,6 +137,7 @@ pub async fn delete_meal(
 ) -> Result<()> {
     actor.ctx.assert_can_edit_event(event_id).await?;
     actor.ctx.assert_can_edit_meal(meal_id).await?;
+    assert_meal_in_event(state, event_id, meal_id).await?;
     state.meals().remove_meal(meal_id).await?;
     Ok(())
 }
@@ -128,6 +152,7 @@ pub async fn duplicate_meal(
 ) -> Result<()> {
     actor.ctx.assert_can_edit_event(event_id).await?;
     actor.ctx.assert_can_edit_meal(meal_id).await?;
+    assert_meal_in_event(state, event_id, meal_id).await?;
     state.meals().duplicate_meal(meal_id).await?;
     Ok(())
 }
@@ -153,6 +178,7 @@ pub async fn save_meal(
     actor.ctx.assert_can_edit_event(event_id).await?;
     if meal_id != MealId(-1) {
         actor.ctx.assert_can_edit_meal(meal_id).await?;
+        assert_meal_in_event(state, event_id, meal_id).await?;
     }
 
     if meal_id.is_valid() {

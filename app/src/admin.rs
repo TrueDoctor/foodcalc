@@ -180,9 +180,16 @@ pub async fn update_user(
     email: String,
 ) -> Result<()> {
     assert_admin(actor)?;
+    let username = username.trim().to_string();
+    let email = email.trim().to_string();
+    if username.is_empty() || email.is_empty() {
+        return Err(Error::Validation {
+            message: "Username and email are required".into(),
+        });
+    }
     let mut user = state.users().get_user(user_id).await?;
-    user.username = username.trim().to_string();
-    user.email = email.trim().to_string();
+    user.username = username;
+    user.email = email;
     state.users().update_user(user).await?;
     Ok(())
 }

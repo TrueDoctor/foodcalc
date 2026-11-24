@@ -30,14 +30,21 @@ pub fn render_shopping_tour(data: &TourExportData) -> Result<Vec<u8>> {
         }
         let weight = item_weight.clone() - inv_amount.clone();
 
-        // Match on the ingredient like the legacy frontend: the source may live
-        // at a different store than the tour's store, but its package size is
-        // still what drives the package count for this order.
-        let Some(source) = metro
+        // Prefer a source at the tour's store so its package size drives the
+        // package count, but fall back to any source of the ingredient: some
+        // ingredients are only sourced at other stores (e.g. Gemüse Schenk),
+        // and a hard store filter would silently drop those rows.
+        let source = metro
             .sources
             .iter()
-            .find(|s| s.ingredient_id == item.ingredient_id)
-        else {
+            .find(|s| s.ingredient_id == item.ingredient_id && s.store_id == metro.store_id)
+            .or_else(|| {
+                metro
+                    .sources
+                    .iter()
+                    .find(|s| s.ingredient_id == item.ingredient_id)
+            });
+        let Some(source) = source else {
             continue;
         };
 

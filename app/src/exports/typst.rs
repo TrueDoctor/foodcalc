@@ -1,8 +1,8 @@
 use foodlib_new::ops::export::{EventAllergenInfo, RecipeInfo};
-use pdf_export::renderer::{DishLabelLayout as PdfLayout, DocumentRenderer};
+use typst_renderer::renderer::{DishLabelLayout as PdfLayout, DocumentRenderer};
 
 use super::{DishLabelLayout, PdfExporter};
-use crate::app::{Error, Result};
+use crate::{Error, Result};
 
 pub struct TypstExporter {
     inner: DocumentRenderer,
