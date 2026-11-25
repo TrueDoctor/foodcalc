@@ -1,26 +1,24 @@
 use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 
-use axum::{Extension, Router};
+use axum::Router;
 use axum_login::{
     tower_sessions::{ExpiredDeletion, Expiry, SessionManagerLayer},
     AuthManagerLayerBuilder,
 };
 use fern::colors::{Color, ColoredLevelConfig};
+use foodlib_new::AppState;
 use sqlx::postgres::PgPool;
 use time::format_description;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tower_sessions::cookie::Key;
 use tower_sessions_sqlx_store::PostgresStore;
 
-use foodlib_new::auth::AuthBackend;
+pub mod auth;
 mod frontend;
 mod htmx_middleware;
 
-type FoodLib = Extension<foodlib_new::FoodLib>;
+use auth::AuthBackend;
 
-// The shared, transport-agnostic application state from the `app` crate:
-// business-logic use-cases take `&MyAppState`, and it derefs to `FoodLib`.
-pub use app::MyAppState;
 
 #[tokio::main]
 async fn main() {
@@ -82,18 +80,21 @@ async fn main() {
         .with_signed(key);
 
     // Create auth backend and layer
-    let backend = AuthBackend::new(Arc::new(pool.clone()));
-    let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
+    let mut app_state = AppState::new(pool);
 
-    let lib = foodlib_new::FoodLib::new(pool.clone());
-    let state = MyAppState::new(lib.clone());
-    let new_lib = lib;
+    #[cfg(feature = "typst")]
+    {
+        app_state = app_state.with_pdf_exporter(Arc::new(typst_renderer::TypstExporter::new()));
+    }
+
+    // Create auth backend and layer
+    let backend = AuthBackend::new(app_state.clone());
+    let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
 
     // Combine routes with middleware
     let app = Router::new()
         .merge(frontend::frontend_router())
-        .with_state(state)
-        .layer(Extension(new_lib))
+        .with_state(app_state)
         .layer(axum::middleware::from_fn(htmx_middleware::htmx_middleware))
         .layer(auth_layer)
         .layer(CorsLayer::very_permissive())

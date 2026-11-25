@@ -1,23 +1,20 @@
-
 use crate::{
     frontend::{events_tab::event_detail_tab, html_error, icons, MResponse, WebCtx},
-    MyAppState,
+    AppState,
 };
 use axum::{
     extract::{Form, Path, State},
     routing::{delete, get, post},
 };
-use foodlib_new::event::CreateFoodPrep;
-use foodlib_new::{
-    entities::types::ids::{EventId, FoodPrepId, RecipeId},
-    event::FoodPrep,
-    recipe::Recipe,
-};
+use foodlib_new::entities::event::{CreateFoodPrep, FoodPrep};
+use foodlib_new::entities::recipe::Recipe;
+use foodlib_new::types::ids::{EventId, FoodPrepId, RecipeId};
+use foodlib_new::AppCtx;
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
-pub(crate) fn food_prep_router() -> axum::Router<MyAppState> {
+pub(crate) fn food_prep_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/add/{event_id}", get(add_food_prep))
         .route("/create_inline/{event_id}", post(create_inline))
@@ -39,7 +36,7 @@ struct InlinePrepForm {
 }
 
 async fn create_inline(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
     Form(form): Form<InlinePrepForm>,
@@ -52,7 +49,7 @@ async fn create_inline(
         .map(super::shopping_tours::parse_datetime_local)
         .transpose()?;
     let use_until = super::shopping_tours::parse_datetime_local(&form.use_until)?;
-    app::events::logistics::add_food_prep(
+    foodlib_new::events::logistics::add_food_prep(
         &state,
         &actor,
         CreateFoodPrep {
@@ -63,7 +60,7 @@ async fn create_inline(
             use_until,
         },
     )
-    .await?;
+        .await?;
     event_detail_tab::event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
@@ -78,7 +75,7 @@ struct FoodPrepForm {
 }
 
 async fn add_food_prep(
-    state: State<MyAppState>,
+    state: State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> Result<Markup, Markup> {
@@ -86,23 +83,24 @@ async fn add_food_prep(
 }
 
 async fn delete_food_prep(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, prep_id)): Path<(EventId, FoodPrepId)>,
 ) -> MResponse {
-    app::events::logistics::delete_food_prep(&state, &actor, event_id, prep_id).await?;
+    foodlib_new::events::logistics::delete_food_prep(&state, &actor, event_id, prep_id).await?;
     event_detail_tab::event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 async fn delete_food_prep_dialog(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, prep_id)): Path<(EventId, FoodPrepId)>,
 ) -> MResponse {
-    // Get food prep details if possible
-    let prep = app::events::logistics::get_food_prep_with_permission(&state, &actor, event_id, prep_id).await?;
-    // Get recipe name if possible
-    let recipe = app::recipes::get_recipe(&state, prep.recipe_id).await?;
+    let prep = foodlib_new::events::logistics::get_food_prep_with_permission(
+        &state, &actor, event_id, prep_id,
+    )
+        .await?;
+    let recipe = foodlib_new::recipes::get_recipe(&state, prep.recipe_id).await?;
     let recipe_name = recipe.name;
     Ok(html! {
         dialog open="true" class="dialog" id="delete" {
@@ -116,29 +114,21 @@ async fn delete_food_prep_dialog(
 }
 
 async fn food_prep_form(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, prep_id)): Path<(EventId, FoodPrepId)>,
 ) -> Result<Markup, Markup> {
-    app::events::logistics::get_food_prep_with_permission(&state, &actor, event_id, prep_id)
+    let existing = foodlib_new::events::logistics::get_food_prep_with_permission(
+        &state, &actor, event_id, prep_id,
+    )
         .await
         .map_err(|e| html_error(&format!("{e}"), "/events"))?;
-    let recipes = app::recipes::list_recipes(&state).await.unwrap_or_default();
+    let recipes = foodlib_new::recipes::list_recipes(&state)
+        .await
+        .unwrap_or_default();
 
-    // If prep_id is provided, get existing prep data
     let prep = if prep_id.is_valid() {
-        state
-            .events()
-            .get_food_prep(prep_id)
-            .await
-            .unwrap_or(FoodPrep {
-                id: FoodPrepId(-1),
-                event_id,
-                recipe_id: RecipeId(0),
-                prep_date: OffsetDateTime::now_utc(),
-                use_from: None,
-                use_until: OffsetDateTime::now_utc(),
-            })
+        existing
     } else {
         FoodPrep {
             id: FoodPrepId(-1),
@@ -224,33 +214,22 @@ async fn food_prep_form(
 }
 
 async fn save_food_prep(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(form): Form<FoodPrepForm>,
 ) -> MResponse {
-    // Parse dates
-    let date_format = format_description!("[year]-[month]-[day]T[hour]:[minute]");
+    let prep_date = super::shopping_tours::parse_datetime_local(&form.prep_date)?;
+    let use_from = form
+        .use_from
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(super::shopping_tours::parse_datetime_local)
+        .transpose()?;
+    let use_until = super::shopping_tours::parse_datetime_local(&form.use_until)?;
 
-    let prep_date = time::PrimitiveDateTime::parse(&form.prep_date, date_format)?;
-    let prep_date = prep_date.assume_utc();
-
-    let use_from = if let Some(date_str) = form.use_from {
-        if !date_str.is_empty() {
-            let dt = time::PrimitiveDateTime::parse(&date_str, date_format)?;
-            Some(dt.assume_utc())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let use_until = time::PrimitiveDateTime::parse(&form.use_until, date_format)?.assume_utc();
-
-    // Create or update prep
     match form.prep_id {
         Some(prep_id) if prep_id.is_valid() => {
-            app::events::logistics::update_food_prep(
+            foodlib_new::events::logistics::update_food_prep(
                 &state,
                 &actor,
                 FoodPrep {
@@ -262,10 +241,10 @@ async fn save_food_prep(
                     use_until,
                 },
             )
-            .await?;
+                .await?;
         }
         _ => {
-            app::events::logistics::add_food_prep(
+            foodlib_new::events::logistics::add_food_prep(
                 &state,
                 &actor,
                 CreateFoodPrep {
@@ -276,7 +255,7 @@ async fn save_food_prep(
                     use_until,
                 },
             )
-            .await?;
+                .await?;
         }
     }
 
@@ -317,16 +296,15 @@ fn format_food_prep(event_id: EventId, prep: &FoodPrep, recipe_name: &str) -> Ma
 }
 
 pub async fn render_food_prep(
-    state: &MyAppState,
+    state: &AppState,
+    actor: &AppCtx,
     event_id: EventId,
     default_date: OffsetDateTime,
 ) -> MResponse {
-    let app::events::EventItemSources { preps, recipes, .. } =
-        app::events::gather_event_item_sources(state, event_id).await?;
+    let foodlib_new::events::timeline::EventItemSources { preps, recipes, .. } =
+        foodlib_new::events::timeline::gather_event_item_sources(state, actor, event_id).await?;
 
-    // Recipe names for the prep rows (id -> name), plus the full sorted list
-    // for the inline add-row.
-    let recipe_names: std::collections::HashMap<foodlib_new::entities::types::ids::RecipeId, String> =
+    let recipe_names: std::collections::HashMap<RecipeId, String> =
         recipes.iter().map(|r| (r.id, r.name.clone())).collect();
     let mut all_recipes = recipes;
     all_recipes.sort_by(|a, b| a.name.cmp(&b.name));
@@ -357,11 +335,6 @@ pub async fn render_food_prep(
     })
 }
 
-/// Inline add-row for food prep. All fields fit, so submit directly via POST.
-/// Editing still uses the detail page (consistency with shopping tours).
-/// Both `prep_date` and `use_until` default to the supplied date so the user
-/// never submits an ambiguous empty `datetime-local` (which browsers serialize
-/// as `""` when the time portion is blank).
 fn food_prep_add_row(
     event_id: EventId,
     recipes: &[Recipe],

@@ -1,33 +1,28 @@
-use axum::extract::{Form, Path, Query};
-use axum::extract::State;
+use axum::extract::{Form, Path, Query, State};
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
 use bigdecimal::BigDecimal;
-use foodlib_new::auth::AuthBackend;
-use foodlib_new::auth_context::AuthCtx;
-use foodlib_new::entities::types::amount::Amount;
-use foodlib_new::entities::types::ids::{
+use foodlib_new::entities::allergen::canonical;
+use foodlib_new::entities::ingredient::{Ingredient, IngredientSource, IngredientWithSource};
+use foodlib_new::entities::property::Property;
+use foodlib_new::entities::store::Store;
+use foodlib_new::error::Error;
+use foodlib_new::types::amount::Amount;
+use foodlib_new::types::ids::{
     GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId,
 };
-use foodlib_new::entities::types::money::Money;
-use foodlib_new::ingredient::IngredientWithSource;
-use crate::frontend::WebCtx;
-use foodlib_new::user::User;
-use foodlib_new::{
-    error::Error,
-    ingredient::{Ingredient, IngredientSource},
-    store::Store,
-};
+use foodlib_new::types::money::Money;
+use foodlib_new::{AppCtx, AppState};
 use maud::{html, Markup};
 use num::{FromPrimitive, ToPrimitive};
 use serde::Deserialize;
 
 use super::{IResponse, MResponse};
-use crate::frontend::{icons, move_group, LOGIN_URL};
-use crate::MyAppState;
+use crate::auth::AuthBackend;
+use crate::frontend::{icons, move_group, OptWebCtx, WebCtx, LOGIN_URL};
 
-pub(crate) fn ingredients_router() -> axum::Router<MyAppState> {
+pub(crate) fn ingredients_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/", post(update_ingredient))
         .route("/sources/{ingredient}/{source}", post(update_source))
@@ -65,36 +60,31 @@ impl IngredientFilters {
 }
 
 pub async fn update_ingredient(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(ingredient): Form<Ingredient>,
 ) -> IResponse {
-    let result = if !ingredient.id.is_valid() {
-        app::ingredients::create_ingredient(
+    if !ingredient.id.is_valid() {
+        foodlib_new::ingredients::create_ingredient(
             &state,
             &actor,
             ingredient.name.clone(),
             ingredient.energy,
             ingredient.comment.clone(),
         )
-        .await?;
+            .await?;
         Ok((
             [("HX-Retarget", "#content"), ("HX-Reswap", "innerHTML")],
-            render_ingredients_view(State(state), Some(actor.ctx.user.clone())).await,
+            render_ingredients_view(State(state), OptWebCtx(Some(actor))).await,
         )
             .into_response())
     } else {
         let target_group = ingredient.group_id;
         let refreshed =
-            app::ingredients::update_ingredient(&state, &actor, ingredient, target_group).await?;
-        Ok(format_ingredient(
-            &refreshed.into(),
-            Some(&actor.ctx.user),
-            &actor.ctx.group_ids,
-        )
-        .into_response())
-    };
-    result
+            foodlib_new::ingredients::update_ingredient(&state, &actor, ingredient, target_group)
+                .await?;
+        Ok(format_ingredient(&refreshed.into(), Some(&actor)).into_response())
+    }
 }
 
 #[derive(Deserialize, Clone, PartialEq)]
@@ -107,15 +97,15 @@ struct SourceData {
 }
 
 async fn update_source(
-    State(state): State<MyAppState>,
-    user: User,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     Path((ingredient_id, source_id)): Path<(IngredientId, IngredientSourceId)>,
     form: Form<SourceData>,
 ) -> MResponse {
     let data = form.0;
-    app::ingredients::save_source(
+    foodlib_new::ingredients::save_source(
         &state,
-        &user,
+        &actor,
         ingredient_id,
         source_id,
         data.store_id,
@@ -124,61 +114,53 @@ async fn update_source(
         data.url,
         data.comment,
     )
-    .await?;
-    sources_table(State(state), Some(user), Path(ingredient_id)).await
+        .await?;
+    sources_table(State(state), OptWebCtx(Some(actor)), Path(ingredient_id)).await
 }
 
 async fn delete_source(
-    State(state): State<MyAppState>,
-    user: User,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     Path((ingredient_id, source_id)): Path<(IngredientId, IngredientSourceId)>,
 ) -> MResponse {
-    app::ingredients::delete_source(&state, &user, ingredient_id, source_id).await?;
-    sources_table(State(state), Some(user), Path(ingredient_id)).await
+    foodlib_new::ingredients::delete_source(&state, &actor, ingredient_id, source_id).await?;
+    sources_table(State(state), OptWebCtx(Some(actor)), Path(ingredient_id)).await
 }
 
-/// Route handler for `GET /ingredients`. Always returns the full page shell;
-/// the filter form refreshes only the rows via `GET /ingredients/rows`. URL
-/// is shareable — query params drive the initial filter state on full loads.
 pub async fn ingredients_view(
-    State(state): State<MyAppState>,
-    user: Option<User>,
+    State(state): State<AppState>,
+    OptWebCtx(actor): OptWebCtx,
     Query(filters): Query<IngredientFilters>,
 ) -> Markup {
-    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&state, user.as_ref())
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&state, actor.as_ref())
         .await
         .unwrap_or_default();
     let filtered = filter_ingredients(&ingredients, &filters, &user_group_ids);
-    render_ingredients_page(&filtered, user.as_ref(), &user_group_ids, &filters)
+    render_ingredients_page(&filtered, actor.as_ref(), &filters)
 }
 
-/// Returns just the filtered `<tr>` rows for the filter form to swap into
-/// `#search-results`. Same query-param shape as `ingredients_view`.
 pub async fn ingredient_rows_view(
-    State(state): State<MyAppState>,
-    user: Option<User>,
+    State(state): State<AppState>,
+    OptWebCtx(actor): OptWebCtx,
     Query(filters): Query<IngredientFilters>,
 ) -> Markup {
-    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&state, user.as_ref())
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&state, actor.as_ref())
         .await
         .unwrap_or_default();
     let filtered = filter_ingredients(&ingredients, &filters, &user_group_ids);
-    ingredient_rows(&filtered, user.as_ref(), &user_group_ids)
+    ingredient_rows(&filtered, actor.as_ref())
 }
 
-/// Render the full ingredients page. Used both by the route handler (on
-/// non-HX requests) and by mutation handlers that want to return the user
-/// to a fresh page; mutations don't preserve filter state today.
 pub async fn render_ingredients_view(
-    State(state): State<MyAppState>,
-    user: Option<User>,
+    State(state): State<AppState>,
+    OptWebCtx(actor): OptWebCtx,
 ) -> Markup {
-    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&state, user.as_ref())
+    let (ingredients, user_group_ids) = fetch_ingredients_and_groups(&state, actor.as_ref())
         .await
         .unwrap_or_default();
     let filters = IngredientFilters::default();
     let filtered = filter_ingredients(&ingredients, &filters, &user_group_ids);
-    render_ingredients_page(&filtered, user.as_ref(), &user_group_ids, &filters)
+    render_ingredients_page(&filtered, actor.as_ref(), &filters)
 }
 
 fn filter_ingredients<'a>(
@@ -197,31 +179,23 @@ fn filter_ingredients<'a>(
         .collect()
 }
 
-fn ingredient_rows(
-    ingredients: &[&IngredientWithSource],
-    user: Option<&User>,
-    user_group_ids: &[GroupId],
-) -> Markup {
+fn ingredient_rows(ingredients: &[&IngredientWithSource], actor: Option<&AppCtx>) -> Markup {
     html! {
         @for ingredient in ingredients {
-            (format_ingredient(ingredient, user, user_group_ids))
+            (format_ingredient(ingredient, actor))
         }
     }
 }
 
 fn render_ingredients_page(
     ingredients: &[&IngredientWithSource],
-    user: Option<&User>,
-    user_group_ids: &[GroupId],
+    actor: Option<&AppCtx>,
     filters: &IngredientFilters,
 ) -> Markup {
     let search_value = filters.search.clone();
     let mine_checked = filters.mine_only();
     html! {
-        div id="ingredients"{
-            // Filter form is a GET targeting this same page. Each input change
-            // re-issues GET /ingredients?... with hx-replace-url so the URL
-            // bar tracks the filter state without polluting history.
+        div id="ingredients" {
             form id="ingredients-filter" class="
                 flex flex-row items-center justify-stretch
                 mb-2 gap-5 h-10
@@ -233,7 +207,7 @@ fn render_ingredients_page(
                 hx-on::after-request="if(event.detail.successful){const fd=new FormData(this);const qs=new URLSearchParams();for(const [k,v] of fd){if(v) qs.set(k,v);}const q=qs.toString();history.replaceState(null,'','/ingredients'+(q?'?'+q:''));}"
                 hx-indicator=".htmx-indicator" {
                 input class="grow text h-full" type="search" placeholder="Search for Ingredient" id="search" name="search" autocomplete="off" autofocus="autofocus" value=(search_value);
-                @if user.is_some() {
+                @if actor.is_some() {
                     label class="flex items-center gap-2 whitespace-nowrap" {
                         input type="checkbox" id="mine-only" name="mine_only" value="1" checked[mine_checked];
                         "Mine only"
@@ -242,8 +216,8 @@ fn render_ingredients_page(
             }
             span class="htmx-indicator" { "Searching..." }
 
-            table class="table-fixed responsive-card"{
-                @let is_admin = user.is_some_and(|u| u.is_admin);
+            table class="table-fixed responsive-card" {
+                @let is_admin = actor.is_some_and(|a| a.user.is_admin);
                 thead { tr class="p-2" {
                     @if is_admin { th class="w-1/12" { "ID" } }
                     th class="w-1/4" { "Name" }
@@ -253,23 +227,18 @@ fn render_ingredients_page(
                     th class="w-1/6" {}
                 } }
                 tbody id="search-results" {
-                    @if user.is_some() {
-                        (ingredient_add_row(user, user_group_ids))
+                    @if actor.is_some() {
+                        (ingredient_add_row(actor))
                     }
-                    (ingredient_rows(ingredients, user, user_group_ids))
+                    (ingredient_rows(ingredients, actor))
                 }
             }
         }
     }
 }
 
-/// First-row inline add. Rendered when the user is logged in; the server
-/// picks the user's personal group on submit, so no group field needed here.
-/// After a successful POST the entire page is re-rendered (server retargets
-/// to #content) which restores a fresh empty add-row, and the after-request
-/// handler refocuses the name input so the user can keep adding.
-fn ingredient_add_row(user: Option<&User>, _user_group_ids: &[GroupId]) -> Markup {
-    let is_admin = user.is_some_and(|u| u.is_admin);
+fn ingredient_add_row(actor: Option<&AppCtx>) -> Markup {
+    let is_admin = actor.is_some_and(|a| a.user.is_admin);
     html! {
         tr id="ingredient--1" {
             input type="hidden" name="id" value="-1";
@@ -295,22 +264,22 @@ fn ingredient_add_row(user: Option<&User>, _user_group_ids: &[GroupId]) -> Marku
 }
 
 async fn delete_ingredient(
-    State(state): State<MyAppState>,
-    user: User,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     id: Path<IngredientId>,
 ) -> MResponse {
-    app::ingredients::delete_ingredient(&state, &user, id.0).await?;
-    Ok(render_ingredients_view(State(state), Some(user)).await)
+    foodlib_new::ingredients::delete_ingredient(&state, &actor, id.0).await?;
+    Ok(render_ingredients_view(State(state), OptWebCtx(Some(actor))).await)
 }
 
 pub async fn edit_ingredient_form(
-    State(state): State<MyAppState>,
-    ctx: AuthCtx,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     Form(ingredient): Form<IngredientWithSource>,
 ) -> MResponse {
     let id = ingredient.id;
     let owner_select = if id.is_valid() {
-        Some(move_group::owner_select(&state, &ctx, ingredient.group_id).await?)
+        Some(move_group::owner_select(&state, &actor, ingredient.group_id).await?)
     } else {
         None
     };
@@ -336,11 +305,11 @@ pub async fn edit_ingredient_form(
 }
 
 async fn delete_ingredient_form(
-    State(state): State<MyAppState>,
-    user: User,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     id: Path<IngredientId>,
 ) -> MResponse {
-    let usages = app::ingredients::gather_usages(&state, &user, id.0).await?;
+    let usages = foodlib_new::ingredients::gather_usages(&state, &actor, id.0).await?;
 
     Ok(html! {
         dialog open="true" class="dialog" id="delete" {
@@ -352,26 +321,24 @@ async fn delete_ingredient_form(
             }
             div class="flex justify-between w-full m-2 gap-2" {
                 button class="btn btn-abort" hx-get="/ingredients" hx-target="#content" { "Abort" }
-                button class="btn btn-cancel mx-4" hx-target="#content" hx-delete=(format!("/ingredients/{}",id.0)) { "Confirm Delete" }
+                button class="btn btn-cancel mx-4" hx-target="#content" hx-delete=(format!("/ingredients/{}", id.0)) { "Confirm Delete" }
             }
         }
     })
 }
 
 async fn sources_table(
-    State(state): State<MyAppState>,
-    user: Option<User>,
+    State(state): State<AppState>,
+    OptWebCtx(actor): OptWebCtx,
     id: Path<IngredientId>,
 ) -> MResponse {
-    let app::ingredients::SourcesViewData {
+    let foodlib_new::ingredients::SourcesViewData {
         sources,
         stores,
         ingredient,
-        user_group_ids,
-    } = app::ingredients::gather_sources(&state, user.as_ref(), id.0).await?;
-    let can_edit_sources = user
-        .as_ref()
-        .is_some_and(|u| app::ingredients::can_edit(ingredient.group_id, &user_group_ids, u));
+        ..
+    } = foodlib_new::ingredients::gather_sources(&state, actor.as_ref(), id.0).await?;
+    let can_edit_sources = actor.is_some_and(|a| a.can_access_group(ingredient.group_id));
 
     Ok(html! {
         dialog open="true" class="dialog z-50" id="popup" {
@@ -404,28 +371,23 @@ async fn sources_table(
 }
 
 async fn properties_dialog(
-    State(state): State<MyAppState>,
-    user: Option<User>,
+    State(state): State<AppState>,
+    OptWebCtx(actor): OptWebCtx,
     id: Path<IngredientId>,
 ) -> MResponse {
-    let app::ingredients::PropertiesViewData {
+    let foodlib_new::ingredients::PropertiesViewData {
         properties: props,
         ingredient,
-        user_group_ids,
-    } = app::ingredients::gather_properties(&state, user.as_ref(), id.0).await?;
-    let can_edit = user
-        .as_ref()
-        .is_some_and(|u| app::ingredients::can_edit(ingredient.group_id, &user_group_ids, u));
+        ..
+    } = foodlib_new::ingredients::gather_properties(&state, actor.as_ref(), id.0).await?;
+    let can_edit = actor.is_some_and(|a| a.can_access_group(ingredient.group_id));
 
-    // Group properties by source kind for readability.
-    let mut contains: Vec<&foodlib_new::property::Property> = Vec::new();
-    let mut may_contain: Vec<&foodlib_new::property::Property> = Vec::new();
+    let mut contains: Vec<&Property> = Vec::new();
+    let mut may_contain: Vec<&Property> = Vec::new();
     for p in &props.properties {
         if p.name.starts_with("~spuren-") {
             may_contain.push(p);
         } else {
-            // We don't have provenance stored, so we can't separate Category from Contains here.
-            // Group everything non-trace into one "Direct properties" bucket.
             contains.push(p);
         }
     }
@@ -439,7 +401,6 @@ async fn properties_dialog(
         }
     }
 
-    use foodlib_new::allergen::canonical;
     let contains_taken: std::collections::HashSet<&str> =
         contains.iter().map(|p| p.name.as_str()).collect();
     let may_contain_taken: std::collections::HashSet<String> = may_contain
@@ -548,12 +509,12 @@ async fn properties_dialog(
 }
 
 async fn delete_property(
-    State(state): State<MyAppState>,
-    user: User,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     Path((ingredient_id, property_id)): Path<(IngredientId, PropertyId)>,
 ) -> MResponse {
-    app::ingredients::delete_property(&state, &user, ingredient_id, property_id).await?;
-    properties_dialog(State(state), Some(user), Path(ingredient_id)).await
+    foodlib_new::ingredients::delete_property(&state, &actor, ingredient_id, property_id).await?;
+    properties_dialog(State(state), OptWebCtx(Some(actor)), Path(ingredient_id)).await
 }
 
 #[derive(Deserialize)]
@@ -563,20 +524,20 @@ struct AddPropertyForm {
 }
 
 async fn add_property(
-    State(state): State<MyAppState>,
-    user: User,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     Path(ingredient_id): Path<IngredientId>,
     Form(form): Form<AddPropertyForm>,
 ) -> MResponse {
-    app::ingredients::add_property(
+    foodlib_new::ingredients::add_property(
         &state,
-        &user,
+        &actor,
         ingredient_id,
         form.canonical,
         form.kind,
     )
-    .await?;
-    properties_dialog(State(state), Some(user), Path(ingredient_id)).await
+        .await?;
+    properties_dialog(State(state), OptWebCtx(Some(actor)), Path(ingredient_id)).await
 }
 
 fn format_add_ingredient_source(stores: &[Store], ingredient_id: IngredientId) -> Markup {
@@ -646,26 +607,18 @@ fn format_ingredient_source(
 }
 
 async fn fetch_ingredients_and_groups(
-    state: &MyAppState,
-    user: Option<&User>,
+    state: &AppState,
+    actor: Option<&AppCtx>,
 ) -> Result<(Vec<IngredientWithSource>, Vec<GroupId>), Error> {
-    let ingredients = app::ingredients::list_with_sources(state).await?;
-    let user_group_ids = match user {
-        Some(u) => app::users::user_group_ids(state, u.id).await?,
-        None => vec![],
-    };
+    let ingredients = foodlib_new::ingredients::list_with_sources(state).await?;
+    let user_group_ids = actor.map(|a| a.group_ids.clone()).unwrap_or_default();
     Ok((ingredients, user_group_ids))
 }
 
-fn format_ingredient(
-    ingredient: &IngredientWithSource,
-    user: Option<&User>,
-    user_group_ids: &[GroupId],
-) -> Markup {
+fn format_ingredient(ingredient: &IngredientWithSource, actor: Option<&AppCtx>) -> Markup {
     let sources_button_text = if ingredient.has_sources { "" } else { "⚠️" };
-    let can_edit_this =
-        user.is_some_and(|u| app::ingredients::can_edit(ingredient.group_id, user_group_ids, u));
-    let is_admin = user.is_some_and(|u| u.is_admin);
+    let can_edit_this = actor.is_some_and(|a| a.can_access_group(ingredient.group_id));
+    let is_admin = actor.is_some_and(|a| a.user.is_admin);
 
     let comment = ingredient
         .comment

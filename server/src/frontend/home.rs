@@ -1,32 +1,30 @@
-use axum::response::IntoResponse;
 use axum::extract::State;
-use foodlib_new::user::User;
+use axum::response::IntoResponse;
+use foodlib_new::entities::user::User;
 use maud::{html, Markup};
 
-use crate::{
-    frontend::{ingredients_tab::render_ingredients_view, LOGIN_URL},
-};
+use crate::frontend::{ingredients_tab::render_ingredients_view, OptWebCtx, LOGIN_URL};
 
-pub(crate) fn home_router() -> axum::Router<crate::MyAppState> {
+pub(crate) fn home_router() -> axum::Router<crate::AppState> {
     axum::Router::new().route("/", axum::routing::get(home_view))
 }
 
 #[axum::debug_handler]
 pub async fn home_view(
-    user: Option<User>,
-    State(state): State<crate::MyAppState>,
+    OptWebCtx(actor): OptWebCtx,
+    State(state): State<crate::AppState>,
 ) -> impl IntoResponse {
     (
         [("HX-Replace-Url", "ingredients")],
-        content(State(state), user).await,
+        content(State(state), OptWebCtx(actor)).await,
     )
 }
 
-pub async fn content(State(state): State<crate::MyAppState>, user: Option<User>) -> Markup {
+pub async fn content(State(state): State<crate::AppState>, OptWebCtx(actor): OptWebCtx) -> Markup {
     html! {
         div class="flex flex-col items-center justify-center mb-16" {
             div id="content" class="w-full px-2 sm:px-4 lg:w-3/4 lg:px-0 flex flex-col items-center justify-center" {
-                (render_ingredients_view(State(state), user).await)
+                (render_ingredients_view(State(state), OptWebCtx(actor)).await)
             }
         }
     }
@@ -34,9 +32,11 @@ pub async fn content(State(state): State<crate::MyAppState>, user: Option<User>)
 
 pub fn navbar(user: Option<User>, host: &str) -> Markup {
     html! {
-        //Warn local developers if their server is pointed at the production database.
+        // Warn local developers if their server is pointed at the production database.
         @let is_localhost = host == "localhost" || host == "127.0.0.1";
-        @let on_prod_db = std::env::var("DATABASE_URL").unwrap().ends_with("food_calc");
+        @let on_prod_db = std::env::var("DATABASE_URL")
+            .unwrap_or_default()
+            .ends_with("food_calc");
         @if is_localhost && on_prod_db {
             dialog open="true" class="bg-btn-cancel-normal text-white rounded-lg w-full" id="banner" {
                 div class="p-4 flex flex-col items-center justify-center gap-4" {
@@ -44,7 +44,7 @@ pub fn navbar(user: Option<User>, host: &str) -> Markup {
                         "WARNING: You are using the production database!"
                     }
                     p class="text-lg" {
-                        (std::env::var("DATABASE_URL").unwrap())
+                        (std::env::var("DATABASE_URL").unwrap_or_default())
                     }
                     button class="btn bg-black w-1/2" hx-on:click="document.getElementById('banner').remove()" {
                         "Close"
@@ -65,7 +65,7 @@ pub fn navbar(user: Option<User>, host: &str) -> Markup {
         " {
             summary class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none" {
                 svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="h-5 w-5 text-white" {
-                    path fill="currentColor" d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" {}
+                    path fill="currentColor" d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c17.7 0 32 14.3 32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" {}
                 }
                 span { "Menu" }
             }

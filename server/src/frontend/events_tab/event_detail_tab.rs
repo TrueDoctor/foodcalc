@@ -4,18 +4,26 @@ use axum::{
 };
 use bigdecimal::ToPrimitive;
 use foodlib_new::{
-    entities::types::amount::Amount,
-    entities::types::ids::{
-        EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, MealId, StoreId,
+    entities::{
+        event::SourceOverrideView,
+        meal::{Meal, MealIngredient},
+        recipe::Recipe,
+        store::Store,
     },
-    error::{Error, Result},
-    event::SourceOverrideView,
-    meal::Meal,
+    error::Error,
+    types::{
+        amount::Amount,
+        ids::{EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, MealId, StoreId},
+    },
+    AppCtx,
 };
 use maud::{html, Markup};
 use num::FromPrimitive;
 use serde::Deserialize;
+use std::collections::HashMap;
 use time::macros::format_description;
+#[cfg(feature = "typst")]
+use typst_renderer::renderer::DishLabelLayout;
 
 mod event_edit_meal_tab;
 mod food_prep;
@@ -23,11 +31,11 @@ mod shopping_tours;
 mod timeline;
 
 use crate::{
-    frontend::{icons, move_group, MResponse, WebCtx},
-    MyAppState,
+    frontend::{icons, move_group, web_error::WebError, MResponse, WebCtx},
+    AppState,
 };
 
-pub(crate) fn event_detail_router() -> axum::Router<MyAppState> {
+pub(crate) fn event_detail_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/{event_id}", post(update_event))
         .route("/{event_id}/overrides/{source_id}", post(update_override))
@@ -68,29 +76,26 @@ struct ShiftTimesForm {
 }
 
 async fn handle_shift_times(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
     Form(form): Form<ShiftTimesForm>,
 ) -> MResponse {
     let target = shopping_tours::parse_datetime_local(&form.new_first_meal_start)?;
-    app::events::timeline::shift_event_times(&state, &actor, event_id, target).await?;
+    foodlib_new::events::timeline::shift_event_times(&state, &actor, event_id, target).await?;
     event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 async fn render_meal_prices(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    use bigdecimal::ToPrimitive;
-    use std::collections::HashMap;
-
-    let app::events::shopping::MealPricesData {
+    let foodlib_new::events::shopping::MealPricesData {
         meals,
         price_by_meal,
         budget,
-    } = app::events::shopping::gather_meal_prices(&state, &actor, event_id).await?;
+    } = foodlib_new::events::shopping::gather_meal_prices(&state, &actor, event_id).await?;
     let price_by_meal: HashMap<MealId, f64> = price_by_meal
         .into_iter()
         .map(|(id, p)| (id, p.to_f64().unwrap_or_default()))
@@ -145,11 +150,11 @@ async fn render_meal_prices(
 }
 
 pub async fn delete_override_dialog(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, source_id)): Path<(EventId, IngredientSourceId)>,
 ) -> MResponse {
-    let overrides = app::events::list_source_overrides(&state, &actor, event_id).await?;
+    let overrides = foodlib_new::events::list_source_overrides(&state, &actor, event_id).await?;
     let source = overrides
         .iter()
         .find(|s| s.source_id == source_id)
@@ -170,20 +175,22 @@ pub async fn delete_override_dialog(
 }
 
 pub async fn delete_override(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, source_id)): Path<(EventId, IngredientSourceId)>,
 ) -> MResponse {
-    app::events::logistics::delete_source_override(&state, &actor, event_id, source_id).await?;
+    foodlib_new::events::logistics::delete_source_override(&state, &actor, event_id, source_id)
+        .await?;
     event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 pub async fn delete_meal_dialog(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    let meal = app::events::meals::get_meal_for_event(&state, &actor, event_id, meal_id).await?;
+    let meal =
+        foodlib_new::events::meals::get_meal_for_event(&state, &actor, event_id, meal_id).await?;
 
     Ok(html! {
         dialog open="true" class="dialog" id="delete" {
@@ -196,18 +203,23 @@ pub async fn delete_meal_dialog(
     })
 }
 
+type PdfResponse = std::result::Result<([(axum::http::HeaderName, String); 2], Vec<u8>), WebError>;
+
 pub async fn export_recipe_pdf(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     Path(meal_id): Path<MealId>,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let recipe_info = app::exports::fetch_meal_recipe(&state, meal_id).await?;
+) -> PdfResponse {
+    let recipe_info = foodlib_new::exports::fetch_meal_recipe(&state, &actor, meal_id).await?;
     let title = recipe_info.name.to_owned();
     #[cfg(feature = "typst")]
-    let result = typst_renderer::DocumentRenderer::new().export_recipes(vec![recipe_info]);
+    let result = typst_renderer::DocumentRenderer::new()
+        .export_recipes(vec![recipe_info])
+        .map_err(|e| WebError(Error::Misc(e.to_string())));
     #[cfg(not(feature = "typst"))]
-    let result = Err(foodlib_new::Error::Misc(
+    let result = Err(WebError(Error::Misc(
         "Server compiled without typst support".into(),
-    ));
+    )));
     let recipe = result?;
 
     let headers = [
@@ -222,20 +234,21 @@ pub async fn export_recipe_pdf(
     ];
     Ok((headers, recipe))
 }
-
 pub async fn export_food_prep_pdf(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     Path(prep_id): Path<FoodPrepId>,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let recipe_info = app::exports::fetch_food_prep_recipe(&state, prep_id).await?;
+) -> PdfResponse {
+    let recipe_info = foodlib_new::exports::fetch_food_prep_recipe(&state, &actor, prep_id).await?;
     let title = format!("{}_prep", recipe_info.name);
     #[cfg(feature = "typst")]
     let result = typst_renderer::DocumentRenderer::new()
-        .export_recipes(vec![recipe_info]);
+        .export_recipes(vec![recipe_info])
+        .map_err(|e| WebError(Error::Misc(e.to_string())));
     #[cfg(not(feature = "typst"))]
-    let result = Err(foodlib_new::Error::Misc(
+    let result = Err(WebError(Error::Misc(
         "Server compiled without typst support".into(),
-    ));
+    )));
     let recipe = result?;
 
     let headers = [
@@ -252,30 +265,27 @@ pub async fn export_food_prep_pdf(
 }
 
 pub async fn export_dish_labels_tent(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
+) -> PdfResponse {
     dish_labels_response(&state, &actor, event_id).await
 }
 
 async fn dish_labels_response(
-    state: &MyAppState,
-    actor: &app::AppCtx,
+    state: &AppState,
+    actor: &AppCtx,
     event_id: EventId,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let info = app::exports::fetch_event_allergens(state, actor, event_id).await?;
+) -> PdfResponse {
+    let info = foodlib_new::exports::fetch_event_allergens(state, actor, event_id).await?;
     let filename = format!("{}_dish_labels_tent", sanitize_filename(&info.event_name));
 
-    // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
     #[cfg(feature = "typst")]
-    let result = typst_renderer::DocumentRenderer::new()
-        .export_dish_labels(info, DishLabelLayout::Tent);
+    let result =
+        typst_renderer::DocumentRenderer::new().export_dish_labels(info, DishLabelLayout::Tent);
     #[cfg(not(feature = "typst"))]
-    let result = Err(foodlib_new::Error::Misc(
-        "Server compiled without typst support".into(),
-    ));
-    let pdf = result.map_err(|e| foodlib_new::Error::Misc(e.to_string()))?;
+    let result = Err(Error::Misc("Server compiled without typst support".into()));
+    let pdf = result.map_err(|e| WebError(Error::Misc(e.to_string())))?;
 
     Ok((
         [
@@ -293,22 +303,18 @@ async fn dish_labels_response(
 }
 
 pub async fn export_event_allergens(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let info = app::exports::fetch_event_allergens(&state, &actor, event_id).await?;
+) -> PdfResponse {
+    let info = foodlib_new::exports::fetch_event_allergens(&state, &actor, event_id).await?;
     let filename = format!("{}_allergene", sanitize_filename(&info.event_name));
 
     #[cfg(feature = "typst")]
-  // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
-    let result = typst_renderer::DocumentRenderer::new()
-        .export_event_allergens(info);
+    let result = typst_renderer::DocumentRenderer::new().export_event_allergens(info);
     #[cfg(not(feature = "typst"))]
-    let result = Err(foodlib_new::Error::Misc(
-        "Server compiled without typst support".into(),
-    ));
-    let pdf = result.map_err(|e| foodlib_new::Error::Misc(e.to_string()))?;
+    let result = Err(Error::Misc("Server compiled without typst support".into()));
+    let pdf = result.map_err(|e| WebError(Error::Misc(e.to_string())))?;
 
     Ok((
         [
@@ -328,27 +334,23 @@ pub async fn export_event_allergens(
 /// Combined PDF for an entire event: every meal recipe plus every food-prep
 /// sheet, ordered chronologically, in a single download.
 pub async fn export_all_pdf(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>)> {
-    let event = app::events::get_event(&state, &actor, event_id).await?;
+) -> PdfResponse {
+    let event = foodlib_new::events::get_event(&state, &actor, event_id).await?;
     let filename = format!("{}_alle_rezepte", sanitize_filename(&event.name));
 
-    let recipes = app::exports::fetch_event_combined(&state, event_id).await?;
+    let recipes = foodlib_new::exports::fetch_event_combined(&state, &actor, event_id).await?;
 
     #[cfg(feature = "typst")]
-   // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
-    let result = typst_renderer::DocumentRenderer::new()
-        .export_recipes(recipes);
+    let result = typst_renderer::DocumentRenderer::new().export_recipes(recipes);
     #[cfg(not(feature = "typst"))]
     let result = {
         let _ = recipes;
-        Err(foodlib_new::Error::Misc(
-            "Server compiled without typst support".into(),
-        ))
+        Err(Error::Misc("Server compiled without typst support".into()))
     };
-    let pdf = result.map_err(|e| foodlib_new::Error::Misc(e.to_string()))?;
+    let pdf = result.map_err(|e| WebError(Error::Misc(e.to_string())))?;
 
     Ok((
         [
@@ -378,11 +380,11 @@ fn sanitize_filename(s: &str) -> String {
 }
 
 pub async fn event_form(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    let app::events::EventFormData {
+    let foodlib_new::events::EventFormData {
         event,
         stores,
         overrides,
@@ -390,19 +392,15 @@ pub async fn event_form(
         meals,
         mut recipes,
         preps,
-    } = app::events::gather_form_data(&state, &actor, event_id).await?;
+    } = foodlib_new::events::gather_form_data(&state, &actor, event_id).await?;
     recipes.sort_by(|a, b| a.name.cmp(&b.name));
-    // Default start-time for the inline meal add-row: latest meal's start_time
-    // if any, otherwise "now". Saves the user retyping when adding meals
-    // back-to-back.
+
     let default_meal_start = meals
         .iter()
         .map(|m| m.start_time)
         .max()
         .unwrap_or_else(time::OffsetDateTime::now_utc);
-    // Default date for tour + food-prep add-rows: a day before the earliest
-    // meal (or food prep), so shopping/prep naturally precedes consumption.
-    // Falls back to "now" when nothing is scheduled yet.
+
     let earliest = meals
         .iter()
         .map(|m| m.start_time)
@@ -412,7 +410,6 @@ pub async fn event_form(
         .map(|t| t - time::Duration::days(1))
         .unwrap_or_else(time::OffsetDateTime::now_utc);
 
-    // Create a dummy source for the "add new" row
     let dummy_source = SourceOverrideView {
         event_id,
         ingredient_id: IngredientId(-1),
@@ -422,7 +419,7 @@ pub async fn event_form(
         store_name: String::new(),
     };
 
-    let owner_select = move_group::owner_select(&state, &actor.ctx, event.group_id).await?;
+    let owner_select = move_group::owner_select(&state, &actor, event.group_id).await?;
 
     let first_meal_start = meals.iter().map(|m| m.start_time).min();
     Ok(html! {
@@ -432,20 +429,15 @@ pub async fn event_form(
                 input name="name" class="text " type="text" value=(&event.name);
                 label for="comment" { "Comment:" };
                 input name="comment" class="text " type="text" value=(&event.comment.unwrap_or_default());
-                // "Total X€ / [budget]": the total is lazily filled by the
-                // /meal-prices OOB swap (keyed by id) and colored vs the budget
-                // server-side; the budget itself stays editable.
                 div class="flex flex-row items-center gap-1 whitespace-nowrap" {
                     span class="font-semibold" id="event-total-price" { "Total …" }
                     span { "/" }
-                    input name="budget" class="text w-24" type="text" value=(event.budget.as_ref().and_then(|x|x.to_f64()).unwrap_or(0.));
+                    input name="budget" class="text w-24" type="text" value=(event.budget.as_ref().and_then(|x| x.to_f64()).unwrap_or(0.));
                 }
                 (owner_select)
-                button class="btn btn-primary " hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" {"Submit"}
+                button class="btn btn-primary " hx-post=(format!("/events/edit/{}", event_id)) hx-include="closest #event_form" hx-target="#content" hx-swap="innerHTML" hx-indicator=".htmx-indicator" { "Submit" }
                 span class="htmx-indicator" { "Saving\u{a0}…" }
             }
-            // Event-level actions: navigate to the timeline, and (when meals
-            // exist) shift every dated row by anchoring the first meal.
             div class="flex flex-row items-center justify-center flex-wrap gap-2" {
                 a class="btn btn-primary " hx-target="#content" hx-push-url="true" hx-get=(format!("/events/edit/timeline/{}", event_id)) { "Show timeline" }
                 @if let Some(first_meal_start) = first_meal_start {
@@ -476,7 +468,7 @@ pub async fn event_form(
             p class="text-2xl" { "Meals" }
         }
         table class="w-full text-inherit table-auto object-center mb-2 responsive-card no-stripe" {
-            thead { tr { th { "Recipe" } th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} }  }
+            thead { tr { th { "Recipe" } th { "Servings" } th { "Energy" } th { "Weight" } th { "Price" } th {} } }
             tbody class="text-center" id="meals-tbody" {
                 (meal_add_row(event_id, &recipes, default_meal_start))
                 (format_event_meal_groups(event_id, &meals))
@@ -489,12 +481,12 @@ pub async fn event_form(
             }
         }
         (render_shopping_tours(&state, event_id, &stores, default_shop_date).await?)
-        (food_prep::render_food_prep(&state, event_id, default_shop_date).await?)
+        (food_prep::render_food_prep(&state, &actor, event_id, default_shop_date).await?)
         div class="flex-col items-center justify-center mb-2" {
             p class="text-2xl" { "Ingredient Sources Overrides" }
         }
         table class="w-full text-inherit table-auto object-center responsive-card" {
-            thead { tr { th { "Ingredient" } th {"Store"} th {} th {} }  }
+            thead { tr { th { "Ingredient" } th { "Store" } th {} th {} } }
             tbody {
                 (format_event_source_override(&dummy_source, &stores))
                 @for over in overrides {
@@ -506,47 +498,43 @@ pub async fn event_form(
 }
 
 async fn ingredients_per_serving(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     meal_id: Path<MealId>,
 ) -> MResponse {
     let event_meal_ingredients =
-        app::events::meals::get_meal_ingredients(&state, meal_id.0).await?;
-    let meal = app::events::meals::get_meal(&state, meal_id.0).await?;
+        foodlib_new::events::meals::get_meal_ingredients(&state, meal_id.0).await?;
+    let meal = foodlib_new::events::meals::get_meal(&state, meal_id.0).await?;
 
     Ok(html! {
         dialog open="true" id="popup" class="w-1/2 dialog" {
             div class="flex-col items-center justify-center" {
                 table class="w-full table-auto object-center table-fixed" {
-                    thead { tr { th { "Ingredient" } th {"Amount"} th {"Energy"} th {"Price"} } }
+                    thead { tr { th { "Ingredient" } th { "Amount" } th { "Energy" } th { "Price" } } }
                     tbody {
                         @for item in event_meal_ingredients {
                             (format_event_meal_ingredient(&item, meal.servings as f64))
                         }
                     }
                 }
-                button class="btn btn-cancel" hx-trigger="click from:body" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
+                button class="btn btn-cancel" hx-trigger="click from:body" hx-swap="delete" hx-target="#popup" hx-get="/" { "Close" }
             }
         }
     })
 }
 
-use std::collections::HashMap;
-#[cfg(feature = "typst")]
-use typst_renderer::renderer::DishLabelLayout;
-
 async fn render_ingredients_without_tours(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
     let uncovered_ingredients =
-        app::events::logistics::gather_uncovered_ingredients(&state, &actor, event_id).await?;
+        foodlib_new::events::logistics::gather_uncovered_ingredients(&state, &actor, event_id)
+            .await?;
 
     if uncovered_ingredients.is_empty() {
         return Ok(html! {});
     }
 
-    // Group by store (when available)
     let mut by_store: HashMap<String, Vec<String>> = HashMap::new();
     let mut total_weight = Amount::default();
 
@@ -564,7 +552,6 @@ async fn render_ingredients_without_tours(
         total_weight += ingredient.weight.clone().unwrap_or_default();
     }
 
-    // Sort stores alphabetically for consistent display
     let mut stores: Vec<_> = by_store.into_iter().collect();
     stores.sort_by(|(a, _), (b, _)| a.cmp(b));
 
@@ -599,12 +586,12 @@ async fn render_ingredients_without_tours(
 }
 
 pub async fn render_shopping_tours(
-    state: &MyAppState,
+    state: &AppState,
     event_id: EventId,
-    stores: &[foodlib_new::store::Store],
+    stores: &[Store],
     default_date: time::OffsetDateTime,
 ) -> MResponse {
-    let tours = app::events::get_shopping_tours(state, event_id).await?;
+    let tours = foodlib_new::events::get_shopping_tours(state, event_id).await?;
 
     Ok(html! {
         div class="flex-col items-center justify-center mb-2" {
@@ -644,12 +631,9 @@ pub async fn render_shopping_tours(
     })
 }
 
-/// Inline add-row for shopping tours. All fields fit in the row, so submit
-/// directly — no detail-page round-trip. Editing an existing tour still goes
-/// through the detail page (it carries the shopping-list + inventory UI).
 fn tour_add_row(
     event_id: EventId,
-    stores: &[foodlib_new::store::Store],
+    stores: &[Store],
     default_date: time::OffsetDateTime,
 ) -> Markup {
     let url = format!("/events/edit/shopping_tours/create_inline/{}", event_id);
@@ -680,7 +664,7 @@ fn tour_add_row(
 }
 
 fn format_event_meal_ingredient(
-    event_meal_ingredient: &foodlib_new::meal::MealIngredient,
+    event_meal_ingredient: &MealIngredient,
     portions: f64,
 ) -> Markup {
     let format = |x, unit| html! { td { (&format!("{:.3}{}", x, unit)) } };
@@ -689,7 +673,7 @@ fn format_event_meal_ingredient(
         tr {
             td { (event_meal_ingredient.ingredient) }
             (format(event_meal_ingredient.weight.to_f64().unwrap_or_default() / portions * 1000., "g"))
-            (format(event_meal_ingredient.energy.to_f64().unwrap_or_default() / portions / 100. , "kj"))
+            (format(event_meal_ingredient.energy.to_f64().unwrap_or_default() / portions / 100., "kj"))
             (format(event_meal_ingredient.price.to_f64().unwrap_or_default() / portions, "€"))
         }
     }
@@ -704,7 +688,6 @@ struct EventForm {
     group_id: GroupId,
 }
 
-/// An empty form field (`""`) means "unset", not "unparseable number".
 fn empty_to_none<'de, D>(deserializer: D) -> std::result::Result<Option<f64>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -717,12 +700,12 @@ where
 }
 
 async fn update_event(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     event_id: Path<EventId>,
     event_data: Form<EventForm>,
 ) -> MResponse {
-    app::events::update_event(
+    foodlib_new::events::update_event(
         &state,
         &actor,
         event_id.0,
@@ -731,7 +714,7 @@ async fn update_event(
         event_data.budget,
         event_data.group_id,
     )
-    .await?;
+        .await?;
     event_form(State(state), WebCtx(actor), event_id).await
 }
 
@@ -742,23 +725,20 @@ struct SourceData {
 }
 
 async fn update_override(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, ingredient_id)): Path<(EventId, IngredientId)>,
     Form(source): Form<SourceData>,
 ) -> MResponse {
-    app::events::logistics::set_source_default_override(
+    foodlib_new::events::logistics::set_source_default_override(
         &state,
         &actor,
         event_id,
         &source.ingredient,
         source.store_id,
     )
-    .await?;
+        .await?;
 
-    // Adding a brand-new override (id -1 from the Add row) must re-render the
-    // form so the new row appears. Editing an existing override only changes
-    // prices, so refresh just the price cells via the OOB swaps.
     if !ingredient_id.is_valid() {
         event_form(State(state), WebCtx(actor), Path(event_id)).await
     } else {
@@ -768,9 +748,9 @@ async fn update_override(
 
 fn format_event_source_override(
     source_override: &SourceOverrideView,
-    stores: &[foodlib_new::store::Store],
+    stores: &[Store],
 ) -> Markup {
-    let option = |store: &foodlib_new::store::Store, source_store| match store.id == source_store {
+    let option = |store: &Store, source_store| match store.id == source_store {
         false => html! {
             option
                 label=(store.name)
@@ -782,7 +762,7 @@ fn format_event_source_override(
             option
                 label=(store.name)
                 value=(store.id)
-                selected {(store.name)}
+                selected { (store.name) }
         },
     };
 
@@ -791,11 +771,7 @@ fn format_event_source_override(
         "/events/edit/{}/overrides/{}",
         source_override.event_id, source_override.ingredient_id
     );
-    // New (empty) rows keep an explicit Add button — auto-saving a blank row
-    // would create junk overrides. Existing rows auto-save on change (posting
-    // the whole row) instead, matching the inventory/edit patterns elsewhere.
-    // Setting an override only affects prices, so the handler returns just the
-    // OOB price swaps rather than re-rendering the whole event form.
+
     html! {
         tr {
             td data-label="Ingredient" {
@@ -829,18 +805,14 @@ fn format_event_source_override(
             td class="no-label" { @if !is_new {
                 div class="flex flex-row justify-end" {
                     button class="icon-btn" title="Delete" aria-label="Delete" hx-get=(format!("/events/edit/{}/overrides/{}/delete_dialog", source_override.event_id, source_override.source_id)) hx-target="this" hx-swap="outerHTML" { (icons::delete()) }
-                } }}
+                } } }
         }
     }
 }
 
-/// Inline add-row for meals. The visible columns mirror the table; the Add
-/// button navigates (push-url) to the meal-detail page with the typed values
-/// prepopulated via querystring, so the user can fill the remaining required
-/// fields (place, end_time, energy, comment) before saving.
 fn meal_add_row(
     event_id: EventId,
-    recipes: &[foodlib_new::recipe::Recipe],
+    recipes: &[Recipe],
     default_start: time::OffsetDateTime,
 ) -> Markup {
     let url = format!("/events/edit/event_edit_meal/{}/-1", event_id);
@@ -873,9 +845,6 @@ fn meal_add_row(
     }
 }
 
-/// Render meals grouped by `start_time`. `meals` is start_time-ordered, so
-/// each contiguous run sharing a start time is one group, preceded by a header
-/// row with the group's date/time and subtotal that also draws the divider.
 fn format_event_meal_groups(event_id: EventId, meals: &[Meal]) -> Markup {
     html! {
         @for group in meals.chunk_by(|a, b| a.start_time == b.start_time) {
@@ -883,14 +852,11 @@ fn format_event_meal_groups(event_id: EventId, meals: &[Meal]) -> Markup {
             @for meal in group {
                 (format_event_meal(event_id, meal))
             }
-            // Empty spacer row separates this group from the next header.
-            // Hidden on mobile, where responsive-card already spaces cards.
             tr class="meal-group-band hidden sm:table-row" aria-hidden="true" { td colspan="6" class="h-4 no-label" {} }
         }
     }
 }
 
-/// German weekday name for a group header (e.g. "Montag").
 fn german_weekday(weekday: time::Weekday) -> &'static str {
     use time::Weekday::*;
     match weekday {
@@ -904,29 +870,19 @@ fn german_weekday(weekday: time::Weekday) -> &'static str {
     }
 }
 
-/// Header/divider row opening a meal group. Shows the group's weekday, time
-/// range (shared start – latest end) and location, plus absolute subtotals:
-/// energy (kj) summed over `energy_per_serving × servings`, total weight (g),
-/// and a lazily-filled price cell keyed by the group's unix timestamp. The
-/// bottom border draws the divider, so the header text sits above the line and
-/// its meals below.
 fn meal_group_header_row(start_time: time::OffsetDateTime, group: &[Meal]) -> Markup {
     let time_format = format_description!("[day].[month] [hour]:[minute]");
     let time_only = format_description!("[hour]:[minute]");
-    // Energy summed in kj (energy_per_serving × servings), shown in MJ.
     let total_energy_mj: f64 = group
         .iter()
         .map(|m| m.energy.to_f64().unwrap_or_default() * m.servings as f64)
         .sum::<f64>()
         / 1000.;
-    // `weight` from the query is already total meal weight in kg.
     let total_weight_kg: f64 = group
         .iter()
         .map(|m| m.weight.to_f64().unwrap_or_default())
         .sum();
 
-    // Group end = latest end among its meals. Show only the time-of-day when it
-    // lands on the start's calendar day, otherwise the full end date+time.
     let group_end = group.iter().map(|m| m.end_time).max().unwrap_or(start_time);
     let start_str = start_time.format(&time_format).unwrap_or_default();
     let end_str = if group_end.date() == start_time.date() {

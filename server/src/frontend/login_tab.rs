@@ -1,22 +1,21 @@
 use axum::{
-    extract::Query,
+    extract::{Query, State},
     response::IntoResponse,
     routing::{any, get, post},
     Form,
 };
-use foodlib_new::{
-    auth::{AuthSession, Credentials},
-    error::Error,
-    user::User,
-};
+use foodlib_new::error::Error;
 use maud::{html, Markup};
 use serde::Deserialize;
 
-use crate::MyAppState;
+use crate::auth::{AuthSession, Credentials};
+use crate::frontend::web_error::WebError;
+use crate::frontend::OptWebCtx;
+use crate::AppState;
 
 use super::IResponse;
 
-pub(crate) fn login_router() -> axum::Router<MyAppState> {
+pub(crate) fn login_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/login/form", any(login_view))
         .route("/login", post(login_handler))
@@ -46,9 +45,9 @@ fn safe_next(raw: Option<&str>) -> String {
     }
 }
 
-pub async fn login_view(user: Option<User>, Query(q): Query<NextParam>) -> IResponse {
+pub async fn login_view(OptWebCtx(actor): OptWebCtx, Query(q): Query<NextParam>) -> IResponse {
     let next = safe_next(q.next.as_deref());
-    if user.is_some() {
+    if actor.is_some() {
         return Ok((
             [("HX-Reswap", "none")],
             axum::response::Redirect::to("/auth/logout"),
@@ -57,7 +56,7 @@ pub async fn login_view(user: Option<User>, Query(q): Query<NextParam>) -> IResp
     }
     let signup_link = format!("/auth/signup/form?next={}", urlencoding::encode(&next));
     let html = html! {
-        div id="login-dialog"  {
+        div id="login-dialog" {
             dialog class="dialog" open="open" id="login-dialog" {
                 div class="flex items-center justify-center" {
                     form hx-post="/auth/login" class="flex flex-col gap-1 justify-items-center justify-center h-full w-full" {
@@ -108,7 +107,7 @@ fn wrong_credentials(hidden: bool) -> Markup {
 async fn login_handler(auth: AuthSession, Form(data): Form<LoginData>) -> impl IntoResponse {
     let next = safe_next(data.next.as_deref());
     let (username, password) = (data.username, data.password);
-    let Ok(_) = foodlib_new::auth::login(auth, Credentials { username, password }).await else {
+    let Ok(_) = crate::auth::login(auth, Credentials { username, password }).await else {
         return (
             [("HX-Reswap", "outerHTML"), ("HX-Retarget", "#login-error")],
             wrong_credentials(false),
@@ -122,20 +121,16 @@ fn signup_error(message: &str) -> Markup {
     html! { span id="signup-error" class="text-red-700" { (message) } }
 }
 
-async fn signup_view(user: Option<User>, Query(q): Query<NextParam>) -> IResponse {
+async fn signup_view(OptWebCtx(actor): OptWebCtx, Query(q): Query<NextParam>) -> IResponse {
     if !signup_enabled() {
-        return Err(Error::NotFound {
+        return Err(WebError(Error::NotFound {
             entity: "signup",
             id: "disabled".into(),
-        });
+        }));
     }
     let next = safe_next(q.next.as_deref());
-    if user.is_some() {
-        return Ok((
-            [("HX-Reswap", "none")],
-            axum::response::Redirect::to(&next),
-        )
-            .into_response());
+    if actor.is_some() {
+        return Ok(([("HX-Reswap", "none")], axum::response::Redirect::to(&next)).into_response());
     }
     let login_link = format!("/auth/login/form?next={}", urlencoding::encode(&next));
     let html = html! {
@@ -175,14 +170,14 @@ pub struct SignupData {
 
 async fn signup_handler(
     auth: AuthSession,
-    foodlib: crate::FoodLib,
+    State(state): State<AppState>,
     Form(data): Form<SignupData>,
-) -> impl IntoResponse {
+) -> IResponse {
     if !signup_enabled() {
-        return Err(Error::NotFound {
+        return Err(WebError(Error::NotFound {
             entity: "signup",
             id: "disabled".into(),
-        });
+        }));
     }
 
     let username = data.username.trim().to_string();
@@ -217,20 +212,10 @@ async fn signup_handler(
         return Ok(bad("Password must be at least 8 characters"));
     }
 
-    if foodlib
-        .users()
-        .get_user_by_string_reference(username.clone())
-        .await
-        .is_some()
-    {
+    if state.get_user_by_login(&username).await.is_some() {
         return Ok(bad("That username is already taken"));
     }
-    if foodlib
-        .users()
-        .get_user_by_string_reference(email.clone())
-        .await
-        .is_some()
-    {
+    if state.get_user_by_login(&email).await.is_some() {
         return Ok(bad("That email is already registered"));
     }
 
@@ -238,13 +223,13 @@ async fn signup_handler(
         username: username.clone(),
         password: password.clone(),
     };
-    if let Err(e) = foodlib_new::auth::register(&auth.backend, email, credentials, false).await {
+    if let Err(e) = crate::auth::register(&auth.backend, email, credentials, false).await {
         log::error!("signup failed for {username}: {e}");
         return Ok(bad("Could not create account, please try again"));
     }
 
     let credentials = Credentials { username, password };
-    if let Err(e) = foodlib_new::auth::login(auth, credentials).await {
+    if let Err(e) = crate::auth::login(auth, credentials).await {
         log::error!("auto-login after signup failed: {e}");
         return Ok(([("HX-Redirect", next_login_form.as_str())], ()).into_response());
     }
@@ -252,27 +237,18 @@ async fn signup_handler(
     Ok(([("HX-Redirect", next.as_str())], ()).into_response())
 }
 
-async fn logout_handler(mut auth: AuthSession, headers: axum::http::HeaderMap) -> impl IntoResponse {
-    dbg!("Logging out user: {}", &auth.user);
+async fn logout_handler(
+    mut auth: AuthSession,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
     if let Err(e) = auth.logout().await {
         log::error!("failed to log out {:?}: {e}", auth.user);
     }
 
     // HX-Redirect is only honored by htmx; a plain browser navigation (typed
     // URL, bookmark, opened in a new tab) needs a real redirect.
-    if headers
-        .get("HX-Request")
-        .is_some_and(|v| v == "true")
-    {
-        (
-            [
-                // ("HX-Reswap", "delete"),
-                // ("HX-Retarget", "#login-dialog"),
-                ("HX-Redirect", "/"),
-            ],
-            (),
-        )
-            .into_response()
+    if headers.get("HX-Request").is_some_and(|v| v == "true") {
+        ([("HX-Redirect", "/")], ()).into_response()
     } else {
         axum::response::Redirect::to("/").into_response()
     }

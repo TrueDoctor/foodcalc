@@ -1,19 +1,17 @@
-use axum::extract::{Form, Path};
-use axum::extract::State;
-use foodlib_new::entities::types::ids::EventId;
-use foodlib_new::user::User;
+use axum::extract::{Form, Path, State};
+use foodlib_new::entities::event::Event;
+use foodlib_new::types::ids::EventId;
 use maud::{html, Markup};
 use serde::Deserialize;
 
 mod event_detail_tab;
 
-use crate::frontend::icons;
-use crate::frontend::WebCtx;
-use crate::MyAppState;
+use crate::frontend::{icons, WebCtx};
+use crate::AppState;
 
 use super::MResponse;
 
-pub(crate) fn events_router() -> axum::Router<MyAppState> {
+pub(crate) fn events_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/", axum::routing::get(event_list))
         .route("/delete/{event_id}", axum::routing::get(delete_dialog))
@@ -40,7 +38,7 @@ pub struct AddEventForm {
 }
 
 /// An empty form field (`""`) means "unset", not "unparseable number".
-fn empty_to_none<'de, D>(deserializer: D) -> std::result::Result<Option<f64>, D::Error>
+fn empty_to_none<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -52,12 +50,12 @@ where
 }
 
 pub async fn add(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(form): Form<AddEventForm>,
 ) -> MResponse {
-    app::events::create_event(&state, &actor, form.name, form.comment, form.budget).await?;
-    Ok(event_list(State(state), actor.ctx.user).await)
+    foodlib_new::events::create_event(&state, &actor, form.name, form.comment, form.budget).await?;
+    Ok(event_list(State(state), WebCtx(actor)).await)
 }
 
 /// Inline add-row for events. Visible columns mirror the table (name +
@@ -88,20 +86,20 @@ fn event_add_row(is_admin: bool) -> Markup {
 }
 
 pub async fn duplicate(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    let id = app::events::duplicate_event(&state, &actor, event_id).await?;
+    let id = foodlib_new::events::duplicate_event(&state, &actor, event_id).await?;
     event_detail_tab::event_form(State(state), WebCtx(actor), Path(id)).await
 }
 
 pub async fn delete_dialog(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    let event = app::events::get_event(&state, &actor, event_id).await?;
+    let event = foodlib_new::events::get_event(&state, &actor, event_id).await?;
     Ok(html! {
         div class="flex flex-col gap-2" {
             p class="text-2xl" { "Are you sure you want to delete this Event permanently?" }
@@ -119,25 +117,22 @@ pub async fn delete_dialog(
 }
 
 pub async fn delete(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    app::events::delete_event(&state, &actor, event_id).await?;
-    Ok(event_list(State(state), actor.ctx.user).await)
+    foodlib_new::events::delete_event(&state, &actor, event_id).await?;
+    Ok(event_list(State(state), WebCtx(actor)).await)
 }
 
-pub async fn event_list(State(state): State<MyAppState>, user: User) -> Markup {
-    let events = app::events::list_events(&state).await.unwrap_or_default();
-    let user_group_ids = app::users::lenient_user_group_ids(&state, &user).await;
-    let visible_events: Vec<_> = if user.is_admin {
-        events.iter().collect()
-    } else {
-        events
-            .iter()
-            .filter(|e| user_group_ids.contains(&e.group_id))
-            .collect()
-    };
+pub async fn event_list(State(state): State<AppState>, WebCtx(actor): WebCtx) -> Markup {
+    let events = foodlib_new::events::list_events(&state)
+        .await
+        .unwrap_or_default();
+    let visible_events: Vec<_> = events
+        .iter()
+        .filter(|e| actor.can_access_group(e.group_id))
+        .collect();
 
     html! {
         form id="events-filter" class="
@@ -149,7 +144,7 @@ pub async fn event_list(State(state): State<MyAppState>, user: User) -> Markup {
             hx-trigger="keyup changed delay:20ms from:#search, change from:#mine-only, search"
             hx-target="#search-results" {
             input class="grow text h-full" type="search" placeholder="Search for event" id="search" name="search" autocomplete="off" autofocus="autofocus";
-            @if user.is_admin {
+            @if actor.user.is_admin {
                 label class="flex items-center gap-2 whitespace-nowrap" {
                     input type="checkbox" id="mine-only" name="mine_only" value="1";
                     "Mine only"
@@ -157,11 +152,11 @@ pub async fn event_list(State(state): State<MyAppState>, user: User) -> Markup {
             }
         }
         table class="w-full text-inherit table-auto object-center responsive-card" {
-            thead { tr { @if user.is_admin { th class="w-1/12" { "ID" } } th { "Name" } th { "Comment" } th {}} }
+            thead { tr { @if actor.user.is_admin { th class="w-1/12" { "ID" } } th { "Name" } th { "Comment" } th {}} }
             tbody id="search-results" {
-                (event_add_row(user.is_admin))
+                (event_add_row(actor.user.is_admin))
                 @for event in visible_events.iter() {
-                    (format_event(event, user.is_admin))
+                    (format_event(event, actor.user.is_admin))
                 }
             }
         }
@@ -178,30 +173,31 @@ pub async fn event_list(State(state): State<MyAppState>, user: User) -> Markup {
 }
 
 pub async fn search(
-    State(state): State<MyAppState>,
-    user: User,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     query: Form<SearchParameters>,
 ) -> Markup {
     let query_str = query.search.to_lowercase();
     let mine_only = query.mine_only.is_some();
-    let events = app::events::list_events(&state).await.unwrap_or_default();
-    let user_group_ids = app::users::lenient_user_group_ids(&state, &user).await;
+    let events = foodlib_new::events::list_events(&state)
+        .await
+        .unwrap_or_default();
 
     let filtered_events = events.iter().filter(|x| {
         x.name.to_lowercase().contains(&query_str)
-            && (user.is_admin || user_group_ids.contains(&x.group_id))
-            && (!mine_only || user_group_ids.contains(&x.group_id))
+            && actor.can_access_group(x.group_id)
+            && (!mine_only || actor.group_ids.contains(&x.group_id))
     });
 
     html! {
-        (event_add_row(user.is_admin))
+        (event_add_row(actor.user.is_admin))
         @for event in filtered_events {
-            (format_event(event, user.is_admin))
+            (format_event(event, actor.user.is_admin))
         }
     }
 }
 
-fn format_event(event: &foodlib_new::event::Event, is_admin: bool) -> Markup {
+fn format_event(event: &Event, is_admin: bool) -> Markup {
     html! {
         tr id=(format!("event-{}", event.id)) {
             @let indicator_id = format!("indicator-{}", event.id);

@@ -1,22 +1,20 @@
+// Top imports:
+use super::MResponse;
+use crate::frontend::{icons, WebCtx};
+use crate::AppState;
 use axum::{
     extract::{Form, Path, Query, State},
     http::HeaderMap,
     routing::{get, post, put},
 };
-use foodlib_new::{
-    auth_context::AuthCtx,
-    entities::types::amount::Amount,
-    entities::types::ids::{GroupId, IngredientId, InventoryId},
-    ingredient::Ingredient,
-    inventory::{Inventory, InventoryItemWithName},
-};
+use foodlib_new::entities::ingredient::Ingredient;
+use foodlib_new::entities::inventory::{Inventory, InventoryItemWithName};
+use foodlib_new::types::amount::Amount;
+use foodlib_new::types::ids::{GroupId, IngredientId, InventoryId};
 use maud::{html, Markup};
 use serde::Deserialize;
-use super::MResponse;
-use crate::frontend::{icons, WebCtx};
-use crate::MyAppState;
 
-pub(crate) fn inventories_router() -> axum::Router<MyAppState> {
+pub(crate) fn inventories_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/", get(list_view).post(create_inventory))
         .route("/new", get(new_inventory_form))
@@ -63,12 +61,12 @@ impl ListFilters {
 }
 
 async fn list_view(
-    State(state): State<MyAppState>,
-    _ctx: AuthCtx,
+    State(state): State<AppState>,
+    _actor: WebCtx,
     headers: HeaderMap,
     Query(filters): Query<ListFilters>,
 ) -> MResponse {
-    let inventories = app::inventories::list_inventories(&state).await?;
+    let inventories = foodlib_new::inventories::list_inventories(&state).await?;
     let open = filters.open_ids();
     let filter = filters.filter_str();
 
@@ -260,13 +258,13 @@ fn render_row_markup(inv: &Inventory, open: bool, filter: &str) -> Markup {
     }
 }
 
-async fn render_row(State(state): State<MyAppState>, Path(id): Path<InventoryId>) -> MResponse {
-    let inv = app::inventories::get_inventory(&state, id).await?;
+async fn render_row(State(state): State<AppState>, Path(id): Path<InventoryId>) -> MResponse {
+    let inv = foodlib_new::inventories::get_inventory(&state, id).await?;
     Ok(render_row_markup(&inv, false, ""))
 }
 
 async fn contents_view(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     Path(id): Path<InventoryId>,
     Query(filters): Query<ContentsFilters>,
 ) -> MResponse {
@@ -280,11 +278,11 @@ pub struct ContentsFilters {
 }
 
 async fn render_contents(
-    state: &MyAppState,
+    state: &AppState,
     inventory_id: InventoryId,
     filter: &str,
 ) -> MResponse {
-    let data = app::inventories::gather_contents(state, inventory_id).await?;
+    let data = foodlib_new::inventories::gather_contents(state, inventory_id).await?;
     let mut items = data.items;
     if !filter.is_empty() {
         let needle = filter.to_lowercase();
@@ -399,12 +397,12 @@ struct NewInventoryForm {
 }
 
 async fn create_inventory(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(form): Form<NewInventoryForm>,
 ) -> MResponse {
-    app::inventories::create_inventory(&state, &actor, form.name).await?;
-    let inventories = app::inventories::list_inventories(&state).await?;
+    foodlib_new::inventories::create_inventory(&state, &actor, form.name).await?;
+    let inventories = foodlib_new::inventories::list_inventories(&state).await?;
     Ok(render_list(&inventories, &[], ""))
 }
 
@@ -415,24 +413,24 @@ struct RenameForm {
 }
 
 async fn rename_inventory(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(id): Path<InventoryId>,
     Form(form): Form<RenameForm>,
 ) -> MResponse {
     let inv =
-        app::inventories::rename_inventory(&state, &actor, id, form.name, form.group_id).await?;
+        foodlib_new::inventories::rename_inventory(&state, &actor, id, form.name, form.group_id).await?;
     Ok(render_row_markup(&inv, false, ""))
 }
 
 async fn edit_row(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(id): Path<InventoryId>,
 ) -> MResponse {
-    let inv = app::inventories::get_inventory_for_edit(&state, &actor, id).await?;
+    let inv = foodlib_new::inventories::get_inventory_for_edit(&state, &actor, id).await?;
     let owner_select =
-        crate::frontend::move_group::owner_select(&state, &actor.ctx, inv.group_id).await?;
+        crate::frontend::move_group::owner_select(&state, &actor, inv.group_id).await?;
     let row_id = format!("inv-{}", inv.id);
     Ok(html! {
         details id=(row_id) class="border rounded-lg p-2" open {
@@ -455,12 +453,12 @@ async fn edit_row(
 }
 
 async fn delete_inventory(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(id): Path<InventoryId>,
 ) -> MResponse {
-    app::inventories::delete_inventory(&state, &actor, id).await?;
-    let inventories = app::inventories::list_inventories(&state).await?;
+    foodlib_new::inventories::delete_inventory(&state, &actor, id).await?;
+    let inventories = foodlib_new::inventories::list_inventories(&state).await?;
     Ok(render_list(&inventories, &[], ""))
 }
 
@@ -471,12 +469,12 @@ struct AddItemForm {
 }
 
 async fn add_item(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(id): Path<InventoryId>,
     Form(form): Form<AddItemForm>,
 ) -> MResponse {
-    app::inventories::set_item(&state, &actor, id, form.ingredient_id, form.amount).await?;
+    foodlib_new::inventories::set_item(&state, &actor, id, form.ingredient_id, form.amount).await?;
     render_contents(&state, id, "").await
 }
 
@@ -486,12 +484,12 @@ struct UpdateAmountForm {
 }
 
 async fn update_item_amount(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((id, ingredient_id)): Path<(InventoryId, IngredientId)>,
     Form(form): Form<UpdateAmountForm>,
 ) -> MResponse {
-    let item = app::inventories::update_item_amount(
+    let item = foodlib_new::inventories::update_item_amount(
         &state,
         &actor,
         id,
@@ -503,11 +501,11 @@ async fn update_item_amount(
 }
 
 async fn delete_item(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((id, ingredient_id)): Path<(InventoryId, IngredientId)>,
 ) -> MResponse {
-    app::inventories::delete_item(&state, &actor, id, ingredient_id).await?;
+    foodlib_new::inventories::delete_item(&state, &actor, id, ingredient_id).await?;
     render_contents(&state, id, "").await
 }
 
@@ -517,12 +515,12 @@ async fn delete_item(
 /// `hx-swap-oob` block that updates the source inventory's contents in the
 /// same response — no second round trip.
 async fn move_item(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((from_id, ingredient_id, to_id)): Path<(InventoryId, IngredientId, InventoryId)>,
 ) -> MResponse {
     let moved =
-        app::inventories::move_item(&state, &actor, from_id, to_id, ingredient_id).await?;
+        foodlib_new::inventories::move_item(&state, &actor, from_id, to_id, ingredient_id).await?;
     if !moved {
         return render_contents(&state, to_id, "").await;
     }

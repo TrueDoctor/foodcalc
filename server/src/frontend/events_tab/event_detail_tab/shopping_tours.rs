@@ -1,25 +1,23 @@
-use app::AppCtx;
 use crate::{
-    frontend::{events_tab::event_detail_tab, IResponse, MResponse, WebCtx},
-    MyAppState,
+    frontend::{events_tab::event_detail_tab, web_error::WebError, IResponse, MResponse, WebCtx},
+    AppState,
 };
 use axum::{
     extract::{Form, Path, State},
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use foodlib_new::{
-    entities::types::amount::Amount,
-    entities::types::ids::{EventId, IngredientId, InventoryId, ShoppingTourId, StoreId},
-    error::Result,
-    event::ShoppingListItem,
-    inventory::InventoryItemWithName,
-};
+use foodlib_new::entities::event::ShoppingListItem;
+use foodlib_new::entities::inventory::InventoryItemWithName;
+use foodlib_new::error::Result;
+use foodlib_new::types::amount::Amount;
+use foodlib_new::types::ids::{EventId, IngredientId, InventoryId, ShoppingTourId, StoreId};
+use foodlib_new::AppCtx;
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
-pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
+pub(crate) fn shopping_tour_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/add/{event_id}", get(add_shopping_tour))
         .route("/create_inline/{event_id}", post(create_inline))
@@ -51,7 +49,7 @@ struct ToggleForm {
 }
 
 async fn add_shopping_tour(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
@@ -59,13 +57,12 @@ async fn add_shopping_tour(
 }
 
 async fn edit_shopping_tour(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, tour_id)): Path<(EventId, ShoppingTourId)>,
 ) -> MResponse {
     render_shopping_tour_form(&state, &actor, event_id, Some(tour_id)).await
 }
-
 
 #[derive(Deserialize)]
 struct InlineTourForm {
@@ -74,13 +71,14 @@ struct InlineTourForm {
 }
 
 async fn create_inline(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
     Form(form): Form<InlineTourForm>,
 ) -> MResponse {
     let tour_date = parse_datetime_local(&form.date)?;
-    app::events::shopping::create_tour(&state, &actor, event_id, form.store_id, tour_date).await?;
+    foodlib_new::events::shopping::create_tour(&state, &actor, event_id, form.store_id, tour_date)
+        .await?;
     event_detail_tab::event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
@@ -98,33 +96,32 @@ pub(crate) fn parse_datetime_local(s: &str) -> Result<OffsetDateTime> {
         &normalized,
         format_description!("[year]-[month]-[day]T[hour]:[minute]"),
     )
-    .map_err(|e| foodlib_new::Error::Misc(e.to_string()))?;
+        .map_err(|e| foodlib_new::Error::Misc(e.to_string()))?;
     Ok(dt.assume_utc())
 }
 
 async fn delete_shopping_tour(
-    state: State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> MResponse {
-    app::events::shopping::delete_tour(&state, &actor, tour_id).await?;
+    foodlib_new::events::shopping::delete_tour(&state, &actor, tour_id).await?;
     Ok(html! {})
 }
 
-
 async fn render_shopping_tour_form(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
     tour_id: Option<ShoppingTourId>,
 ) -> MResponse {
-    let app::events::shopping::TourFormData {
+    let foodlib_new::events::shopping::TourFormData {
         stores,
         inventories,
         existing,
         event_inventories,
         shopping_list,
-    } = app::events::shopping::gather_tour_form(state, actor, event_id, tour_id).await?;
+    } = foodlib_new::events::shopping::gather_tour_form(state, actor, event_id, tour_id).await?;
 
     let selected_store_id = existing.as_ref().map(|t| t.store_id);
     let initial_date = existing
@@ -133,7 +130,7 @@ async fn render_shopping_tour_form(
         .unwrap_or_else(OffsetDateTime::now_utc);
 
     let inventory_items =
-        app::events::shopping::gather_inventory_items(state, &event_inventories).await;
+        foodlib_new::events::shopping::gather_inventory_items(state, &event_inventories).await;
 
     Ok(html! {
         div class="flex-col space-y-4 w-full" {
@@ -145,9 +142,7 @@ async fn render_shopping_tour_form(
                 }
             }
 
-            // Stack form and shopping list vertically on mobile, side by side on desktop
             div class="flex flex-col lg:flex-row gap-4" {
-                // Form section - takes full width on mobile, half on desktop
                 form class="w-full lg:w-1/2 space-y-4" hx-post="/events/edit/shopping_tours/save" hx-target="#content" {
                     input type="hidden" name="event_id" value=(event_id);
                     @if let Some(id) = tour_id {
@@ -212,10 +207,8 @@ async fn render_shopping_tour_form(
                     }
                 }
 
-                // Shopping list section - takes full width on mobile, half on desktop
                 @if let (Some(id), false) = (tour_id, shopping_list.is_empty()) {
                     div class="w-full lg:w-1/2 space-y-4" {
-                        // Action buttons in a grid on mobile, row on desktop
                         div class="grid grid-cols-2 lg:flex gap-2 mb-4" {
                             a class="btn btn-primary text-center"
                                 href=(format!("/events/edit/shopping_tours/export/{}/plain", id))
@@ -234,7 +227,6 @@ async fn render_shopping_tour_form(
                             }
                         }
 
-                        // Table with horizontal scroll on mobile if needed
                         div class="overflow-x-auto" {
                             table class="w-full text-inherit table-auto min-w-[500px]" {
                                 thead {
@@ -277,13 +269,13 @@ async fn render_shopping_tour_form(
 }
 
 async fn save_tour(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(form): Form<TourForm>,
 ) -> MResponse {
     let tour_date = parse_datetime_local(&form.date)?;
 
-    let result = app::events::shopping::save_tour(
+    let result = foodlib_new::events::shopping::save_tour(
         &state,
         &actor,
         form.event_id,
@@ -291,7 +283,7 @@ async fn save_tour(
         form.store_id,
         tour_date,
     )
-    .await;
+        .await;
     if let Err(ref e) = result {
         log::error!("Encountered error while saving tour {e}");
     }
@@ -321,6 +313,7 @@ fn get_row_class(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -
         ""
     }
 }
+
 fn get_inventory_amount(item: &ShoppingListItem, inventory: &[InventoryItemWithName]) -> Amount {
     get_inventory_amount_by_id(item.ingredient_id, inventory)
 }
@@ -350,11 +343,11 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithN
 }
 
 async fn export_plain(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> IResponse {
-    let file = app::exports::render_shopping_tour_txt(&state, &actor, tour_id).await?;
+    let file = foodlib_new::exports::render_shopping_tour_txt(&state, &actor, tour_id).await?;
     Ok(IntoResponse::into_response((
         [
             (
@@ -371,11 +364,11 @@ async fn export_plain(
 }
 
 async fn export_metro(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> IResponse {
-    let file = app::exports::render_metro_shopping_tour_csv(&state, &actor, tour_id).await?;
+    let file = foodlib_new::exports::render_metro_shopping_tour_csv(&state, &actor, tour_id).await?;
 
     Ok(IntoResponse::into_response((
         [
@@ -393,40 +386,44 @@ async fn export_metro(
 }
 
 async fn toggle_inventory(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, inventory_id)): Path<(EventId, InventoryId)>,
     Form(form): Form<ToggleForm>,
 ) -> MResponse {
-    app::events::shopping::set_event_inventory(&state, &actor, event_id, inventory_id, form.checked)
+    foodlib_new::events::shopping::set_event_inventory(
+        &state,
+        &actor,
+        event_id,
+        inventory_id,
+        form.checked,
+    )
         .await?;
 
     render_shopping_tour_form(&state, &actor, event_id, Some(form.tour_id)).await
 }
 
 async fn update_inventory(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
 ) -> MResponse {
-    app::events::shopping::apply_inventory_changes(&state, &actor, tour_id).await?;
-    let tour = app::events::shopping::get_shopping_tour(&state, tour_id).await?;
+    foodlib_new::events::shopping::apply_inventory_changes(&state, &actor, tour_id).await?;
+    let tour = foodlib_new::events::shopping::get_shopping_tour(&state, tour_id).await?;
 
-    // Redirect back to event page
     event_detail_tab::event_form(State(state), WebCtx(actor), Path(tour.event_id)).await
 }
 
 async fn confirm_update(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(tour_id): Path<ShoppingTourId>,
-) -> Result<Markup> {
-    // Calculate expected changes
-    let changes = app::events::shopping::calculate_inventory_changes(&state, &actor, tour_id)
-        .await
-        .unwrap();
+) -> std::result::Result<Markup, WebError> {
+    let changes =
+        foodlib_new::events::shopping::calculate_inventory_changes(&state, &actor, tour_id)
+            .await?;
 
-    let tour = app::events::shopping::get_shopping_tour(&state, tour_id).await.unwrap();
+    let tour = foodlib_new::events::shopping::get_shopping_tour(&state, tour_id).await?;
 
     Ok(html! {
         div class="flex flex-col space-y-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg" {
@@ -435,7 +432,6 @@ async fn confirm_update(
                 "This will subtract the listed amounts from your inventories. This action cannot be undone."
             }
 
-            // Inventory changes table
             @if !changes.is_empty() {
                 div class="overflow-x-auto mb-4" {
                     table class="w-full text-inherit table-auto min-w-[500px]" {

@@ -1,19 +1,21 @@
 use crate::{
-    frontend::{events_tab::event_detail_tab, html_error, MResponse, WebCtx},
-    MyAppState,
+    frontend::{events_tab::event_detail_tab, html_error, web_error::WebError, MResponse, WebCtx},
+    AppState,
 };
 use axum::{
     extract::{Form, Path, Query, State},
-    http::StatusCode,
     routing::{delete, get, post},
 };
-use foodlib_new::entities::types::amount::Amount;
-use foodlib_new::entities::types::ids::{EventId, MealId, PlaceId, RecipeId};
+use bigdecimal::ToPrimitive;
+use foodlib_new::entities::meal::Meal;
+use foodlib_new::error::Error;
+use foodlib_new::types::amount::Amount;
+use foodlib_new::types::ids::{EventId, MealId, PlaceId, RecipeId};
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
 
-pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
+pub(crate) fn event_edit_meal_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/{event_id}/{meal_id}", post(update_meal))
         .route("/{event_id}/{meal_id}", get(meal_form))
@@ -27,22 +29,23 @@ pub(crate) fn event_edit_meal_router() -> axum::Router<MyAppState> {
 }
 
 async fn meal_price_cell(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(meal_id): Path<MealId>,
 ) -> MResponse {
-    let price = app::events::meals::get_meal_price_for_actor(&state, &actor, meal_id).await?;
+    let price =
+        foodlib_new::events::meals::get_meal_price_for_actor(&state, &actor, meal_id).await?;
     Ok(html! { (price.round(2).to_string()) "€" })
 }
 
 async fn meal_price_per_serving_cell(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(meal_id): Path<MealId>,
 ) -> MResponse {
-    use bigdecimal::ToPrimitive;
-    let meal = app::events::meals::get_meal_for_actor(&state, &actor, meal_id).await?;
-    let price = app::events::meals::get_meal_price_for_actor(&state, &actor, meal_id).await?;
+    let meal = foodlib_new::events::meals::get_meal_for_actor(&state, &actor, meal_id).await?;
+    let price =
+        foodlib_new::events::meals::get_meal_price_for_actor(&state, &actor, meal_id).await?;
     let per_serving = price.to_f64().unwrap_or_default() / meal.servings as f64;
     Ok(html! { (format!("{:.3}€", per_serving)) })
 }
@@ -59,25 +62,25 @@ pub struct MealForm {
 }
 
 pub async fn delete_meal(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    app::events::meals::delete_meal(&state, &actor, event_id, meal_id).await?;
+    foodlib_new::events::meals::delete_meal(&state, &actor, event_id, meal_id).await?;
     event_detail_tab::event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 pub async fn duplicate_meal(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
 ) -> MResponse {
-    app::events::meals::duplicate_meal(&state, &actor, event_id, meal_id).await?;
+    foodlib_new::events::meals::duplicate_meal(&state, &actor, event_id, meal_id).await?;
     event_detail_tab::event_form(State(state), WebCtx(actor), Path(event_id)).await
 }
 
 pub async fn update_meal(
-    state: State<MyAppState>,
+    state: State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
     Form(meal): Form<MealForm>,
@@ -87,21 +90,31 @@ pub async fn update_meal(
         &append_start,
         &time::format_description::well_known::Rfc3339,
     )
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+        .map_err(|_| {
+            WebError(Error::Validation {
+                message: "Invalid start time".into(),
+            })
+        })?;
 
-    // Parse end time
     let append_end = format!("{}:00-00:00", meal.end_time);
     let end_time =
         OffsetDateTime::parse(&append_end, &time::format_description::well_known::Rfc3339)
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
-    let place_id =
-        meal.place_id
-            .filter(|&id| id.is_valid())
-            .ok_or_else(|| foodlib_new::Error::Validation {
-                message: "Please select a place for the meal.".into(),
+            .map_err(|_| {
+                WebError(Error::Validation {
+                    message: "Invalid end time".into(),
+                })
             })?;
 
-    app::events::meals::save_meal(
+    let place_id = meal
+        .place_id
+        .filter(|&id| id.is_valid())
+        .ok_or_else(|| {
+            WebError(Error::Validation {
+                message: "Please select a place for the meal.".into(),
+            })
+        })?;
+
+    foodlib_new::events::meals::save_meal(
         &state,
         &actor,
         event_id,
@@ -114,7 +127,7 @@ pub async fn update_meal(
         meal.servings,
         meal.comment,
     )
-    .await?;
+        .await?;
     event_detail_tab::event_form(state, WebCtx(actor), Path(event_id)).await
 }
 
@@ -126,28 +139,26 @@ pub struct MealPrefill {
 }
 
 async fn meal_form(
-    state: State<MyAppState>,
+    state: State<AppState>,
     WebCtx(actor): WebCtx,
     Path((event_id, meal_id)): Path<(EventId, MealId)>,
     Query(prefill): Query<MealPrefill>,
 ) -> Result<Markup, Markup> {
-    app::events::meals::assert_meal_form_access(&actor, event_id, meal_id)
+    foodlib_new::events::meals::assert_meal_form_access(&actor, event_id, meal_id)
         .await
         .map_err(|e| html_error(&format!("{e}"), "/events"))?;
-    let mut meal = foodlib_new::entities::meal::Meal {
+    let mut meal = Meal {
         name: "Select Recipe".to_string(),
         place: "Select Place".to_string(),
         ..Default::default()
     };
     if meal_id.is_valid() {
-        meal = state
-            .meals()
-            .get_meal(meal_id)
+        meal = foodlib_new::events::meals::get_meal(&state, meal_id)
             .await
             .map_err(|e| html_error(&format!("Failed to fetch meal {e}"), "/events"))?;
     } else {
         if let Some(rid) = prefill.recipe_id {
-            if let Ok(r) = app::recipes::get_recipe(&state, rid).await {
+            if let Ok(r) = foodlib_new::recipes::get_recipe(&state, rid).await {
                 meal.recipe_id = r.id;
                 meal.name = r.name;
             }
@@ -166,11 +177,11 @@ async fn meal_form(
             }
         }
     }
-    let mut recipes = app::recipes::list_recipes(&state)
+    let mut recipes = foodlib_new::recipes::list_recipes(&state)
         .await
         .map_err(|e| html_error(&format!("Failed to fetch recipes {e}"), "/events"))?;
     recipes.sort_by(|a, b| a.name.cmp(&b.name));
-    let mut places = app::events::list_places(&state)
+    let mut places = foodlib_new::events::list_places(&state)
         .await
         .map_err(|e| html_error(&format!("Failed to fetch places {e}"), "/events"))?;
     places.sort_by(|a, b| a.name.cmp(&b.name));
@@ -219,10 +230,11 @@ async fn meal_form(
                 }
                 tr {
                     td {
-                    div class="group" {
-                        p { "Energy" }
-                        span class="absolute z-50 hidden px-6 py-2 -mt-16 text-center text-white bg-blue-900 border border-grey-600 rounded tooltip-text group-hover:block" {"Size of 1 Serving"}
-                    }}
+                        div class="group" {
+                            p { "Energy" }
+                            span class="absolute z-50 hidden px-6 py-2 -mt-16 text-center text-white bg-blue-900 border border-grey-600 rounded tooltip-text group-hover:block" { "Size of 1 Serving" }
+                        }
+                    }
                     td { input class="text" type="text" name="energy" required="required" value=(meal.energy.to_string()); }
                 }
                 tr {
@@ -245,7 +257,6 @@ async fn meal_form(
         }
         div class="flex justify-between w-full mt-4 gap-2" {
             button class="btn btn-abort" hx-target="#content" hx-get=(format!("/events/edit/{}", event_id)) { "Abort" }
-
             button class="btn btn-primary mx-4" hx-target="#content" hx-post=(format!("/events/edit/event_edit_meal/{}/{}", event_id, meal_id)) hx-include="*" { "Save" }
         }
     })

@@ -1,22 +1,21 @@
 use crate::{
-    frontend::{icons, move_group, MResponse, WebCtx},
-    MyAppState,
+    frontend::{icons, move_group, web_error::WebError, MResponse, WebCtx},
+    AppState,
 };
 use axum::{
     extract::{Form, Path, State},
     routing::{delete, put},
 };
 use bigdecimal::ToPrimitive;
-use foodlib_new::{
-    entities::types::amount::Amount,
-    entities::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId},
-    recipe::{RecipeIngredient, RecipeMetaIngredient, RecipeStep},
-    unit::Unit,
-};
+use foodlib_new::entities::ingredient::Ingredient;
+use foodlib_new::entities::recipe::{Recipe, RecipeIngredient, RecipeMetaIngredient, RecipeStep};
+use foodlib_new::entities::unit::Unit;
+use foodlib_new::types::amount::Amount;
+use foodlib_new::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId};
 use maud::{html, Markup};
 use serde::Deserialize;
 
-pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
+pub(crate) fn recipes_edit_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/{recipe_id}", axum::routing::get(recipe_edit_view))
         .route("/commit-ingredient", put(handle_ingredient_add))
@@ -81,11 +80,11 @@ pub struct UpdateRecipeStepHeader {
 }
 
 pub async fn handle_name_change(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(data): Form<UpdateNameHeader>,
-) -> Result<(), foodlib_new::Error> {
-    app::recipes::update_name(
+) -> Result<(), WebError> {
+    foodlib_new::recipes::update_name(
         &state,
         &actor,
         data.recipe_id,
@@ -95,14 +94,15 @@ pub async fn handle_name_change(
         data.weighed_in,
     )
     .await
+    .map_err(WebError)
 }
 
 pub async fn handle_ingredient_change(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
-    let recipe_ingredient = app::recipes::update_ingredient(
+    let recipe_ingredient = foodlib_new::recipes::update_ingredient(
         &state,
         &actor,
         data.recipe_id,
@@ -114,17 +114,19 @@ pub async fn handle_ingredient_change(
     .await?;
 
     Ok(recipe_ingredient.format_for_ingredient_table(
-        app::recipes::list_units(&state).await.unwrap_or_default(),
+        foodlib_new::recipes::list_units(&state)
+            .await
+            .unwrap_or_default(),
         recipe_ingredient.recipe_id,
     ))
 }
 
 pub async fn handle_subrecipe_change(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
-    let sub_recipe = app::recipes::update_subrecipe(
+    let sub_recipe = foodlib_new::recipes::update_subrecipe(
         &state,
         &actor,
         data.recipe_id,
@@ -138,12 +140,12 @@ pub async fn handle_subrecipe_change(
 }
 
 pub async fn handle_step_change(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
     let recipe_id = data.recipe_id;
-    let step = app::recipes::update_step(
+    let step = foodlib_new::recipes::update_step(
         &state,
         &actor,
         data.recipe_id,
@@ -170,51 +172,58 @@ struct ReorderStepForm {
 }
 
 async fn handle_step_reorder(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(form): Form<ReorderStepForm>,
-) -> Result<(), foodlib_new::Error> {
-    app::recipes::reorder_step(&state, &actor, form.recipe_id, form.step_id, form.step_order)
-        .await
+) -> Result<(), WebError> {
+    foodlib_new::recipes::reorder_step(
+        &state,
+        &actor,
+        form.recipe_id,
+        form.step_id,
+        form.step_order,
+    )
+    .await
+    .map_err(WebError)
 }
 
 pub async fn handle_ingredient_delete(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((recipe_id, ingredient_id)): Path<(RecipeId, IngredientId)>,
 ) -> MResponse {
-    app::recipes::delete_ingredient(&state, &actor, recipe_id, ingredient_id).await?;
+    foodlib_new::recipes::delete_ingredient(&state, &actor, recipe_id, ingredient_id).await?;
 
     recipe_edit_view(State(state), WebCtx(actor), Path(recipe_id)).await
 }
 
 pub async fn handle_subrecipe_delete(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((recipe_id, subrecipe_id)): Path<(RecipeId, RecipeId)>,
 ) -> MResponse {
-    app::recipes::delete_subrecipe(&state, &actor, recipe_id, subrecipe_id).await?;
+    foodlib_new::recipes::delete_subrecipe(&state, &actor, recipe_id, subrecipe_id).await?;
 
     recipe_edit_view(State(state), WebCtx(actor), Path(recipe_id)).await
 }
 
 pub async fn handle_step_delete(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path((recipe_id, step_id)): Path<(RecipeId, RecipeStepId)>,
 ) -> MResponse {
-    app::recipes::delete_step(&state, &actor, recipe_id, step_id).await?;
+    foodlib_new::recipes::delete_step(&state, &actor, recipe_id, step_id).await?;
 
     recipe_edit_view(State(state), WebCtx(actor), Path(recipe_id)).await
 }
 
 pub async fn handle_ingredient_add(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(data): Form<UpdateIngredientHeader>,
 ) -> MResponse {
     let recipe_id = data.recipe_id;
-    app::recipes::add_ingredient(
+    foodlib_new::recipes::add_ingredient(
         &state,
         &actor,
         recipe_id,
@@ -228,12 +237,12 @@ pub async fn handle_ingredient_add(
 }
 
 pub async fn handle_subrecipe_add(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(data): Form<UpdateSubrecipeHeader>,
 ) -> MResponse {
     let recipe_id = data.recipe_id;
-    app::recipes::add_subrecipe(
+    foodlib_new::recipes::add_subrecipe(
         &state,
         &actor,
         recipe_id,
@@ -246,12 +255,12 @@ pub async fn handle_subrecipe_add(
 }
 
 pub async fn handle_step_add(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(data): Form<UpdateRecipeStepHeader>,
 ) -> MResponse {
     let recipe_id = data.recipe_id;
-    app::recipes::add_step(
+    foodlib_new::recipes::add_step(
         &state,
         &actor,
         recipe_id,
@@ -270,7 +279,7 @@ pub async fn handle_step_add(
 /// datalist) and rewrites the id before insert.
 fn recipe_ingredient_add_row(
     recipe_id: RecipeId,
-    all_ingredients: &[foodlib_new::ingredient::Ingredient],
+    all_ingredients: &[Ingredient],
     unit_types: &[Unit],
 ) -> Markup {
     let list_id = format!("ingredient-add-datalist-{}", recipe_id);
@@ -307,10 +316,7 @@ fn recipe_ingredient_add_row(
 
 /// First-row inline add for the recipe-subrecipes table. Sentinel id -1; the
 /// commit handler resolves the subrecipe id by name lookup.
-fn recipe_subrecipe_add_row(
-    recipe_id: RecipeId,
-    all_recipes: &[foodlib_new::recipe::Recipe],
-) -> Markup {
+fn recipe_subrecipe_add_row(recipe_id: RecipeId, all_recipes: &[Recipe]) -> Markup {
     let list_id = format!("subrecipe-add-datalist-{}", recipe_id);
     html! {
         tr id="recipe-subrecipe--1" {
@@ -342,13 +348,13 @@ fn recipe_subrecipe_add_row(
 }
 
 pub async fn recipe_edit_view(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(recipe_id): Path<RecipeId>,
 ) -> MResponse {
-    let data = app::recipes::gather_edit_view_data(&state, &actor, recipe_id).await?;
-    let owner_select = move_group::owner_select(&state, &actor.ctx, data.recipe.group_id).await?;
-    let app::recipes::EditViewData {
+    let data = foodlib_new::recipes::gather_edit_view_data(&state, &actor, recipe_id).await?;
+    let owner_select = move_group::owner_select(&state, &actor, data.recipe.group_id).await?;
+    let foodlib_new::recipes::EditViewData {
         recipe,
         sub_recipes,
         ingredients,
@@ -360,7 +366,7 @@ pub async fn recipe_edit_view(
     } = data;
 
     Ok(html! {
-        div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full"{
+        div id=("contents") class="flex flex-col items-center justify-center mb-16 w-full" {
             div id=("recipe-information") class="w-full sm:w-3/4" {
                 form hx-put="/recipes/edit/change-name" hx-indicator=".htmx-indicator" hx-swap="none" class="w-full flex flex-col mb-4 pb-4 gap-2" {
                     input type="hidden" name=("recipe_id") value=(recipe_id);

@@ -1,21 +1,20 @@
 use axum::extract::{Form, Path, State};
 use axum::routing::{delete, get, post};
 use axum_login::login_required;
-use foodlib_new::auth::AuthBackend;
-use foodlib_new::recipe::Recipe;
+use foodlib_new::entities::recipe::Recipe;
 use foodlib_new::types::ids::{GroupId, RecipeId};
-use foodlib_new::user::User;
-use crate::frontend::WebCtx;
+use foodlib_new::{AppCtx, AppState};
 use maud::{html, Markup};
 use serde::Deserialize;
 
+use super::web_error::WebError;
 use super::MResponse;
-use crate::frontend::{icons, LOGIN_URL};
-use crate::MyAppState;
+use crate::auth::AuthBackend;
+use crate::frontend::{icons, OptWebCtx, WebCtx, LOGIN_URL};
 
 mod recipes_edit_tab;
 
-pub(crate) fn recipes_router() -> axum::Router<MyAppState> {
+pub(crate) fn recipes_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/", post(add_recipe))
         .route("/delete/{recipe_id}", get(delete_recipe))
@@ -38,13 +37,14 @@ pub struct SearchParameters {
 }
 
 pub async fn search(
-    State(state): State<MyAppState>,
-    user: Option<User>,
+    State(state): State<AppState>,
+    OptWebCtx(actor): OptWebCtx,
     query: Form<SearchParameters>,
 ) -> MResponse {
     let needle = query.search.to_lowercase();
     let mine_only = query.mine_only.is_some();
-    let (recipes, user_group_ids) = app::recipes::gather_overview(&state, user.as_ref()).await?;
+    let (recipes, user_group_ids) =
+        foodlib_new::recipes::gather_overview(&state, actor.as_ref()).await?;
 
     let filtered_recipes = recipes.iter().filter(|x| {
         x.name.to_lowercase().contains(&needle)
@@ -52,11 +52,11 @@ pub async fn search(
     });
 
     Ok(html! {
-        @if user.is_some() {
-            (recipe_add_row(user.as_ref().is_some_and(|u| u.is_admin)))
+        @if let Some(ref a) = actor {
+            (recipe_add_row(a.user.is_admin))
         }
         @for recipe in filtered_recipes {
-            (format_recipe(recipe, user.as_ref(), &user_group_ids))
+            (format_recipe(recipe, actor.as_ref(), &user_group_ids))
         }
     })
 }
@@ -67,19 +67,18 @@ pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
              div class="flex flex-col items-center justify-center p-2" {
                  div class="flex flex-col items-center justify-center gap-2" {
                      h1 class="text-lg mb-2" { "Export recipe" }
-                     // Input mask for energy and number of servings as a form which downloads the recipe as a PDF on Submit
-                        form class="flex flex-col items-stretch justify-center gap-4 w-full" action=(format!("/recipes/export_pdf/{}", recipe_id)) {
-                            div class="flex flex-col gap-2 w-full" {
-                                input class="text w-full" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy kJ/serving" required="required";
-                                input class="text w-full" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="number_of_servings" placeholder="Number of servings" required="required";
-                            }
-                            div class="flex flex-row flex-wrap items-center justify-center gap-4" {
-                                button class="btn btn-primary" type="submit" hx-post=(format!("/recipes/shopping-list/{}", recipe_id)) hx-target="#shopping-list" { "Shopping list" }
-                                button class="btn btn-primary" type="submit" { "Export" }
-                                button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
-                            }
-                        }
-                    div id="shopping-list";
+                     form class="flex flex-col items-stretch justify-center gap-4 w-full" action=(format!("/recipes/export_pdf/{}", recipe_id)) {
+                         div class="flex flex-col gap-2 w-full" {
+                             input class="text w-full" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="energy" placeholder="Energy kJ/serving" required="required";
+                             input class="text w-full" inputmode="numeric" pattern="\\d*(\\.\\d+)?" name="number_of_servings" placeholder="Number of servings" required="required";
+                         }
+                         div class="flex flex-row flex-wrap items-center justify-center gap-4" {
+                             button class="btn btn-primary" type="submit" hx-post=(format!("/recipes/shopping-list/{}", recipe_id)) hx-target="#shopping-list" { "Shopping list" }
+                             button class="btn btn-primary" type="submit" { "Export" }
+                             button class="btn btn-cancel" hx-swap="delete" hx-target="#popup" hx-get="/" {"Close"}
+                         }
+                     }
+                     div id="shopping-list";
                  }
              }
          }
@@ -93,55 +92,48 @@ pub struct ExportRecipe {
 }
 
 pub async fn export_recipe_pdf(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     Path(recipe_id): Path<i32>,
     Form(form): Form<ExportRecipe>,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), foodlib_new::Error> {
-    let energy = form.energy;
-    let number_of_servings = form.number_of_servings;
-
-    let recipe_info =
-        app::exports::fetch_user_input_meal(&state, RecipeId(recipe_id), number_of_servings as f64, energy as u32)
-            .await?;
-    let title = recipe_info.name.to_owned();
-    // TODO: Consider caching the renderer in AppState to avoid reinitializing it for every request
-    #[cfg(feature = "typst")]
-    let result = typst_renderer::DocumentRenderer::new()
-        .export_recipes(vec![recipe_info]);
-    #[cfg(not(feature = "typst"))]
-    let result = Err(foodlib_new::Error::Misc(
-        "Server compiled without typst support".into(),
-    ));
-    let recipe = result?;
+) -> std::result::Result<([(axum::http::HeaderName, String); 2], Vec<u8>), WebError> {
+    let recipe_info = foodlib_new::exports::fetch_user_input_meal(
+        &state,
+        RecipeId(recipe_id),
+        form.number_of_servings as f64,
+        form.energy as u32,
+    )
+        .await?;
+    let filename = format!("{}.pdf", recipe_info.name);
+    let exported = foodlib_new::exports::render_pdf(&state, filename, move |pdf| {
+        pdf.export_recipes(vec![recipe_info])
+    })
+        .await?;
 
     let headers = [
         (
             axum::http::header::CONTENT_DISPOSITION,
-            format!("attachment; filename=\"{}.pdf\"", title),
+            format!("attachment; filename=\"{}\"", exported.filename),
         ),
         (
             axum::http::header::CONTENT_TYPE,
-            "application/pdf".to_string(),
+            exported.mime.to_string(),
         ),
     ];
-    Ok((headers, recipe))
+    Ok((headers, exported.bytes))
 }
 
 pub async fn shopping_list(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     Path(recipe_id): Path<i32>,
     Form(form): Form<ExportRecipe>,
 ) -> MResponse {
-    let energy = form.energy;
-    let number_of_servings = form.number_of_servings;
-
-    let subrecipes = app::exports::fetch_subrecipes_from_user_input(
+    let subrecipes = foodlib_new::exports::fetch_subrecipes_from_user_input(
         &state,
         RecipeId(recipe_id),
-        number_of_servings as f64,
-        energy as u32,
+        form.number_of_servings as f64,
+        form.energy as u32,
     )
-    .await?;
+        .await?;
     let shopping_list = subrecipes
         .iter()
         .filter(|&recipe| !recipe.is_subrecipe)
@@ -168,17 +160,17 @@ pub async fn shopping_list(
 }
 
 pub async fn delete_recipe_nqa(
-    State(state): State<MyAppState>,
-    user: User,
+    State(state): State<AppState>,
+    WebCtx(actor): WebCtx,
     Path(recipe_id): Path<i32>,
 ) -> MResponse {
-    app::recipes::delete_recipe(&state, &user, RecipeId(recipe_id)).await?;
-    Ok(recipes_view(State(state), Some(user)).await)
+    foodlib_new::recipes::delete_recipe(&state, &actor, RecipeId(recipe_id)).await?;
+    Ok(recipes_view(State(state), OptWebCtx(Some(actor))).await)
 }
 
-pub async fn delete_recipe(Path(recipe_id): Path<i32>, user: User) -> Markup {
+pub async fn delete_recipe(Path(recipe_id): Path<i32>, WebCtx(actor): WebCtx) -> Markup {
     // Only show delete dialog if user is admin
-    if !user.is_admin {
+    if !actor.user.is_admin {
         return html! {};
     }
 
@@ -188,20 +180,21 @@ pub async fn delete_recipe(Path(recipe_id): Path<i32>, user: User) -> Markup {
                 p { "Are you sure you want to delete this Recipe permanently?" }
                 div class="flex justify-between w-full m-2 gap-2" {
                     button class="btn btn-abort" hx-on:click="document.getElementById('dialog').remove()" { "Abort" }
-                    button class="btn btn-cancel mx-4" hx-target="#content" hx-delete=(format!("/recipes/delete_nqa/{}",recipe_id)) { "Confirm Delete" }
+                    button class="btn btn-cancel mx-4" hx-target="#content" hx-delete=(format!("/recipes/delete_nqa/{}", recipe_id)) { "Confirm Delete" }
                 }
             }
         }
     }
 }
 
-pub async fn recipes_view(State(state): State<MyAppState>, user: Option<User>) -> Markup {
-    let (recipes, user_group_ids) = app::recipes::gather_overview(&state, user.as_ref())
-        .await
-        .unwrap_or_default();
+pub async fn recipes_view(State(state): State<AppState>, OptWebCtx(actor): OptWebCtx) -> Markup {
+    let (recipes, user_group_ids) =
+        foodlib_new::recipes::gather_overview(&state, actor.as_ref())
+            .await
+            .unwrap_or_default();
 
     html! {
-        div id="recipes" class="w-full"  {
+        div id="recipes" class="w-full" {
             form id="recipes-filter" class="
                 flex flex-row items-center justify-stretch
                 mb-2 gap-5 h-10
@@ -212,7 +205,7 @@ pub async fn recipes_view(State(state): State<MyAppState>, user: Option<User>) -
                 hx-target="#search-results"
                 hx-indicator=".htmx-indicator" {
                 input class="grow text h-full" type="search" placeholder="Search for recipe" id="search" name="search" autocomplete="off" autofocus="autofocus";
-                @if user.is_some() {
+                @if actor.is_some() {
                     label class="flex items-center gap-2 whitespace-nowrap" {
                         input type="checkbox" id="mine-only" name="mine_only" value="1";
                         "Mine only"
@@ -220,19 +213,19 @@ pub async fn recipes_view(State(state): State<MyAppState>, user: Option<User>) -
                 }
             }
             table class="w-full text-inherit table-auto object-center responsive-card" {
-                @let is_admin = user.as_ref().is_some_and(|u| u.is_admin);
+                @let is_admin = actor.as_ref().is_some_and(|a| a.user.is_admin);
                 thead { tr {
                     @if is_admin { th class="w-1/12" { "ID" } }
                     th { "Name" } th { "Comment" } th {} th {}
                 } }
-                    tbody id="search-results"  {
-                        @if user.is_some() {
-                            (recipe_add_row(is_admin))
-                        }
-                        @for recipe in recipes.iter() {
-                            (format_recipe(recipe, user.as_ref(), &user_group_ids))
-                        }
+                tbody id="search-results" {
+                    @if actor.is_some() {
+                        (recipe_add_row(is_admin))
                     }
+                    @for recipe in recipes.iter() {
+                        (format_recipe(recipe, actor.as_ref(), &user_group_ids))
+                    }
+                }
                 span class="htmx-indicator" {
                     "Searching..."
                 }
@@ -241,9 +234,6 @@ pub async fn recipes_view(State(state): State<MyAppState>, user: Option<User>) -
     }
 }
 
-/// First-row inline add. On success, `add_recipe` returns the recipe-edit
-/// view (retargeted to #content) so the user lands in the editor — no need
-/// to refocus the name input here.
 fn recipe_add_row(is_admin: bool) -> Markup {
     html! {
         tr id="recipe--1" {
@@ -272,24 +262,23 @@ struct NewRecipe {
 }
 
 async fn add_recipe(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Form(recipe_data): Form<NewRecipe>,
 ) -> MResponse {
-    let created_recipe = app::recipes::create_recipe(
+    let created_recipe = foodlib_new::recipes::create_recipe(
         &state,
         &actor,
         recipe_data.name,
         recipe_data.comment,
     )
-    .await?;
+        .await?;
     recipes_edit_tab::recipe_edit_view(State(state), WebCtx(actor), Path(created_recipe)).await
 }
 
-fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[GroupId]) -> Markup {
-    let can_edit_this =
-        user.is_some_and(|u| app::ingredients::can_edit(recipe.group_id, user_group_ids, u));
-    let is_admin = user.is_some_and(|u| u.is_admin);
+fn format_recipe(recipe: &Recipe, actor: Option<&AppCtx>, _user_group_ids: &[GroupId]) -> Markup {
+    let can_edit_this = actor.is_some_and(|a| a.can_access_group(recipe.group_id));
+    let is_admin = actor.is_some_and(|a| a.user.is_admin);
     let comment = recipe.comment.as_deref().unwrap_or("").trim().to_string();
 
     html! {
@@ -317,7 +306,7 @@ fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[GroupId
             td class="no-label whitespace-nowrap" {
                 div class="flex flex-row flex-nowrap gap-2 justify-end items-center" {
                     @if can_edit_this {
-                        button class="icon-btn" type="button" title="Edit" aria-label="Edit" hx-push-url="true" hx-target="#content"  hx-get=(format!("/recipes/edit/{}", recipe.id)) { (icons::edit()) }
+                        button class="icon-btn" type="button" title="Edit" aria-label="Edit" hx-push-url="true" hx-target="#content" hx-get=(format!("/recipes/edit/{}", recipe.id)) { (icons::edit()) }
                     }
                     @if is_admin {
                         button class="icon-btn" type="button" title="Delete" aria-label="Delete" hx-swap="beforebegin" hx-get=(format!("/recipes/delete/{}", recipe.id)) { (icons::delete()) }
@@ -340,16 +329,16 @@ fn pretty_property(name: &str) -> String {
 }
 
 async fn allergens_dialog(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     Path(recipe_id): Path<i32>,
 ) -> MResponse {
-    let app::recipes::RecipeAllergenData {
+    let foodlib_new::recipes::RecipeAllergenData {
         recipe_name,
         dietary,
         contains,
         may_contain,
         hinweise,
-    } = app::recipes::gather_recipe_allergens(&state, RecipeId(recipe_id)).await?;
+    } = foodlib_new::recipes::gather_recipe_allergens(&state, RecipeId(recipe_id)).await?;
 
     Ok(html! {
         dialog open="true" class="dialog z-50" id="popup" {

@@ -1,25 +1,25 @@
-use ::time::OffsetDateTime;
 use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use foodlib_new::meal::Meal;
-use foodlib_new::FoodLib;
+use foodlib_new::entities::allergen::DietaryFlags;
+use foodlib_new::entities::meal::Meal;
+use foodlib_new::types::ids::{EventId, MealId, RecipeId};
+use foodlib_new::AppState as FoodState;
 use http::header::CONTENT_TYPE;
 use http::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tokio::net::TcpListener;
-use tokio::sync::RwLock;
-use tokio::task;
-
-use foodlib_new::types::ids::{EventId, MealId, RecipeId};
 use std::collections::HashMap;
 use std::env;
 use std::io::Write;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use ::time::OffsetDateTime;
+use tokio::net::TcpListener;
+use tokio::sync::RwLock;
+use tokio::task;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -35,13 +35,9 @@ struct MealStatus {
     recipe_id: RecipeId,
     place: String,
     meal_id: MealId,
-    event_id: EventId, // Added event_id for cache invalidation
-    /// Canonical property names (e.g. "milch", "gluten"). `~spuren-X` prefixed entries
-    /// indicate "may contain X" warnings; `~hinweis-X` entries are non-EU-14
-    /// avoidance notes (e.g. onion) shown as separate "Hinweise".
+    event_id: EventId,
     #[serde(default)]
     allergens: Vec<String>,
-    /// Derived dietary flags computed from `allergens`.
     #[serde(default)]
     dietary: DietaryStatus,
 }
@@ -52,9 +48,6 @@ struct DietaryStatus {
     vegetarian: bool,
     lactose_free: bool,
     gluten_free: bool,
-    /// A `*_trace` flag is true when the paired flag holds only because a
-    /// `~spuren-` may-contain warning on that axis was ignored → the UI renders
-    /// the label with an asterisk (e.g. "vegan*").
     #[serde(default)]
     vegan_trace: bool,
     #[serde(default)]
@@ -65,8 +58,8 @@ struct DietaryStatus {
     gluten_free_trace: bool,
 }
 
-impl From<foodlib_new::allergen::DietaryFlags> for DietaryStatus {
-    fn from(d: foodlib_new::allergen::DietaryFlags) -> Self {
+impl From<DietaryFlags> for DietaryStatus {
+    fn from(d: DietaryFlags) -> Self {
         Self {
             vegan: d.vegan,
             vegetarian: d.vegetarian,
@@ -88,7 +81,7 @@ struct FullMealStatus {
 
 #[derive(Clone, Deserialize, Serialize)]
 struct FeedbackStatus {
-    feedback_id: i32, // Unique ID for feedback
+    feedback_id: i32,
     feedback: String,
     event_id: EventId,
     timestamp: u64,
@@ -107,7 +100,6 @@ struct FeedbackQuery {
     include_read: Option<bool>,
 }
 
-// Define the cache structure
 #[derive(Clone)]
 struct EventCache {
     meals: HashMap<EventId, Vec<FullMealStatus>>,
@@ -152,19 +144,17 @@ impl EventCache {
     }
 }
 
-// Query parameters struct
 #[derive(serde::Deserialize)]
 struct EventQuery {
     event: Option<EventId>,
 }
 
-// Modified AppState to include cache
 #[derive(Clone)]
 struct AppState {
     meal_states: Arc<RwLock<HashMap<MealId, MealStatus>>>,
     feedback: Arc<RwLock<Vec<FeedbackStatus>>>,
     event_cache: Arc<RwLock<EventCache>>,
-    food_lib: Arc<FoodLib>,
+    food_lib: FoodState,
 }
 
 fn now() -> u64 {
@@ -174,7 +164,6 @@ fn now() -> u64 {
         .as_secs()
 }
 
-// Background task to refresh the cache
 async fn start_cache_refresh_task(state: AppState, refresh_interval: Duration) {
     task::spawn(async move {
         let mut interval = tokio::time::interval(refresh_interval);
@@ -186,24 +175,20 @@ async fn start_cache_refresh_task(state: AppState, refresh_interval: Duration) {
 }
 
 async fn refresh_cache(state: &AppState) {
-    // Refresh the upcoming event
     let upcoming_event_id = get_upcoming_event(&state.food_lib).await;
 
-    // Update the upcoming event in cache
     {
         let mut cache = state.event_cache.write().await;
         cache.update_upcoming_event(upcoming_event_id);
     }
 
-    // If we have an upcoming event, make sure its meals are cached
     if let Some(event_id) = upcoming_event_id {
         let event_meals = get_event_meals_from_db(&state.food_lib, event_id).await;
         let allergens = fetch_allergens_for_meals(&state.food_lib, &event_meals).await;
 
-        // Process meals with current state and update cache
         let full_meals = process_meals(
             event_meals,
-            state.meal_states.write().await.deref(),
+            state.meal_states.read().await.deref(),
             event_id,
             &allergens,
         );
@@ -214,11 +199,8 @@ async fn refresh_cache(state: &AppState) {
     println!("Cache refreshed at {}", OffsetDateTime::now_utc());
 }
 
-// Get the event to show by default: the ongoing event, else the next upcoming one
-async fn get_upcoming_event(food_lib: &FoodLib) -> Option<EventId> {
-    match food_lib
-        .events()
-        .get_current_or_upcoming_event(OffsetDateTime::now_utc())
+async fn get_upcoming_event(food_lib: &FoodState) -> Option<EventId> {
+    match foodlib_new::events::get_current_or_upcoming_event(food_lib, OffsetDateTime::now_utc())
         .await
     {
         Ok(event) => event.map(|e| e.id),
@@ -229,9 +211,8 @@ async fn get_upcoming_event(food_lib: &FoodLib) -> Option<EventId> {
     }
 }
 
-// Get event meals from database
-async fn get_event_meals_from_db(food_lib: &FoodLib, event_id: EventId) -> Vec<Meal> {
-    match get_event_meals_internal(food_lib, event_id).await {
+async fn get_event_meals_from_db(food_lib: &FoodState, event_id: EventId) -> Vec<Meal> {
+    match foodlib_new::events::meals::get_event_meals(food_lib, event_id).await {
         Ok(meals) => meals,
         Err(e) => {
             eprintln!("Error fetching meals for event {}: {}", event_id, e);
@@ -240,66 +221,31 @@ async fn get_event_meals_from_db(food_lib: &FoodLib, event_id: EventId) -> Vec<M
     }
 }
 
-// Helper to fetch meals from database
-async fn get_event_meals_internal(
-    food_lib: &FoodLib,
-    event_id: EventId,
-) -> Result<Vec<Meal>, foodlib_new::Error> {
-    food_lib.meals().get_event_meals(event_id).await
-}
-
-/// Fetch (allergens, dietary) per recipe for all distinct recipe_ids in `meals`.
-/// On any per-recipe error we substitute an empty entry — best-effort, never fail
-/// the cache refresh because of allergen data.
 async fn fetch_allergens_for_meals(
-    food_lib: &FoodLib,
+    food_lib: &FoodState,
     meals: &[Meal],
 ) -> HashMap<RecipeId, (Vec<String>, DietaryStatus)> {
-    use std::collections::HashSet;
-    let recipe_ids: HashSet<RecipeId> = meals.iter().map(|m| m.recipe_id).collect();
-    let mut out = HashMap::new();
+    let recipe_ids: std::collections::HashSet<_> =
+        meals.iter().map(|meal| meal.recipe_id).collect();
+
+    let mut out = HashMap::with_capacity(recipe_ids.len());
+
     for recipe_id in recipe_ids {
-        let props = food_lib
-            .properties()
-            .get_recipe_properties(recipe_id)
+        let data = foodlib_new::recipes::gather_recipe_allergens(food_lib, recipe_id)
             .await
-            .map(|rp| rp.properties)
-            .unwrap_or_default();
-        // Split into contains/may/hinweise, compact contains & may separately (drop
-        // subsumed children), then merge back with prefixes preserved. `~spuren-` are
-        // EU-14 may-contain warnings; `~hinweis-` are non-EU-14 avoidances (e.g. onion)
-        // that must stay OUT of the regulatory "Enthält" list.
-        let mut contains: Vec<String> = Vec::new();
-        let mut may: Vec<String> = Vec::new();
-        let mut hinweise: Vec<String> = Vec::new();
-        for p in &props {
-            let lower = p.name.to_lowercase();
-            if let Some(rest) = lower.strip_prefix("~spuren-") {
-                may.push(rest.to_string());
-            } else if let Some(rest) = lower.strip_prefix("~hinweis-") {
-                hinweise.push(rest.to_string());
-            } else {
-                contains.push(lower);
-            }
-        }
-        contains.sort();
-        contains.dedup();
-        may.sort();
-        may.dedup();
-        hinweise.sort();
-        hinweise.dedup();
-        let contains = foodlib_new::ops::allergens::compact_allergen_set(&contains);
-        let may = foodlib_new::ops::allergens::compact_allergen_set(&may);
-        let mut names: Vec<String> = contains;
-        names.extend(may.into_iter().map(|s| format!("~spuren-{s}")));
-        names.extend(hinweise.into_iter().map(|s| format!("~hinweis-{s}")));
-        let dietary = foodlib_new::ops::allergens::dietary_flags(&props).into();
-        out.insert(recipe_id, (names, dietary));
+            .unwrap();
+
+        let mut names = data.contains;
+        names.extend(data.may_contain.into_iter().map(|name| format!("~spuren-{name}")));
+        names.extend(data.hinweise.into_iter().map(|name| format!("~hinweis-{name}")));
+
+        out.insert(recipe_id, (names, data.dietary.into()));
     }
+
     out
 }
 
-// Process meals with current state
+
 fn process_meals(
     meals: Vec<Meal>,
     meal_states: &HashMap<MealId, MealStatus>,
@@ -318,26 +264,22 @@ fn process_meals(
             let mut status = meal_states
                 .get(&meal.meal_id)
                 .cloned()
-                .unwrap_or_else(|| {
-                    // Default meal status if not in state
-                    MealStatus {
-                        start: meal.start_time.unix_timestamp(),
-                        end: meal.end_time.unix_timestamp(),
-                        eta: current_time as i64 - 1, // Default to 1 second before current time
-                        last_modified: current_time,
-                        over: false,
-                        msg: None,
-                        recipe: meal.name.clone(),
-                        recipe_id: meal.recipe_id,
-                        place: meal.place.clone(),
-                        meal_id: meal.meal_id,
-                        event_id,
-                        allergens: recipe_allergens.clone(),
-                        dietary: recipe_dietary,
-                    }
+                .unwrap_or_else(|| MealStatus {
+                    start: meal.start_time.unix_timestamp(),
+                    end: meal.end_time.unix_timestamp(),
+                    eta: current_time as i64 - 1,
+                    last_modified: current_time,
+                    over: false,
+                    msg: None,
+                    recipe: meal.name.clone(),
+                    recipe_id: meal.recipe_id,
+                    place: meal.place.clone(),
+                    meal_id: meal.meal_id,
+                    event_id,
+                    allergens: recipe_allergens.clone(),
+                    dietary: recipe_dietary,
                 });
 
-            // set fields that coud have changed
             status.start = meal.start_time.unix_timestamp();
             status.end = meal.end_time.unix_timestamp();
             status.recipe = meal.name.clone();
@@ -358,18 +300,14 @@ fn process_meals(
 async fn main() {
     dotenv::dotenv().ok();
 
-    // Get Database Connection
     println!("Setting up Database");
     let database_url = &env::var("DATABASE_URL").expect("DATABASE_URL env var was not set");
     let pg_pool = PgPool::connect(database_url)
         .await
         .expect("Failed to connect to database");
-    let food_lib = FoodLib::new(pg_pool);
+    let food_lib = FoodState::new(pg_pool);
 
     println!("Setting up Logging");
-    // DEBUG logs every request via TraceLayer, which is heavy noise on a
-    // dashboard that's polled by many tabs every 10s. Default to INFO and let
-    // RUST_LOG override when debugging.
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -385,9 +323,7 @@ async fn main() {
     let meal_states = Arc::new(RwLock::new(HashMap::new()));
     let event_cache = Arc::new(RwLock::new(EventCache::new()));
     let feedback = Arc::new(RwLock::new(Vec::new()));
-    let food_lib = Arc::new(food_lib);
 
-    // Initialize the app state
     let app_state = AppState {
         meal_states,
         event_cache,
@@ -395,10 +331,8 @@ async fn main() {
         food_lib: food_lib.clone(),
     };
 
-    // Start the cache refresh task
     start_cache_refresh_task(app_state.clone(), Duration::from_secs(300)).await;
 
-    // Pre-populate meal states from the next event
     if let Some(next_event) = get_upcoming_event(&food_lib).await {
         let event_meals = get_event_meals_from_db(&food_lib, next_event).await;
         let allergens = fetch_allergens_for_meals(&food_lib, &event_meals).await;
@@ -414,7 +348,7 @@ async fn main() {
                 MealStatus {
                     start: meal.start_time.unix_timestamp(),
                     end: meal.end_time.unix_timestamp(),
-                    eta: current_time as i64 - 1, // Default to 1 second before current time
+                    eta: current_time as i64 - 1,
                     last_modified: current_time,
                     over: false,
                     msg: None,
@@ -429,7 +363,6 @@ async fn main() {
             );
         }
 
-        // Initialize the cache with the upcoming event's meals
         let full_meals = process_meals(
             event_meals,
             app_state.meal_states.read().await.deref(),
@@ -471,23 +404,20 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// Modified handler for getting status
 #[axum::debug_handler]
 async fn get_status(
     State(state): State<AppState>,
     Query(params): Query<EventQuery>,
 ) -> impl IntoResponse {
-    // Determine which event to display
     let event_id = match params.event {
         Some(id) => id,
         None => {
-            // Use cached upcoming event or fetch if cache is stale
             let cache = state.event_cache.read().await;
             if let Some(id) = cache.upcoming_event_id {
                 if cache.is_upcoming_cache_valid(Duration::from_secs(300)) {
                     id
                 } else {
-                    drop(cache); // Release lock before async operation
+                    drop(cache);
                     match get_upcoming_event(&state.food_lib).await {
                         Some(id) => {
                             let mut cache = state.event_cache.write().await;
@@ -503,7 +433,7 @@ async fn get_status(
                     }
                 }
             } else {
-                drop(cache); // Release lock before async operation
+                drop(cache);
                 match get_upcoming_event(&state.food_lib).await {
                     Some(id) => {
                         let mut cache = state.event_cache.write().await;
@@ -521,8 +451,7 @@ async fn get_status(
         }
     };
 
-    // Check if we have a valid cache for this event
-    let cache_ttl = Duration::from_secs(60); // 1 minute TTL
+    let cache_ttl = Duration::from_secs(60);
     let meals = {
         let cache = state.event_cache.read().await;
         if cache.is_event_cache_valid(event_id, cache_ttl) {
@@ -531,9 +460,8 @@ async fn get_status(
                 None => Vec::new(),
             }
         } else {
-            drop(cache); // Release lock before async operation
+            drop(cache);
 
-            // Fetch meals from database
             let event_meals = get_event_meals_from_db(&state.food_lib, event_id).await;
             if event_meals.is_empty() {
                 return (
@@ -542,7 +470,6 @@ async fn get_status(
                 );
             }
 
-            // Process and cache meals
             let allergens = fetch_allergens_for_meals(&state.food_lib, &event_meals).await;
             let full_meals = process_meals(
                 event_meals,
@@ -556,7 +483,6 @@ async fn get_status(
         }
     };
 
-    // Group meals by full date (year, month, day)
     let hour = 3600;
     let get_date_key = |time: i64| {
         let dt = OffsetDateTime::from_unix_timestamp(time - 3 * hour)
@@ -564,7 +490,6 @@ async fn get_status(
             .to_offset(time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC))
             .date();
 
-        // Return tuple of (year, month, day) for comparison
         (dt.year(), dt.month() as i32, dt.day())
     };
 
@@ -588,7 +513,6 @@ async fn get_status(
     (StatusCode::OK, Json(days))
 }
 
-// Modified update_status to also update the cache
 async fn update_status(
     State(state): State<AppState>,
     Path(meal_id): Path<MealId>,
@@ -597,12 +521,9 @@ async fn update_status(
     let mut app_state = state.meal_states.write().await;
     status.last_modified = now();
 
-    // Get the event_id of the meal
     let event_id = status.event_id;
-
     app_state.insert(meal_id, status.clone());
 
-    // Update cache for this event if it exists
     let mut cache = state.event_cache.write().await;
     if let Some(meals) = cache.get_event_meals(event_id).cloned() {
         let updated_meals = meals
@@ -623,11 +544,9 @@ async fn update_status(
     (StatusCode::OK, Json(meals))
 }
 
-// New handler for listing events
 async fn get_events(State(state): State<AppState>) -> impl IntoResponse {
-    match state.food_lib.events().list().await {
+    match foodlib_new::events::list_events(&state.food_lib).await {
         Ok(events) => {
-            // Map to a simpler format for the frontend
             let event_list: Vec<serde_json::Value> = events
                 .into_iter()
                 .map(|event| {
@@ -650,17 +569,13 @@ async fn get_events(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
-// New handler for getting event details
 async fn get_event_details(
     State(state): State<AppState>,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
 ) -> impl IntoResponse {
-    match state
-        .food_lib
-        .events()
-        .get(foodlib_new::entities::types::ids::EventId(event_id))
-        .await
-    {
+    let ctx = state.food_lib.status_api_ctx();
+
+    match foodlib_new::events::get_event(&state.food_lib, &ctx, event_id).await {
         Ok(event) => {
             let event_details = serde_json::json!({
                 "id": event.id,
@@ -680,16 +595,13 @@ async fn get_event_details(
     }
 }
 
-// New handler for processing feedback
 async fn handle_feedback(
     State(state): State<AppState>,
     Json(mut feedback): Json<FeedbackStatus>,
 ) -> impl IntoResponse {
-    // Placeholder for feedback handling logic
     println!("Received feedback: {}", feedback.feedback);
     let mut feedback_list = state.feedback.write().await;
     feedback.feedback_id = feedback_list.last().map_or(1, |f| f.feedback_id + 1);
-    // Log the feedback to a file
     let log_entry = format!(
         "{} - Feedback ID: {}, Event ID: {}, Message: {}\n",
         OffsetDateTime::now_utc(),
@@ -716,7 +628,6 @@ async fn get_feedback(
 ) -> impl IntoResponse {
     let feedback_list = state.feedback.read().await;
     if !query.include_read.unwrap_or(true) {
-        // If include_read is false, filter out read feedback
         let unread_feedback: Vec<FeedbackStatus> =
             feedback_list.iter().filter(|f| !f.read).cloned().collect();
         return (StatusCode::OK, Json(unread_feedback));

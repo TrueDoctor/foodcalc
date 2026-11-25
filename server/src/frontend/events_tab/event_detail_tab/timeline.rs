@@ -23,18 +23,18 @@
 
 use std::collections::HashMap;
 
-use crate::{frontend::MResponse, frontend::WebCtx, MyAppState};
+use crate::{frontend::MResponse, frontend::WebCtx, AppState};
 use axum::{
     extract::{Form, Path, State},
     routing::{get, post},
 };
-use foodlib_new::entities::types::ids::{EventId, RecipeId};
 use foodlib_new::types::ids::TimelineEntityId;
+use foodlib_new::types::ids::{EventId, RecipeId};
 use maud::{html, Markup};
 use serde::Deserialize;
 use time::{macros::format_description, Date, Duration, OffsetDateTime, PrimitiveDateTime, Time};
 
-pub(crate) fn timeline_router() -> axum::Router<MyAppState> {
+pub(crate) fn timeline_router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/{event_id}", get(timeline_view))
         .route("/{event_id}/move", post(handle_move))
@@ -160,15 +160,16 @@ impl ItemKind {
 /// Food-prep rows only carry a `recipe_id`, so recipe names are resolved once
 /// via a single `recipes().list()` into a lookup map (avoids N queries).
 async fn collect_items(
-    state: &MyAppState,
+    state: &AppState,
+    actor: &foodlib_new::AppCtx,
     event_id: EventId,
 ) -> foodlib_new::Result<Vec<TimelineItem>> {
-    let app::events::EventItemSources {
+    let foodlib_new::events::timeline::EventItemSources {
         meals,
         tours,
         preps,
         recipes,
-    } = app::events::gather_event_item_sources(state, event_id).await?;
+    } = foodlib_new::events::timeline::gather_event_item_sources(state, actor, event_id).await?;
 
     let recipe_names: HashMap<RecipeId, String> = recipes
         .into_iter()
@@ -231,7 +232,7 @@ async fn collect_items(
     // fall within the event's own day range are relevant — Engelsystem may hold
     // shifts for other events/days at the same location. Best-effort: an unset
     // integration or a failed fetch simply contributes no bars.
-    if let Some(engel) = foodlib_new::ops::engelsystem::EngelSystem::from_env() {
+    if let Some(engel) = foodlib_new::EngelSystem::from_env() {
         let event_days: std::collections::HashSet<Date> =
             items.iter().map(|i| logical_date(i.start)).collect();
         for shift in engel.get_location_shifts(ENGELSYSTEM_LOCATION_ID).await {
@@ -685,12 +686,12 @@ fn render_lane(
 
 /// Render the whole timeline for one event.
 pub async fn timeline_view(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
 ) -> MResponse {
-    let event = app::events::get_event(&state, &actor, event_id).await?;
-    let items = collect_items(&state, event_id).await?;
+    let event = foodlib_new::events::get_event(&state, &actor, event_id).await?;
+    let items = collect_items(&state, &actor, event_id).await?;
     let bounds = WindowBounds::from_items(&items);
     let days = group_by_day(&items);
 
@@ -854,7 +855,7 @@ fn to_stored(day: Date, minutes_since_day_start: i64) -> Option<OffsetDateTime> 
 /// timeline. Read-modify-write: the current row is fetched and only its time
 /// fields are patched, so no other data is trusted from the client.
 async fn handle_move(
-    State(state): State<MyAppState>,
+    State(state): State<AppState>,
     WebCtx(actor): WebCtx,
     Path(event_id): Path<EventId>,
     Form(form): Form<MoveForm>,
@@ -877,7 +878,7 @@ async fn handle_move(
         Some(end_min) => to_stored(day, end_min),
         None => None,
     };
-    app::events::timeline::move_timeline_item(
+    foodlib_new::events::timeline::move_timeline_item(
         &state,
         &actor,
         event_id,
@@ -894,7 +895,7 @@ async fn handle_move(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use foodlib_new::entities::types::ids::MealId;
+    use foodlib_new::types::ids::MealId;
     use time::macros::date;
 
     #[test]

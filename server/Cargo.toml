@@ -12,7 +12,6 @@ typst = ["dep:typst-renderer"]
 
 [dependencies]
 axum.workspace = true
-app = { path = "../app" }
 foodlib_new = { path = "../foodlib_new", features = ["axum"] }
 typst-renderer = { path = "../typst-renderer", optional = true }
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
@@ -29,8 +28,9 @@ serde = { workspace = true }
 time = { workspace = true }
 log = { workspace = true }
 bigdecimal = { workspace = true }
-futures = { workspace = true }
 serde_json = "1"
 tower-sessions = { version = "0.14.0", features = ["signed"] }
 tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
 urlencoding = "2"
+async-trait = "0.1.86"
+bcrypt = "0.16.0"

@@ -1,23 +1,21 @@
-use foodlib_new::{
-    auth_context::AuthCtx,
-    error::Result,
-    types::ids::GroupId,
-    user::Group,
-};
+use foodlib_new::entities::user::Group;
+use foodlib_new::error::Result;
+use foodlib_new::types::ids::GroupId;
+use foodlib_new::AppCtx;
 use maud::{html, Markup};
 
 /// Groups the user could plausibly move an entity into:
 /// - Admins: every group except the current one
 /// - Members: every group they belong to except the current one
 async fn candidate_groups(
-    state: &crate::MyAppState,
-    ctx: &AuthCtx,
+    state: &crate::AppState,
+    actor: &AppCtx,
     current_group_id: GroupId,
 ) -> Result<Vec<Group>> {
-    let groups = if ctx.user.is_admin {
-        app::users::list_all_groups(state).await?
+    let groups = if actor.user.is_admin {
+        foodlib_new::admin::groups::list_all_groups(state).await?
     } else {
-        app::users::get_user_groups(state, ctx.user.id).await?
+        foodlib_new::admin::groups::get_user_groups(state, actor.user.id).await?
     };
     Ok(groups
         .into_iter()
@@ -30,12 +28,14 @@ async fn candidate_groups(
 /// surrounding form's save action picks up `group_id`. Falls back to a plain
 /// read-only label when the user has no other groups to move into.
 pub async fn owner_select(
-    state: &crate::MyAppState,
-    ctx: &AuthCtx,
+    state: &crate::AppState,
+    actor: &AppCtx,
     current_group_id: GroupId,
 ) -> Result<Markup> {
-    let candidates = candidate_groups(state, ctx, current_group_id).await?;
-    let current = app::users::get_group(state, current_group_id).await.ok();
+    let candidates = candidate_groups(state, actor, current_group_id).await?;
+    let current = foodlib_new::admin::groups::get_group(state, current_group_id)
+        .await
+        .ok();
     let current_label = current
         .as_ref()
         .map(|g| {
@@ -65,3 +65,4 @@ pub async fn owner_select(
         }
     })
 }
+

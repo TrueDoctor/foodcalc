@@ -1,9 +1,9 @@
+use crate::auth::{AuthSession, Credentials};
 use axum::{
     body::Body, extract::Request, http::Response, middleware::Next, response::IntoResponse,
 };
-use axum_login::AuthnBackend;
 use axum_extra::extract::Host;
-use foodlib_new::auth::{AuthSession, Credentials};
+use axum_login::AuthnBackend;
 use maud::{html, DOCTYPE};
 
 use crate::frontend::home;
@@ -15,10 +15,7 @@ pub async fn htmx_middleware(
     req: Request,
     next: Next,
 ) -> Response<Body> {
-    let is_htmx = req
-        .headers()
-        .get("HX-Request")
-        .is_some_and(|v| v == "true");
+    let is_htmx = req.headers().get("HX-Request").is_some_and(|v| v == "true");
 
     let (host, _) = host.split_once(':').unwrap_or_default();
     // Dev convenience: ONLY when explicitly opted in via FOODCALC_AUTO_LOGIN=1,
@@ -133,7 +130,7 @@ pub async fn htmx_middleware(
                     bg-light-bg-light text-gray-800
                     dark:bg-dark-bg-dark dark:text-gray-100" {
                     div  {
-                        (home::navbar(auth.user, host))
+                        (home::navbar(auth.user.map(|u| u.0), host))
                         div class="flex flex-col items-center justify-center mb-16" {
                             div id="content" class="w-full px-2 sm:px-4 lg:w-3/4 lg:px-0 flex flex-col items-center justify-center" {
                                 (maud::PreEscaped(body))
