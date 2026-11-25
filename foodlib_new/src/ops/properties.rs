@@ -1,6 +1,6 @@
 // foodlib_new/src/ops/properties.rs
 
-use crate::entities::types::ids::{IngredientId, PropertyId, RecipeId};
+use crate::types::ids::{IngredientId, PropertyId, RecipeId};
 use sqlx::PgPool;
 use std::sync::Arc;
 

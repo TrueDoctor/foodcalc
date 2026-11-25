@@ -1,10 +1,10 @@
 use crate::{
     entities::meal::*,
-    entities::types::ids::{EventId, IngredientId, MealId, PlaceId, RecipeId},
     error::{Error, Result},
 };
 
-use crate::entities::types::amount::Amount;
+use crate::types::amount::Amount;
+use crate::types::ids::{EventId, IngredientId, MealId, PlaceId, RecipeId};
 use sqlx::PgPool;
 use std::sync::Arc;
 use time::OffsetDateTime;

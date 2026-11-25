@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use bigdecimal::{BigDecimal, ToPrimitive};
 
-use foodlib_new::entities::event::{ShoppingListItemWithUsage, ShoppingTour};
-use foodlib_new::entities::types::amount::Amount;
-use foodlib_new::entities::types::ids::IngredientId;
+use crate::entities::event::{ShoppingListItemWithUsage, ShoppingTour};
+use crate::types::amount::Amount;
+use crate::types::ids::IngredientId;
 
 use super::TourExportData;
 
@@ -144,7 +144,7 @@ fn format_tour_text_with_inventory(
 }
 
 /// Format a per-recipe usage breakdown as "3.00kg Recipe 2.00kg Other".
-pub(crate) fn format_recipe_usage(usages: &[(String, Option<Amount>)]) -> String {
+pub fn format_recipe_usage(usages: &[(String, Option<Amount>)]) -> String {
     usages
         .iter()
         .map(|(recipe, kg)| match kg {

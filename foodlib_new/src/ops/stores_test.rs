@@ -2,8 +2,9 @@
 
 use pretty_assertions::assert_eq;
 
+use crate::types::ids::StoreId;
 use crate::{
-    entities::store::*, entities::types::ids::StoreId, error::Error, ops::stores::StoreOps,
+    entities::store::*, error::Error, ops::stores::StoreOps,
 };
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]

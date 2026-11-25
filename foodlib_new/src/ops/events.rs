@@ -1,12 +1,12 @@
 use crate::entities::event::*;
-use crate::entities::types::ids::{
-    EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, InventoryId, RecipeId, StoreId,
-    ShoppingTourId, UserId,
-};
 use crate::error::{Error, Result};
+use crate::types::ids::{
+    EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, InventoryId, RecipeId,
+    ShoppingTourId, StoreId, UserId,
+};
 
-use crate::entities::types::amount::Amount;
-use crate::entities::types::money::Money;
+use crate::types::amount::Amount;
+use crate::types::money::Money;
 use sqlx::PgPool;
 use std::sync::Arc;
 use time::OffsetDateTime;

@@ -1,13 +1,13 @@
 use pretty_assertions::assert_eq;
 use std::str::FromStr;
 
-use crate::entities::types::amount::Amount;
-use crate::entities::types::money::Money;
+use crate::types::amount::Amount;
+use crate::types::ids::{
+    GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId, UnitId,
+};
+use crate::types::money::Money;
 use crate::{
     entities::ingredient::*,
-    entities::types::ids::{
-        GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId, UnitId,
-    },
     error::Error,
     ops::ingredients::IngredientOps,
 };

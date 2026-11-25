@@ -2,12 +2,12 @@
 
 use crate::{
     entities::inventory::*,
-    entities::types::ids::{GroupId, IngredientId, InventoryId},
     error::Error,
     ops::inventories::InventoryOps,
 };
 
-use crate::entities::types::amount::Amount;
+use crate::types::amount::Amount;
+use crate::types::ids::{GroupId, IngredientId, InventoryId};
 use pretty_assertions::assert_eq;
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]

@@ -1,64 +1,35 @@
 //! Ingredient use-cases.
 
-use foodlib_new::entities::types::amount::Amount;
-use foodlib_new::entities::types::ids::{
-    GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId, UnitId,
+use crate::ctx::assert_can_move_to;
+use crate::entities::allergen::{canonical, ClassifiedProperty, PropertySource};
+use crate::entities::ingredient::{
+    CreateIngredient, CreateIngredientSource, Ingredient, IngredientSource, IngredientWithSource,
 };
-use foodlib_new::entities::types::money::Money;
-use foodlib_new::ingredient::{CreateIngredient, CreateIngredientSource, Ingredient, IngredientSource};
-use foodlib_new::property::IngredientProperties;
-use foodlib_new::recipe::Recipe;
-use foodlib_new::store::Store;
-use foodlib_new::types::ids::UserId;
-use foodlib_new::user::User;
-
-use crate::app_ctx::{assert_can_move_to, AppCtx};
-use crate::{Error, MyAppState, Result};
-
-/// True if the user may edit an entity owned by `group_id`: admins may edit
-/// anything; members may edit entities of groups they belong to.
-pub fn can_edit(group_id: GroupId, user_group_ids: &[GroupId], user: &User) -> bool {
-    user.is_admin || user_group_ids.contains(&group_id)
-}
+use crate::entities::property::IngredientProperties;
+use crate::entities::recipe::Recipe;
+use crate::entities::store::Store;
+use crate::types::amount::Amount;
+use crate::types::ids::{GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId, UnitId};
+use crate::types::money::Money;
+use crate::{AppCtx, AppState, Error, Result};
 
 /// All ingredients together with a "has sources" flag.
 #[allow(deprecated)]
-pub async fn list_with_sources(
-    state: &MyAppState,
-) -> Result<Vec<foodlib_new::ingredient::IngredientWithSource>> {
-    state.ingredients().list_with_sources().await
-}
-
-async fn user_group_ids(state: &MyAppState, user_id: UserId) -> Result<Vec<GroupId>> {
-    Ok(state
-        .users()
-        .get_user_groups(user_id)
-        .await?
-        .into_iter()
-        .map(|g| g.id)
-        .collect())
-}
-
-async fn user_group_ids_opt(
-    state: &MyAppState,
-    user: Option<&User>,
-) -> Result<Vec<GroupId>> {
-    match user {
-        Some(u) => user_group_ids(state, u.id).await,
-        None => Ok(vec![]),
-    }
+pub async fn list_with_sources(state: &AppState) -> Result<Vec<IngredientWithSource>> {
+    state.db().ingredients().list_with_sources().await
 }
 
 /// Creates a new ingredient owned by the actor's personal group.
 pub async fn create_ingredient(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     name: String,
     energy: Amount,
     comment: Option<String>,
 ) -> Result<()> {
-    let group = state.users().get_personal_group(actor.ctx.user.id).await?;
+    let group = state.db().users().get_personal_group(actor.user.id).await?;
     state
+        .db()
         .ingredients()
         .create(CreateIngredient {
             name,
@@ -75,60 +46,49 @@ pub async fn create_ingredient(
 /// another group additionally requires membership in (or admin over) the
 /// target group. Returns the refreshed ingredient.
 pub async fn update_ingredient(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     mut ingredient: Ingredient,
     target_group: GroupId,
 ) -> Result<Ingredient> {
-    let existing = state.ingredients().get(ingredient.id).await?;
-    if !can_edit(existing.group_id, &actor.ctx.group_ids, &actor.ctx.user) {
-        return Err(Error::Forbidden(
-            "You don't have permission to edit this ingredient".into(),
-        ));
-    }
+    let existing = state.db().ingredients().get(ingredient.id).await?;
+    actor.assert_group(existing.group_id)?;
 
     ingredient.group_id = existing.group_id;
     if existing.group_id != target_group {
         assert_can_move_to(actor, target_group)?;
     }
-    let updated = state.ingredients().update(ingredient).await?;
+    let updated = state.db().ingredients().update(ingredient).await?;
     if existing.group_id != target_group {
         state
+            .db()
             .ingredients()
             .set_group(updated.id, target_group)
             .await?;
     }
-    Ok(state.ingredients().get(updated.id).await?)
+    state.db().ingredients().get(updated.id).await
 }
 
-/// Deletes an ingredient. Only administrators may delete ingredients.
+/// Deletes an ingredient. Only human administrators may delete ingredients.
 pub async fn delete_ingredient(
-    state: &MyAppState,
-    user: &User,
+    state: &AppState,
+    actor: &AppCtx,
     ingredient_id: IngredientId,
 ) -> Result<()> {
-    if !user.is_admin {
-        return Err(Error::Forbidden(
-            "You don't have permission to delete ingredients".into(),
-        ));
-    }
-    state.ingredients().delete(ingredient_id).await?;
-    Ok(())
+    actor.require_human()?;
+    actor.require_admin()?;
+    state.db().ingredients().delete(ingredient_id).await
 }
 
-/// Lists the recipes that use an ingredient (shown before confirming a
-/// delete). Only administrators may delete ingredients.
+/// Lists the recipes that use an ingredient (shown before confirming it is
+/// deleted). Only administrators may delete ingredients.
 pub async fn gather_usages(
-    state: &MyAppState,
-    user: &User,
+    state: &AppState,
+    actor: &AppCtx,
     ingredient_id: IngredientId,
 ) -> Result<Vec<Recipe>> {
-    if !user.is_admin {
-        return Err(Error::Forbidden(
-            "You don't have permission to delete ingredients".into(),
-        ));
-    }
-    Ok(state.ingredients().usages(ingredient_id).await?)
+    actor.require_admin()?;
+    state.db().ingredients().usages(ingredient_id).await
 }
 
 /// Everything the sources dialog renders, fetched in one use case so
@@ -142,16 +102,14 @@ pub struct SourcesViewData {
 
 /// Collects all data needed to render an ingredient's sources dialog.
 pub async fn gather_sources(
-    state: &MyAppState,
-    user: Option<&User>,
+    state: &AppState,
+    actor: Option<&AppCtx>,
     ingredient_id: IngredientId,
 ) -> Result<SourcesViewData> {
-    let sources = state.ingredients().get_sources(ingredient_id).await?;
-    let stores = state.stores().list().await?;
-    let ingredient = state.ingredients().get(ingredient_id).await?;
-    let user_group_ids = user_group_ids_opt(state, user)
-        .await
-        .unwrap_or_default();
+    let sources = state.db().ingredients().get_sources(ingredient_id).await?;
+    let stores = state.db().stores().list().await?;
+    let ingredient = state.db().ingredients().get(ingredient_id).await?;
+    let user_group_ids = actor.map(|a| a.group_ids.clone()).unwrap_or_default();
 
     Ok(SourcesViewData {
         sources,
@@ -164,9 +122,10 @@ pub async fn gather_sources(
 /// Creates or updates one ingredient source; an invalid `source_id` means
 /// create (the sources dialog submits a sentinel id for the inline add row).
 /// Requires edit rights on the ingredient's owner group.
+#[allow(clippy::too_many_arguments)]
 pub async fn save_source(
-    state: &MyAppState,
-    user: &User,
+    state: &AppState,
+    actor: &AppCtx,
     ingredient_id: IngredientId,
     source_id: IngredientSourceId,
     store_id: StoreId,
@@ -175,16 +134,11 @@ pub async fn save_source(
     url: Option<String>,
     comment: Option<String>,
 ) -> Result<()> {
-    let ingredient = state.ingredients().get(ingredient_id).await?;
-    let group_ids = user_group_ids(state, user.id).await?;
-    if !can_edit(ingredient.group_id, &group_ids, user) {
-        return Err(Error::Forbidden(
-            "You don't have permission to edit sources for this ingredient".into(),
-        ));
-    }
+    actor.assert_can_edit_ingredient(ingredient_id).await?;
 
     if !source_id.is_valid() {
         state
+            .db()
             .ingredients()
             .add_source(CreateIngredientSource {
                 ingredient_id,
@@ -197,7 +151,15 @@ pub async fn save_source(
             })
             .await?;
     } else {
+        let sources = state.db().ingredients().get_sources(ingredient_id).await?;
+        if !sources.iter().any(|s| s.id == source_id) {
+            return Err(Error::NotFound {
+                entity: "IngredientSource",
+                id: source_id.to_string(),
+            });
+        }
         state
+            .db()
             .ingredients()
             .update_source(IngredientSource {
                 id: source_id,
@@ -214,23 +176,23 @@ pub async fn save_source(
     Ok(())
 }
 
-/// Deletes one ingredient source.
+/// Deletes one ingredient source after verifying it belongs to `ingredient_id`.
 /// Requires edit rights on the ingredient's owner group.
 pub async fn delete_source(
-    state: &MyAppState,
-    user: &User,
+    state: &AppState,
+    actor: &AppCtx,
     ingredient_id: IngredientId,
     source_id: IngredientSourceId,
 ) -> Result<()> {
-    let ingredient = state.ingredients().get(ingredient_id).await?;
-    let group_ids = user_group_ids(state, user.id).await?;
-    if !can_edit(ingredient.group_id, &group_ids, user) {
-        return Err(Error::Forbidden(
-            "You don't have permission to delete sources for this ingredient".into(),
-        ));
+    actor.assert_can_edit_ingredient(ingredient_id).await?;
+    let sources = state.db().ingredients().get_sources(ingredient_id).await?;
+    if !sources.iter().any(|s| s.id == source_id) {
+        return Err(Error::NotFound {
+            entity: "IngredientSource",
+            id: source_id.to_string(),
+        });
     }
-    state.ingredients().delete_source(source_id).await?;
-    Ok(())
+    state.db().ingredients().delete_source(source_id).await
 }
 
 /// Everything the allergen (properties) dialog renders, fetched in one use
@@ -243,18 +205,17 @@ pub struct PropertiesViewData {
 
 /// Collects all data needed to render an ingredient's allergen dialog.
 pub async fn gather_properties(
-    state: &MyAppState,
-    user: Option<&User>,
+    state: &AppState,
+    actor: Option<&AppCtx>,
     ingredient_id: IngredientId,
 ) -> Result<PropertiesViewData> {
     let properties = state
+        .db()
         .properties()
         .get_ingredient_properties(ingredient_id)
         .await?;
-    let ingredient = state.ingredients().get(ingredient_id).await?;
-    let user_group_ids = user_group_ids_opt(state, user)
-        .await
-        .unwrap_or_default();
+    let ingredient = state.db().ingredients().get(ingredient_id).await?;
+    let user_group_ids = actor.map(|a| a.group_ids.clone()).unwrap_or_default();
 
     Ok(PropertiesViewData {
         properties,
@@ -266,44 +227,31 @@ pub async fn gather_properties(
 /// Removes one property (e.g. allergen tag) from an ingredient.
 /// Requires edit rights on the ingredient's owner group.
 pub async fn delete_property(
-    state: &MyAppState,
-    user: &User,
+    state: &AppState,
+    actor: &AppCtx,
     ingredient_id: IngredientId,
     property_id: PropertyId,
 ) -> Result<()> {
-    let ingredient = state.ingredients().get(ingredient_id).await?;
-    let group_ids = user_group_ids(state, user.id).await?;
-    if !can_edit(ingredient.group_id, &group_ids, user) {
-        return Err(Error::Forbidden(
-            "You don't have permission to edit this ingredient".into(),
-        ));
-    }
+    actor.assert_can_edit_ingredient(ingredient_id).await?;
     state
+        .db()
         .properties()
         .remove_from_ingredient(ingredient_id, property_id)
-        .await?;
-    Ok(())
+        .await
 }
 
 /// Adds one canonical allergen tag to an ingredient. `kind` is either
 /// `"contains"` or `"may_contain"`.
 /// Requires edit rights on the ingredient's owner group.
 pub async fn add_property(
-    state: &MyAppState,
-    user: &User,
+    state: &AppState,
+    actor: &AppCtx,
     ingredient_id: IngredientId,
     canonical: String,
     kind: String,
 ) -> Result<()> {
-    let ingredient = state.ingredients().get(ingredient_id).await?;
-    let group_ids = user_group_ids(state, user.id).await?;
-    if !can_edit(ingredient.group_id, &group_ids, user) {
-        return Err(Error::Forbidden(
-            "You don't have permission to edit this ingredient".into(),
-        ));
-    }
+    actor.assert_can_edit_ingredient(ingredient_id).await?;
 
-    use foodlib_new::allergen::{canonical, ClassifiedProperty, PropertySource};
     if !canonical::ALL.contains(&canonical.as_str()) {
         return Err(Error::Validation {
             message: format!("Unknown allergen: {}", canonical),
@@ -320,6 +268,7 @@ pub async fn add_property(
     };
 
     state
+        .db()
         .allergens()
         .apply_to_ingredient(
             ingredient_id,
@@ -328,6 +277,5 @@ pub async fn add_property(
                 source,
             }],
         )
-        .await?;
-    Ok(())
+        .await
 }

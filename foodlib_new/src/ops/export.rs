@@ -1,9 +1,9 @@
 use crate::entities::allergen::DietaryFlags;
 use crate::entities::property::Property;
 use crate::entities::recipe::{RecipeStep, SubRecipe};
-use crate::entities::types::amount::Amount;
-use crate::entities::types::ids::{EventId, FoodPrepId, MealId, RecipeId};
 use crate::error::{Error, Result};
+use crate::types::amount::Amount;
+use crate::types::ids::{EventId, FoodPrepId, MealId, RecipeId};
 use crate::types::money::Money;
 use bigdecimal::ToPrimitive;
 use sqlx::PgPool;

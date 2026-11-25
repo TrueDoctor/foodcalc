@@ -1,6 +1,6 @@
+use crate::types::ids::{GroupId, IngredientId, InventoryId};
 use crate::{
     entities::inventory::*,
-    entities::types::ids::{GroupId, IngredientId, InventoryId},
     error::Result,
 };
 use sqlx::PgPool;

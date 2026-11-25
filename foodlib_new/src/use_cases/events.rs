@@ -1,35 +1,33 @@
 //! Event use-cases.
 
+use crate::ctx::assert_can_move_to;
+use crate::entities::event::{CreateEvent, Event, FoodPrep, ShoppingTour};
+use crate::entities::ingredient::Ingredient;
+use crate::entities::meal::Meal;
+use crate::entities::recipe::Recipe;
+use crate::entities::store::Store;
+use crate::types::ids::{EventId, GroupId};
+use crate::types::money::Money;
+use crate::{entities, AppCtx, AppState, Result};
 use bigdecimal::FromPrimitive;
-use foodlib_new::entities::types::ids::{
-    EventId, GroupId,
-};
-use foodlib_new::entities::types::money::Money;
-use foodlib_new::event::{CreateEvent, Event, FoodPrep, ShoppingTour};
-use foodlib_new::ingredient::Ingredient;
-use foodlib_new::meal::Meal;
-use foodlib_new::recipe::Recipe;
-use foodlib_new::store::Store;
 
-use crate::app_ctx::{AppCtx, assert_can_move_to};
-use crate::{MyAppState, Result};
-
+pub mod logistics;
 pub mod meals;
 pub mod shopping;
 pub mod timeline;
-pub mod logistics;
 
 /// Creates a new event owned by the actor's personal group. An empty comment
 /// is normalized to `None`.
 pub async fn create_event(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     name: String,
     comment: Option<String>,
     budget: Option<f64>,
 ) -> Result<()> {
-    let group = state.users().get_personal_group(actor.ctx.user.id).await?;
+    let group = state.db().users().get_personal_group(actor.user.id).await?;
     state
+        .db()
         .events()
         .create(CreateEvent {
             name,
@@ -47,24 +45,20 @@ pub async fn create_event(
 /// event's id.
 /// Requires `EditEvent` permission on the source event.
 pub async fn duplicate_event(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
 ) -> Result<EventId> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    let group = state.users().get_personal_group(actor.ctx.user.id).await?;
-    state.events().duplicate(event_id, group.id).await
+    actor.assert_can_edit_event(event_id).await?;
+    let group = state.db().users().get_personal_group(actor.user.id).await?;
+    state.db().events().duplicate(event_id, group.id).await
 }
 
 /// Deletes an event.
 /// Requires `EditEvent` permission.
-pub async fn delete_event(
-    state: &MyAppState,
-    actor: &AppCtx,
-    event_id: EventId,
-) -> Result<()> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    state.events().delete(event_id).await?;
+pub async fn delete_event(state: &AppState, actor: &AppCtx, event_id: EventId) -> Result<()> {
+    actor.assert_can_edit_event(event_id).await?;
+    state.db().events().delete(event_id).await?;
     Ok(())
 }
 
@@ -73,7 +67,7 @@ pub async fn delete_event(
 /// Requires `EditEvent` permission; moving to another group additionally
 /// requires membership in (or admin over) the target group.
 pub async fn update_event(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
     name: String,
@@ -81,13 +75,14 @@ pub async fn update_event(
     budget: Option<f64>,
     target_group: GroupId,
 ) -> Result<()> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    let current = state.events().get(event_id).await?;
+    actor.assert_can_edit_event(event_id).await?;
+    let current = state.db().events().get(event_id).await?;
     if current.group_id != target_group {
         assert_can_move_to(actor, target_group)?;
     }
 
     state
+        .db()
         .events()
         .update(Event {
             id: event_id,
@@ -101,7 +96,7 @@ pub async fn update_event(
         .await?;
 
     if current.group_id != target_group {
-        state.events().set_group(event_id, target_group).await?;
+        state.db().events().set_group(event_id, target_group).await?;
     }
     Ok(())
 }
@@ -111,7 +106,7 @@ pub async fn update_event(
 pub struct EventFormData {
     pub event: Event,
     pub stores: Vec<Store>,
-    pub overrides: Vec<foodlib_new::event::SourceOverrideView>,
+    pub overrides: Vec<entities::event::SourceOverrideView>,
     pub ingredients: Vec<Ingredient>,
     pub meals: Vec<Meal>,
     pub recipes: Vec<Recipe>,
@@ -121,18 +116,18 @@ pub struct EventFormData {
 /// Collects all data needed to render the event edit form.
 /// Requires `EditEvent` permission.
 pub async fn gather_form_data(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
 ) -> Result<EventFormData> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    let stores = state.stores().list().await?;
-    let overrides = state.events().get_source_overrides(event_id).await?;
-    let ingredients = state.ingredients().list().await?;
-    let meals = state.meals().get_event_meals(event_id).await?;
-    let recipes = state.recipes().list().await?;
-    let preps = state.events().get_food_prep_tasks(event_id).await?;
-    let event = state.events().get(event_id).await?;
+    actor.assert_can_edit_event(event_id).await?;
+    let stores = state.db().stores().list().await?;
+    let overrides = state.db().events().get_source_overrides(event_id).await?;
+    let ingredients = state.db().ingredients().list().await?;
+    let meals = state.db().meals().get_event_meals(event_id).await?;
+    let recipes = state.db().recipes().list().await?;
+    let preps = state.db().events().get_food_prep_tasks(event_id).await?;
+    let event = state.db().events().get(event_id).await?;
 
     Ok(EventFormData {
         event,
@@ -147,42 +142,35 @@ pub async fn gather_form_data(
 
 /// Fetches one event (e.g. for delete-confirmation dialogs or overview
 /// pages). Requires `EditEvent` permission.
-pub async fn get_event(
-    state: &MyAppState,
-    actor: &AppCtx,
-    event_id: EventId,
-) -> Result<Event> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    state.events().get(event_id).await
+pub async fn get_event(state: &AppState, actor: &AppCtx, event_id: EventId) -> Result<Event> {
+    actor.assert_can_edit_event(event_id).await?;
+    state.db().events().get(event_id).await
 }
 
 /// Lists all events.
-pub async fn list_events(state: &MyAppState) -> Result<Vec<Event>> {
-    state.events().list().await
+pub async fn list_events(state: &AppState) -> Result<Vec<Event>> {
+    state.db().events().list().await
 }
 
 /// Lists all places (meal locations).
-pub async fn list_places(state: &MyAppState) -> Result<Vec<foodlib_new::event::Place>> {
-    state.events().get_places().await
+pub async fn list_places(state: &AppState) -> Result<Vec<entities::event::Place>> {
+    state.db().events().get_places().await
 }
 
 /// Lists an event's ingredient source default overrides.
 /// Requires `EditEvent` permission.
 pub async fn list_source_overrides(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
-) -> Result<Vec<foodlib_new::event::SourceOverrideView>> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    state.events().get_source_overrides(event_id).await
+) -> Result<Vec<entities::event::SourceOverrideView>> {
+    actor.assert_can_edit_event(event_id).await?;
+    state.db().events().get_source_overrides(event_id).await
 }
 
 /// Lists an event's shopping tours.
-pub async fn get_shopping_tours(
-    state: &MyAppState,
-    event_id: EventId,
-) -> Result<Vec<ShoppingTour>> {
-    state.events().get_shopping_tours(event_id).await
+pub async fn get_shopping_tours(state: &AppState, event_id: EventId) -> Result<Vec<ShoppingTour>> {
+    state.db().events().get_shopping_tours(event_id).await
 }
 
 /// Raw building blocks for event timeline-style views: the event's meals,
@@ -190,23 +178,36 @@ pub async fn get_shopping_tours(
 /// grouping and filtering stay presentation.
 pub struct EventItemSources {
     pub meals: Vec<Meal>,
-    pub tours: Vec<foodlib_new::event::ShoppingTour>,
+    pub tours: Vec<ShoppingTour>,
     pub preps: Vec<FoodPrep>,
     pub recipes: Vec<Recipe>,
 }
 
 pub async fn gather_event_item_sources(
-    state: &MyAppState,
+    state: &AppState,
     event_id: EventId,
 ) -> Result<EventItemSources> {
-    let meals = state.meals().get_event_meals(event_id).await?;
-    let tours = state.events().get_shopping_tours(event_id).await?;
-    let preps = state.events().get_food_prep_tasks(event_id).await?;
-    let recipes = state.recipes().list().await?;
+    let meals = state.db().meals().get_event_meals(event_id).await?;
+    let tours = state.db().events().get_shopping_tours(event_id).await?;
+    let preps = state.db().events().get_food_prep_tasks(event_id).await?;
+    let recipes = state.db().recipes().list().await?;
     Ok(EventItemSources {
         meals,
         tours,
         preps,
         recipes,
     })
+}
+
+/// Fetches one event without edit-permission checks (for public read-only views).
+pub async fn get_event_public(state: &AppState, event_id: EventId) -> Result<Event> {
+    state.db().events().get(event_id).await
+}
+
+/// Fetches the currently ongoing event, or the next upcoming event after `at`.
+pub async fn get_current_or_upcoming_event(
+    state: &AppState,
+    at: time::OffsetDateTime,
+) -> Result<Option<Event>> {
+    state.db().events().get_current_or_upcoming_event(at).await
 }

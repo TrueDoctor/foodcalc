@@ -12,9 +12,9 @@ use sqlx::PgPool;
 use crate::error::{Error, Result};
 use crate::ops::allergens::AllergenOps;
 
-use crate::entities::types::amount::Amount;
-use crate::entities::types::money::Money;
+use crate::types::amount::Amount;
 use crate::types::ids::{IngredientId, IngredientSourceId, StoreId};
+use crate::types::money::Money;
 use bigdecimal::{FromPrimitive, ToPrimitive};
 use metro_scrape::article::{Article, Bundle};
 use metro_scrape::request::fetch_articles_from_urls;

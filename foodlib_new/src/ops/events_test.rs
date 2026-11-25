@@ -1,11 +1,11 @@
 use crate::entities::event::*;
-use crate::entities::types::ids::{
-    EventId, GroupId, IngredientId, IngredientSourceId, StoreId, ShoppingTourId,
-};
 use crate::error::Error;
 use crate::ops::events::EventOps;
+use crate::types::ids::{
+    EventId, GroupId, IngredientId, IngredientSourceId, ShoppingTourId, StoreId,
+};
 
-use crate::entities::types::money::Money;
+use crate::types::money::Money;
 use pretty_assertions::assert_eq;
 use sqlx::PgPool;
 use std::str::FromStr;

@@ -1,8 +1,8 @@
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use crate::entities::types::amount::Amount;
-use crate::entities::types::ids::UnitId;
+use crate::types::amount::Amount;
+use crate::types::ids::UnitId;
 use crate::{
     entities::unit::*,
     error::{Error, Result},

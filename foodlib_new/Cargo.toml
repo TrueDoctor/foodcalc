@@ -12,8 +12,6 @@ log.workspace = true
 serde.workspace = true
 bigdecimal.workspace = true
 time.workspace = true
-axum-login.workspace = true
-async-trait.workspace = true
 bcrypt = "0.16.0"
 metro-scrape = { path = "../metro-scrape" }
 axum = { workspace = true, optional = true }
@@ -22,6 +20,8 @@ eyre = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
+futures = "0.3.34"
+tokio = "1.54.1"
 
 
 [dev-dependencies]

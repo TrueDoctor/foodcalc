@@ -1,7 +1,7 @@
-use bigdecimal::ToPrimitive;
-use foodlib_new::entities::types::amount::Amount;
-
 use super::{text::format_recipe_usage, TourExportData};
+use bigdecimal::ToPrimitive;
+
+use crate::types::amount::Amount;
 use crate::{Error, Result};
 
 pub fn render_shopping_tour(data: &TourExportData) -> Result<Vec<u8>> {
@@ -76,7 +76,9 @@ pub fn render_shopping_tour(data: &TourExportData) -> Result<Vec<u8>> {
     for (col1, packages, comment, _) in rows {
         let col1 = format!(
             "\"{}\"",
-            col1.replace('"', "\"\"").replace('\n', " ").replace('\r', " ")
+            col1.replace('"', "\"\"")
+                .replace('\n', " ")
+                .replace('\r', " ")
         );
         let comment_field = if comment.is_empty() {
             String::new()

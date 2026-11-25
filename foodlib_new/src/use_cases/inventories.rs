@@ -1,46 +1,47 @@
 //! Inventory use-cases.
 
-use foodlib_new::entities::types::amount::Amount;
-use foodlib_new::entities::types::ids::{GroupId, IngredientId, InventoryId};
-use foodlib_new::inventory::{CreateInventory, Inventory, InventoryItem, InventoryItemWithName};
+use crate::ctx::{AppCtx, assert_can_move_to};
+use crate::entities::inventory::{CreateInventory, Inventory, InventoryItem, InventoryItemWithName};
+use crate::types::amount::Amount;
+use crate::types::ids::{GroupId, IngredientId, InventoryId};
 
-use crate::app_ctx::{assert_can_move_to, AppCtx};
-use crate::{MyAppState, Result};
+use crate::{AppState, Result};
+use crate::entities::ingredient::Ingredient;
 
 /// Lists all inventories.
-pub async fn list_inventories(state: &MyAppState) -> Result<Vec<Inventory>> {
-    state.inventories().list().await
+pub async fn list_inventories(state: &AppState) -> Result<Vec<Inventory>> {
+    state.db().inventories().list().await
 }
 
 /// Fetches one inventory.
-pub async fn get_inventory(state: &MyAppState, inventory_id: InventoryId) -> Result<Inventory> {
-    state.inventories().get(inventory_id).await
+pub async fn get_inventory(state: &AppState, inventory_id: InventoryId) -> Result<Inventory> {
+    state.db().inventories().get(inventory_id).await
 }
 
 /// Fetches one inventory for editing (e.g. the inline edit row).
 /// Requires `EditInventory` permission.
 pub async fn get_inventory_for_edit(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     inventory_id: InventoryId,
 ) -> Result<Inventory> {
-    actor.ctx.assert_can_edit_inventory(inventory_id).await?;
-    state.inventories().get(inventory_id).await
+    actor.assert_can_edit_inventory(inventory_id).await?;
+    state.db().inventories().get(inventory_id).await
 }
 
 /// Everything the inventory contents view renders: the inventory's items and
 /// all ingredients (for the add-row datalist). Filtering stays presentation.
 pub struct InventoryContentsData {
     pub items: Vec<InventoryItemWithName>,
-    pub ingredients: Vec<foodlib_new::ingredient::Ingredient>,
+    pub ingredients: Vec<Ingredient>,
 }
 
 pub async fn gather_contents(
-    state: &MyAppState,
+    state: &AppState,
     inventory_id: InventoryId,
 ) -> Result<InventoryContentsData> {
-    let items = state.inventories().get_items(inventory_id).await?;
-    let ingredients = state.ingredients().list().await?;
+    let items = state.db().inventories().get_items(inventory_id).await?;
+    let ingredients = state.db().ingredients().list().await?;
     Ok(InventoryContentsData {
         items,
         ingredients,
@@ -49,12 +50,13 @@ pub async fn gather_contents(
 
 /// Creates a new inventory owned by the actor's personal group.
 pub async fn create_inventory(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     name: String,
 ) -> Result<()> {
-    let group = state.users().get_personal_group(actor.ctx.user.id).await?;
+    let group = state.db().users().get_personal_group(actor.user.id).await?;
     state
+        .db()
         .inventories()
         .create(CreateInventory {
             name,
@@ -69,21 +71,21 @@ pub async fn create_inventory(
 /// group additionally requires membership in (or admin over) the target
 /// group. Returns the final inventory state.
 pub async fn rename_inventory(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     inventory_id: InventoryId,
     name: String,
     target_group: GroupId,
 ) -> Result<Inventory> {
-    actor.ctx.assert_can_edit_inventory(inventory_id).await?;
-    let mut inv = state.inventories().get(inventory_id).await?;
+    actor.assert_can_edit_inventory(inventory_id).await?;
+    let mut inv = state.db().inventories().get(inventory_id).await?;
     if inv.group_id != target_group {
         assert_can_move_to(actor, target_group)?;
     }
     inv.name = name;
-    state.inventories().update(inv.clone()).await?;
+    state.db().inventories().update(inv.clone()).await?;
     if inv.group_id != target_group {
-        state.inventories().set_group(inventory_id, target_group).await?;
+        state.db().inventories().set_group(inventory_id, target_group).await?;
         inv.group_id = target_group;
     }
     Ok(inv)
@@ -92,12 +94,12 @@ pub async fn rename_inventory(
 /// Deletes an inventory.
 /// Requires `EditInventory` permission.
 pub async fn delete_inventory(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     inventory_id: InventoryId,
 ) -> Result<()> {
-    actor.ctx.assert_can_edit_inventory(inventory_id).await?;
-    state.inventories().delete(inventory_id).await?;
+    actor.assert_can_edit_inventory(inventory_id).await?;
+    state.db().inventories().delete(inventory_id).await?;
     Ok(())
 }
 
@@ -107,27 +109,26 @@ pub async fn delete_inventory(
 /// the inventory untouched so the user can correct the input.
 /// Requires `EditInventory` permission.
 pub async fn set_item(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     inventory_id: InventoryId,
     ingredient_id: IngredientId,
     amount: Amount,
 ) -> Result<()> {
-    actor.ctx.assert_can_edit_inventory(inventory_id).await?;
+    actor.assert_can_edit_inventory(inventory_id).await?;
     if !ingredient_id.is_valid() {
         return Ok(());
     }
-
-    let items = state.inventories().get_items(inventory_id).await?;
+    let items = state.db().inventories().get_items(inventory_id).await?;
     let item = InventoryItem {
         inventory_id,
         ingredient_id,
         amount,
     };
     if items.iter().any(|x| x.ingredient_id == ingredient_id) {
-        state.inventories().update_item(item).await?;
+        state.db().inventories().update_item(item).await?;
     } else {
-        state.inventories().add_item(item).await?;
+        state.db().inventories().add_item(item).await?;
     }
     Ok(())
 }
@@ -136,14 +137,15 @@ pub async fn set_item(
 /// name for the caller's presentation layer.
 /// Requires `EditInventory` permission.
 pub async fn update_item_amount(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     inventory_id: InventoryId,
     ingredient_id: IngredientId,
     amount: Amount,
 ) -> Result<InventoryItemWithName> {
-    actor.ctx.assert_can_edit_inventory(inventory_id).await?;
+    actor.assert_can_edit_inventory(inventory_id).await?;
     let updated = state
+        .db()
         .inventories()
         .update_item(InventoryItem {
             inventory_id,
@@ -151,7 +153,7 @@ pub async fn update_item_amount(
             amount,
         })
         .await?;
-    let ingredient = state.ingredients().get(ingredient_id).await?;
+    let ingredient = state.db().ingredients().get(ingredient_id).await?;
     Ok(InventoryItemWithName {
         name: ingredient.name,
         ..updated.into()
@@ -161,13 +163,14 @@ pub async fn update_item_amount(
 /// Removes one item from an inventory.
 /// Requires `EditInventory` permission.
 pub async fn delete_item(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     inventory_id: InventoryId,
     ingredient_id: IngredientId,
 ) -> Result<()> {
-    actor.ctx.assert_can_edit_inventory(inventory_id).await?;
+    actor.assert_can_edit_inventory(inventory_id).await?;
     state
+        .db()
         .inventories()
         .delete_item(inventory_id, ingredient_id)
         .await?;
@@ -182,7 +185,7 @@ pub async fn delete_item(
 ///
 /// Returns whether the item was moved.
 pub async fn move_item(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     from_id: InventoryId,
     to_id: InventoryId,
@@ -191,10 +194,10 @@ pub async fn move_item(
     if from_id == to_id {
         return Ok(false);
     }
-    actor.ctx.assert_can_edit_inventory(from_id).await?;
-    actor.ctx.assert_can_edit_inventory(to_id).await?;
+    actor.assert_can_edit_inventory(from_id).await?;
+    actor.assert_can_edit_inventory(to_id).await?;
 
-    let source_items = state.inventories().get_items(from_id).await?;
+    let source_items = state.db().inventories().get_items(from_id).await?;
     let Some(source_item) = source_items
         .iter()
         .find(|x| x.ingredient_id == ingredient_id)
@@ -203,7 +206,7 @@ pub async fn move_item(
     };
     let amount_to_move = source_item.amount.clone();
 
-    let dest_items = state.inventories().get_items(to_id).await?;
+    let dest_items = state.db().inventories().get_items(to_id).await?;
     let merged_amount = dest_items
         .iter()
         .find(|x| x.ingredient_id == ingredient_id)
@@ -217,10 +220,10 @@ pub async fn move_item(
         amount: merged_amount,
     };
     if dest_has {
-        state.inventories().update_item(dest_item).await?;
+        state.db().inventories().update_item(dest_item).await?;
     } else {
-        state.inventories().add_item(dest_item).await?;
+        state.db().inventories().add_item(dest_item).await?;
     }
-    state.inventories().delete_item(from_id, ingredient_id).await?;
+    state.db().inventories().delete_item(from_id, ingredient_id).await?;
     Ok(true)
 }

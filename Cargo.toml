@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["metro-scrape", "server", "status-api", "foodlib_new", "typst-renderer", "app"]
+members = ["metro-scrape", "server", "status-api", "foodlib_new", "typst-renderer"]
 default-members = ["server", "foodlib_new"]
 exclude = ["foodlib", "cli-client", "api"]
 

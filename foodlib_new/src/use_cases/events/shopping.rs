@@ -1,31 +1,27 @@
 //! Shopping-tour use-cases.
 
-use crate::app_ctx::AppCtx;
-use crate::{MyAppState, Result};
-use foodlib_new::entities::types::amount::Amount;
-use foodlib_new::entities::types::ids::{
-    EventId, IngredientId, InventoryId, ShoppingTourId, StoreId,
-};
-use foodlib_new::event::ShoppingTour;
-use foodlib_new::event::{EventInventory, ShoppingListItem};
-use foodlib_new::inventory::InventoryItem;
-use foodlib_new::inventory::InventoryItemWithName;
-use foodlib_new::meal::Meal;
-use foodlib_new::types::ids::MealId;
-use foodlib_new::types::money::Money;
+use crate::entities::event::{EventInventory, ShoppingListItem, ShoppingTour};
+use crate::entities::inventory::{InventoryItem, InventoryItemWithName};
+use crate::entities::meal::Meal;
+use crate::entities::{event, inventory, store};
+use crate::types::amount::Amount;
+use crate::types::ids::{EventId, IngredientId, InventoryId, MealId, ShoppingTourId, StoreId};
+use crate::types::money::Money;
+use crate::{entities, AppCtx, AppState, Result};
 use time::OffsetDateTime;
 
 /// Creates one shopping tour for an event.
 /// Requires `EditEvent` permission.
 pub async fn create_tour(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
     store_id: StoreId,
     tour_date: OffsetDateTime,
 ) -> Result<()> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
+    actor.assert_can_edit_event(event_id).await?;
     state
+        .db()
         .events()
         .add_shopping_tour(ShoppingTour {
             id: ShoppingTourId(-1),
@@ -43,21 +39,22 @@ pub async fn create_tour(
 /// existing tours.
 /// Requires `EditEvent` permission.
 pub async fn save_tour(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
     tour_id: Option<ShoppingTourId>,
     store_id: StoreId,
     tour_date: OffsetDateTime,
 ) -> Result<()> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
+    actor.assert_can_edit_event(event_id).await?;
     if let Some(tour_id) = tour_id {
-        actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
+        actor.assert_can_edit_shopping_tour(tour_id).await?;
     }
 
     match tour_id {
         Some(id) => {
             state
+                .db()
                 .events()
                 .update_shopping_tour(ShoppingTour {
                     id,
@@ -70,6 +67,7 @@ pub async fn save_tour(
         }
         None => {
             state
+                .db()
                 .events()
                 .add_shopping_tour(ShoppingTour {
                     id: ShoppingTourId(-1),
@@ -86,30 +84,27 @@ pub async fn save_tour(
 
 /// Deletes one shopping tour.
 /// Requires `EditShoppingTour` permission.
-pub async fn delete_tour(
-    state: &MyAppState,
-    actor: &AppCtx,
-    tour_id: ShoppingTourId,
-) -> Result<()> {
-    actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    state.events().delete_shopping_tour(tour_id).await?;
+pub async fn delete_tour(state: &AppState, actor: &AppCtx, tour_id: ShoppingTourId) -> Result<()> {
+    actor.assert_can_edit_shopping_tour(tour_id).await?;
+    state.db().events().delete_shopping_tour(tour_id).await?;
     Ok(())
 }
 
 /// Attaches (`checked`) or detaches an inventory from an event's shopping.
 /// Requires `EditEvent` permission.
 pub async fn set_event_inventory(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
     inventory_id: InventoryId,
     checked: bool,
 ) -> Result<()> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
+    actor.assert_can_edit_event(event_id).await?;
     if checked {
-        state.events().add_inventory(event_id, inventory_id).await?;
+        state.db().events().add_inventory(event_id, inventory_id).await?;
     } else {
         state
+            .db()
             .events()
             .remove_inventory(event_id, inventory_id)
             .await?;
@@ -145,15 +140,15 @@ fn calculate_subtraction(available: &Amount, remaining: &Amount) -> Amount {
 /// the order the event attached them.
 /// Requires `EditShoppingTour` permission.
 pub async fn calculate_inventory_changes(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     tour_id: ShoppingTourId,
 ) -> Result<Vec<InventoryChange>> {
-    actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
-    let tour = state.events().get_shopping_tour(tour_id).await?;
-    let shopping_list = state.events().get_shopping_list(tour_id).await?;
-    let inventories = state.events().get_inventories(tour.event_id).await?;
-    let inventory_ops = state.inventories();
+    actor.assert_can_edit_shopping_tour(tour_id).await?;
+    let tour = state.db().events().get_shopping_tour(tour_id).await?;
+    let shopping_list = state.db().events().get_shopping_list(tour_id).await?;
+    let inventories = state.db().events().get_inventories(tour.event_id).await?;
+    let inventory_ops = state.db().inventories();
     let inventories = inventories
         .iter()
         .map(|inv| inv.inventory_id)
@@ -177,7 +172,7 @@ pub async fn calculate_inventory_changes(
                 break;
             }
 
-            if let Ok(items) = state.inventories().get_items(inv.id).await {
+            if let Ok(items) = state.db().inventories().get_items(inv.id).await {
                 if let Some(current_item) =
                     items.iter().find(|i| i.ingredient_id == item.ingredient_id)
                 {
@@ -208,14 +203,15 @@ pub async fn calculate_inventory_changes(
 /// change the inventory item is overwritten with its new amount.
 /// Requires `EditShoppingTour` permission.
 pub async fn apply_inventory_changes(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     tour_id: ShoppingTourId,
 ) -> Result<()> {
-    actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    actor.assert_can_edit_shopping_tour(tour_id).await?;
     let changes = calculate_inventory_changes(state, actor, tour_id).await?;
     for (_, inventory_id, _, ingredient_id, _, _, amount) in changes {
         state
+            .db()
             .inventories()
             .update_item(InventoryItem {
                 inventory_id,
@@ -232,31 +228,31 @@ pub async fn apply_inventory_changes(
 /// existing tours. `shopping_list` is empty for new tours.
 /// Requires `EditEvent` permission.
 pub struct TourFormData {
-    pub stores: Vec<foodlib_new::store::Store>,
-    pub inventories: Vec<foodlib_new::inventory::Inventory>,
+    pub stores: Vec<store::Store>,
+    pub inventories: Vec<inventory::Inventory>,
     pub existing: Option<ShoppingTour>,
     pub event_inventories: Vec<EventInventory>,
     pub shopping_list: Vec<ShoppingListItem>,
 }
 
 pub async fn gather_tour_form(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
     tour_id: Option<ShoppingTourId>,
 ) -> Result<TourFormData> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
+    actor.assert_can_edit_event(event_id).await?;
     if let Some(id) = tour_id {
-        actor.ctx.assert_can_edit_shopping_tour(id).await?;
+        actor.assert_can_edit_shopping_tour(id).await?;
     }
 
-    let stores = state.stores().list().await?;
-    let inventories = state.inventories().list().await?;
+    let stores = state.db().stores().list().await?;
+    let inventories = state.db().inventories().list().await?;
     let (existing, event_inventories, shopping_list) = match tour_id {
         Some(id) => (
-            Some(state.events().get_shopping_tour(id).await?),
-            state.events().get_inventories(event_id).await?,
-            state.events().get_shopping_list(id).await?,
+            Some(state.db().events().get_shopping_tour(id).await?),
+            state.db().events().get_inventories(event_id).await?,
+            state.db().events().get_shopping_list(id).await?,
         ),
         None => (None, vec![], vec![]),
     };
@@ -274,12 +270,12 @@ pub async fn gather_tour_form(
 /// inventory that fails to read contributes no items). Used to annotate the
 /// shopping list with availability.
 pub async fn gather_inventory_items(
-    state: &MyAppState,
+    state: &AppState,
     event_inventories: &[EventInventory],
 ) -> Vec<InventoryItemWithName> {
     let mut all_items = vec![];
     for inv in event_inventories {
-        if let Ok(items) = state.inventories().get_items(inv.inventory_id).await {
+        if let Ok(items) = state.db().inventories().get_items(inv.inventory_id).await {
             all_items.extend(items);
         }
     }
@@ -287,34 +283,32 @@ pub async fn gather_inventory_items(
 }
 
 /// Fetches one shopping tour.
-pub async fn get_shopping_tour(
-    state: &MyAppState,
-    tour_id: ShoppingTourId,
-) -> Result<ShoppingTour> {
-    state.events().get_shopping_tour(tour_id).await
+pub async fn get_shopping_tour(state: &AppState, tour_id: ShoppingTourId) -> Result<ShoppingTour> {
+    state.db().events().get_shopping_tour(tour_id).await
 }
 
 /// Reads for the tour text export: the shopping list with per-recipe usage
 /// breakdown, the tour, and the event's attached inventories.
 /// Requires `EditShoppingTour` permission.
 pub struct TourExportReads {
-    pub shopping_list: Vec<foodlib_new::event::ShoppingListItemWithUsage>,
+    pub shopping_list: Vec<event::ShoppingListItemWithUsage>,
     pub tour: ShoppingTour,
     pub event_inventories: Vec<EventInventory>,
 }
 
 pub async fn gather_tour_export(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     tour_id: ShoppingTourId,
 ) -> Result<TourExportReads> {
-    actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    actor.assert_can_edit_shopping_tour(tour_id).await?;
     let shopping_list = state
+        .db()
         .events()
         .tour_shopping_list_with_usage(tour_id)
         .await?;
-    let tour = state.events().get_shopping_tour(tour_id).await?;
-    let event_inventories = state.events().get_inventories(tour.event_id).await?;
+    let tour = state.db().events().get_shopping_tour(tour_id).await?;
+    let event_inventories = state.db().events().get_inventories(tour.event_id).await?;
     Ok(TourExportReads {
         shopping_list,
         tour,
@@ -325,27 +319,32 @@ pub async fn gather_tour_export(
 /// Reads for the Metro CSV export.
 /// Requires `EditShoppingTour` permission.
 pub struct MetroExportReads {
-    pub shopping_list: Vec<foodlib_new::event::ShoppingListItemWithUsage>,
-    pub sources: Vec<foodlib_new::entities::ingredient::IngredientSource>,
+    pub shopping_list: Vec<event::ShoppingListItemWithUsage>,
+    pub sources: Vec<entities::ingredient::IngredientSource>,
     pub tour: ShoppingTour,
     pub event_inventories: Vec<EventInventory>,
     pub article_numbers: std::collections::HashMap<IngredientId, String>,
 }
 
 pub async fn gather_metro_export(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     tour_id: ShoppingTourId,
 ) -> Result<MetroExportReads> {
-    actor.ctx.assert_can_edit_shopping_tour(tour_id).await?;
+    actor.assert_can_edit_shopping_tour(tour_id).await?;
     let shopping_list = state
+        .db()
         .events()
         .tour_shopping_list_with_usage(tour_id)
         .await?;
-    let sources = state.ingredients().list_sources(None).await?;
-    let tour = state.events().get_shopping_tour(tour_id).await?;
-    let event_inventories = state.events().get_inventories(tour.event_id).await?;
-    let article_numbers = state.events().resolve_metro_article_numbers(tour_id).await?;
+    let sources = state.db().ingredients().list_sources(None).await?;
+    let tour = state.db().events().get_shopping_tour(tour_id).await?;
+    let event_inventories = state.db().events().get_inventories(tour.event_id).await?;
+    let article_numbers = state
+        .db()
+        .events()
+        .resolve_metro_article_numbers(tour_id)
+        .await?;
     Ok(MetroExportReads {
         shopping_list,
         sources,
@@ -365,16 +364,15 @@ pub struct MealPricesData {
 
 /// Collects all data needed to render the per-meal price cells.
 pub async fn gather_meal_prices(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
 ) -> Result<MealPricesData> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    let meals = state.meals().get_event_meals(event_id).await?;
-    let prices = state.meals().get_event_meal_prices(event_id).await?;
-    let price_by_meal: std::collections::HashMap<MealId, Amount> =
-        prices.into_iter().collect();
-    let budget = state.events().get(event_id).await?.budget;
+    actor.assert_can_edit_event(event_id).await?;
+    let meals = state.db().meals().get_event_meals(event_id).await?;
+    let prices = state.db().meals().get_event_meal_prices(event_id).await?;
+    let price_by_meal: std::collections::HashMap<MealId, Amount> = prices.into_iter().collect();
+    let budget = state.db().events().get(event_id).await?.budget;
 
     Ok(MealPricesData {
         meals,

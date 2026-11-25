@@ -1,25 +1,27 @@
-use crate::{AppCtx, MyAppState};
-use foodlib_new::Error;
-use foodlib_new::types::ids::{EventId, FoodPrepId, MealId, ShoppingTourId};
+use crate::types::ids::{EventId, FoodPrepId, MealId, ShoppingTourId};
+use crate::{AppCtx, AppState, Error};
+use crate::entities::event::{FoodPrep, ShoppingTour};
+use crate::entities::meal::Meal;
+use crate::entities::recipe::Recipe;
 
 /// Apply a drag/resize update from the timeline to a meal, shopping tour or
 /// food-prep task. Read-modify-write: the current row is fetched and only its
 /// time fields are patched, so no other data is trusted from the client.
 /// Requires `EditEvent` permission.
 pub async fn move_timeline_item(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
     kind: &str,
     item_id: i32,
     new_start: time::OffsetDateTime,
     new_end: Option<time::OffsetDateTime>,
-) -> foodlib_new::Result<()> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
+) -> crate::Result<()> {
+    actor.assert_can_edit_event(event_id).await?;
 
     match kind {
         "meal" => {
-            let m = state.meals().get_meal(MealId(item_id)).await?;
+            let m = state.db().meals().get_meal(MealId(item_id)).await?;
             // The timeline only shows items of `event_id`; reject a mismatched
             // id so one event's editor cannot move another event's row.
             if m.event_id != event_id {
@@ -34,6 +36,7 @@ pub async fn move_timeline_item(
                 .filter(|e| *e > new_start)
                 .unwrap_or(new_start + (m.end_time - m.start_time));
             state
+                .db()
                 .meals()
                 .update_meal(
                     m.meal_id,
@@ -49,6 +52,7 @@ pub async fn move_timeline_item(
         }
         "tour" => {
             let mut tour = state
+                .db()
                 .events()
                 .get_shopping_tour(ShoppingTourId(item_id))
                 .await?;
@@ -58,10 +62,10 @@ pub async fn move_timeline_item(
                 });
             }
             tour.tour_date = new_start;
-            state.events().update_shopping_tour(tour).await?;
+            state.db().events().update_shopping_tour(tour).await?;
         }
         "prep" => {
-            let mut prep = state.events().get_food_prep(FoodPrepId(item_id)).await?;
+            let mut prep = state.db().events().get_food_prep(FoodPrepId(item_id)).await?;
             if prep.event_id != event_id {
                 return Err(Error::Validation {
                     message: "food prep task does not belong to this event".into(),
@@ -75,7 +79,7 @@ pub async fn move_timeline_item(
             if let Some(from) = prep.use_from {
                 prep.use_from = Some(from + delta);
             }
-            state.events().update_food_prep(prep).await?;
+            state.db().events().update_food_prep(prep).await?;
         }
         other => {
             return Err(Error::Misc(format!("unknown kind: {other}")));
@@ -88,12 +92,40 @@ pub async fn move_timeline_item(
 /// that the first meal starts at `target`.
 /// Requires `EditEvent` permission.
 pub async fn shift_event_times(
-    state: &MyAppState,
+    state: &AppState,
     actor: &AppCtx,
     event_id: EventId,
     target: time::OffsetDateTime,
-) -> foodlib_new::Result<()> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    state.events().shift_event_times(event_id, target).await?;
+) -> crate::Result<()> {
+    actor.assert_can_edit_event(event_id).await?;
+    state.db().events().shift_event_times(event_id, target).await?;
     Ok(())
+}
+
+
+/// Everything needed to render an event's timeline.
+pub struct EventItemSources {
+    pub meals: Vec<Meal>,
+    pub tours: Vec<ShoppingTour>,
+    pub preps: Vec<FoodPrep>,
+    pub recipes: Vec<Recipe>,
+}
+
+/// Loads meals, shopping tours, food-prep tasks, and recipe names for an event.
+pub async fn gather_event_item_sources(
+    state: &AppState,
+    actor: &AppCtx,
+    event_id: EventId,
+) -> crate::Result<EventItemSources> {
+    actor.assert_can_edit_event(event_id).await?;
+    let meals = state.db().meals().get_event_meals(event_id).await?;
+    let tours = state.db().events().get_shopping_tours(event_id).await?;
+    let preps = state.db().events().get_food_prep_tasks(event_id).await?;
+    let recipes = state.db().recipes().list().await?;
+    Ok(EventItemSources {
+        meals,
+        tours,
+        preps,
+        recipes,
+    })
 }

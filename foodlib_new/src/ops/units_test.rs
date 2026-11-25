@@ -3,8 +3,9 @@
 use pretty_assertions::assert_eq;
 use std::str::FromStr;
 
-use crate::entities::types::amount::Amount;
-use crate::{entities::types::ids::UnitId, entities::unit::*, error::Error, ops::units::UnitOps};
+use crate::types::amount::Amount;
+use crate::types::ids::UnitId;
+use crate::{entities::unit::*, error::Error, ops::units::UnitOps};
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_create_unit(pool: sqlx::PgPool) {

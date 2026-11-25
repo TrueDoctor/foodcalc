@@ -1,7 +1,7 @@
+use crate::mapping::{map_event_to_typst, map_recipes_to_typst};
+use foodlib_new::exports::{EventAllergenInfo, RecipeInfo};
 use typst::foundations::{Dict, IntoValue};
 use typst_as_lib::{TypstEngine, TypstTemplateMainFile};
-use foodlib_new::ops::export::{EventAllergenInfo, RecipeInfo};
-use crate::mapping::{map_event_to_typst, map_recipes_to_typst};
 
 // Load assets once at compile time
 static RECIPE_TEMPLATE: &str = include_str!("../templates/recipe.typ");
@@ -11,7 +11,6 @@ static FONT_R: &[u8] = include_bytes!("../fonts/LinLibertine_R.ttf");
 static FONT_RI: &[u8] = include_bytes!("../fonts/LinLibertine_RI.ttf");
 static FONT_RB: &[u8] = include_bytes!("../fonts/LinLibertine_RB.ttf");
 static FONT_RBI: &[u8] = include_bytes!("../fonts/LinLibertine_RBI.ttf");
-
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum DishLabelLayout {

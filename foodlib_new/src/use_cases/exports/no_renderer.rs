@@ -1,6 +1,6 @@
-use foodlib_new::ops::export::{EventAllergenInfo, EventOverviewInfo, RecipeInfo};
-
 use super::{DishLabelLayout, PdfExporter, TourExportData};
+
+use crate::ops::export::{EventAllergenInfo, EventOverviewInfo, RecipeInfo};
 use crate::{Error, Result};
 
 pub struct NoRenderer;

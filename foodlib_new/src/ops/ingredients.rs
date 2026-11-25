@@ -1,13 +1,13 @@
 // foodlib_new/src/ops/ingredients.rs
 
-use crate::entities::types::amount::Amount;
-use crate::entities::types::money::Money;
+use crate::types::amount::Amount;
+use crate::types::ids::{
+    GroupId, IngredientId, IngredientSourceId, PropertyId, RecipeId, StoreId, UnitId, UserId,
+};
+use crate::types::money::Money;
 use crate::{
     entities::ingredient::*,
     entities::recipe::{Recipe, RecipeKind},
-    entities::types::ids::{
-        GroupId, IngredientId, IngredientSourceId, PropertyId, RecipeId, StoreId, UnitId, UserId,
-    },
     error::Result,
     Error,
 };

@@ -1,4 +1,4 @@
-use crate::entities::types::ids::{GroupId, UserId};
+use crate::types::ids::{GroupId, UserId};
 use crate::{
     entities::user::*,
     error::{Error, Result},
@@ -475,7 +475,7 @@ impl UserOps {
     }
 }
 
-pub async fn members_of_group(foodlib: &crate::FoodLib, group_id: GroupId) -> Result<Vec<User>> {
+pub async fn members_of_group(foodlib: &crate::ops::FoodLib, group_id: GroupId) -> Result<Vec<User>> {
     let pool = foodlib.pool_arc();
     let rows = sqlx::query_as!(
         User,

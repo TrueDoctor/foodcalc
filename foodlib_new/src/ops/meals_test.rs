@@ -4,12 +4,12 @@ use std::str::FromStr;
 
 use crate::{
     entities::meal::*,
-    entities::types::ids::{EventId, IngredientId, MealId, PlaceId, RecipeId},
     error::Error,
     ops::meals::MealOps,
 };
 
-use crate::entities::types::amount::Amount;
+use crate::types::amount::Amount;
+use crate::types::ids::{EventId, IngredientId, MealId, PlaceId, RecipeId};
 use pretty_assertions::assert_eq;
 use sqlx::PgPool;
 use std::sync::Arc;

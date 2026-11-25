@@ -22,8 +22,8 @@ use crate::entities::allergen::*;
 use crate::entities::property::Property;
 use crate::error::Result;
 
-use metro_scrape::article::{Article, Feature, FeatureMetaInfo};
 use crate::types::ids::IngredientId;
+use metro_scrape::article::{Article, Feature, FeatureMetaInfo};
 
 #[derive(Clone)]
 pub struct AllergenOps {

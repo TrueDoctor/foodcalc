@@ -3,7 +3,8 @@
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use crate::{entities::store::*, entities::types::ids::StoreId, error::Result};
+use crate::types::ids::StoreId;
+use crate::{entities::store::*, error::Result};
 
 #[derive(Clone)]
 pub struct StoreOps {

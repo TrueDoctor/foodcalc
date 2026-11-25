@@ -1,8 +1,10 @@
 use bigdecimal::ToPrimitive;
 use foodlib_new::entities::allergen::DietaryFlags;
-use foodlib_new::ops::export::{EventAllergenInfo, RecipeInfo};
+use foodlib_new::exports::{EventAllergenInfo, RecipeInfo};
 use time::format_description;
-use typst::foundations::{Array, Dict, IntoValue, Value}; // If you still pass BigDecimal from foodlib_new
+use typst::foundations::{Array, Dict, IntoValue, Value};
+
+// If you still pass BigDecimal from foodlib_new
 #[derive(Debug, Clone, Copy, Default)]
 pub enum DishLabelLayout {
     #[default]
@@ -28,8 +30,10 @@ pub fn map_recipes_to_typst(recipes: &[RecipeInfo]) -> Dict {
             if info.is_prep && !info.prep_for.is_empty() {
                 let mut prep_arr = Array::new();
                 for (name, pct) in &info.prep_for {
-                    prep_arr
-                        .push(Array::from_iter([name.clone().into_value(), pct.into_value()]).into_value());
+                    prep_arr.push(
+                        Array::from_iter([name.clone().into_value(), pct.into_value()])
+                            .into_value(),
+                    );
                 }
                 dict.insert("prep_for".into(), prep_arr.into_value());
             } else {
@@ -77,7 +81,10 @@ pub fn map_recipes_to_typst(recipes: &[RecipeInfo]) -> Dict {
 
             // Map Allergens
             let contains: Vec<String> = sub.properties.iter().map(|p| p.name.clone()).collect();
-            dict.insert("allergens".into(), Value::Dict(map_allergens(&sub.dietary, &contains)));
+            dict.insert(
+                "allergens".into(),
+                Value::Dict(map_allergens(&sub.dietary, &contains)),
+            );
 
             pages.push(dict.into_value());
         }

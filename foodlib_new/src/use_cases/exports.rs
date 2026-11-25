@@ -5,19 +5,22 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
-use crate::{Error, MyAppState, Result};
-use foodlib_new::entities::event::{ShoppingListItemWithUsage, ShoppingTour};
-use foodlib_new::entities::types::ids::{IngredientId, StoreId};
-use foodlib_new::ops::export::{EventAllergenInfo, EventOverviewInfo, RecipeInfo};
-use foodlib_new::types::amount::Amount;
+use crate::ctx::AppCtx;
+use crate::entities::event::{ShoppingListItemWithUsage, ShoppingTour};
+use crate::entities::ingredient::IngredientSource;
+use crate::entities::recipe::SubRecipe;
+use crate::types::amount::Amount;
+use crate::types::ids::{
+    EventId, FoodPrepId, IngredientId, MealId, RecipeId, ShoppingTourId, StoreId,
+};
+use crate::{AppState, Error, Result};
+
+// Re-export so `PdfExporter` and `fetch_*` signatures don't leak `pub(crate) mod ops`.
+pub use crate::ops::export::{EventAllergenInfo, EventOverviewInfo, RecipeInfo};
 
 pub mod csv;
 pub mod text;
-#[cfg(feature = "typst")]
-mod typst;
-#[cfg(not(feature = "typst"))]
 mod no_renderer;
-
 /// Finished export artifact returned by domain export use-cases.
 pub struct ExportedFile {
     pub filename: String,
@@ -55,16 +58,18 @@ pub struct TourExportData {
 }
 
 pub struct MetroExportContext {
-    pub sources: Vec<foodlib_new::entities::ingredient::IngredientSource>,
+    pub sources: Vec<IngredientSource>,
     pub article_numbers: HashMap<IngredientId, String>,
     /// The store the sources belong to (currently always the Metro store).
     pub store_id: StoreId,
 }
 
-/// Polymorphic PDF rendering backend stored once on [`MyAppState`].
+/// Polymorphic PDF rendering backend stored once on [`AppState`].
 pub trait PdfExporter: Send + Sync {
     fn export_recipes(&self, _infos: Vec<RecipeInfo>) -> Result<Vec<u8>> {
-        Err(Error::Misc("PDF export for recipes is not implemented".into()))
+        Err(Error::Misc(
+            "PDF export for recipes is not implemented".into(),
+        ))
     }
 
     fn export_event_allergens(&self, _info: EventAllergenInfo) -> Result<Vec<u8>> {
@@ -98,18 +103,11 @@ pub trait PdfExporter: Send + Sync {
 
 /// Instantiates the singleton PDF renderer once at server startup.
 pub fn default_pdf_exporter() -> Arc<dyn PdfExporter> {
-    #[cfg(feature = "typst")]
-    {
-        Arc::new(typst::TypstExporter::new())
-    }
-    #[cfg(not(feature = "typst"))]
-    {
-        Arc::new(no_renderer::NoRenderer)
-    }
+    Arc::new(no_renderer::NoRenderer)
 }
 
 /// Runs a Typst PDF render job on Tokio's blocking pool using the singleton engine.
-pub async fn render_pdf<F>(state: &MyAppState, filename: String, job: F) -> Result<ExportedFile>
+pub async fn render_pdf<F>(state: &AppState, filename: String, job: F) -> Result<ExportedFile>
 where
     F: FnOnce(&dyn PdfExporter) -> Result<Vec<u8>> + Send + 'static,
 {
@@ -136,66 +134,74 @@ pub fn sanitize_filename(name: &str) -> String {
 // the lib directly; all of these feed the `PdfExporter` or text/CSV writers.
 
 pub async fn fetch_meal_recipe(
-    state: &MyAppState,
-    meal_id: foodlib_new::entities::types::ids::MealId,
+    state: &AppState,
+    actor: &AppCtx,
+    meal_id: MealId,
 ) -> Result<RecipeInfo> {
-    state.export().fetch_meal_recipe(meal_id).await
+    actor.assert_can_edit_meal(meal_id).await?;
+    state.db().export().fetch_meal_recipe(meal_id).await
 }
 
 pub async fn fetch_food_prep_recipe(
-    state: &MyAppState,
-    prep_id: foodlib_new::entities::types::ids::FoodPrepId,
+    state: &AppState,
+    actor: &AppCtx,
+    prep_id: FoodPrepId,
 ) -> Result<RecipeInfo> {
-    state.export().fetch_food_prep_recipe(prep_id).await
+    actor.assert_can_edit_food_prep(prep_id).await?;
+    state.db().export().fetch_food_prep_recipe(prep_id).await
 }
 
 pub async fn fetch_user_input_meal(
-    state: &MyAppState,
-    recipe_id: foodlib_new::entities::types::ids::RecipeId,
+    state: &AppState,
+    recipe_id: RecipeId,
     servings: f64,
     energy_kj: u32,
 ) -> Result<RecipeInfo> {
     state
+        .db()
         .export()
         .fetch_user_input_meal(recipe_id, servings, energy_kj, String::new())
         .await
 }
 
 pub async fn fetch_subrecipes_from_user_input(
-    state: &MyAppState,
-    recipe_id: foodlib_new::entities::types::ids::RecipeId,
+    state: &AppState,
+    recipe_id: RecipeId,
     servings: f64,
     energy_kj: u32,
-) -> Result<Vec<foodlib_new::entities::recipe::SubRecipe>> {
+) -> Result<Vec<SubRecipe>> {
     state
+        .db()
         .export()
         .fetch_subrecipes_from_user_input(recipe_id, servings, energy_kj)
         .await
 }
 
 pub async fn fetch_event_allergens(
-    state: &MyAppState,
-    actor: &crate::app_ctx::AppCtx,
-    event_id: foodlib_new::entities::types::ids::EventId,
+    state: &AppState,
+    actor: &AppCtx,
+    event_id: EventId,
 ) -> Result<EventAllergenInfo> {
-    actor.ctx.assert_can_edit_event(event_id).await?;
-    state.export().fetch_event_allergens(event_id).await
+    actor.assert_can_edit_event(event_id).await?;
+    state.db().export().fetch_event_allergens(event_id).await
 }
 
 pub async fn fetch_event_combined(
-    state: &MyAppState,
-    event_id: foodlib_new::entities::types::ids::EventId,
+    state: &AppState,
+    actor: &AppCtx,
+    event_id: EventId,
 ) -> Result<Vec<RecipeInfo>> {
-    state.export().fetch_event_combined(event_id).await
+    actor.assert_can_edit_event(event_id).await?;
+    state.db().export().fetch_event_combined(event_id).await
 }
 
 /// Renders a shopping tour as a Metro order CSV: whole package counts per
 /// article (resolved via the Metro sync cache), minus what the event's
 /// attached inventories already cover. Requires `EditShoppingTour` permission.
 pub async fn render_metro_shopping_tour_csv(
-    state: &MyAppState,
-    actor: &crate::app_ctx::AppCtx,
-    tour_id: foodlib_new::entities::types::ids::ShoppingTourId,
+    state: &AppState,
+    actor: &AppCtx,
+    tour_id: ShoppingTourId,
 ) -> Result<ExportedFile> {
     use crate::events::shopping::{gather_inventory_items, gather_metro_export};
 
@@ -235,9 +241,9 @@ pub async fn render_metro_shopping_tour_csv(
 /// the event's attached inventories already cover and showing proportional
 /// package prices. Requires `EditShoppingTour` permission.
 pub async fn render_shopping_tour_txt(
-    state: &MyAppState,
-    actor: &crate::app_ctx::AppCtx,
-    tour_id: foodlib_new::entities::types::ids::ShoppingTourId,
+    state: &AppState,
+    actor: &AppCtx,
+    tour_id: ShoppingTourId,
 ) -> Result<ExportedFile> {
     use crate::events::shopping::{gather_inventory_items, gather_tour_export};
 
