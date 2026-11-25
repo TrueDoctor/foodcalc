@@ -36,14 +36,20 @@ It is available at `/`.
 
 ```text
 foodcalc/
-├── server/                 # Axum web server for server-rendered UI
-├── typst_export/           # Typst templating and PDF rendering engine
-├── foodlib_new/            # Core domain library: ops, entities, RBAC policy, SQLx migrations
-├── metro-scrape/           # Metro supplier catalog & price synchronization
-├── foodlib/                # Legacy data layer (being phased out)
-└── cli-client/             # Legacy CLI client (being phased out)
-``` 
+├── server/          # Axum web server for server-rendered UI (HTMX)
+├── status-api/      # Read-only JSON status dashboard service
+├── typst-renderer/  # Typst templating and PDF rendering engine
+├── foodlib_new/     # Core domain library
+├── metro-scrape/    # Metro supplier catalog & price synchronization
+├── foodlib/         # Legacy data layer (being phased out)
+└── cli-client/      # Legacy CLI client (being phased out)
+```
 
+foodlib_new is the core domain library, containing all business logic and data access. It encapsulates the access to the database and provides a clean API for the server.
+The application logic in the usecases allows the clients to be slim and let them reuse the same logic, making it easier to add new clients in the future and let them all behave the same way.
+Therefore the clients can focus on their own concerns for displaying the data.
+
+Using dependency inversion, the typst-renderer crate is optional and can be registered as a PDF exporter implementation. This allows for the server to be built without typst, and for the typst-renderer to be swapped out for another implementation if needed.
 
 ## Development
 
