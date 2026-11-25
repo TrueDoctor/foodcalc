@@ -1,4 +1,4 @@
-use crate::entities::types::ids::{IngredientId, PropertyId, RecipeId};
+use crate::types::ids::{IngredientId, PropertyId, RecipeId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
-use crate::entities::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId};
+use crate::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId};
 
-use crate::entities::types::amount::Amount;
+use crate::types::amount::Amount;
 use serde::{Deserialize, Serialize};
 use time::Duration;
 

@@ -144,3 +144,45 @@ pub struct DietaryFlags {
     pub lactose_free_trace: bool,
     pub gluten_free_trace: bool,
 }
+
+use crate::entities::property::Property;
+
+impl DietaryFlags {
+    pub fn from_properties(properties: &[Property]) -> Self {
+        let names: Vec<String> = properties.iter().map(|p| p.name.to_lowercase()).collect();
+        let has = |targets: &[&str]| targets.iter().any(|t| names.iter().any(|n| n == t));
+        let has_trace = |targets: &[&str]| {
+            targets
+                .iter()
+                .any(|t| names.iter().any(|n| n == &format!("~spuren-{t}")))
+        };
+
+        let meat_or_fish = [canonical::FLEISCH, canonical::SCHWEIN, canonical::FISCH];
+        let dairy = [canonical::MILCHPRODUKT, canonical::KAESE, canonical::MILCH];
+        let eggs = [canonical::EI_PRODUKT, canonical::EIER];
+        let gluten = [canonical::GLUTEN, canonical::WEIZEN];
+
+        let vegetarian = !has(&meat_or_fish);
+        let vegetarian_trace = vegetarian && has_trace(&meat_or_fish);
+
+        let vegan = vegetarian && !has(&dairy) && !has(&eggs);
+        let vegan_trace = vegan && (vegetarian_trace || has_trace(&dairy) || has_trace(&eggs));
+
+        let lactose_free = !has(&dairy);
+        let lactose_free_trace = lactose_free && has_trace(&dairy);
+
+        let gluten_free = !has(&gluten);
+        let gluten_free_trace = gluten_free && has_trace(&gluten);
+
+        Self {
+            vegan,
+            vegetarian,
+            lactose_free,
+            gluten_free,
+            vegan_trace,
+            vegetarian_trace,
+            lactose_free_trace,
+            gluten_free_trace,
+        }
+    }
+}

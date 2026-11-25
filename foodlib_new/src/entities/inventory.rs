@@ -1,6 +1,6 @@
-use crate::entities::types::ids::{GroupId, IngredientId, InventoryId};
+use crate::types::ids::{GroupId, IngredientId, InventoryId};
 
-use crate::entities::types::amount::Amount;
+use crate::types::amount::Amount;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

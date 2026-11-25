@@ -1,10 +1,10 @@
-use crate::entities::types::ids::{
-    EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, InventoryId, PlaceId, RecipeId,
-    StoreId, ShoppingTourId,
+use crate::types::ids::{
+    EventId, FoodPrepId, GroupId, IngredientId, IngredientSourceId, InventoryId, PlaceId, RecipeId, ShoppingTourId,
+    StoreId,
 };
 
-use crate::entities::types::amount::Amount;
-use crate::entities::types::money::Money;
+use crate::types::amount::Amount;
+use crate::types::money::Money;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 

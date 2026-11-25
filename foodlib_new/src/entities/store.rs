@@ -1,5 +1,5 @@
-use crate::entities::types::ids::StoreId;
-use crate::entities::types::money::Money;
+use crate::types::ids::StoreId;
+use crate::types::money::Money;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

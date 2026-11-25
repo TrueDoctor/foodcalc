@@ -1,4 +1,4 @@
-use crate::entities::types::ids::{GroupId, UserId};
+use crate::types::ids::{GroupId, UserId};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 

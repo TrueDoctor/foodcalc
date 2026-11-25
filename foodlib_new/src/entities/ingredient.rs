@@ -1,7 +1,7 @@
-use crate::entities::types::ids::{GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId, UnitId};
+use crate::types::ids::{GroupId, IngredientId, IngredientSourceId, PropertyId, StoreId, UnitId};
 
-use crate::entities::types::amount::Amount;
-use crate::entities::types::money::Money;
+use crate::types::amount::Amount;
+use crate::types::money::Money;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

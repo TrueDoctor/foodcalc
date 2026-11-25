@@ -1,6 +1,6 @@
-use crate::entities::types::ids::{EventId, IngredientId, MealId, PlaceId, RecipeId};
+use crate::types::ids::{EventId, IngredientId, MealId, PlaceId, RecipeId};
 
-use crate::entities::types::amount::Amount;
+use crate::types::amount::Amount;
 use serde::{Deserialize, Serialize};
 use time::{macros::time, OffsetDateTime};
 
