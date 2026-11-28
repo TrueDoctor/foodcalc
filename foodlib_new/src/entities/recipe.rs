@@ -1,7 +1,6 @@
 use crate::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId};
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::types::PgInterval;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recipe {
@@ -31,8 +30,8 @@ pub struct RecipeStep {
     pub order: f64, // TODO: use a proper ordering type instead of f64
     pub name: String,
     pub description: String,
-    pub fixed_duration: PgInterval,  // duration in seconds
-    pub duration_per_kg: PgInterval, // duration in seconds per kg
+    pub fixed_duration: time::Duration,  // duration in seconds
+    pub duration_per_kg: time::Duration, // duration in seconds per kg
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

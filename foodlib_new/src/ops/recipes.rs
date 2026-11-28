@@ -286,7 +286,7 @@ impl RecipeOps {
     // Recipe Steps
     pub async fn add_step(&self, step: RecipeStep) -> Result<RecipeStep> {
         let record = sqlx::query_as!(
-            RecipeStep,
+            RecipeStepDB,
             r#"
             INSERT INTO steps (recipe_id, step_order, step_name, step_description,
                              fixed_duration, duration_per_kg)
@@ -300,18 +300,19 @@ impl RecipeOps {
             step.order,
             step.name,
             step.description,
-            step.fixed_duration,
-            step.duration_per_kg,
+            duration_to_pg_interval(step.fixed_duration),
+            duration_to_pg_interval(step.duration_per_kg)
         )
         .fetch_one(&*self.pool)
         .await?;
 
-        Ok(record)
+        let recipe_step: RecipeStep = record.into();
+        Ok(recipe_step)
     }
 
     pub async fn update_step(&self, step: RecipeStep) -> Result<RecipeStep> {
         let record = sqlx::query_as!(
-            RecipeStep,
+            RecipeStepDB,
             r#"
             UPDATE steps
             SET step_order = $2, step_name = $3, step_description = $4,
@@ -327,8 +328,8 @@ impl RecipeOps {
             step.order,
             step.name,
             step.description,
-            step.fixed_duration,
-            step.duration_per_kg,
+            duration_to_pg_interval(step.fixed_duration),
+            duration_to_pg_interval(step.duration_per_kg),
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -337,7 +338,8 @@ impl RecipeOps {
             id: step.id.to_string(),
         })?;
 
-        Ok(record)
+        let recipe_step: RecipeStep = record.into();
+        Ok(recipe_step)
     }
 
     pub async fn delete_step(&self, recipe_id: RecipeId, step_id: RecipeStepId) -> Result<()> {
@@ -364,7 +366,7 @@ impl RecipeOps {
 
     pub async fn get_steps(&self, recipe_id: RecipeId) -> Result<Vec<RecipeStep>> {
         let records = sqlx::query_as!(
-            RecipeStep,
+            RecipeStepDB,
             r#"
             SELECT
                 step_id as id, recipe_id, step_order as "order",
@@ -379,6 +381,7 @@ impl RecipeOps {
         .fetch_all(&*self.pool)
         .await?;
 
+        let records: Vec<RecipeStep> = records.into_iter().map(|r| r.into()).collect();
         Ok(records)
     }
 
@@ -656,8 +659,8 @@ impl RecipeOps {
                 step.order,
                 step.name,
                 step.description,
-                step.fixed_duration,
-                step.duration_per_kg,
+                duration_to_pg_interval(step.fixed_duration),
+                duration_to_pg_interval(step.duration_per_kg),
             )
             .execute(&mut *tx)
             .await?;
@@ -665,5 +668,42 @@ impl RecipeOps {
 
         tx.commit().await?;
         Ok(())
+    }
+}
+
+struct RecipeStepDB {
+    id: i32,
+    recipe_id: i32,
+    order: f64,
+    name: String,
+    description: String,
+    fixed_duration: sqlx::postgres::types::PgInterval,
+    duration_per_kg: sqlx::postgres::types::PgInterval,
+}
+
+impl From<RecipeStepDB> for RecipeStep {
+    fn from(row: RecipeStepDB) -> Self {
+        Self {
+            id: RecipeStepId(row.id),
+            recipe_id: RecipeId(row.recipe_id),
+            order: row.order,
+            name: row.name,
+            description: row.description,
+            fixed_duration: pg_interval_to_duration(&row.fixed_duration),
+            duration_per_kg: pg_interval_to_duration(&row.duration_per_kg),
+        }
+    }
+}
+
+fn pg_interval_to_duration(interval: &sqlx::postgres::types::PgInterval) -> time::Duration {
+    time::Duration::days(interval.days as i64)
+        + time::Duration::microseconds(interval.microseconds)
+}
+
+fn duration_to_pg_interval(duration: time::Duration) -> sqlx::postgres::types::PgInterval {
+    sqlx::postgres::types::PgInterval {
+        months: 0,
+        days: 0,
+        microseconds: duration.whole_microseconds() as i64,
     }
 }

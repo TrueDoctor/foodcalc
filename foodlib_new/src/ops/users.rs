@@ -4,9 +4,7 @@ use crate::{
     error::{Error, Result},
 };
 use sqlx::PgPool;
-use std::collections::HashMap;
 use std::sync::Arc;
-use time::OffsetDateTime;
 
 #[derive(Clone, Debug)]
 pub struct UserOps {

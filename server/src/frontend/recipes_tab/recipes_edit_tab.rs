@@ -1,9 +1,14 @@
 use crate::FoodLib;
+use crate::{
+    frontend::{icons, move_group, MResponse},
+    MyAppState,
+};
 use axum::{
     extract::{Form, Path},
     routing::{delete, put},
 };
 use bigdecimal::BigDecimal;
+use foodlib_new::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId};
 use foodlib_new::{
     auth_context::AuthCtx,
     recipe::{RecipeIngredient, RecipeMetaIngredient, RecipeStep},
@@ -11,12 +16,7 @@ use foodlib_new::{
 };
 use maud::{html, Markup};
 use serde::Deserialize;
-use sqlx::postgres::types::PgInterval;
-use foodlib_new::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId};
-use crate::{
-    frontend::{icons, move_group, MResponse},
-    MyAppState,
-};
+use time::Duration;
 
 pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
     axum::Router::new()
@@ -112,19 +112,15 @@ impl From<UpdateRecipeStepHeader> for RecipeStep {
             order: value.step_order,
             name: value.step_name,
             description: value.step_description,
-            fixed_duration: pg_interval_from_minutes(value.fixed_duration_minutes),
-            duration_per_kg: pg_interval_from_minutes(value.duration_per_kg_minutes),
+            fixed_duration: minutes_to_duration(value.fixed_duration_minutes),
+            duration_per_kg: minutes_to_duration(value.duration_per_kg_minutes),
             recipe_id: value.recipe_id,
         }
     }
 }
 
-fn pg_interval_from_minutes(minutes: f64) -> PgInterval {
-    PgInterval {
-        months: 0,
-        days: 0,
-        microseconds: (60_000_000. * minutes) as i64,
-    }
+fn minutes_to_duration(minutes: f64) -> Duration {
+    Duration::minutes(minutes as i64)
 }
 
 pub async fn handle_name_change(
@@ -642,8 +638,8 @@ impl StepTableFormattable for RecipeStep {
                 td class="step-drag-handle no-label text-center cursor-grab opacity-60 select-none" title="Drag to reorder" { "⋮⋮" }
                 td data-label="Name" { input class=(format!("text {}",form_id)) name=("step_name") value=(self.name) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
                 td data-label="Description" { input class=(format!("text {}",form_id)) name="step_description" value=(self.description) hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td data-label="Duration (min)" { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", (self.fixed_duration.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
-                td data-label="Per kg (min)" { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", (self.duration_per_kg.microseconds / 1_000_000) as f64 / 60.)) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td data-label="Duration (min)" { input class=(format!("text {}",form_id)) name="fixed_duration_minutes" value=(format!("{}", self.fixed_duration.as_seconds_f64() / 60.0 )) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
+                td data-label="Per kg (min)" { input class=(format!("text {}",form_id)) name="duration_per_kg_minutes" value=(format!("{}", self.duration_per_kg.as_seconds_f64() / 60.0 )) required="required" hx-put="/recipes/edit/change-step" hx-target=(format!("#step-{}", self.id)) hx-include=(format!(".{}", form_id)) hx-trigger="change" hx-swap="outerHTML" hx-indicator=".htmx-indicator"; }
                 td class="no-label" { button class="icon-btn" title="Delete" aria-label="Delete" hx-target="#contents" type="button" hx-delete=(format!("/recipes/edit/delete-step/{}/{}", recipe_id, self.id)) hx-include=(format!(".{}", form_id)) { (icons::delete()) } }
             }
         }
