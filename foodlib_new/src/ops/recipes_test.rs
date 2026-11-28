@@ -1,6 +1,7 @@
 use crate::entities::recipe::*;
 use crate::ops::recipes::*;
 use bigdecimal::BigDecimal;
+use crate::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId};
 use core::time;
 use pretty_assertions::assert_eq;
 use sqlx::PgPool;
@@ -9,10 +10,10 @@ use std::sync::Arc;
 
 async fn create_test_recipe(ops: &RecipeOps) -> Recipe {
     ops.create(Recipe {
-        id: -1,
+        id: RecipeId::invalid(),
         name: "Test Recipe".to_string(),
         comment: Some("Test Comment".to_string()),
-        group_id: 1,
+        group_id: GroupId(1),
         weighed_in: false,
     })
     .await
@@ -26,7 +27,7 @@ async fn test_create_recipe(pool: PgPool) {
     let recipe = create_test_recipe(&ops).await;
     assert_eq!(recipe.name, "Test Recipe");
     assert_eq!(recipe.comment, Some("Test Comment".to_string()));
-    assert!(recipe.id > 0);
+    assert!(recipe.id.is_valid());
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -77,7 +78,7 @@ async fn test_recipe_steps(pool: PgPool) {
 
     // Add step
     let step = RecipeStep {
-        id: -1,
+        id: RecipeStepId(-1),
         recipe_id: recipe.id,
         order: 1.0,
         name: "Test Step".to_string(),
@@ -121,10 +122,10 @@ async fn test_meta_recipes(pool: PgPool) {
     let parent_recipe = create_test_recipe(&ops).await;
     let child_recipe = ops
         .create(Recipe {
-            id: -1,
+            id: RecipeId::invalid(),
             name: "Child Recipe".to_string(),
             comment: None,
-            group_id: 1,
+            group_id: GroupId(1),
             weighed_in: false,
         })
         .await
@@ -164,21 +165,21 @@ async fn test_recipe_ingredients(pool: PgPool) {
 
     // Simple Pasta (ID: 1) already has an ingredient and meta-recipe
     let ingredients = ops
-        .get_ingredients(1)
+        .get_ingredients(RecipeId(1))
         .await
         .expect("Failed to get ingredients");
 
     assert_eq!(ingredients.len(), 1);
-    assert_eq!(ingredients[0].ingredient_id, 1); // Pasta
+    assert_eq!(ingredients[0].ingredient_id, IngredientId(1)); // Pasta
     assert_eq!(ingredients[0].amount, BigDecimal::from(500)); // 500g
-    assert_eq!(ingredients[0].unit_id, 1); // grams
+    assert_eq!(ingredients[0].unit_id, UnitId(1)); // grams
 
     // Add new ingredient
     let new_ingredient = RecipeIngredient {
-        recipe_id: 1,
-        ingredient_id: 4, // Olive Oil
+        recipe_id: RecipeId(1),
+        ingredient_id: IngredientId(4), // Olive Oil
         amount: BigDecimal::from_str("2.0").unwrap(),
-        unit_id: 3, // mL
+        unit_id: UnitId(3), // mL
         name: None,
     };
 
@@ -188,7 +189,7 @@ async fn test_recipe_ingredients(pool: PgPool) {
 
     // Verify ingredients after addition
     let ingredients = ops
-        .get_ingredients(1)
+        .get_ingredients(RecipeId(1))
         .await
         .expect("Failed to get ingredients");
     assert_eq!(ingredients.len(), 2);
@@ -204,12 +205,12 @@ async fn test_recipe_ingredients(pool: PgPool) {
         .expect("Failed to update ingredient");
 
     // Delete ingredient
-    ops.delete_ingredient(1, 4)
+    ops.delete_ingredient(RecipeId(1), IngredientId(4))
         .await
         .expect("Failed to delete ingredient");
 
     let ingredients = ops
-        .get_ingredients(1)
+        .get_ingredients(RecipeId(1))
         .await
         .expect("Failed to get ingredients");
     assert_eq!(ingredients.len(), 1);
@@ -227,7 +228,7 @@ async fn test_search_by_ingredients(pool: PgPool) {
         .expect("Failed to search recipes");
 
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].id, 2); // Basic Cake
+    assert_eq!(results[0].id, RecipeId(2)); // Basic Cake
     assert_eq!(results[0].name, "Basic Cake");
 
     // Search for recipes containing tomatoes (id: 2)
@@ -238,7 +239,8 @@ async fn test_search_by_ingredients(pool: PgPool) {
         .expect("Failed to search recipes");
 
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].id, 3); // Tomato Sauce
+    assert_eq!(results[0].id, RecipeId(3)); // Tomato Sauce
+    // assert_eq!(results[0].name, "Tomato Sauce");
 
     // Search for pasta (id: 1) and tomatoes (id: 2)
     // Should find both Simple Pasta (id: 1) and Tomato Sauce (id: 3)
@@ -248,8 +250,8 @@ async fn test_search_by_ingredients(pool: PgPool) {
         .expect("Failed to search recipes");
 
     assert_eq!(results.len(), 2);
-    assert!(results.iter().any(|r| r.id == 1)); // Simple Pasta
-    assert!(results.iter().any(|r| r.id == 3)); // Tomato Sauce
+    assert!(results.iter().any(|r| r.id == RecipeId(1))); // Simple Pasta
+    assert!(results.iter().any(|r| r.id == RecipeId(3))); // Tomato Sauce
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -259,36 +261,36 @@ async fn test_update_recipe_entries(pool: PgPool) {
     // Update Simple Pasta (ID: 1)
     let regular_ingredients = vec![
         RecipeIngredient {
-            recipe_id: 1,
-            ingredient_id: 1,              // Pasta
+            recipe_id: RecipeId(1),
+            ingredient_id: IngredientId(1),  // Pasta
             amount: BigDecimal::from(400), // 400g
-            unit_id: 1,                    // grams
+            unit_id: UnitId(1),              // grams
             name: None,
         },
         RecipeIngredient {
-            recipe_id: 1,
-            ingredient_id: 4,             // Olive Oil
-            amount: BigDecimal::from(30), // 30mL
-            unit_id: 3,                   // milliliters
+            recipe_id: RecipeId(1),
+            ingredient_id: IngredientId(4),  // Olive Oil
+            amount: BigDecimal::from(30),  // 30mL
+            unit_id: UnitId(3),              // milliliters
             name: None,
         },
     ];
 
     let meta_ingredients = vec![RecipeMetaIngredient {
-        parent_id: 1,
-        child_id: 3,                                  // Tomato Sauce
+        parent_id: RecipeId(1),
+        child_id: RecipeId(3),                       // Tomato Sauce
         weight: BigDecimal::from_str("0.4").unwrap(), // 400g
         name: None,
     }];
 
     // Update recipe entries
-    ops.update_recipe_entries(1, regular_ingredients.clone(), meta_ingredients.clone())
+    ops.update_recipe_entries(RecipeId(1), regular_ingredients.clone(), meta_ingredients.clone())
         .await
         .expect("Failed to update recipe entries");
 
     // Verify regular ingredients
     let ingredients = ops
-        .get_ingredients(1)
+        .get_ingredients(RecipeId(1))
         .await
         .expect("Failed to get ingredients");
     assert_eq!(ingredients.len(), 2);
@@ -302,29 +304,29 @@ async fn test_update_recipe_entries(pool: PgPool) {
     let ingredients: Vec<_> = ingredients.into_iter().map(|i| i.1).collect();
 
     // Check pasta ingredient
-    assert_eq!(ingredients[0].ingredient_id, 1);
+    assert_eq!(ingredients[0].ingredient_id, IngredientId(1));
     assert_eq!(ingredients[0].amount, BigDecimal::from(400));
-    assert_eq!(ingredients[0].unit_id, 1);
+    assert_eq!(ingredients[0].unit_id, UnitId(1));
 
     // Check olive oil ingredient
-    assert_eq!(ingredients[1].ingredient_id, 4);
+    assert_eq!(ingredients[1].ingredient_id, IngredientId(4));
     assert_eq!(ingredients[1].amount, BigDecimal::from(30));
-    assert_eq!(ingredients[1].unit_id, 3);
+    assert_eq!(ingredients[1].unit_id, UnitId(3));
 
     // Verify meta recipes (direct relationships only)
     let meta_recipes = ops
-        .get_meta_ingredients(1)
+        .get_meta_ingredients(RecipeId(1))
         .await
         .expect("Failed to get meta ingredients");
 
     assert_eq!(meta_recipes.len(), 1);
-    assert_eq!(meta_recipes[0].parent_id, 1);
-    assert_eq!(meta_recipes[0].child_id, 3); // Tomato Sauce
+    assert_eq!(meta_recipes[0].parent_id, RecipeId(1));
+    assert_eq!(meta_recipes[0].child_id, RecipeId(3)); // Tomato Sauce
     assert_eq!(meta_recipes[0].weight, BigDecimal::from_str("0.4").unwrap());
 
     // Verify meta recipe
     let resolved = ops
-        .get_resolved_recipe(1)
+        .get_resolved_recipe(RecipeId(1))
         .await
         .expect("Failed to get resolved recipe");
 

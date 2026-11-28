@@ -1,9 +1,12 @@
+use crate::types::ids::{GroupId, UserId};
 use crate::{
     entities::user::*,
     error::{Error, Result},
 };
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
+use time::OffsetDateTime;
 
 #[derive(Clone, Debug)]
 pub struct UserOps {
@@ -21,7 +24,7 @@ impl UserOps {
             r#"
             INSERT INTO users (username, email, password_hash, is_admin, created_at)
             VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, username, email, password_hash, is_admin, created_at
+            RETURNING id as "id: UserId", username, email, password_hash, is_admin, created_at
             "#,
             user.username,
             user.email,
@@ -42,13 +45,13 @@ impl UserOps {
             UPDATE users
             SET username = $1, email = $2, password_hash = $3, is_admin = $4
             WHERE id = $5
-            RETURNING id, username, email, password_hash, is_admin, created_at
+            RETURNING id as "id: UserId", username, email, password_hash, is_admin, created_at
             "#,
             user.username,
             user.email,
             user.password_hash,
             user.is_admin,
-            user.id
+            user.id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -56,7 +59,7 @@ impl UserOps {
         Ok(row)
     }
 
-    pub async fn update_password(&self, id: i64, password: String) -> Result<User> {
+    pub async fn update_password(&self, id: UserId, password: String) -> Result<User> {
         let password_hash = bcrypt::hash(password, 12)?;
 
         let user = sqlx::query_as!(
@@ -64,10 +67,10 @@ impl UserOps {
             r#"
             UPDATE users SET password_hash = $1
             WHERE id = $2
-            RETURNING id, username, email, password_hash, is_admin, created_at
+            RETURNING id as "id: UserId", username, email, password_hash, is_admin, created_at
             "#,
             password_hash,
-            id
+            id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -75,8 +78,8 @@ impl UserOps {
         Ok(user)
     }
 
-    pub async fn delete_user(&self, id: i64) -> Result<()> {
-        sqlx::query!(r#"DELETE FROM users WHERE id = $1"#, id)
+    pub async fn delete_user(&self, id: UserId) -> Result<()> {
+        sqlx::query!(r#"DELETE FROM users WHERE id = $1"#, id.get())
             .execute(&*self.pool)
             .await?;
 
@@ -86,7 +89,7 @@ impl UserOps {
     /// Deletes a user and their personal group, plus all their group memberships.
     /// Refuses if the user's personal group still owns any recipes, ingredients,
     /// inventories, or events.
-    pub async fn delete_user_cascade(&self, id: i64) -> Result<()> {
+    pub async fn delete_user_cascade(&self, id: UserId) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
         let personal_group_id = sqlx::query_scalar!(
@@ -96,7 +99,7 @@ impl UserOps {
             JOIN groups g ON g.id = ug.group_id
             WHERE ug.user_id = $1 AND g.is_personal = TRUE
             "#,
-            id
+            id.get()
         )
         .fetch_optional(&mut *tx)
         .await?;
@@ -125,8 +128,13 @@ impl UserOps {
                 });
             }
         }
-
-        sqlx::query!(r#"DELETE FROM user_groups WHERE user_id = $1"#, id)
+        sqlx::query!(
+            r#"
+            DELETE FROM user_groups
+                   WHERE user_id = $1
+           "#,
+            id.get()
+        )
             .execute(&mut *tx)
             .await?;
 
@@ -136,7 +144,7 @@ impl UserOps {
                 .await?;
         }
 
-        sqlx::query!(r#"DELETE FROM users WHERE id = $1"#, id)
+        sqlx::query!(r#"DELETE FROM users WHERE id = $1"#, id.get())
             .execute(&mut *tx)
             .await?;
 
@@ -144,15 +152,15 @@ impl UserOps {
         Ok(())
     }
 
-    pub async fn get_user(&self, id: i64) -> Result<User> {
+    pub async fn get_user(&self, id: UserId) -> Result<User> {
         let row = sqlx::query_as!(
             User,
             r#"
-            SELECT id, username, email, password_hash, is_admin, created_at
+            SELECT id as "id: UserId", username, email, password_hash, is_admin, created_at
             FROM users
             WHERE id = $1
             "#,
-            id
+            id.get()
         )
         .fetch_optional(&*self.pool)
         .await?;
@@ -168,7 +176,7 @@ impl UserOps {
         sqlx::query_as!(
             User,
             r#"
-            SELECT id, username, email, password_hash, is_admin, created_at
+            SELECT id as "id: UserId", username, email, password_hash, is_admin, created_at
             FROM users
             WHERE id = $1 OR username = $2 OR email = $2
             "#,
@@ -184,7 +192,7 @@ impl UserOps {
         let rows = sqlx::query_as!(
             User,
             r#"
-            SELECT id, username, email, password_hash, is_admin, created_at
+            SELECT id as "id: UserId", username, email, password_hash, is_admin, created_at
             FROM users
             ORDER BY username
             "#
@@ -204,7 +212,7 @@ impl UserOps {
             r#"
             INSERT INTO users (username, email, password_hash, is_admin, created_at)
             VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, username, email, password_hash, is_admin, created_at
+            RETURNING id as "id: UserId", username, email, password_hash, is_admin, created_at
             "#,
             user.username,
             user.email,
@@ -220,7 +228,7 @@ impl UserOps {
             r#"
             INSERT INTO groups (name, is_personal)
             VALUES ($1, TRUE)
-            RETURNING id, name, is_personal
+            RETURNING id as "id: GroupId", name, is_personal
             "#,
             created.username
         )
@@ -228,9 +236,12 @@ impl UserOps {
         .await?;
 
         sqlx::query!(
-            r#"INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2)"#,
-            created.id,
-            group.id
+            r#"
+            INSERT INTO user_groups (user_id, group_id)
+            VALUES ($1, $2)
+            "#,
+            created.id.get(),
+            group.id.get()
         )
         .execute(&mut *tx)
         .await?;
@@ -245,7 +256,7 @@ impl UserOps {
             r#"
             INSERT INTO groups (name, is_personal)
             VALUES ($1, FALSE)
-            RETURNING id, name, is_personal
+            RETURNING id as "id: GroupId", name, is_personal
             "#,
             name
         )
@@ -255,11 +266,14 @@ impl UserOps {
         Ok(row)
     }
 
-    pub async fn add_user_to_group(&self, user_id: i64, group_id: i32) -> Result<()> {
-        sqlx::query!(
-            r#"INSERT INTO user_groups (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"#,
-            user_id,
-            group_id
+    pub async fn add_user_to_group(&self, user_id: UserId, group_id: GroupId) -> Result<()> {
+        sqlx::query!(r#"
+            INSERT INTO user_groups (user_id, group_id)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+            "#,
+            user_id.get(),
+            group_id.get()
         )
         .execute(&*self.pool)
         .await?;
@@ -267,11 +281,14 @@ impl UserOps {
         Ok(())
     }
 
-    pub async fn remove_user_from_group(&self, user_id: i64, group_id: i32) -> Result<()> {
-        sqlx::query!(
-            r#"DELETE FROM user_groups WHERE user_id = $1 AND group_id = $2"#,
-            user_id,
-            group_id
+    /// Removes a user from a group.
+    pub async fn remove_user_from_group(&self, user_id: UserId, group_id: GroupId) -> Result<()> {
+        sqlx::query!(r#"
+            DELETE FROM user_groups
+            WHERE user_id = $1 AND group_id = $2
+            "#,
+            user_id.get(),
+            group_id.get()
         )
         .execute(&*self.pool)
         .await?;
@@ -279,17 +296,17 @@ impl UserOps {
         Ok(())
     }
 
-    pub async fn get_user_groups(&self, user_id: i64) -> Result<Vec<Group>> {
+    pub async fn get_user_groups(&self, user_id: UserId) -> Result<Vec<Group>> {
         let rows = sqlx::query_as!(
             Group,
             r#"
-            SELECT g.id, g.name, g.is_personal
-            FROM user_groups ug
-            JOIN groups g ON ug.group_id = g.id
-            WHERE ug.user_id = $1
+            SELECT DISTINCT g.id as "id: GroupId", g.name, g.is_personal
+            FROM user_groups ugr
+            JOIN groups g ON ugr.group_id = g.id
+            WHERE ugr.user_id = $1
             ORDER BY g.is_personal DESC, g.name
             "#,
-            user_id
+            user_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -297,7 +314,7 @@ impl UserOps {
         Ok(rows)
     }
 
-    pub async fn get_personal_group(&self, user_id: i64) -> Result<Group> {
+    pub async fn get_personal_group(&self, user_id: UserId) -> Result<Group> {
         sqlx::query_as!(
             Group,
             r#"
@@ -306,7 +323,7 @@ impl UserOps {
             JOIN groups g ON ug.group_id = g.id
             WHERE ug.user_id = $1 AND g.is_personal = TRUE
             "#,
-            user_id
+            user_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -316,11 +333,11 @@ impl UserOps {
         })
     }
 
-    pub async fn get_group(&self, id: i32) -> Result<Group> {
+    pub async fn get_group(&self, id: GroupId) -> Result<Group> {
         let row = sqlx::query_as!(
             Group,
-            r#"SELECT id, name, is_personal FROM groups WHERE id = $1"#,
-            id
+            r#"SELECT id as "id: GroupId", name, is_personal FROM groups WHERE id = $1"#,
+            id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -333,9 +350,11 @@ impl UserOps {
     }
 
     pub async fn get_all_groups(&self) -> Result<Vec<Group>> {
-        let rows = sqlx::query_as!(
-            Group,
-            r#"SELECT id, name, is_personal FROM groups ORDER BY is_personal DESC, name"#
+        let rows = sqlx::query_as!(Group, r#"
+            SELECT id as "id: GroupId", name, is_personal
+            FROM groups
+            ORDER BY is_personal DESC, name
+            "#
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -343,13 +362,28 @@ impl UserOps {
         Ok(rows)
     }
 
-    pub async fn delete_group(&self, id: i32) -> Result<()> {
-        sqlx::query!(r#"DELETE FROM user_groups WHERE group_id = $1"#, id)
-            .execute(&*self.pool)
+    pub async fn delete_group(&self, id: GroupId) -> Result<()> {
+        // Transactional: remove all memberships first, then delete the group itself.
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query!(r#"
+            DELETE FROM user_groups
+               WHERE group_id = $1
+           "#,
+            id.get()
+        )
+            .execute(&mut *tx)
             .await?;
-        sqlx::query!(r#"DELETE FROM groups WHERE id = $1"#, id)
-            .execute(&*self.pool)
+
+        sqlx::query!(r#"
+            DELETE FROM groups
+            WHERE id = $1
+            "#, id.get())
+
+            .execute(&mut *tx)
             .await?;
+
+        tx.commit().await?;
         Ok(())
     }
 }

@@ -22,6 +22,7 @@ use crate::entities::allergen::*;
 use crate::entities::property::Property;
 use crate::error::Result;
 
+use crate::types::ids::IngredientId;
 use metro_scrape::article::{Article, Feature, FeatureMetaInfo};
 
 #[derive(Clone)]
@@ -154,7 +155,7 @@ impl AllergenOps {
     /// `ON CONFLICT DO NOTHING`.
     pub async fn apply_to_ingredient(
         &self,
-        ingredient_id: i32,
+        ingredient_id: IngredientId,
         properties: &[ClassifiedProperty],
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
@@ -173,7 +174,7 @@ impl AllergenOps {
                 sqlx::query!(
                     r#"INSERT INTO ingredient_properties (ingredient_id, property_id)
                        VALUES ($1, $2) ON CONFLICT DO NOTHING"#,
-                    ingredient_id,
+                    ingredient_id.get(),
                     existing
                 )
                 .execute(&mut *tx)
@@ -188,11 +189,11 @@ impl AllergenOps {
                 sqlx::query!(
                     r#"INSERT INTO ingredient_properties (ingredient_id, property_id)
                        VALUES ($1, $2) ON CONFLICT DO NOTHING"#,
-                    ingredient_id,
+                    ingredient_id.get(),
                     created
                 )
-                .execute(&mut *tx)
-                .await?;
+                    .execute(&mut *tx)
+                    .await?;
             }
         }
 
@@ -580,10 +581,11 @@ pub fn compact_allergen_set(names: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::ids::PropertyId;
 
     fn p(name: &str) -> Property {
         Property {
-            id: 0,
+            id: PropertyId(0),
             name: name.to_string(),
         }
     }

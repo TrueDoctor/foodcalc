@@ -1,23 +1,18 @@
 // foodlib_new/src/ops/units_test.rs
 
-use bigdecimal::BigDecimal;
 use pretty_assertions::assert_eq;
 use std::str::FromStr;
-
+use bigdecimal::BigDecimal;
+use crate::types::ids::UnitId;
 use crate::{entities::unit::*, error::Error, ops::units::UnitOps};
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
 async fn test_create_unit(pool: sqlx::PgPool) {
     let ops = UnitOps::new(pool.into());
 
-    let unit = Unit {
-        id: -1,
-        name: "Test Unit".to_string(),
-    };
-
-    let created = ops.create(unit.clone()).await.unwrap();
-    assert_eq!(created.name, unit.name);
-    assert!(created.id > 0);
+    let created = ops.create("Test Unit").await.unwrap();
+    assert_eq!(created.name, "Test Unit");
+    assert!(created.id.is_valid());
 
     // Verify it exists in DB
     let fetched = ops.get(created.id).await.unwrap();
@@ -29,11 +24,11 @@ async fn test_get_unit(pool: sqlx::PgPool) {
     let ops = UnitOps::new(pool.into());
 
     // Get existing unit from fixture (kg with id 0)
-    let unit = ops.get(0).await.unwrap();
+    let unit = ops.get(UnitId(0)).await.unwrap();
     assert_eq!(unit.name, "kg");
 
     // Test getting non-existent unit
-    let err = ops.get(9999).await.unwrap_err();
+    let err = ops.get(UnitId(9999)).await.unwrap_err();
     assert!(matches!(err, Error::Database(_)));
 }
 
@@ -43,10 +38,7 @@ async fn test_update_unit(pool: sqlx::PgPool) {
 
     // Create a test unit to update
     let unit = ops
-        .create(Unit {
-            id: -1,
-            name: "Test Unit".to_string(),
-        })
+        .create("Test Unit")
         .await
         .unwrap();
 
@@ -71,17 +63,14 @@ async fn test_delete_unit(pool: sqlx::PgPool) {
 
     // Create temporary unit to delete
     let unit = ops
-        .create(Unit {
-            id: -1,
-            name: "To Delete".to_string(),
-        })
+        .create("To Delete")
         .await
         .unwrap();
 
     // Add a test conversion
     let conversion = UnitConversion {
         from_unit: unit.id,
-        to_unit: 0, // kg
+        to_unit: UnitId::unset(), // kg
         from_amount: BigDecimal::from(1),
         to_amount: BigDecimal::from(1),
     };
@@ -103,10 +92,10 @@ async fn test_list_units(pool: sqlx::PgPool) {
 
     // Verify units from fixture are present
     let kg = units.iter().find(|u| u.name == "kg").unwrap();
-    assert_eq!(kg.id, 0);
+    assert_eq!(kg.id, UnitId(0));
 
     let g = units.iter().find(|u| u.name == "g").unwrap();
-    assert_eq!(g.id, 1);
+    assert_eq!(g.id, UnitId(1));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -115,8 +104,8 @@ async fn test_unit_conversion_crud(pool: sqlx::PgPool) {
 
     // Test adding conversion
     let conversion = UnitConversion {
-        from_unit: 5, // slice
-        to_unit: 0,   // kg
+        from_unit: UnitId(5), // slice
+        to_unit: UnitId(0),   // kg
         from_amount: BigDecimal::from(1000),
         to_amount: BigDecimal::from(1),
     };
@@ -147,13 +136,13 @@ async fn test_unit_conversion_crud(pool: sqlx::PgPool) {
         );
     }
     // Test fetching conversion
-    let fetched = ops.get_conversion(5, 0).await.unwrap();
+    let fetched = ops.get_conversion(UnitId(5), UnitId(0)).await.unwrap();
     assert!(fetched.is_some());
     // Conversion factor should be 0.001 (1kg = 1000g)
     assert_eq!(fetched.unwrap(), BigDecimal::from_str("0.001").unwrap());
 
     // Test deleting conversion
-    ops.delete_conversion(5, 0).await.unwrap();
+    ops.delete_conversion(UnitId(5), UnitId(0)).await.unwrap();
     ops.refresh_conversions()
         .await
         .expect("failed to refresh conversions");
@@ -161,7 +150,7 @@ async fn test_unit_conversion_crud(pool: sqlx::PgPool) {
     let conversions = ops.get_all_conversions().await.unwrap();
     assert!(!conversions
         .iter()
-        .any(|c| c.from_unit == 5 && c.to_unit == 0));
+        .any(|c| c.from_unit == UnitId(5) && c.to_unit == UnitId(0)));
 }
 
 #[sqlx::test(fixtures("../fixtures/minimal.sql"))]
@@ -184,8 +173,8 @@ async fn test_conversion_calculations(pool: sqlx::PgPool) {
     let result = ops
         .convert_unit(
             BigDecimal::from(1000), // 1000g
-            1,                      // from g
-            0,                      // to kg
+            UnitId(1),          // from g
+            UnitId(0),          // to kg
         )
         .await
         .unwrap();
@@ -196,8 +185,8 @@ async fn test_conversion_calculations(pool: sqlx::PgPool) {
     let result = ops
         .convert_unit(
             BigDecimal::from(1000), // 1000g
-            1,                      // from g
-            2,                      // to L
+            UnitId(1),          // from g
+            UnitId(2),          // to L
         )
         .await
         .unwrap();
@@ -208,8 +197,8 @@ async fn test_conversion_calculations(pool: sqlx::PgPool) {
     let err = ops
         .convert_unit(
             BigDecimal::from(1),
-            9999, // invalid unit
-            0,
+            UnitId(9999), // invalid unit
+            UnitId(0),
         )
         .await
         .unwrap_err();
@@ -229,15 +218,15 @@ async fn test_all_conversions(pool: sqlx::PgPool) {
     // Check some basic conversions from fixture
     assert!(conversions
         .iter()
-        .any(|c| c.from_unit == 1 && c.to_unit == 0)); // g to kg
+        .any(|c| c.from_unit == UnitId(1) && c.to_unit == UnitId(0))); // g to kg
     assert!(conversions
         .iter()
-        .any(|c| c.from_unit == 3 && c.to_unit == 2)); // mL to L
+        .any(|c| c.from_unit == UnitId(3) && c.to_unit == UnitId(2))); // mL to L
 
     // Calculate and verify some conversion factors
     let g_to_kg = conversions
         .iter()
-        .find(|c| c.from_unit == 1 && c.to_unit == 0)
+        .find(|c| c.from_unit == UnitId(1) && c.to_unit == UnitId(0))
         .unwrap();
 
     assert_eq!(
