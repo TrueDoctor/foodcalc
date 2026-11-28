@@ -1,9 +1,10 @@
+use crate::types::ids::{GroupId, UserId};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    pub id: i64,
+    pub id: UserId,
     pub username: String,
     pub email: String,
     pub password_hash: String,
@@ -14,7 +15,7 @@ pub struct User {
 impl Default for User {
     fn default() -> Self {
         Self {
-            id: -1,
+            id: UserId::invalid(),
             username: "test".into(),
             email: "test@example.com".into(),
             password_hash: "test".into(),
@@ -26,13 +27,13 @@ impl Default for User {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Group {
-    pub id: i32,
+    pub id: GroupId,
     pub name: String,
     pub is_personal: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserGroup {
-    pub user_id: i64,
-    pub group_id: i32,
+    pub user_id: UserId,
+    pub group_id: GroupId,
 }

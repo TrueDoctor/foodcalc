@@ -10,6 +10,7 @@ pub mod auth_context;
 pub mod entities;
 pub mod error;
 pub mod ops;
+pub mod types;
 #[cfg(feature = "typst")]
 pub mod typst;
 

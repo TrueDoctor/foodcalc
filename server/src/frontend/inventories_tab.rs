@@ -12,7 +12,7 @@ use foodlib_new::{
 };
 use maud::{html, Markup};
 use serde::Deserialize;
-
+use foodlib_new::types::ids::{GroupId, IngredientId, InventoryId};
 use super::MResponse;
 use crate::frontend::{icons, move_group};
 use crate::MyAppState;
@@ -51,12 +51,12 @@ pub struct ListFilters {
 }
 
 impl ListFilters {
-    fn open_ids(&self) -> Vec<i32> {
+    fn open_ids(&self) -> Vec<InventoryId> {
         self.open
             .as_deref()
             .unwrap_or("")
             .split(',')
-            .filter_map(|s| s.trim().parse::<i32>().ok())
+            .filter_map(|s| s.trim().parse::<i32>().ok().map(InventoryId))
             .collect()
     }
 
@@ -84,7 +84,7 @@ async fn list_view(
     }
 }
 
-fn render_list(inventories: &[Inventory], open: &[i32], filter: &str) -> Markup {
+fn render_list(inventories: &[Inventory], open: &[InventoryId], filter: &str) -> Markup {
     html! {
         // Inline page glue: <details> URL-sync + Sortable.js wiring. Defined
         // once per list render; the htmx:load handler is idempotent so re-runs
@@ -263,14 +263,14 @@ fn render_row_markup(inv: &Inventory, open: bool, filter: &str) -> Markup {
     }
 }
 
-async fn render_row(foodlib: FoodLib, Path(id): Path<i32>) -> MResponse {
+async fn render_row(foodlib: FoodLib, Path(id): Path<InventoryId>) -> MResponse {
     let inv = foodlib.inventories().get(id).await?;
     Ok(render_row_markup(&inv, false, ""))
 }
 
 async fn contents_view(
     foodlib: FoodLib,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
     Query(filters): Query<ContentsFilters>,
 ) -> MResponse {
     render_contents(&foodlib, id, filters.filter.as_deref().unwrap_or("")).await
@@ -282,7 +282,7 @@ pub struct ContentsFilters {
     pub filter: Option<String>,
 }
 
-async fn render_contents(foodlib: &FoodLib, inventory_id: i32, filter: &str) -> MResponse {
+async fn render_contents(foodlib: &FoodLib, inventory_id: InventoryId, filter: &str) -> MResponse {
     let mut items = foodlib.inventories().get_items(inventory_id).await?;
     if !filter.is_empty() {
         let needle = filter.to_lowercase();
@@ -322,7 +322,7 @@ async fn render_contents(foodlib: &FoodLib, inventory_id: i32, filter: &str) -> 
 ///   match a datalist option, so the browser blocks submit with a native
 ///   tooltip; the button additionally calls `reportValidity()` on click so
 ///   the message is shown immediately rather than only on blur.
-fn add_item_row(inventory_id: i32) -> Markup {
+fn add_item_row(inventory_id: InventoryId) -> Markup {
     let list_id = format!("ingredients-{}", inventory_id);
     // Inline handler: resolves the typed name to an ingredient id by looking
     // up the matching `<option data-id>` in the associated datalist. Runs on
@@ -365,7 +365,7 @@ fn add_item_row(inventory_id: i32) -> Markup {
     }
 }
 
-fn item_row(inventory_id: i32, item: &InventoryItemWithName) -> Markup {
+fn item_row(inventory_id: InventoryId, item: &InventoryItemWithName) -> Markup {
     let row_id = format!("inv-{}-item-{}", inventory_id, item.ingredient_id);
     html! {
         tr id=(row_id)
@@ -405,7 +405,7 @@ async fn create_inventory(
     foodlib
         .inventories()
         .create(Inventory {
-            id: -1,
+            id: InventoryId::invalid(),
             name: form.name,
             group_id: group.id,
         })
@@ -417,13 +417,13 @@ async fn create_inventory(
 #[derive(Deserialize)]
 struct RenameForm {
     name: String,
-    group_id: i32,
+    group_id: GroupId,
 }
 
 async fn rename_inventory(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
     Form(form): Form<RenameForm>,
 ) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
@@ -441,7 +441,7 @@ async fn rename_inventory(
     Ok(render_row_markup(&inv, false, ""))
 }
 
-async fn edit_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<i32>) -> MResponse {
+async fn edit_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<InventoryId>) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
     let inv = foodlib.inventories().get(id).await?;
     let owner_select = move_group::owner_select(&foodlib, &ctx, inv.group_id).await?;
@@ -469,7 +469,7 @@ async fn edit_row(foodlib: FoodLib, ctx: AuthCtx, Path(id): Path<i32>) -> MRespo
 async fn delete_inventory(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
 ) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
     foodlib.inventories().delete(id).await?;
@@ -479,21 +479,21 @@ async fn delete_inventory(
 
 #[derive(Deserialize)]
 struct AddItemForm {
-    ingredient_id: i32,
+    ingredient_id: IngredientId,
     amount: BigDecimal,
 }
 
 async fn add_item(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(id): Path<i32>,
+    Path(id): Path<InventoryId>,
     Form(form): Form<AddItemForm>,
 ) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
     // -1 means the client-side datalist match failed (user typed a name with
     // no matching ingredient). Bail out without mutating; the unchanged
     // contents render keeps their input where it is so they can correct it.
-    if form.ingredient_id < 0 {
+    if !form.ingredient_id.is_valid() {
         return render_contents(&foodlib, id, "").await;
     }
 
@@ -519,7 +519,7 @@ struct UpdateAmountForm {
 async fn update_item_amount(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((id, ingredient_id)): Path<(i32, i32)>,
+    Path((id, ingredient_id)): Path<(InventoryId, IngredientId)>,
     Form(form): Form<UpdateAmountForm>,
 ) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
@@ -542,7 +542,7 @@ async fn update_item_amount(
 async fn delete_item(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((id, ingredient_id)): Path<(i32, i32)>,
+    Path((id, ingredient_id)): Path<(InventoryId, IngredientId)>,
 ) -> MResponse {
     ctx.assert_can_edit_inventory(id).await?;
     foodlib
@@ -560,7 +560,7 @@ async fn delete_item(
 async fn move_item(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((from_id, ingredient_id, to_id)): Path<(i32, i32, i32)>,
+    Path((from_id, ingredient_id, to_id)): Path<(InventoryId, IngredientId, InventoryId)>,
 ) -> MResponse {
     if from_id == to_id {
         return render_contents(&foodlib, to_id, "").await;

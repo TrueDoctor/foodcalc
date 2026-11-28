@@ -19,7 +19,7 @@ pub struct Credentials {
 }
 
 impl AuthUser for User {
-    type Id = i64;
+    type Id = crate::types::ids::UserId;
 
     fn id(&self) -> Self::Id {
         self.id
@@ -134,7 +134,7 @@ pub async fn register(
     backend
         .user_ops
         .create_user_with_personal_group(User {
-            id: -1,
+            id: crate::types::ids::UserId::invalid(),
             username: credentials.username,
             email,
             password_hash: bcrypt::hash(&credentials.password, 12).unwrap(),
@@ -148,7 +148,7 @@ pub async fn register(
 
 pub async fn change_password(
     backend: &AuthBackend,
-    user_id: i64,
+    user_id: crate::types::ids::UserId,
     new_password: String,
 ) -> Result<User> {
     backend

@@ -12,7 +12,7 @@ use time::OffsetDateTime;
 
 use crate::{FoodLib, MyAppState};
 use foodlib_new::auth_context::AuthCtx;
-
+use foodlib_new::types::ids::{GroupId, UserId};
 use crate::frontend::MResponse;
 
 pub(crate) fn users_router() -> axum::Router<MyAppState> {
@@ -134,7 +134,7 @@ async fn create_user(
         });
     }
     let user = User {
-        id: -1,
+        id: UserId::invalid(),
         username: username.to_string(),
         email: email.to_string(),
         password_hash: String::new(),
@@ -157,17 +157,17 @@ async fn create_user(
 async fn user_detail_view(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(user_id): Path<i64>,
+    Path(user_id): Path<UserId>,
 ) -> MResponse {
     assert_admin(&ctx)?;
     render_user_detail(&foodlib, user_id).await
 }
 
-async fn render_user_detail(foodlib: &foodlib_new::FoodLib, user_id: i64) -> MResponse {
+async fn render_user_detail(foodlib: &foodlib_new::FoodLib, user_id: UserId) -> MResponse {
     let user = foodlib.users().get_user(user_id).await?;
     let user_groups = foodlib.users().get_user_groups(user_id).await?;
     let all_groups = foodlib.users().get_all_groups().await?;
-    let member_ids: std::collections::HashSet<i32> = user_groups.iter().map(|g| g.id).collect();
+    let member_ids: std::collections::HashSet<GroupId> = user_groups.iter().map(|g| g.id).collect();
     let candidate_groups: Vec<&Group> = all_groups
         .iter()
         .filter(|g| !g.is_personal && !member_ids.contains(&g.id))
@@ -270,7 +270,7 @@ struct UpdateUserForm {
 async fn update_user(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(user_id): Path<i64>,
+    Path(user_id): Path<UserId>,
     Form(form): Form<UpdateUserForm>,
 ) -> MResponse {
     assert_admin(&ctx)?;
@@ -284,7 +284,7 @@ async fn update_user(
 async fn toggle_admin(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(user_id): Path<i64>,
+    Path(user_id): Path<UserId>,
 ) -> MResponse {
     assert_admin(&ctx)?;
     if user_id == ctx.user.id {
@@ -306,7 +306,7 @@ struct PasswordForm {
 async fn set_password(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(user_id): Path<i64>,
+    Path(user_id): Path<UserId>,
     Form(form): Form<PasswordForm>,
 ) -> MResponse {
     assert_admin(&ctx)?;
@@ -322,7 +322,7 @@ async fn set_password(
 async fn delete_user(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(user_id): Path<i64>,
+    Path(user_id): Path<UserId>,
 ) -> MResponse {
     assert_admin(&ctx)?;
     if user_id == ctx.user.id {
@@ -336,13 +336,13 @@ async fn delete_user(
 
 #[derive(Deserialize)]
 struct AddGroupForm {
-    group_id: i32,
+    group_id: GroupId,
 }
 
 async fn add_to_group(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(user_id): Path<i64>,
+    Path(user_id): Path<UserId>,
     Form(form): Form<AddGroupForm>,
 ) -> MResponse {
     assert_admin(&ctx)?;
@@ -356,7 +356,7 @@ async fn add_to_group(
 async fn remove_from_group(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((user_id, group_id)): Path<(i64, i32)>,
+    Path((user_id, group_id)): Path<(UserId, GroupId)>,
 ) -> MResponse {
     assert_admin(&ctx)?;
     let group = foodlib.users().get_group(group_id).await?;

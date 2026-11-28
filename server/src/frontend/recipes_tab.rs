@@ -9,7 +9,7 @@ use foodlib_new::recipe::Recipe;
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
-
+use foodlib_new::types::ids::{GroupId, RecipeId};
 use super::MResponse;
 use crate::frontend::{icons, LOGIN_URL};
 use crate::MyAppState;
@@ -62,7 +62,7 @@ pub async fn search(
     })
 }
 
-pub async fn export_recipe(Path(recipe_id): Path<i32>) -> Markup {
+pub async fn export_recipe(Path(recipe_id): Path<RecipeId>) -> Markup {
     html! {
          dialog class="dialog" id="popup" open="open" {
              div class="flex flex-col items-center justify-center p-2" {
@@ -95,7 +95,7 @@ pub struct ExportRecipe {
 
 pub async fn export_recipe_pdf(
     State(state): State<MyAppState>,
-    Path(recipe_id): Path<i32>,
+    Path(recipe_id): Path<RecipeId>,
     Form(form): Form<ExportRecipe>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), foodlib_new::Error> {
     let energy = form.energy;
@@ -134,7 +134,7 @@ pub async fn export_recipe_pdf(
 
 pub async fn shopping_list(
     State(state): State<MyAppState>,
-    Path(recipe_id): Path<i32>,
+    Path(recipe_id): Path<RecipeId>,
     Form(form): Form<ExportRecipe>,
 ) -> MResponse {
     let energy = form.energy;
@@ -172,7 +172,7 @@ pub async fn shopping_list(
 pub async fn delete_recipe_nqa(
     foodlib: FoodLib,
     user: User,
-    Path(recipe_id): Path<i32>,
+    Path(recipe_id): Path<RecipeId>,
 ) -> MResponse {
     // Only admins can delete recipes
     if !user.is_admin {
@@ -185,7 +185,7 @@ pub async fn delete_recipe_nqa(
     Ok(recipes_view(foodlib, Some(user)).await)
 }
 
-pub async fn delete_recipe(Path(recipe_id): Path<i32>, user: User) -> Markup {
+pub async fn delete_recipe(Path(recipe_id): Path<RecipeId>, user: User) -> Markup {
     // Only show delete dialog if user is admin
     if !user.is_admin {
         return html! {};
@@ -287,7 +287,7 @@ async fn add_recipe(
 ) -> MResponse {
     let group = foodlib.users().get_personal_group(ctx.user.id).await?;
     let recipe = Recipe {
-        id: -1,
+        id: RecipeId::invalid(),
         name: recipe_data.name,
         comment: recipe_data.comment,
         group_id: group.id,
@@ -301,7 +301,7 @@ async fn add_recipe(
 async fn fetch_recipes_and_groups(
     foodlib: &FoodLib,
     user: Option<&User>,
-) -> Result<(Vec<Recipe>, Vec<i32>), foodlib_new::Error> {
+) -> Result<(Vec<Recipe>, Vec<GroupId>), foodlib_new::Error> {
     let recipes = foodlib.recipes().list().await?;
     let user_group_ids = match user {
         Some(u) => foodlib
@@ -316,11 +316,11 @@ async fn fetch_recipes_and_groups(
     Ok((recipes, user_group_ids))
 }
 
-fn can_edit(group_id: i32, user_group_ids: &[i32], user: &User) -> bool {
+fn can_edit(group_id: GroupId, user_group_ids: &[GroupId], user: &User) -> bool {
     user.is_admin || user_group_ids.contains(&group_id)
 }
 
-fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[i32]) -> Markup {
+fn format_recipe(recipe: &Recipe, user: Option<&User>, user_group_ids: &[GroupId]) -> Markup {
     let can_edit_this = user.map_or(false, |u| can_edit(recipe.group_id, user_group_ids, u));
     let is_admin = user.map_or(false, |u| u.is_admin);
     let comment = recipe.comment.as_deref().unwrap_or("").trim().to_string();
@@ -372,7 +372,7 @@ fn pretty_property(name: &str) -> String {
     }
 }
 
-async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<i32>) -> MResponse {
+async fn allergens_dialog(foodlib: FoodLib, Path(recipe_id): Path<RecipeId>) -> MResponse {
     let rp = foodlib
         .properties()
         .get_recipe_properties(recipe_id)

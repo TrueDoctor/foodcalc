@@ -44,8 +44,16 @@ pub mod canonical {
 
     /// Curated common avoidances (non-EU-14). Extend this list as guest needs
     /// dictate; each entry needs a matching rule in `classify_avoidance_label`.
-    pub const AVOIDANCES: &[&str] =
-        &[ZWIEBEL, KNOBLAUCH, PILZ, APFEL, KAROTTE, KICHERERBSE, ZITRUS, GUAR];
+    pub const AVOIDANCES: &[&str] = &[
+        ZWIEBEL,
+        KNOBLAUCH,
+        PILZ,
+        APFEL,
+        KAROTTE,
+        KICHERERBSE,
+        ZITRUS,
+        GUAR,
+    ];
 
     /// All canonical names users can attach via the UI, ordered for display.
     /// Broad dietary classes first, then EU-14 allergens, then common avoidances.

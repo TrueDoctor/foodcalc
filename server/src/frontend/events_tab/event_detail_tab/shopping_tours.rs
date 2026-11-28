@@ -13,7 +13,7 @@ use maud::{html, Markup};
 use num::{ToPrimitive, Zero};
 use serde::Deserialize;
 use time::{macros::format_description, OffsetDateTime};
-
+use foodlib_new::types::ids::{EventId, IngredientId, InventoryId, ShoppingTourId, StoreId};
 use crate::{
     frontend::{events_tab::event_detail_tab, IResponse, MResponse},
     FoodLib, MyAppState,
@@ -38,36 +38,36 @@ pub(crate) fn shopping_tour_router() -> axum::Router<MyAppState> {
 
 #[derive(Deserialize)]
 struct TourForm {
-    event_id: i32,
-    tour_id: Option<i32>,
-    store_id: i32,
+    event_id: EventId,
+    tour_id: Option<ShoppingTourId>,
+    store_id: StoreId,
     date: String,
 }
 
 #[derive(Deserialize)]
 struct ToggleForm {
     checked: bool,
-    tour_id: i32,
+    tour_id: ShoppingTourId,
 }
 
 async fn add_shopping_tour(
     state: State<MyAppState>,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
-    shopping_tour_form(state, ctx, Path((event_id, -1))).await
+    shopping_tour_form(state, ctx, Path((event_id, ShoppingTourId::invalid()))).await
 }
 #[derive(Deserialize)]
 struct InlineTourForm {
-    store_id: i32,
+    store_id: StoreId,
     date: String,
 }
 
 async fn create_inline(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(event_id): Path<i32>,
+    Path(event_id): Path<EventId>,
     Form(form): Form<InlineTourForm>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
@@ -75,7 +75,7 @@ async fn create_inline(
     foodlib
         .events()
         .add_shopping_tour(ShoppingTour {
-            id: -1,
+            id: ShoppingTourId::invalid(),
             event_id,
             tour_date,
             store_id: form.store_id,
@@ -106,7 +106,7 @@ pub(crate) fn parse_datetime_local(s: &str) -> Result<OffsetDateTime> {
 async fn delete_shopping_tour(
     state: State<MyAppState>,
     ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
+    Path(tour_id): Path<ShoppingTourId>,
 ) -> MResponse {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
     state.events().delete_shopping_tour(tour_id).await?;
@@ -116,10 +116,10 @@ async fn delete_shopping_tour(
 async fn shopping_tour_form(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path((event_id, tour_id)): Path<(i32, i32)>,
+    Path((event_id, tour_id)): Path<(EventId, ShoppingTourId)>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
-    if tour_id > 0 {
+    if tour_id.is_valid() {
         ctx.assert_can_edit_shopping_tour(tour_id).await?;
     }
     let stores = state.stores().list().await?;
@@ -127,19 +127,19 @@ async fn shopping_tour_form(
 
     let mut default_tour = ShoppingTour {
         event_id,
-        id: -1,
+        id: ShoppingTourId::invalid(),
         tour_date: OffsetDateTime::now_utc(),
-        store_id: 0,
+        store_id: StoreId::unset(),
         store_name: None,
     };
 
-    if tour_id != -1 {
+    if tour_id.is_valid() || tour_id.is_unset() {
         default_tour = state.events().get_shopping_tour(tour_id).await?;
     }
 
     // If tour_id is provided, get existing tour data. `default_tour` was already
     // loaded by `get_shopping_tour(tour_id)` above, so reuse it directly.
-    let (tour, event_inventories, shopping_list) = if tour_id > 0 {
+    let (tour, event_inventories, shopping_list) = if tour_id.is_valid() {
         (
             default_tour,
             state.events().get_inventories(event_id).await?,
@@ -148,7 +148,7 @@ async fn shopping_tour_form(
     } else {
         (default_tour, vec![], vec![])
     };
-    let tour_id = if tour_id < 0 { None } else { Some(tour_id) };
+    let tour_id = if !tour_id.is_valid() { None } else { Some(tour_id) };
 
     let inventory_items = inventory_items(tour_id, &event_inventories, &state).await;
 
@@ -167,7 +167,7 @@ async fn shopping_tour_form(
                 // Form section - takes full width on mobile, half on desktop
                 form class="w-full lg:w-1/2 space-y-4" hx-post="/events/edit/shopping_tours/save" hx-target="#content" {
                     input type="hidden" name="event_id" value=(event_id);
-                    input type="hidden" name="tour_id" value=(tour_id.unwrap_or(-1));
+                    input type="hidden" name="tour_id" value=(tour_id.unwrap_or(ShoppingTourId::invalid()));
 
                     div class="flex flex-col space-y-2" {
                         label for="store_id" { "Store" }
@@ -285,7 +285,7 @@ async fn shopping_tour_form(
 }
 
 async fn inventory_items(
-    tour_id: Option<i32>,
+    tour_id: Option<ShoppingTourId>,
     event_inventories: &Vec<foodlib_new::event::EventInventory>,
     lib: &foodlib_new::FoodLib,
 ) -> Vec<InventoryItemWithName> {
@@ -311,7 +311,7 @@ async fn save_tour(
 ) -> MResponse {
     ctx.assert_can_edit_event(form.event_id).await?;
     if let Some(tour_id) = form.tour_id {
-        if tour_id > 0 {
+        if tour_id.is_valid() {
             ctx.assert_can_edit_shopping_tour(tour_id).await?;
         }
     }
@@ -325,7 +325,7 @@ async fn save_tour(
 
     // Create or update tour
     let result = match form.tour_id {
-        Some(tour_id) if tour_id > 0 => {
+        Some(tour_id) if tour_id.is_valid() => {
             foodlib
                 .events()
                 .update_shopping_tour(foodlib_new::event::ShoppingTour {
@@ -341,7 +341,7 @@ async fn save_tour(
             foodlib
                 .events()
                 .add_shopping_tour(foodlib_new::event::ShoppingTour {
-                    id: -1,
+                    id: ShoppingTourId::invalid(),
                     event_id: form.event_id,
                     tour_date,
                     store_id: form.store_id,
@@ -383,7 +383,7 @@ fn get_inventory_amount(
 }
 
 fn get_inventory_amount_by_id(
-    ingredient_id: i32,
+    ingredient_id: IngredientId,
     inventory: &[InventoryItemWithName],
 ) -> BigDecimal {
     inventory
@@ -408,7 +408,7 @@ fn get_inventory_status(item: &ShoppingListItem, inventory: &[InventoryItemWithN
 async fn export_plain(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
+    Path(tour_id): Path<ShoppingTourId>,
 ) -> IResponse {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
     // Single query: tour shopping list + per-recipe usage breakdown.
@@ -487,7 +487,7 @@ fn format_recipe_usage(usages: &[(String, BigDecimal)]) -> String {
 async fn export_metro(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
+    Path(tour_id): Path<ShoppingTourId>,
 ) -> IResponse {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
     // Single query: tour shopping list + per-recipe usage breakdown.
@@ -586,7 +586,7 @@ fn calculate_subtraction(available: &BigDecimal, remaining: &BigDecimal) -> BigD
 async fn toggle_inventory(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path((event_id, inventory_id)): Path<(i32, i32)>,
+    Path((event_id, inventory_id)): Path<(EventId, InventoryId)>,
     Form(form): Form<ToggleForm>,
 ) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
@@ -602,7 +602,7 @@ async fn toggle_inventory(
 async fn update_inventory(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
+    Path(tour_id): Path<ShoppingTourId>,
 ) -> MResponse {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
     let changes = calculate_inventory_changes(&foodlib.0, tour_id).await?;
@@ -626,8 +626,8 @@ async fn update_inventory(
 /// Calculate inventory changes showing what will be deducted from each inventory
 async fn calculate_inventory_changes(
     lib: &foodlib_new::FoodLib,
-    tour_id: i32,
-) -> Result<Vec<(String, i32, String, i32, BigDecimal, BigDecimal, BigDecimal)>> {
+    tour_id: ShoppingTourId,
+) -> Result<Vec<(String, InventoryId, String, IngredientId, BigDecimal, BigDecimal, BigDecimal)>> {
     let tour = lib.events().get_shopping_tour(tour_id).await?;
     let inventory_ops = lib.inventories();
 
@@ -682,7 +682,7 @@ async fn calculate_inventory_changes(
 async fn confirm_update(
     State(state): State<MyAppState>,
     ctx: AuthCtx,
-    Path(tour_id): Path<i32>,
+    Path(tour_id): Path<ShoppingTourId>,
 ) -> Result<Markup> {
     ctx.assert_can_edit_shopping_tour(tour_id).await?;
     let lib = &state.db;

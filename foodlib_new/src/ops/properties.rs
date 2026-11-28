@@ -1,5 +1,6 @@
 // foodlib_new/src/ops/properties.rs
 
+use crate::types::ids::{IngredientId, PropertyId, RecipeId};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -34,15 +35,15 @@ impl PropertyOps {
         Ok(row)
     }
 
-    pub async fn get(&self, id: i32) -> Result<Property> {
+    pub async fn get(&self, id: PropertyId) -> Result<Property> {
         let row = sqlx::query_as!(
             Property,
             r#"
-            SELECT property_id as "id", name
-            FROM food_properties 
+            SELECT property_id as "id: PropertyId", name
+            FROM food_properties
             WHERE property_id = $1
             "#,
-            id
+            id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -54,8 +55,8 @@ impl PropertyOps {
         let row = sqlx::query_as!(
             Property,
             r#"
-            SELECT property_id as "id", name
-            FROM food_properties 
+            SELECT property_id as "id: PropertyId", name
+            FROM food_properties
             WHERE name = $1
             "#,
             name
@@ -73,10 +74,10 @@ impl PropertyOps {
             UPDATE food_properties
             SET name = $1
             WHERE property_id = $2
-            RETURNING property_id as "id", name
+            RETURNING property_id as "id: PropertyId", name
             "#,
             property.name,
-            property.id
+            property.id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -84,16 +85,16 @@ impl PropertyOps {
         Ok(row)
     }
 
-    pub async fn delete(&self, id: i32) -> Result<()> {
+    pub async fn delete(&self, id: PropertyId) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
         // First delete ingredient associations
         sqlx::query!(
             r#"
-            DELETE FROM ingredient_properties 
+            DELETE FROM ingredient_properties
             WHERE property_id = $1
             "#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
@@ -101,10 +102,10 @@ impl PropertyOps {
         // Then delete the property
         sqlx::query!(
             r#"
-            DELETE FROM food_properties 
+            DELETE FROM food_properties
             WHERE property_id = $1
             "#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
@@ -117,7 +118,7 @@ impl PropertyOps {
         let rows = sqlx::query_as!(
             Property,
             r#"
-            SELECT property_id as "id", name
+            SELECT property_id as "id: PropertyId", name
             FROM food_properties
             ORDER BY name
             "#,
@@ -129,15 +130,19 @@ impl PropertyOps {
     }
 
     // Property assignment operations
-    pub async fn assign_to_ingredient(&self, ingredient_id: i32, property_id: i32) -> Result<()> {
+    pub async fn assign_to_ingredient(
+        &self,
+        ingredient_id: IngredientId,
+        property_id: PropertyId,
+    ) -> Result<()> {
         sqlx::query!(
             r#"
             INSERT INTO ingredient_properties (ingredient_id, property_id)
             VALUES ($1, $2)
             ON CONFLICT DO NOTHING
             "#,
-            ingredient_id,
-            property_id
+            ingredient_id.get(),
+            property_id.get()
         )
         .execute(&*self.pool)
         .await?;
@@ -145,14 +150,18 @@ impl PropertyOps {
         Ok(())
     }
 
-    pub async fn remove_from_ingredient(&self, ingredient_id: i32, property_id: i32) -> Result<()> {
+    pub async fn remove_from_ingredient(
+        &self,
+        ingredient_id: IngredientId,
+        property_id: PropertyId,
+    ) -> Result<()> {
         sqlx::query!(
             r#"
-            DELETE FROM ingredient_properties 
+            DELETE FROM ingredient_properties
             WHERE ingredient_id = $1 AND property_id = $2
             "#,
-            ingredient_id,
-            property_id
+            ingredient_id.get(),
+            property_id.get()
         )
         .execute(&*self.pool)
         .await?;
@@ -162,11 +171,11 @@ impl PropertyOps {
 
     pub async fn get_ingredient_properties(
         &self,
-        ingredient_id: i32,
+        ingredient_id: IngredientId,
     ) -> Result<IngredientProperties> {
         let ingredient_name: String = sqlx::query_scalar!(
             r#"SELECT name FROM ingredients WHERE ingredient_id = $1"#,
-            ingredient_id
+            ingredient_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -178,13 +187,13 @@ impl PropertyOps {
         let properties = sqlx::query_as!(
             Property,
             r#"
-            SELECT fp.property_id as "id", fp.name
+            SELECT fp.property_id as "id: PropertyId", fp.name
             FROM ingredient_properties ip
             JOIN food_properties fp ON fp.property_id = ip.property_id
             WHERE ip.ingredient_id = $1
             ORDER BY fp.name
             "#,
-            ingredient_id
+            ingredient_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -197,10 +206,10 @@ impl PropertyOps {
     }
 
     // Recipe property analysis
-    pub async fn get_recipe_properties(&self, recipe_id: i32) -> Result<RecipeProperties> {
+    pub async fn get_recipe_properties(&self, recipe_id: RecipeId) -> Result<RecipeProperties> {
         let recipe_name: String = sqlx::query_scalar!(
             r#"SELECT name FROM recipes WHERE recipe_id = $1"#,
-            recipe_id
+            recipe_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -212,14 +221,14 @@ impl PropertyOps {
         let mut properties = sqlx::query_as!(
             Property,
             r#"
-            SELECT DISTINCT fp.property_id as "id", fp.name
+            SELECT DISTINCT fp.property_id as "id: PropertyId", fp.name
             FROM resolved_recipes r
             JOIN ingredient_properties ip ON ip.ingredient_id = r.ingredient_id
             JOIN food_properties fp ON fp.property_id = ip.property_id
             WHERE r.recipe_id = $1
             ORDER BY fp.name
             "#,
-            recipe_id
+            recipe_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -235,7 +244,7 @@ impl PropertyOps {
             JOIN ingredients i ON i.ingredient_id = r.ingredient_id
             WHERE r.recipe_id = $1
             "#,
-            recipe_id
+            recipe_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -250,7 +259,10 @@ impl PropertyOps {
         derived.sort();
         derived.dedup();
         for name in derived {
-            properties.push(Property { id: 0, name });
+            properties.push(Property {
+                id: PropertyId(0),
+                name,
+            });
         }
         properties.sort_by(|a, b| a.name.cmp(&b.name));
 

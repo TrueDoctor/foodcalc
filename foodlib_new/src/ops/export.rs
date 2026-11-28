@@ -2,6 +2,7 @@ use crate::entities::allergen::DietaryFlags;
 use crate::entities::property::Property;
 use crate::entities::recipe::{RecipeStep, SubRecipe};
 use crate::error::{Error, Result};
+use crate::types::ids::{EventId, FoodPrepId, MealId, RecipeId};
 use bigdecimal::{BigDecimal, ToPrimitive};
 use sqlx::PgPool;
 use std::collections::HashSet;
@@ -26,7 +27,7 @@ pub struct RecipeInfo {
     /// Subrecipe ids that are prepped ahead for this event. Their own recipe
     /// section is omitted (assumed already made) and their meta-ingredient row is
     /// marked "aus Food Prep". Empty when there is no event/prep context.
-    pub prepped_subrecipe_ids: Vec<i32>,
+    pub prepped_subrecipe_ids: Vec<RecipeId>,
     /// True when the recipe's ingredient amounts have been weighed and verified
     /// accurate to the gram ("eingewogen"); rendered as a badge on the sheet.
     pub weighed_in: bool,
@@ -53,8 +54,8 @@ pub struct SubrecipeSection {
 /// Lighter-weight summary for dish labels and event overviews — just identity + allergens.
 #[derive(Debug, Clone)]
 pub struct MealAllergenInfo {
-    pub meal_id: i32,
-    pub recipe_id: i32,
+    pub meal_id: MealId,
+    pub recipe_id: RecipeId,
     pub recipe_name: String,
     pub place: String,
     pub servings: i32,
@@ -65,7 +66,7 @@ pub struct MealAllergenInfo {
 
 #[derive(Debug, Clone)]
 pub struct EventAllergenInfo {
-    pub event_id: i32,
+    pub event_id: EventId,
     pub event_name: String,
     pub meals: Vec<MealAllergenInfo>,
 }
@@ -73,7 +74,7 @@ pub struct EventAllergenInfo {
 /// Prep availability windows for one event, fetched once and queried in memory.
 struct PrepWindows {
     /// (prepped recipe id, use_from, use_until).
-    windows: Vec<(i32, time::OffsetDateTime, time::OffsetDateTime)>,
+    windows: Vec<(RecipeId, time::OffsetDateTime, time::OffsetDateTime)>,
 }
 
 impl PrepWindows {
@@ -82,9 +83,9 @@ impl PrepWindows {
     fn ids_available_at(
         &self,
         consumer_time: time::OffsetDateTime,
-        exclude: Option<i32>,
-    ) -> Vec<i32> {
-        let mut ids: Vec<i32> = self
+        exclude: Option<RecipeId>,
+    ) -> Vec<RecipeId> {
+        let mut ids: Vec<RecipeId> = self
             .windows
             .iter()
             .filter(|(id, from, until)| {
@@ -107,7 +108,7 @@ impl ExportOps {
         Self { pool }
     }
 
-    pub async fn fetch_meal_recipe(&self, meal_id: i32) -> Result<RecipeInfo> {
+    pub async fn fetch_meal_recipe(&self, meal_id: MealId) -> Result<RecipeInfo> {
         // Avoid `MealOps::get_meal` which aggregates over `event_ingredients` (a deep
         // recursive view) — that query takes ~3 minutes on this DB. We only need
         // recipe_id, start_time, and a scaling weight; weight is derived from
@@ -115,11 +116,11 @@ impl ExportOps {
         // heavy aggregate computes but reading only `event_meals` + `recipe_stats`.
         let row = sqlx::query!(
             r#"
-            SELECT event_id, recipe_id, start_time, servings, energy_per_serving
+            SELECT event_id as "event_id: EventId", recipe_id as "recipe_id: RecipeId", start_time, servings, energy_per_serving
             FROM event_meals
             WHERE meal_id = $1
             "#,
-            meal_id
+            meal_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -143,11 +144,11 @@ impl ExportOps {
         Ok(info)
     }
 
-    pub async fn fetch_food_prep_recipe(&self, prep_id: i32) -> Result<RecipeInfo> {
+    pub async fn fetch_food_prep_recipe(&self, prep_id: FoodPrepId) -> Result<RecipeInfo> {
         let prep = sqlx::query_as!(
             crate::entities::event::FoodPrep,
-            "SELECT prep_id as id, event_id, recipe_id, prep_date, use_from, use_until FROM food_prep WHERE prep_id = $1",
-            prep_id
+            r#"SELECT prep_id as "id: FoodPrepId", event_id as "event_id: EventId", recipe_id as "recipe_id: RecipeId", prep_date, use_from, use_until FROM food_prep WHERE prep_id = $1"#,
+            prep_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -158,7 +159,7 @@ impl ExportOps {
 
         let weight = sqlx::query!(
             r#"SELECT COALESCE(SUM(weight), 0) as "total_weight!" FROM prep_ingredients_with_duplicates WHERE prep_id = $1"#,
-            prep_id
+            prep_id.get()
         )
         .fetch_one(&*self.pool)
         .await?
@@ -186,9 +187,8 @@ impl ExportOps {
     /// Build every recipe sheet for an event — one per meal plus one per food-prep
     /// task — sorted chronologically (preps by prep_date, meals by start_time) so a
     /// single combined PDF reads in kitchen-workflow order.
-    pub async fn fetch_event_combined(&self, event_id: i32) -> Result<Vec<RecipeInfo>> {
-        let format =
-            format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
+    pub async fn fetch_event_combined(&self, event_id: EventId) -> Result<Vec<RecipeInfo>> {
+        let format = format_description::parse("[day].[month].[year] [hour]:[minute]").unwrap();
 
         // (sort_key, RecipeInfo). sort_key is the OffsetDateTime driving the order.
         let mut items: Vec<(time::OffsetDateTime, RecipeInfo)> = Vec::new();
@@ -206,8 +206,7 @@ impl ExportOps {
             let date = meal.start_time.format(&format).unwrap_or_default();
             match self.fetch_recipe_info(meal.recipe_id, meal.weight.clone(), date).await {
                 Ok(mut info) => {
-                    info.prepped_subrecipe_ids =
-                        windows.ids_available_at(meal.start_time, None);
+                    info.prepped_subrecipe_ids = windows.ids_available_at(meal.start_time, None);
                     items.push((meal.start_time, info));
                 }
                 // Skip meals whose recipe can't render (e.g. no subrecipes) rather
@@ -248,7 +247,7 @@ impl ExportOps {
 
     pub async fn fetch_subrecipes(
         &self,
-        recipe_id: i32,
+        recipe_id: RecipeId,
         weight: BigDecimal,
     ) -> Result<Vec<SubRecipe>> {
         let mut subrecipes = sqlx::query_as!(
@@ -256,19 +255,19 @@ impl ExportOps {
             r#"
             SELECT
                 recipe as "recipe!",
-                recipe_id as "recipe_id!",
+                recipe_id as "recipe_id!: RecipeId",
                 ingredient as "ingredient!",
                 round(COALESCE(weight, 0) * $1, 10) as "weight!",
                 subrecipe as "subrecipe!",
                 is_subrecipe as "is_subrecipe!",
-                subrecipe_id as "subrecipe_id!",
+                subrecipe_id as "subrecipe_id!: RecipeId",
                 subrecipe_hierarchy
             FROM subrecipes as s
             WHERE recipe_id = $2
             ORDER BY recipe, subrecipe_id, ingredient
             "#,
             weight,
-            recipe_id,
+            recipe_id.get(),
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -286,7 +285,7 @@ impl ExportOps {
 
     pub async fn fetch_user_input_meal(
         &self,
-        recipe_id: i32,
+        recipe_id: RecipeId,
         people: f64,
         calories: u32,
         date: String,
@@ -298,7 +297,7 @@ impl ExportOps {
 
     pub async fn fetch_subrecipes_from_user_input(
         &self,
-        recipe_id: i32,
+        recipe_id: RecipeId,
         people: f64,
         calories: u32,
     ) -> Result<Vec<SubRecipe>> {
@@ -307,25 +306,33 @@ impl ExportOps {
         self.fetch_subrecipes(recipe_id, weight).await
     }
 
-    async fn calc_energy_to_weight(&self, recipe_id: i32, energy: BigDecimal) -> Result<BigDecimal> {
+    async fn calc_energy_to_weight(&self, recipe_id: RecipeId, energy: BigDecimal) -> Result<BigDecimal> {
         let recipe_stats = sqlx::query!(
             r#"SELECT weight, energy FROM recipe_stats WHERE recipe_id = $1"#,
-            recipe_id,
+            recipe_id.get(),
         )
         .fetch_one(&*self.pool)
         .await?;
 
-        let recipe_weight = recipe_stats.weight.ok_or_else(|| Error::NotFound { entity: "recipe_stats.weight", id: recipe_id.to_string() })?;
-        let recipe_energy = recipe_stats.energy.ok_or_else(|| Error::NotFound { entity: "recipe_stats.energy", id: recipe_id.to_string() })?;
+        let recipe_weight = recipe_stats.weight.ok_or_else(|| Error::NotFound {
+            entity: "recipe_stats.weight",
+            id: recipe_id.to_string(),
+        })?;
+        let recipe_energy = recipe_stats.energy.ok_or_else(|| Error::NotFound {
+            entity: "recipe_stats.energy",
+            id: recipe_id.to_string(),
+        })?;
         if recipe_energy == BigDecimal::from(0) {
-            return Err(Error::Validation { message: format!("recipe {recipe_id} has zero energy") });
+            return Err(Error::Validation {
+                message: format!("recipe {recipe_id} has zero energy"),
+            });
         }
         Ok(recipe_weight / recipe_energy * energy)
     }
 
     async fn fetch_recipe_info(
         &self,
-        recipe_id: i32,
+        recipe_id: RecipeId,
         weight: BigDecimal,
         date: String,
     ) -> Result<RecipeInfo> {
@@ -335,8 +342,8 @@ impl ExportOps {
         let mut keys = subrecipes
             .iter()
             .map(|sr| sr.subrecipe_id)
-            .collect::<Vec<i32>>();
-        let mut seen: HashSet<i32> = HashSet::new();
+            .collect::<Vec<RecipeId>>();
+        let mut seen: HashSet<RecipeId> = HashSet::new();
         keys.retain(|&x| seen.insert(x));
 
         let name = subrecipes
@@ -398,16 +405,16 @@ impl ExportOps {
     /// instead of a query per meal/prep. Uses the same `[use_from, use_until]`
     /// window the shopping-tour views use (`resolved_prep_starts`:
     /// `use_from = COALESCE(use_from, prep_date)`).
-    async fn event_prep_windows(&self, event_id: i32) -> Result<PrepWindows> {
+    async fn event_prep_windows(&self, event_id: EventId) -> Result<PrepWindows> {
         let rows = sqlx::query!(
             r#"
-            SELECT recipe_id,
+            SELECT recipe_id as "recipe_id: RecipeId",
                    COALESCE(use_from, prep_date) as "use_from!",
                    use_until
             FROM food_prep
             WHERE event_id = $1
             "#,
-            event_id,
+            event_id.get(),
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -424,17 +431,17 @@ impl ExportOps {
     /// combined export. Keyed by prep_id.
     async fn event_prep_weights(
         &self,
-        event_id: i32,
-    ) -> Result<std::collections::HashMap<i32, BigDecimal>> {
+        event_id: EventId,
+    ) -> Result<std::collections::HashMap<FoodPrepId, BigDecimal>> {
         let rows = sqlx::query!(
             r#"
-            SELECT d.prep_id as "prep_id!", COALESCE(SUM(d.weight), 0) as "weight!"
+            SELECT d.prep_id as "prep_id!: FoodPrepId", COALESCE(SUM(d.weight), 0) as "weight!"
             FROM prep_ingredients_with_duplicates d
             JOIN food_prep fp ON fp.prep_id = d.prep_id
             WHERE fp.event_id = $1
             GROUP BY d.prep_id
             "#,
-            event_id,
+            event_id.get(),
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -446,11 +453,11 @@ impl ExportOps {
     /// each per prep). Returns prep_id -> [(meal recipe name, weight %)].
     async fn event_prep_allocations(
         &self,
-        event_id: i32,
-    ) -> Result<std::collections::HashMap<i32, Vec<(String, f64)>>> {
+        event_id: EventId,
+    ) -> Result<std::collections::HashMap<FoodPrepId, Vec<(String, f64)>>> {
         let rows = sqlx::query!(
             r#"
-            SELECT pi.prep_id as "prep_id!", r.name as "recipe!",
+            SELECT pi.prep_id as "prep_id!: FoodPrepId", r.name as "recipe!",
                    sum(eibptr.weight) as "weight!"
             FROM prep_ingredients pi
             JOIN event_ingredients_before_prep_time_resolve eibptr
@@ -463,13 +470,13 @@ impl ExportOps {
             WHERE pi.event_id = $1
             GROUP BY pi.prep_id, r.name
             "#,
-            event_id,
+            event_id.get(),
         )
         .fetch_all(&*self.pool)
         .await?;
 
         // Group by prep, then normalise each prep's rows to percentages.
-        let mut raw: std::collections::HashMap<i32, Vec<(String, f64)>> =
+        let mut raw: std::collections::HashMap<FoodPrepId, Vec<(String, f64)>> =
             std::collections::HashMap::new();
         for row in rows {
             raw.entry(row.prep_id)
@@ -495,7 +502,7 @@ impl ExportOps {
     /// For a prep task, resolve which event meals consume it and each meal's
     /// share of the prepped weight (as a percentage). Aggregated by downstream
     /// recipe name so multiple servings of the same dish collapse into one entry.
-    async fn fetch_prep_allocation(&self, prep_id: i32) -> Result<Vec<(String, f64)>> {
+    async fn fetch_prep_allocation(&self, prep_id: FoodPrepId) -> Result<Vec<(String, f64)>> {
         let rows = sqlx::query!(
             r#"
             SELECT r.name as "recipe!", sum(eibptr.weight) as "weight!"
@@ -510,7 +517,7 @@ impl ExportOps {
             WHERE pi.prep_id = $1
             GROUP BY r.name
             "#,
-            prep_id
+            prep_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -530,10 +537,10 @@ impl ExportOps {
 
     /// Fetch the allergen/dietary summary for every meal of an event, used to
     /// render dish labels and the event-wide allergen overview.
-    pub async fn fetch_event_allergens(&self, event_id: i32) -> Result<EventAllergenInfo> {
+    pub async fn fetch_event_allergens(&self, event_id: EventId) -> Result<EventAllergenInfo> {
         let event_name = sqlx::query_scalar!(
             r#"SELECT event_name FROM events WHERE event_id = $1"#,
-            event_id
+            event_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?
@@ -545,8 +552,8 @@ impl ExportOps {
         let rows = sqlx::query!(
             r#"
             SELECT
-                em.meal_id as "meal_id!",
-                em.recipe_id,
+                em.meal_id as "meal_id!: MealId",
+                em.recipe_id as "recipe_id: RecipeId",
                 r.name as recipe_name,
                 p.name as place,
                 em.servings,
@@ -557,7 +564,7 @@ impl ExportOps {
             WHERE em.event_id = $1
             ORDER BY em.start_time, r.name
             "#,
-            event_id
+            event_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
