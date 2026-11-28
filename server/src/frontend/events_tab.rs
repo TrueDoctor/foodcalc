@@ -5,6 +5,7 @@ use foodlib_new::auth_context::AuthCtx;
 use foodlib_new::user::User;
 use maud::{html, Markup};
 use serde::Deserialize;
+use foodlib_new::types::ids::{EventId, GroupId};
 
 mod event_detail_tab;
 
@@ -45,7 +46,7 @@ pub async fn add(
 ) -> MResponse {
     let group = foodlib.users().get_personal_group(user.id).await?;
     let event = foodlib_new::event::Event {
-        id: -1,
+        id: EventId::invalid(),
         name: form.name,
         comment: form.comment.filter(|s| !s.is_empty()),
         budget: form.budget.and_then(bigdecimal::BigDecimal::from_f64),
@@ -82,14 +83,14 @@ fn event_add_row(is_admin: bool) -> Markup {
     }
 }
 
-pub async fn duplicate(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
+pub async fn duplicate(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
     let group = foodlib.users().get_personal_group(ctx.user.id).await?;
     let id = foodlib.events().duplicate(event_id, group.id).await?;
     event_detail_tab::event_form(foodlib, ctx, Path(id)).await
 }
 
-pub async fn delete_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
+pub async fn delete_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
     let event = foodlib.events().get(event_id).await?;
     Ok(html! {
@@ -108,7 +109,8 @@ pub async fn delete_dialog(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<
     })
 }
 
-pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -> MResponse {
+
+pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<EventId>) -> MResponse {
     ctx.assert_can_edit_event(event_id).await?;
     foodlib.events().delete(event_id).await?;
     Ok(event_list(foodlib, ctx.user).await)
@@ -116,7 +118,7 @@ pub async fn delete(foodlib: FoodLib, ctx: AuthCtx, Path(event_id): Path<i32>) -
 
 pub async fn event_list(foodlib: FoodLib, user: User) -> Markup {
     let events = foodlib.events().list().await.unwrap_or_default();
-    let user_group_ids: Vec<i32> = foodlib
+    let user_group_ids: Vec<GroupId> = foodlib
         .users()
         .get_user_groups(user.id)
         .await
@@ -175,7 +177,7 @@ pub async fn search(foodlib: FoodLib, user: User, query: Form<SearchParameters>)
     let query_str = query.search.to_lowercase();
     let mine_only = query.mine_only.is_some();
     let events = foodlib.events().list().await.unwrap_or_default();
-    let user_group_ids: Vec<i32> = foodlib
+    let user_group_ids: Vec<GroupId> = foodlib
         .users()
         .get_user_groups(user.id)
         .await

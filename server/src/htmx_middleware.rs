@@ -5,7 +5,7 @@ use axum_extra::extract::Host;
 use foodlib_new::auth::AuthSession;
 use foodlib_new::user::User;
 use maud::{html, DOCTYPE};
-
+use foodlib_new::types::ids::UserId;
 use crate::frontend::home;
 use crate::frontend::{CSS_HASH, TIMELINE_JS_HASH};
 
@@ -31,7 +31,7 @@ pub async fn htmx_middleware(
     {
         let user = User {
             username: "test".into(),
-            id: 0,
+            id: UserId::unset(),
             is_admin: true,
             // TODO: replace this with a better way to handle this
             password_hash: String::from("password"),

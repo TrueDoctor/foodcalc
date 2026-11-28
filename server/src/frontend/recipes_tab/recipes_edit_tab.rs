@@ -12,7 +12,7 @@ use foodlib_new::{
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::postgres::types::PgInterval;
-
+use foodlib_new::types::ids::{GroupId, IngredientId, RecipeId, RecipeStepId, UnitId};
 use crate::{
     frontend::{icons, move_group, MResponse},
     MyAppState,
@@ -45,10 +45,10 @@ pub(crate) fn recipes_edit_router() -> axum::Router<MyAppState> {
 
 #[derive(Deserialize, Debug)]
 pub struct UpdateNameHeader {
-    pub recipe_id: i32,
+    pub recipe_id: RecipeId,
     pub name: String,
     pub comment: String,
-    pub group_id: i32,
+    pub group_id: GroupId,
     // Unchecked HTML checkboxes submit nothing, so default to false when absent.
     #[serde(default)]
     pub weighed_in: bool,
@@ -56,11 +56,11 @@ pub struct UpdateNameHeader {
 
 #[derive(Deserialize, Debug)]
 pub struct UpdateIngredientHeader {
-    pub recipe_id: i32,
-    pub ingredient_id: i32,
+    pub recipe_id: RecipeId,
+    pub ingredient_id: IngredientId,
     pub ingredient_name: String,
     pub ingredient_amount: BigDecimal,
-    pub ingredient_unit_id: i32,
+    pub ingredient_unit_id: UnitId,
 }
 
 impl From<UpdateIngredientHeader> for RecipeIngredient {
@@ -77,8 +77,8 @@ impl From<UpdateIngredientHeader> for RecipeIngredient {
 
 #[derive(Deserialize, Debug)]
 pub struct UpdateSubrecipeHeader {
-    pub recipe_id: i32,
-    pub subrecipe_id: i32,
+    pub recipe_id: RecipeId,
+    pub subrecipe_id: RecipeId,
     pub subrecipe_name: String,
     pub subrecipe_amount: BigDecimal,
 }
@@ -96,13 +96,13 @@ impl From<UpdateSubrecipeHeader> for RecipeMetaIngredient {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateRecipeStepHeader {
-    pub step_id: i32,
+    pub step_id: RecipeStepId,
     pub step_order: f64,
     pub step_name: String,
     pub step_description: String,
     pub fixed_duration_minutes: f64,
     pub duration_per_kg_minutes: f64,
-    pub recipe_id: i32,
+    pub recipe_id: RecipeId,
 }
 
 impl From<UpdateRecipeStepHeader> for RecipeStep {
@@ -143,7 +143,7 @@ pub async fn handle_name_change(
             id: data.recipe_id,
             name: data.name,
             comment: Some(data.comment),
-            group_id: -1, // Placeholder; ops-level update ignores group_id
+            group_id: GroupId::invalid(), // Placeholder; ops-level update ignores group_id
             weighed_in: data.weighed_in,
         })
         .await?;
@@ -198,8 +198,8 @@ pub async fn handle_step_change(
 /// step and mutating just the order before update.
 #[derive(Deserialize)]
 struct ReorderStepForm {
-    recipe_id: i32,
-    step_id: i32,
+    recipe_id: RecipeId,
+    step_id: RecipeStepId,
     step_order: f64,
 }
 
@@ -227,7 +227,7 @@ async fn handle_step_reorder(
 pub async fn handle_ingredient_delete(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((recipe_id, ingredient_id)): Path<(i32, i32)>,
+    Path((recipe_id, ingredient_id)): Path<(RecipeId, IngredientId)>,
 ) -> MResponse {
     ctx.assert_can_edit_recipe(recipe_id).await?;
     foodlib
@@ -241,7 +241,7 @@ pub async fn handle_ingredient_delete(
 pub async fn handle_subrecipe_delete(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((recipe_id, subrecipe_id)): Path<(i32, i32)>,
+    Path((recipe_id, subrecipe_id)): Path<(RecipeId, RecipeId)>,
 ) -> MResponse {
     ctx.assert_can_edit_recipe(recipe_id).await?;
     foodlib
@@ -255,7 +255,7 @@ pub async fn handle_subrecipe_delete(
 pub async fn handle_step_delete(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path((recipe_id, step_id)): Path<(i32, i32)>,
+    Path((recipe_id, step_id)): Path<(RecipeId, RecipeStepId)>,
 ) -> MResponse {
     ctx.assert_can_edit_recipe(recipe_id).await?;
     foodlib.recipes().delete_step(recipe_id, step_id).await?;
@@ -317,7 +317,7 @@ pub async fn handle_step_add(
 /// commit handler looks the ingredient up by name (since users pick from the
 /// datalist) and rewrites the id before insert.
 fn recipe_ingredient_add_row(
-    recipe_id: i32,
+    recipe_id: RecipeId,
     all_ingredients: &[foodlib_new::ingredient::Ingredient],
     unit_types: &[Unit],
 ) -> Markup {
@@ -356,7 +356,7 @@ fn recipe_ingredient_add_row(
 /// First-row inline add for the recipe-subrecipes table. Sentinel id -1; the
 /// commit handler resolves the subrecipe id by name lookup.
 fn recipe_subrecipe_add_row(
-    recipe_id: i32,
+    recipe_id: RecipeId,
     all_recipes: &[foodlib_new::recipe::Recipe],
 ) -> Markup {
     let list_id = format!("subrecipe-add-datalist-{}", recipe_id);
@@ -392,7 +392,7 @@ fn recipe_subrecipe_add_row(
 pub async fn recipe_edit_view(
     foodlib: FoodLib,
     ctx: AuthCtx,
-    Path(recipe_id): Path<i32>,
+    Path(recipe_id): Path<RecipeId>,
 ) -> MResponse {
     ctx.assert_can_edit_recipe(recipe_id).await?;
     let subrecipes = foodlib.recipes().get_meta_ingredients(recipe_id).await?;
@@ -496,7 +496,7 @@ pub async fn recipe_edit_view(
 /// end / -1 at the beginning) and PUTs it to /reorder-step. Uses Sortable's
 /// own drag handle (the `.step-drag-handle` cell) so the row inputs stay
 /// editable.
-fn steps_dnd_script(recipe_id: i32) -> Markup {
+fn steps_dnd_script(recipe_id: RecipeId) -> Markup {
     html! {
         script {
             (maud::PreEscaped(format!(r#"
@@ -546,7 +546,7 @@ fn steps_dnd_script(recipe_id: i32) -> Markup {
 
 /// First-row inline add for the steps table. Order is computed server-side
 /// (max existing + 1.0); the form-supplied step_order=0 is ignored.
-fn recipe_step_add_row(recipe_id: i32) -> Markup {
+fn recipe_step_add_row(recipe_id: RecipeId) -> Markup {
     html! {
         tr id="recipe-step--1" class="add-row" {
             input type="hidden" name="recipe_id" value=(recipe_id);
@@ -569,11 +569,11 @@ fn recipe_step_add_row(recipe_id: i32) -> Markup {
 }
 
 pub trait IngredientTableFormattable {
-    fn format_for_ingredient_table(&self, unit_types: Vec<Unit>, recipe_id: i32) -> Markup;
+    fn format_for_ingredient_table(&self, unit_types: Vec<Unit>, recipe_id: RecipeId) -> Markup;
 }
 
 impl IngredientTableFormattable for RecipeIngredient {
-    fn format_for_ingredient_table(&self, unit_types: Vec<Unit>, recipe_id: i32) -> Markup {
+    fn format_for_ingredient_table(&self, unit_types: Vec<Unit>, recipe_id: RecipeId) -> Markup {
         let ingredient = self;
         let ingredient_id = ingredient.ingredient_id;
         let form_id = format!("ingredient-{}-form", ingredient_id);
@@ -628,11 +628,11 @@ impl SubRecipeTableFormattable for RecipeMetaIngredient {
 }
 
 pub trait StepTableFormattable {
-    fn format_for_step_table(&self, recipe_id: i32) -> Markup;
+    fn format_for_step_table(&self, recipe_id: RecipeId) -> Markup;
 }
 
 impl StepTableFormattable for RecipeStep {
-    fn format_for_step_table(&self, recipe_id: i32) -> Markup {
+    fn format_for_step_table(&self, recipe_id: RecipeId) -> Markup {
         let form_id = format!("step-{}-form", self.id);
         html! {
             tr id=(format!("step-{}", self.id)) class="step-row" data-step-id=(self.id) data-step-order=(self.order) style="text-align:center"{

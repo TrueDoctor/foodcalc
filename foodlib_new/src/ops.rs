@@ -29,3 +29,4 @@ pub mod stores_test;
 pub mod units_test;
 #[cfg(test)]
 pub mod users_test;
+pub mod groups;

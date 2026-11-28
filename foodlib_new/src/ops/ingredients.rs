@@ -1,6 +1,14 @@
 // foodlib_new/src/ops/ingredients.rs
 
-use crate::{entities::ingredient::*, error::Result, recipe::Recipe, Error};
+use crate::types::ids::{
+    GroupId, IngredientId, IngredientSourceId, PropertyId, RecipeId, StoreId, UnitId, UserId,
+};
+use crate::{
+    entities::ingredient::*,
+    entities::recipe::{Recipe},
+    error::Result,
+    Error,
+};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -21,12 +29,12 @@ impl IngredientOps {
             r#"
             INSERT INTO ingredients (name, energy, comment, group_id)
             VALUES ($1, $2, $3, $4)
-            RETURNING ingredient_id as "id", name, energy, comment, group_id
+            RETURNING ingredient_id as "id: IngredientId", name, energy, comment, group_id as "group_id: GroupId"
             "#,
             ingredient.name,
             ingredient.energy,
             ingredient.comment,
-            ingredient.group_id,
+            ingredient.group_id.get(),
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -34,20 +42,20 @@ impl IngredientOps {
         Ok(row)
     }
 
-    pub async fn get(&self, id: i32) -> Result<Ingredient> {
+    pub async fn get(&self, id: IngredientId) -> Result<Ingredient> {
         let row = sqlx::query_as!(
             Ingredient,
             r#"
-            SELECT 
-                ingredient_id as "id", 
-                name, 
-                energy, 
-                group_id,
-                comment 
-            FROM ingredients 
+            SELECT
+                ingredient_id as "id: IngredientId",
+                name,
+                energy,
+                group_id as "group_id: GroupId",
+                comment
+            FROM ingredients
             WHERE ingredient_id = $1
             "#,
-            id
+            id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -59,13 +67,13 @@ impl IngredientOps {
         sqlx::query_as!(
             Ingredient,
             r#"
-            SELECT 
-                ingredient_id as "id", 
-                name, 
-                energy, 
-                group_id,
-                comment 
-            FROM ingredients 
+            SELECT
+                ingredient_id as "id: IngredientId",
+                name,
+                energy,
+                group_id as "group_id: GroupId",
+                comment
+            FROM ingredients
             WHERE name = $1
             "#,
             name
@@ -78,20 +86,20 @@ impl IngredientOps {
         })
     }
 
-    pub async fn usages(&self, ingredient_id: i32) -> Result<Vec<Recipe>> {
+    pub async fn usages(&self, ingredient_id: IngredientId) -> Result<Vec<Recipe>> {
         let row = sqlx::query_as!(
             Recipe,
             r#"
             SELECT
-                recipe_id as "id",
+                recipe_id as "id: RecipeId",
                 name,
-                group_id,
+                group_id as "group_id: GroupId",
                 comment,
                 weighed_in
             FROM recipes JOIN recipe_ingredients USING(recipe_id)
             WHERE ingredient_id = $1
             "#,
-            ingredient_id
+            ingredient_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -106,12 +114,12 @@ impl IngredientOps {
             UPDATE ingredients
             SET name = $1, energy = $2, comment = $3
             WHERE ingredient_id = $4
-            RETURNING ingredient_id as "id", name, energy, comment, group_id
+            RETURNING ingredient_id as "id: IngredientId", name, energy, comment, group_id as "group_id: GroupId"
             "#,
             ingredient.name,
             ingredient.energy,
             ingredient.comment,
-            ingredient.id,
+            ingredient.id.get(),
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -119,25 +127,25 @@ impl IngredientOps {
         Ok(row)
     }
 
-    pub async fn set_group(&self, ingredient_id: i32, group_id: i32) -> Result<()> {
+    pub async fn set_group(&self, ingredient_id: IngredientId, group_id: GroupId) -> Result<()> {
         sqlx::query!(
             r#"UPDATE ingredients SET group_id = $1 WHERE ingredient_id = $2"#,
-            group_id,
-            ingredient_id
+            group_id.get(),
+            ingredient_id.get()
         )
         .execute(&*self.pool)
         .await?;
         Ok(())
     }
 
-    pub async fn delete(&self, id: i32) -> Result<()> {
+    pub async fn delete(&self, id: IngredientId) -> Result<()> {
         // Start transaction to handle cascading deletes
         let mut tx = self.pool.begin().await?;
 
         // Delete from recipe_ingredients first
         sqlx::query!(
             r#"DELETE FROM recipe_ingredients WHERE ingredient_id = $1"#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
@@ -145,26 +153,26 @@ impl IngredientOps {
         // Delete from ingredient_sources
         sqlx::query!(
             r#"DELETE FROM ingredient_sources WHERE ingredient_id = $1"#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
 
         // Delete from weights
-        sqlx::query!(r#"DELETE FROM weights WHERE ingredient_id = $1"#, id)
+        sqlx::query!(r#"DELETE FROM weights WHERE ingredient_id = $1"#, id.get())
             .execute(&mut *tx)
             .await?;
 
         // Delete from ingredient_properties
         sqlx::query!(
             r#"DELETE FROM ingredient_properties WHERE ingredient_id = $1"#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
 
         // Finally delete the ingredient
-        sqlx::query!(r#"DELETE FROM ingredients WHERE ingredient_id = $1"#, id)
+        sqlx::query!(r#"DELETE FROM ingredients WHERE ingredient_id = $1"#, id.get())
             .execute(&mut *tx)
             .await?;
 
@@ -173,30 +181,30 @@ impl IngredientOps {
     }
 
     /// Lists ingredients whose group the user belongs to
-    pub async fn list_for_user(&self, user_id: i64) -> Result<Vec<Ingredient>> {
+    pub async fn list_for_user(&self, user_id: UserId) -> Result<Vec<Ingredient>> {
         let rows = sqlx::query_as!(
             Ingredient,
             r#"
-            SELECT ingredient_id as "id", name, energy, group_id, comment
+            SELECT ingredient_id as "id: IngredientId", name, energy, group_id as "group_id: GroupId", comment
             FROM ingredients
             WHERE group_id IN (
                 SELECT group_id FROM user_groups WHERE user_id = $1
             )
             ORDER BY name
             "#,
-            user_id
+            user_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
         Ok(rows)
     }
 
-    pub async fn list_with_sources_for_user(&self, user_id: i64) -> Result<Vec<IngredientWithSource>> {
+    pub async fn list_with_sources_for_user(&self, user_id: UserId) -> Result<Vec<IngredientWithSource>> {
         let rows = sqlx::query_as!(
             IngredientWithSource,
             r#"
             SELECT
-                ingredient_id as "id", name, energy, group_id, comment,
+                ingredient_id as "id: IngredientId", name, energy, group_id as "group_id: GroupId", comment,
                 exists (select * from ingredient_sources as iss where iss.ingredient_id = ingredients.ingredient_id) as "has_sources!"
             FROM ingredients
             WHERE group_id IN (
@@ -204,7 +212,7 @@ impl IngredientOps {
             )
             ORDER BY name
             "#,
-            user_id
+            user_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -215,13 +223,13 @@ impl IngredientOps {
         let rows = sqlx::query_as!(
             Ingredient,
             r#"
-            SELECT 
-                ingredient_id as "id", 
-                name, 
-                energy, 
-                group_id,
-                comment 
-            FROM ingredients 
+            SELECT
+                ingredient_id as "id: IngredientId",
+                name,
+                energy,
+                group_id as "group_id: GroupId",
+                comment
+            FROM ingredients
             ORDER BY ingredient_id
             "#,
         )
@@ -235,14 +243,14 @@ impl IngredientOps {
         let rows = sqlx::query_as!(
             IngredientWithSource,
             r#"
-            SELECT 
-                ingredient_id as "id", 
-                name, 
-                energy, 
-                group_id,
+            SELECT
+                ingredient_id as "id: IngredientId",
+                name,
+                energy,
+                group_id as "group_id: GroupId",
                 comment,
-                exists (select * from ingredient_sources as iss where iss.ingredient_id = ingredients.ingredient_id) as "has_sources!" 
-            FROM ingredients 
+                exists (select * from ingredient_sources as iss where iss.ingredient_id = ingredients.ingredient_id) as "has_sources!"
+            FROM ingredients
             ORDER BY ingredient_id
             "#,
         )
@@ -261,20 +269,20 @@ impl IngredientOps {
                 ingredient_id, store_id, package_size, unit_id, price, url, comment
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING 
-                ingredient_source_id as "id",
-                ingredient_id,
-                store_id,
+            RETURNING
+                ingredient_source_id as "id: IngredientSourceId",
+                ingredient_id as "ingredient_id: IngredientId",
+                store_id as "store_id: StoreId",
                 package_size,
-                unit_id,
+                unit_id as "unit_id: UnitId",
                 price,
                 url,
                 comment
             "#,
-            source.ingredient_id,
-            source.store_id,
+            source.ingredient_id.get(),
+            source.store_id.get(),
             source.package_size,
-            source.unit_id,
+            source.unit_id.get(),
             source.price,
             source.url,
             source.comment,
@@ -290,7 +298,7 @@ impl IngredientOps {
             IngredientSource,
             r#"
             UPDATE ingredient_sources
-            SET 
+            SET
                 store_id = $1,
                 package_size = $2,
                 unit_id = $3,
@@ -298,23 +306,23 @@ impl IngredientOps {
                 url = $5,
                 comment = $6
             WHERE ingredient_source_id = $7
-            RETURNING 
-                ingredient_source_id as "id",
-                ingredient_id,
-                store_id,
+            RETURNING
+                ingredient_source_id as "id: IngredientSourceId",
+                ingredient_id as "ingredient_id: IngredientId",
+                store_id as "store_id: StoreId",
                 package_size,
-                unit_id,
+                unit_id as "unit_id: UnitId",
                 price,
                 url,
                 comment
             "#,
-            source.store_id,
+            source.store_id.get(),
             source.package_size,
-            source.unit_id,
+            source.unit_id.get(),
             source.price,
             source.url,
             source.comment,
-            source.id
+            source.id.get()
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -322,13 +330,13 @@ impl IngredientOps {
         Ok(row)
     }
 
-    pub async fn delete_source(&self, id: i32) -> Result<()> {
+    pub async fn delete_source(&self, id: IngredientSourceId) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
         // First delete any category information
         sqlx::query!(
             r#"DELETE FROM metro_categories WHERE ingredient_source_id = $1"#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
@@ -336,7 +344,7 @@ impl IngredientOps {
         // Then delete the source
         sqlx::query!(
             r#"DELETE FROM ingredient_sources WHERE ingredient_source_id = $1"#,
-            id
+            id.get()
         )
         .execute(&mut *tx)
         .await?;
@@ -345,23 +353,23 @@ impl IngredientOps {
         Ok(())
     }
 
-    pub async fn get_sources(&self, ingredient_id: i32) -> Result<Vec<IngredientSource>> {
+    pub async fn get_sources(&self, ingredient_id: IngredientId) -> Result<Vec<IngredientSource>> {
         let rows = sqlx::query_as!(
             IngredientSource,
             r#"
-            SELECT 
-                ingredient_source_id as "id",
-                ingredient_id,
-                store_id,
+            SELECT
+                ingredient_source_id as "id: IngredientSourceId",
+                ingredient_id as "ingredient_id: IngredientId",
+                store_id as "store_id: StoreId",
                 package_size,
-                unit_id,
+                unit_id as "unit_id: UnitId",
                 price,
                 url,
                 comment
             FROM ingredient_sources
             WHERE ingredient_id = $1
             "#,
-            ingredient_id
+            ingredient_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -378,8 +386,8 @@ impl IngredientOps {
             VALUES ($1, $2, $3)
             RETURNING ingredient_id, unit_id, weight
             "#,
-            weight.ingredient_id,
-            weight.unit_id,
+            weight.ingredient_id.get(),
+            weight.unit_id.get(),
             weight.weight,
         )
         .fetch_one(&*self.pool)
@@ -395,11 +403,11 @@ impl IngredientOps {
             UPDATE weights
             SET weight = $1
             WHERE ingredient_id = $2 AND unit_id = $3
-            RETURNING ingredient_id, unit_id, weight
+            RETURNING ingredient_id as "ingredient_id: IngredientId", unit_id as "unit_id: UnitId", weight
             "#,
             weight.weight,
-            weight.ingredient_id,
-            weight.unit_id,
+            weight.ingredient_id.get(),
+            weight.unit_id.get(),
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -407,11 +415,11 @@ impl IngredientOps {
         Ok(row)
     }
 
-    pub async fn delete_weight(&self, ingredient_id: i32, unit_id: i32) -> Result<()> {
+    pub async fn delete_weight(&self, ingredient_id: IngredientId, unit_id: UnitId) -> Result<()> {
         sqlx::query!(
             r#"DELETE FROM weights WHERE ingredient_id = $1 AND unit_id = $2"#,
-            ingredient_id,
-            unit_id
+            ingredient_id.get(),
+            unit_id.get()
         )
         .execute(&*self.pool)
         .await?;
@@ -419,15 +427,15 @@ impl IngredientOps {
         Ok(())
     }
 
-    pub async fn get_weights(&self, ingredient_id: i32) -> Result<Vec<IngredientWeight>> {
+    pub async fn get_weights(&self, ingredient_id: IngredientId) -> Result<Vec<IngredientWeight>> {
         let rows = sqlx::query_as!(
             IngredientWeight,
             r#"
-            SELECT ingredient_id, unit_id, weight
+            SELECT ingredient_id as "ingredient_id: IngredientId", unit_id as "unit_id: UnitId", weight
             FROM weights
             WHERE ingredient_id = $1
             "#,
-            ingredient_id
+            ingredient_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -442,10 +450,10 @@ impl IngredientOps {
             r#"
             INSERT INTO ingredient_properties (ingredient_id, property_id)
             VALUES ($1, $2)
-            RETURNING ingredient_id, property_id
+            RETURNING ingredient_id as "ingredient_id: IngredientId", property_id as "property_id: PropertyId"
             "#,
-            property.ingredient_id,
-            property.property_id,
+            property.ingredient_id.get(),
+            property.property_id.get(),
         )
         .fetch_one(&*self.pool)
         .await?;
@@ -453,14 +461,14 @@ impl IngredientOps {
         Ok(row)
     }
 
-    pub async fn delete_property(&self, ingredient_id: i32, property_id: i32) -> Result<()> {
+    pub async fn delete_property(&self, ingredient_id: IngredientId, property_id: PropertyId) -> Result<()> {
         sqlx::query!(
             r#"
-            DELETE FROM ingredient_properties 
+            DELETE FROM ingredient_properties
             WHERE ingredient_id = $1 AND property_id = $2
             "#,
-            ingredient_id,
-            property_id
+            ingredient_id.get(),
+            property_id.get()
         )
         .execute(&*self.pool)
         .await?;
@@ -468,15 +476,15 @@ impl IngredientOps {
         Ok(())
     }
 
-    pub async fn get_properties(&self, ingredient_id: i32) -> Result<Vec<IngredientProperty>> {
+    pub async fn get_properties(&self, ingredient_id: IngredientId) -> Result<Vec<IngredientProperty>> {
         let rows = sqlx::query_as!(
             IngredientProperty,
             r#"
-            SELECT ingredient_id, property_id
+            SELECT ingredient_id as "ingredient_id: IngredientId", property_id as "property_id: PropertyId"
             FROM ingredient_properties
             WHERE ingredient_id = $1
             "#,
-            ingredient_id
+            ingredient_id.get()
         )
         .fetch_all(&*self.pool)
         .await?;
@@ -491,11 +499,11 @@ impl IngredientOps {
             r#"
             INSERT INTO metro_categories (ingredient_source_id, category)
             VALUES ($1, $2)
-            ON CONFLICT (ingredient_source_id) DO UPDATE 
+            ON CONFLICT (ingredient_source_id) DO UPDATE
             SET category = $2
-            RETURNING ingredient_source_id, category
+            RETURNING ingredient_source_id as "ingredient_source_id: IngredientSourceId", category
             "#,
-            category.ingredient_source_id,
+            category.ingredient_source_id.get(),
             category.category,
         )
         .fetch_one(&*self.pool)
@@ -504,15 +512,15 @@ impl IngredientOps {
         Ok(row)
     }
 
-    pub async fn get_category(&self, source_id: i32) -> Result<Option<IngredientCategory>> {
+    pub async fn get_category(&self, source_id: IngredientSourceId) -> Result<Option<IngredientCategory>> {
         let row = sqlx::query_as!(
             IngredientCategory,
             r#"
-            SELECT ingredient_source_id, category
+            SELECT ingredient_source_id as "ingredient_source_id: IngredientSourceId", category
             FROM metro_categories
             WHERE ingredient_source_id = $1
             "#,
-            source_id
+            source_id.get()
         )
         .fetch_optional(&*self.pool)
         .await?;
@@ -520,22 +528,22 @@ impl IngredientOps {
         Ok(row)
     }
 
-    pub async fn list_sources(&self, ingredient_id: Option<i32>) -> Result<Vec<IngredientSource>> {
+    pub async fn list_sources(&self, ingredient_id: Option<IngredientId>) -> Result<Vec<IngredientSource>> {
         let rows = match ingredient_id {
             Some(id) => sqlx::query_as!(
                 IngredientSource,
                 r#"
-                SELECT ingredient_source_id as "id", ingredient_id, store_id, package_size, unit_id, price, url, comment
+                SELECT ingredient_source_id as "id: IngredientSourceId", ingredient_id as "ingredient_id: IngredientId", store_id as "store_id: StoreId", package_size, unit_id as "unit_id: UnitId", price, url, comment
                 FROM ingredient_sources WHERE ingredient_id = $1 ORDER BY ingredient_source_id
                 "#,
-                id
+                id.get()
             )
             .fetch_all(&*self.pool)
             .await?,
             None => sqlx::query_as!(
                 IngredientSource,
                 r#"
-                SELECT ingredient_source_id as "id", ingredient_id, store_id, package_size, unit_id, price, url, comment
+                SELECT ingredient_source_id as "id: IngredientSourceId", ingredient_id as "ingredient_id: IngredientId", store_id as "store_id: StoreId", package_size, unit_id as "unit_id: UnitId", price, url, comment
                 FROM ingredient_sources ORDER BY ingredient_id
                 "#,
             )
