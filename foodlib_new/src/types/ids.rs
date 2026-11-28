@@ -51,6 +51,11 @@ macro_rules! make_id {
             pub const fn is_valid(&self) -> bool {
                 self.0 > 0
             }
+            /// Check if the ID is unset (i.e., equal to 0).
+            #[inline]
+            pub const fn is_unset(&self) -> bool {
+                self.0 == 0
+            }
 
             /// Placeholder ID for a row that will be inserted by the DB
             /// (auto-increment replaces it). Never store or send this value.
