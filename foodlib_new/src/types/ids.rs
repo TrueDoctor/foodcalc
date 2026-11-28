@@ -120,9 +120,6 @@ make_id!(/// Primary key of the `ingredient_sources` table.
 make_id!(/// Primary key of the `audit_log` table.
     AuditId: i64);
 
-make_id!( /// Id of a reorder request currently not in database
-    ReorderId: i32
-);
 
 /// Polymorphic entity ID used with `AuditRecord::entity_type`.
 #[derive(

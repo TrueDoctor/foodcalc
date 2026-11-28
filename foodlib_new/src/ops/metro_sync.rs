@@ -157,7 +157,7 @@ impl MetroSyncOps {
         }
 
         for (ingredient_id, article) in fetched.articles {
-            // Wrap the raw i32 in an IngredientId for type safety -> Allow MetroFetch to work without domain types.
+            // Wrap the raw i32 in an IngredientId for type safety -> Allow metro-scrape to work without domain types.
             let ingredient_id = IngredientId(ingredient_id);
             // One ingredient_id can have multiple sources (rare); apply to whichever source
             // matches this article.

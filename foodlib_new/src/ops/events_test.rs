@@ -198,7 +198,7 @@ async fn test_event_crud_operations(pool: PgPool) {
             name: "Test Event".to_string(),
             comment: Some("Test Comment".to_string()),
             budget: Some(BigDecimal::from(500)),
-            group_id: GroupId::invalid(),
+            group_id: GroupId(1),
         })
         .await
         .unwrap();
@@ -235,7 +235,7 @@ async fn test_shopping_tour_management(pool: PgPool) {
     // Add new tour
     let tour = ops
         .add_shopping_tour(ShoppingTour {
-            id: ShoppingTourId(-1),
+            id: ShoppingTourId::invalid(),
             event_id,
             tour_date: datetime!(2024-07-02 08:00:00 UTC),
             store_id: StoreId(1),

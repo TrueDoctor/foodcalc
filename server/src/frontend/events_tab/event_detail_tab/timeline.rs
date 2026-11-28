@@ -412,8 +412,8 @@ fn lane_rank(lane: &[TimelineItem]) -> (std::cmp::Reverse<Duration>, OffsetDateT
 /// deterministic for identical input. Start-first ordering is what guarantees
 /// the minimum lane count; the "longest on top" concern is handled afterwards
 /// by [`lane_rank`], not here.
-fn lane_sort_key(item: &TimelineItem) -> (OffsetDateTime, String, TimelineEntityId) { // TODO: remove this hack once TimelineEntityId is Ord
-    (item.start, item.label.clone(), item.id.unwrap_or(TimelineEntityId::Meal(MealId(i32::MAX))))
+fn lane_sort_key(item: &TimelineItem) -> (OffsetDateTime, String, TimelineEntityId) {
+    (item.start, item.label.clone(), item.id.unwrap_or(TimelineEntityId::Meal(MealId(i32::MAX)))) // TODO: remove this hack once TimelineEntityId can be sorted without a default value.
 }
 
 /// One calendar day's worth of items, grouped into per-kind packed bands.

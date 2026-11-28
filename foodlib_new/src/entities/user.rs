@@ -15,7 +15,7 @@ pub struct User {
 impl Default for User {
     fn default() -> Self {
         Self {
-            id: UserId(-1),
+            id: UserId::invalid(),
             username: "test".into(),
             email: "test@example.com".into(),
             password_hash: "test".into(),

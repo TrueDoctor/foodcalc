@@ -43,7 +43,7 @@ impl Default for Meal {
         let start_time = now.replace_time(time!(12:00));
         Self {
             event_id: EventId::default(),
-            meal_id: MealId(-1),
+            meal_id: MealId::invalid(),
             recipe_id: RecipeId::default(),
             name: "New Meal".to_string(),
             comment: None,

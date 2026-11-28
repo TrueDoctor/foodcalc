@@ -192,8 +192,8 @@ impl AllergenOps {
                     ingredient_id.get(),
                     created
                 )
-                    .execute(&mut *tx)
-                    .await?;
+                .execute(&mut *tx)
+                .await?;
             }
         }
 

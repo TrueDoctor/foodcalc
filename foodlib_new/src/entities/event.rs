@@ -32,7 +32,7 @@ impl Default for Event {
             name: "Test Event".to_string(),
             comment: Some("Test comment".to_string()),
             budget: None,
-            group_id: GroupId(-1),
+            group_id: GroupId::invalid(),
         }
     }
 }
@@ -142,28 +142,3 @@ pub struct EventInventory {
     pub inventory_id: InventoryId,
 }
 
-/// A food prep task plus the prepared recipe's name (timeline feed).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FoodPrepWithRecipe {
-    pub id: FoodPrepId,
-    pub event_id: EventId,
-    pub recipe_id: RecipeId,
-    #[serde(with = "time::serde::rfc3339")]
-    pub prep_date: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub use_from: Option<OffsetDateTime>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub use_until: OffsetDateTime,
-    pub recipe_name: String,
-}
-
-/// Per-ingredient coverage of the event's demand by its linked inventories.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EventInventoryCoverage {
-    pub ingredient_id: IngredientId,
-    pub ingredient_name: String,
-    /// Total demand in kg (from the resolved event shopping list).
-    pub demand_kg: i32,
-    /// Amount stocked across the event's linked inventories, in kg.
-    pub covered_kg: i32,
-}

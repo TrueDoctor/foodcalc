@@ -152,7 +152,7 @@ async fn test_update_event_meals(pool: PgPool) {
     let end_time = start_time + time::Duration::minutes(30);
 
     let meals = vec![Meal {
-        meal_id: MealId(-1),
+        meal_id: MealId::invalid(),
         event_id: EventId(1),
         recipe_id: RecipeId(2),
         name: "Updated Pasta".to_string(),

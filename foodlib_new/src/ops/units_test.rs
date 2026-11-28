@@ -105,7 +105,7 @@ async fn test_unit_conversion_crud(pool: sqlx::PgPool) {
     // Test adding conversion
     let conversion = UnitConversion {
         from_unit: UnitId(5), // slice
-        to_unit: UnitId(0),   // kg
+        to_unit: UnitId::unset(),   // kg
         from_amount: BigDecimal::from(1000),
         to_amount: BigDecimal::from(1),
     };
@@ -174,7 +174,7 @@ async fn test_conversion_calculations(pool: sqlx::PgPool) {
         .convert_unit(
             BigDecimal::from(1000), // 1000g
             UnitId(1),          // from g
-            UnitId(0),          // to kg
+            UnitId::unset(),          // to kg
         )
         .await
         .unwrap();

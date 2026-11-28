@@ -8,11 +8,6 @@ pub struct Inventory {
     pub name: String,
     pub group_id: GroupId,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CreateInventory {
-    pub name: String,
-    pub group_id: GroupId,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InventoryItem {

@@ -56,12 +56,12 @@ impl EventOps {
             "#,
             id.get()
         )
-            .fetch_optional(&*self.pool)
-            .await?
-            .ok_or(Error::NotFound {
-                entity: "Event",
-                id: id.to_string(),
-            })?;
+        .fetch_optional(&*self.pool)
+        .await?
+        .ok_or(Error::NotFound {
+            entity: "Event",
+            id: id.to_string(),
+        })?;
 
         Ok(record)
     }
@@ -621,8 +621,8 @@ impl EventOps {
             "#,
             event_id.get()
         )
-            .fetch_all(&*self.pool)
-            .await?;
+        .fetch_all(&*self.pool)
+        .await?;
 
         Ok(records)
     }

@@ -78,7 +78,7 @@ async fn test_recipe_steps(pool: PgPool) {
 
     // Add step
     let step = RecipeStep {
-        id: RecipeStepId(-1),
+        id: RecipeStepId::invalid(),
         recipe_id: recipe.id,
         order: 1.0,
         name: "Test Step".to_string(),
@@ -240,7 +240,6 @@ async fn test_search_by_ingredients(pool: PgPool) {
 
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].id, RecipeId(3)); // Tomato Sauce
-    // assert_eq!(results[0].name, "Tomato Sauce");
 
     // Search for pasta (id: 1) and tomatoes (id: 2)
     // Should find both Simple Pasta (id: 1) and Tomato Sauce (id: 3)
